@@ -7,6 +7,10 @@ const LS_SESSION = 'mc_session';
 const LS_DATA_PREFIX = 'mc_data_';
 
 const APP_NAME = 'Borion Finance';
+/* V5.36.0 — id fixo da conta "Carteira" (dinheiro físico). Nunca muda entre migrações,
+   nunca é excluída pelo usuário e serve para diferenciar dinheiro físico de banco/cartão. */
+const CARTEIRA_CONTA_ID = 'carteira-fixa';
+const FORMAS_PAGAMENTO = ['Dinheiro','Pix','Débito','Crédito'];
 const DEFAULT_ICON_COLORS = { liquidez:'#22c55e', bens:'#3b6bf0', investimentos:'#cca160', dividas:'#ef4444', receita:'#22c55e', despesas:'#ef4444', investir:'#3b6bf0', saldo:'#eef1f4' };
 const ICON_COLOR_LABELS = { liquidez:'Liquidez', bens:'Bens', investimentos:'Investimentos', dividas:'Dívidas', receita:'Receita', despesas:'Despesas', investir:'Investir', saldo:'Saldo' };
 const FONT_STACKS = {
@@ -270,10 +274,26 @@ function migrateData(d){
   if(!Array.isArray(d.reservas.moves)) d.reservas.moves=[];
   d.modules.reserves = d.reservas.enabled!==false;
   if(!d.contas) d.contas=[];
+  if(!Array.isArray(d.contas)) d.contas=[];
   if(!d.boletos) d.boletos=[];
   if(!Array.isArray(d.boletos)) d.boletos=[];
   if(!d.transferencias) d.transferencias=[];
   if(!Array.isArray(d.transferencias)) d.transferencias=[];
+  // V5.36.0 — "Carteira" (dinheiro físico) é uma conta fixa que sempre precisa existir,
+  // não pode ser excluída e nunca pode ser confundida com cartão de crédito. Migração
+  // defensiva: cria a Carteira se ainda não existir (dado antigo) e garante a flag
+  // isCarteira mesmo se o registro já existia com outro formato.
+  (function ensureCarteira(){
+    let carteira = d.contas.find(c=>c && (c.isCarteira || c.id===CARTEIRA_CONTA_ID));
+    if(!carteira){
+      carteira = { id:CARTEIRA_CONTA_ID, nome:'Carteira', tipo:'Carteira (dinheiro físico)', saldoInicial:0, rende:false, percentualRendimento:0, cor:'#cca160', icone:'💵', isCarteira:true };
+      d.contas.unshift(carteira);
+    } else {
+      carteira.isCarteira = true;
+      if(!carteira.nome) carteira.nome = 'Carteira';
+      if(carteira.tipo==null) carteira.tipo = 'Carteira (dinheiro físico)';
+    }
+  })();
   // upgrade contas registry with the new bank/account fields
   d.contas.forEach(c=>{
     if(c.nome==null) c.nome = c.banco || 'Conta';
@@ -282,13 +302,16 @@ function migrateData(d){
     if(c.rende==null) c.rende = false;
     if(c.percentualRendimento==null) c.percentualRendimento = 0;
     if(c.cor==null) c.cor = bankColor(c.nome);
-    if(c.icone==null) c.icone = '◈';
+    if(c.icone==null) c.icone = c.isCarteira ? '💵' : '◈';
   });
   // ensure banco tag field exists on every entity that can be filtered by bank
   (d.transacoes||[]).forEach(t=>{
     if(t.banco==null) t.banco='';
     // V5.29 — separa receita própria de reembolso/repasse de terceiros (não conta como renda).
     if(t.tipo==='receita' && t.origem==null) t.origem='propria';
+    // V5.36.0 — forma de pagamento das despesas (dinheiro/pix/débito). Compras no crédito
+    // não viram transação aqui — elas passam a existir como parcela vinculada ao cartão.
+    if(t.tipo==='variavel' && t.formaPagamento==null) t.formaPagamento='Dinheiro';
   });
   (d.fixas||[]).forEach(f=>{ if(f.banco==null) f.banco=''; });
   (d.liquidez||[]).forEach(l=>{ if(l.banco==null) l.banco=''; });
@@ -336,6 +359,33 @@ function bankMatches(itemBanco){
 }
 function bankSelectField(idPrefix, selected){
   return {key:'banco', label:'Banco/Conta', type:'select', options:['— Nenhum —',...allBankNames()], default: selected||'— Nenhum —'};
+}
+
+/* ---------------- V5.36.0 — separação Banco/Conta vs Carteira vs Cartão de crédito ----------------
+   Regra de negócio: cartão de crédito NUNCA aparece como banco/conta de origem, e banco/conta/
+   carteira NUNCA aparecem como cartão. A Carteira é uma conta fixa (não pode ser excluída) que
+   representa dinheiro físico e sempre existe (ver ensureCarteira em migrateData). */
+function getCarteiraConta(){
+  return (S.data && Array.isArray(S.data.contas)) ? (S.data.contas.find(c=>c && c.isCarteira) || null) : null;
+}
+/* Nomes de bancos/contas + Carteira, para lançamentos de despesa/receita, despesas fixas,
+   pagamento de fatura/boleto e transferências. NUNCA inclui cartões de crédito. */
+function accountSelectNames(){
+  const carteira = getCarteiraConta();
+  const rest = (S.data.contas||[]).filter(c=>c && !c.isCarteira && c.nome).map(c=>c.nome);
+  return carteira ? [carteira.nome, ...rest] : rest;
+}
+function accountSelectField(idPrefix, selected){
+  const names = accountSelectNames();
+  return {key:'banco', label:'Banco/Conta', type:'select', options:names, default: selected && names.includes(selected) ? selected : (names[0]||'')};
+}
+/* Nomes dos cartões de crédito cadastrados. NUNCA inclui bancos/contas/Carteira. */
+function allCardNames(){
+  return (S.data.cartoes||[]).filter(c=>c && c.banco).map(c=>c.banco);
+}
+function cardSelectField(idPrefix, selected){
+  const names = allCardNames();
+  return {key:'cartao', label:'Cartão de crédito', type:'select', options:names, default: selected && names.includes(selected) ? selected : (names[0]||'')};
 }
 function showBankRequiredModal(msg){
   const text = msg || 'Todo lançamento precisa de um banco/conta vinculado.';

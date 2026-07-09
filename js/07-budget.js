@@ -47,10 +47,11 @@ function renderBudget(){
     rows = list.map(t=>{
       const origemKey = t.origem||'propria';
       const origemPill = (tab==='receita' && origemKey!=='propria') ? ` <span class="cat-pill" style="background:rgba(240,194,110,.15);color:var(--gold-bright);"><span class="dot" style="background:var(--gold-bright)"></span>${esc(txOrigemToLabel(origemKey))}</span>` : '';
+      const formaPill = (tab==='variavel' && t.formaPagamento) ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--muted)"></span>${esc(t.formaPagamento)}</span>` : '';
       return `
       <tr>
         <td>${t.data.slice(8,10)}/${t.data.slice(5,7)}</td>
-        <td>${esc(t.nome)}${origemPill}</td>
+        <td>${esc(t.nome)}${origemPill}${formaPill}</td>
         <td><span class="cat-pill"><span class="dot" style="background:${catColor(t.categoria)}"></span>${esc(t.categoria)}</span></td>
         <td class="${tab==='receita'?'val-pos':'val-neg'}">${tab==='receita'?'':'- '}${brl(t.valor)}</td>
         <td class="tbl-actions"><button onclick="Budget.edit('${t.id}')">✎</button></td>
@@ -272,7 +273,18 @@ function openTransactionModal({type, existing}){
         <div class="field"><label>Data</label><input type="date" id="tm_data" value="${isEdit?existing.data:monthKey(S.month.y,S.month.m)+'-01'}"/></div>
         ${categorySelectHTML('tm', type, isEdit?existing.categoria:null)}
         <div class="field"><label>Valor (R$)</label><input type="text" inputmode="numeric" id="tm_valor" class="money-input" placeholder="0,00"/></div>
-        <div class="field"><label>Banco/Conta</label><select id="tm_banco"><option>— Nenhum —</option>${allBankNames().map(b=>`<option ${isEdit&&existing.banco===b?'selected':''}>${esc(b)}</option>`).join('')}</select></div>
+        <div class="field" id="tm_banco_wrap"><label>${isReceita?'Onde a receita entra':'De onde o dinheiro sai'}</label><select id="tm_banco"><option>— Nenhum —</option>${accountSelectNames().map(b=>`<option ${isEdit&&existing.banco===b?'selected':''}>${esc(b)}</option>`).join('')}</select></div>
+        ${!isReceita?`
+        <div class="field"><label>Forma de pagamento</label><select id="tm_forma">${FORMAS_PAGAMENTO.map(f=>`<option value="${esc(f)}" ${isEdit&&(existing.formaPagamento||'Dinheiro')===f?'selected':''}>${esc(f)}</option>`).join('')}</select></div>
+        <div id="tm_credito_fields" class="hidden">
+          <div class="field"><label>Cartão de crédito</label><select id="tm_cartao">${allCardNames().map(c=>`<option>${esc(c)}</option>`).join('') || '<option value="">Nenhum cartão cadastrado</option>'}</select></div>
+          <div class="field"><label>Tipo de compra</label><select id="tm_credito_tipo">
+            <option value="avista">Crédito à vista</option>
+            <option value="parcelado">Crédito parcelado</option>
+          </select></div>
+          <div class="field hidden" id="tm_parcelas_wrap"><label>Quantidade de parcelas</label><input type="number" id="tm_parcelas" min="2" step="1" value="2"/></div>
+          <p class="modal-sub" style="margin:4px 0 0;">Compra no crédito não desconta o banco agora — ela vira uma compra vinculada ao cartão e entra na fatura, igual em "Cartões e Contas".</p>
+        </div>`:''}
         ${isReceita?`<div class="field"><label>Origem da receita</label><select id="tm_origem">${TX_ORIGEM_OPTIONS.map(o=>`<option ${txOrigemToKey(o)===(isEdit?(existing.origem||'propria'):'propria')?'selected':''}>${esc(o)}</option>`).join('')}</select><p class="modal-sub" style="margin:4px 0 0;">Reembolso e repasse de terceiros não entram na sua Receita do mês — é dinheiro que passa pela conta, não renda sua.</p></div>`:''}
         ${reservaHTML}
         <div class="row-btns"><button class="btn btn-primary btn-block" id="tm_save">${isEdit?'Salvar':'Adicionar'}</button></div>
@@ -311,6 +323,38 @@ function openTransactionModal({type, existing}){
     syncReserveDestinationUI();
   }
 
+  /* V5.36.0 — despesa: alterna entre "sai do banco/carteira" (Dinheiro/Pix/Débito) e
+     "vai para a fatura do cartão" (Crédito). Se a Carteira for escolhida como origem, a
+     forma de pagamento é travada em Dinheiro, porque Carteira é sempre dinheiro físico. */
+  function syncFormaPagamentoUI(){
+    const formaSel = $('#tm_forma');
+    if(!formaSel) return;
+    const bancoWrap = $('#tm_banco_wrap');
+    const creditoFields = $('#tm_credito_fields');
+    const isCredito = formaSel.value==='Crédito';
+    if(bancoWrap) bancoWrap.classList.toggle('hidden', isCredito);
+    if(creditoFields) creditoFields.classList.toggle('hidden', !isCredito);
+    const tipoSel = $('#tm_credito_tipo');
+    const parcelasWrap = $('#tm_parcelas_wrap');
+    if(parcelasWrap && tipoSel) parcelasWrap.classList.toggle('hidden', tipoSel.value!=='parcelado');
+  }
+  function syncCarteiraForcaDinheiro(){
+    const bancoSel = $('#tm_banco'), formaSel = $('#tm_forma');
+    if(!bancoSel || !formaSel) return;
+    const carteira = getCarteiraConta();
+    const isCarteiraSelected = !!carteira && bancoSel.value===carteira.nome;
+    formaSel.disabled = isCarteiraSelected;
+    if(isCarteiraSelected) formaSel.value = 'Dinheiro';
+    syncFormaPagamentoUI();
+  }
+  if(!isReceita && $('#tm_forma')){
+    $('#tm_forma').onchange = syncFormaPagamentoUI;
+    $('#tm_banco').addEventListener('change', syncCarteiraForcaDinheiro);
+    const tipoSel = $('#tm_credito_tipo');
+    if(tipoSel) tipoSel.onchange = syncFormaPagamentoUI;
+    syncCarteiraForcaDinheiro();
+  }
+
   $('#tm_save').onclick = ()=>{
     const nome = $('#tm_nome').value.trim() || 'Sem nome';
     const data = $('#tm_data').value || (monthKey(S.month.y,S.month.m)+'-01');
@@ -318,8 +362,32 @@ function openTransactionModal({type, existing}){
     if(categoria==='__new__'){ alert('Confirme o nome da nova categoria antes de salvar.'); return; }
     const cents = parseInt($('#tm_valor').dataset.cents||'0',10);
     const valor = cents/100;
+
+    const formaPagamento = (!isReceita && $('#tm_forma')) ? $('#tm_forma').value : null;
+    const isCreditoDespesa = formaPagamento==='Crédito';
+
+    /* Crédito: não é uma transação de banco/conta — vira uma compra vinculada ao cartão
+       (à vista = 1 parcela, parcelado = N parcelas), do mesmo jeito que "+ Compra
+       parcelada" em Cartões e Contas. Não desconta banco/carteira no momento da compra. */
+    if(isCreditoDespesa){
+      const cartaoNome = $('#tm_cartao') ? $('#tm_cartao').value : '';
+      const cartao = (S.data.cartoes||[]).find(c=>c.banco===cartaoNome);
+      if(!cartao){ alert('Escolha um cartão de crédito válido. Cadastre um cartão em "Cartões e Contas" antes de lançar uma compra no crédito.'); return; }
+      const tipoCredito = $('#tm_credito_tipo') ? $('#tm_credito_tipo').value : 'avista';
+      const parcelaTotal = tipoCredito==='parcelado' ? Math.max(2, Math.round(Number($('#tm_parcelas').value)||2)) : 1;
+      const valorParcela = Math.round((valor/parcelaTotal)*100)/100;
+      if(isEdit && existing.tipo==='variavel'){
+        const idx = S.data.transacoes.findIndex(x=>x.id===existing.id);
+        if(idx>=0) S.data.transacoes.splice(idx,1);
+      }
+      cartao.parcelas.push({id:uid(), descricao:nome, local:'', categoria:categoria||'Outro', valorParcela, parcelaTotal, dataCompra:(data||todayISO()).slice(0,7), diaEntrada:null});
+      saveCurrentData(); closeModal(); renderView();
+      toast('Compra no crédito lançada no cartão '+cartao.banco+'.');
+      return;
+    }
+
     const bancoVal = $('#tm_banco').value;
-    const banco = requireBanco(bancoVal, 'Todo lançamento precisa de um banco/conta vinculado.');
+    const banco = requireBanco(bancoVal, isReceita ? 'Toda receita precisa de um banco/conta/carteira vinculado.' : 'Toda despesa precisa de um banco/conta/carteira vinculado.');
     if(!banco) return;
     const origem = (isReceita && $('#tm_origem')) ? txOrigemToKey($('#tm_origem').value) : undefined;
     let reservaBox = null, reservaValor = 0, destino = 'Conta livre';
@@ -337,11 +405,13 @@ function openTransactionModal({type, existing}){
       removeLinkedReservaMoveFromTransaction(existing);
       Object.assign(existing, {nome, data, categoria, valor, banco});
       if(isReceita) existing.origem = origem;
+      else existing.formaPagamento = formaPagamento || 'Dinheiro';
       tx = existing;
       toast('Lançamento atualizado.');
     } else {
       tx = {id:uid(), tipo:type, nome, data, categoria, valor, banco};
       if(isReceita) tx.origem = origem;
+      else tx.formaPagamento = formaPagamento || 'Dinheiro';
       S.data.transacoes.push(tx);
       toast(isReceita && reservaBox ? 'Receita adicionada e enviada para reserva.' : 'Lançamento adicionado.');
     }
@@ -377,7 +447,8 @@ function openFixaModal(existing){
         ${categorySelectHTML('fm', 'fixa', isEdit?existing.categoria:null)}
         <div class="field"><label>Valor mensal (R$)</label><input type="text" inputmode="numeric" id="fm_valor" class="money-input" placeholder="0,00"/></div>
         <div class="field"><label>Dia do vencimento</label><input type="number" id="fm_dia" min="1" max="31" value="${isEdit?(existing.dia||1):1}"/></div>
-        <div class="field"><label>Banco/Conta</label><select id="fm_banco"><option>— Nenhum —</option>${allBankNames().map(b=>`<option ${isEdit&&existing.banco===b?'selected':''}>${esc(b)}</option>`).join('')}</select></div>
+        <div class="field"><label>Banco/Conta</label><select id="fm_banco"><option>— Nenhum —</option>${accountSelectNames().map(b=>`<option ${isEdit&&existing.banco===b?'selected':''}>${esc(b)}</option>`).join('')}</select></div>
+        <p class="modal-sub" style="margin:4px 0 0;">Só aparecem aqui a Carteira e os bancos/contas cadastrados — cartão de crédito não é banco/conta de origem.</p>
         <div class="row-btns"><button class="btn btn-primary btn-block" id="fm_save">${isEdit?'Salvar':'Adicionar'}</button></div>
         ${isEdit?`<div class="row-btns" style="margin-top:8px;"><button class="btn btn-danger btn-block" id="fm_delete">Remover a partir deste mês</button></div>`:''}
       </div>

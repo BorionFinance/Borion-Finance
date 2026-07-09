@@ -7,7 +7,7 @@ function renderCards(){
       <div class="card-entity-head">
         <div class="cehl">
           <div class="bank-badge" style="background:${a.cor||bankColor(a.nome)}">${esc(a.icone||(a.nome||'?')[0])}</div>
-          <div class="info"><div>${esc(a.nome)} <span style="font-weight:400;color:var(--muted);font-size:11.5px;">· ${esc(a.tipo||'Conta')}</span></div><div>Saldo inicial: ${brl(a.saldoInicial||0)}${a.rende?` · Rende ${pct(a.percentualRendimento||0)} a.m.`:' · Não rende'}</div></div>
+          <div class="info"><div>${esc(a.nome)} <span style="font-weight:400;color:var(--muted);font-size:11.5px;">· ${esc(a.tipo||'Conta')}</span>${a.isCarteira?` <span class="cat-pill" style="margin-left:4px;"><span class="dot" style="background:var(--gold-bright)"></span>Fixa · não pode ser excluída</span>`:''}</div><div>Saldo inicial: ${brl(a.saldoInicial||0)}${a.rende?` · Rende ${pct(a.percentualRendimento||0)} a.m.`:' · Não rende'}</div></div>
         </div>
         <button class="btn-outline btn-sm" onclick="Cards.editConta('${a.id}')">✎ Editar</button>
       </div>
@@ -131,6 +131,18 @@ const Cards = {
   },
   editConta(id){
     const a = S.data.contas.find(x=>x.id===id);
+    if(!a) return;
+    /* V5.36.0 — a Carteira (dinheiro físico) é uma conta fixa: nome e existência não
+       podem ser alterados pelo usuário, só saldo/aparência. Nunca tem botão de excluir. */
+    if(a.isCarteira){
+      openModal({title:'Editar Carteira', sub:'A Carteira representa seu dinheiro físico (cédulas). Ela é fixa e não pode ser excluída — assim você sempre consegue lançar receitas e despesas mesmo sem cadastrar nenhum banco.', fields:[
+        {key:'saldoInicial',label:'Saldo inicial em dinheiro (R$)',type:'money'},
+        {key:'cor',label:'Cor',type:'color'},
+        {key:'icone',label:'Símbolo/ícone',type:'text'},
+      ], values:a,
+      onSave(v){ Object.assign(a,{saldoInicial:Number(v.saldoInicial)||0, cor:v.cor||a.cor, icone:v.icone||a.icone}); saveCurrentData(); closeModal(); renderView(); }});
+      return;
+    }
     openModal({title:'Editar conta bancária', fields:[
       {key:'nome',label:'Nome do banco/conta',type:'text'},
       {key:'tipo',label:'Tipo',type:'select',options:['Conta corrente','Conta poupança','Carteira digital','Investimento','Outro']},
@@ -206,7 +218,7 @@ const Cards = {
     if(info.total<=0){ toast('Não há valor de fatura neste mês.'); return; }
     openModal({title:'Marcar fatura como paga', sub:'Escolha o banco usado para pagar a fatura de '+monthLabel(S.month.y,S.month.m)+'. O valor sai do saldo (liquidez) desse banco.', fields:[
       {key:'valor',label:'Valor pago (R$)',type:'money',default:info.total},
-      bankSelectField('faturapg',''),
+      accountSelectField('faturapg',''),
       {key:'data',label:'Data do pagamento',type:'date',default:todayISO()},
     ], onSave(v){
       const banco = requireBanco(v.banco,'Escolha o banco usado para pagar a fatura.');
@@ -236,7 +248,7 @@ const Cards = {
     openModal({title:isEdit?'Editar boleto':'Adicionar boleto', sub:'Use para boleto parcelado/carnê. Ele entra em Dívidas no Patrimônio, separado do cartão de crédito.', fields:[
       {key:'descricao',label:'Descrição do boleto',type:'text',placeholder:'Ex: Notebook, seguro, carnê...'},
       {key:'credor',label:'Para quem / empresa',type:'text',placeholder:'Ex: Loja, financeira, pessoa...'},
-      bankSelectField('boleto', b.banco),
+      accountSelectField('boleto', b.banco),
       {key:'categoria',label:'Categoria',type:'select',options:S.data.categorias.variavel,default:b.categoria||S.data.categorias.variavel[0]},
       {key:'valorParcela',label:'Valor de cada boleto (R$)',type:'money'},
       {key:'parcelaTotal',label:'Quantidade de boletos',type:'number',step:'1',default:1},
@@ -264,7 +276,7 @@ const Cards = {
     if(info.total<=0){ toast('Não há parcela ativa neste mês.'); return; }
     openModal({title:'Marcar boleto como pago', sub:'Escolha o banco usado para pagar a parcela de '+monthLabel(S.month.y,S.month.m)+'. O valor sai do saldo (liquidez) desse banco.', fields:[
       {key:'valor',label:'Valor pago (R$)',type:'money',default:info.total},
-      bankSelectField('boletopg', b.banco),
+      accountSelectField('boletopg', b.banco),
       {key:'data',label:'Data do pagamento',type:'date',default:todayISO()},
     ], onSave(v){
       const banco = requireBanco(v.banco,'Escolha o banco usado para pagar o boleto.');
@@ -292,8 +304,8 @@ const Cards = {
   editTransferencia(id){
     const isEdit = !!id;
     const t = isEdit ? (S.data.transferencias||[]).find(x=>x.id===id) : {contaOrigem:'', contaDestino:'', valor:0, data:todayISO(), descricao:''};
-    const banks = allBankNames();
-    if(!banks.length){ alert('Cadastre pelo menos duas contas/bancos antes de transferir.'); return; }
+    const banks = accountSelectNames();
+    if(banks.length<2){ alert('Cadastre pelo menos mais uma conta/banco além da Carteira antes de transferir.'); return; }
     openModal({title:isEdit?'Editar transferência':'Nova transferência entre contas', sub:'Move dinheiro de uma conta para outra. Não conta como receita nem despesa.', fields:[
       {key:'contaOrigem',label:'Conta de origem',type:'select',options:banks,default:t.contaOrigem||banks[0]},
       {key:'contaDestino',label:'Conta de destino',type:'select',options:banks,default:t.contaDestino||banks[0]},

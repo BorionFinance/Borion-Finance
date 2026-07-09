@@ -1,3 +1,12 @@
+## V5.37.0 — Banco/Conta, Carteira e Cartão como entidades separadas (09/07/2026)
+- Nova conta fixa "Carteira" (dinheiro físico): já existe por padrão, não pode ser excluída, e funciona como qualquer conta para entrada/saída de dinheiro. Migração defensiva cria a Carteira automaticamente em dados antigos e nunca duplica em migrações repetidas.
+- No lançamento de receita/despesa e nas despesas fixas, o campo "Banco/Conta" agora mostra só a Carteira e os bancos/contas cadastrados — cartão de crédito não aparece mais nessa lista.
+- Nova "Forma de pagamento" no lançamento de despesa: Dinheiro, Pix, Débito ou Crédito. Escolher a Carteira trava a forma em Dinheiro automaticamente.
+- Escolher "Crédito" troca o campo de banco por um campo exclusivo de cartão (só cartões cadastrados aparecem) e pergunta se a compra é à vista ou parcelada; a compra vira automaticamente uma parcela vinculada ao cartão (igual ao "+ Compra parcelada" de Cartões e Contas) e não desconta o banco/carteira na hora — só a fatura paga mexe no saldo, como já funcionava.
+- Pagamento de fatura de cartão, pagamento de boleto, cadastro de boleto e transferências entre contas agora só aceitam Carteira/bancos reais como origem — nunca outro cartão de crédito.
+- Compatibilidade total com JSON export/import e coluna do Supabase: a Carteira é só mais um item em `contas`, sem mudança de formato de arquivo.
+
+
 ## V5.36.0 — Categorias, conta e UX de lançamentos (09/07/2026)
 - Categorias agora têm cor própria e podem ser reutilizadas em vários recebimentos/despesas.
 - Excluir categoria vinculada agora é bloqueado por modal interno, sem bagunçar lançamentos antigos.

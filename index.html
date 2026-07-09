@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Borion Finance</title>
+<meta name="description" content="Controle financeiro pessoal — receitas, despesas, cartões e patrimônio.">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#060a10">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Borion Finance">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="shortcut icon" href="borion.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<script>
+(function(){
+  try{
+    var raw=localStorage.getItem('mc_config');
+    var cfg=raw?JSON.parse(raw):{};
+    var choice=cfg.theme||'dark';
+    var resolved=choice==='system'&&window.matchMedia? (window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark') : choice;
+    resolved = resolved==='light'?'light':'dark';
+    document.documentElement.setAttribute('data-theme', resolved);
+    document.documentElement.setAttribute('data-theme-choice', choice);
+    var meta=document.querySelector('meta[name="theme-color"]');
+    if(meta) meta.setAttribute('content', resolved==='light'?'#f7f2e7':'#060a10');
+  }catch(e){ document.documentElement.setAttribute('data-theme','dark'); }
+})();
+</script>
+<link rel="stylesheet" href="css/styles.css?v=5.35.2">
+</head>
+<body>
+<div id="root"></div>
+<div id="modal-root"></div>
+<div id="toast-root"></div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/00-utils.js?v=5.35.2"></script>
+<script src="js/01-storage-data-state.js?v=5.35.2"></script>
+<script src="js/02-backup-local.js?v=5.35.2"></script>
+<script src="js/17-borion-cloud.js?v=5.35.2"></script>
+<script src="js/03-modals-shared.js?v=5.35.2"></script>
+<script src="js/04-gate-shell.js?v=5.35.2"></script>
+<script src="js/05-calculations-charts.js?v=5.35.2"></script>
+<script src="js/06-overview.js?v=5.35.2"></script>
+<script src="js/07-budget.js?v=5.35.2"></script>
+<script src="js/08-investments.js?v=5.35.2"></script>
+<script src="js/09-patrimony-goals.js?v=5.35.2"></script>
+<script src="js/10-cards-accounts.js?v=5.35.2"></script>
+<script src="js/11-agenda-notifications.js?v=5.35.2"></script>
+<script src="js/12-bank-filter-search.js?v=5.35.2"></script>
+<script src="js/13-settings.js?v=5.35.2"></script>
+<script src="js/15-cheques.js?v=5.35.2"></script>
+<script src="js/16-import-statement.js?v=5.35.2"></script>
+<script src="js/14-events-boot-pwa.js?v=5.35.2"></script>
+</body>
+</html>

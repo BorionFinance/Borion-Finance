@@ -169,6 +169,15 @@ input,select{font-family:inherit;}
 #install-banner.install-banner-ios{max-width:min(94vw,420px);line-height:1.5;text-align:left;}
 #install-banner.install-banner-ios .ios-share-ic{display:inline-block;transform:translateY(-1px);}
 #install-banner.install-banner-ios .ib-no{align-self:flex-start;}
+.exit-save-banner{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:290;background:linear-gradient(180deg,rgba(20,29,39,.98),rgba(9,14,20,.98));border:1px solid rgba(201,164,92,.28);box-shadow:0 16px 38px rgba(0,0,0,.42),0 0 0 1px rgba(201,164,92,.07) inset;border-radius:16px;padding:12px;max-width:min(92vw,390px);display:flex;gap:12px;align-items:flex-start;animation:toastIn .22s ease;}
+.exit-save-banner .esb-icon{width:34px;height:34px;border-radius:12px;background:rgba(201,164,92,.14);color:var(--gold-bright);display:flex;align-items:center;justify-content:center;font-weight:900;flex:0 0 auto;}
+.exit-save-banner .esb-title{font-weight:800;font-size:13.5px;margin-bottom:2px;color:var(--text);}
+.exit-save-banner .esb-text{font-size:12px;color:var(--muted);line-height:1.35;margin-bottom:9px;}
+.exit-save-banner .esb-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.exit-save-banner button{border:none;border-radius:10px;font-weight:750;font-size:12px;cursor:pointer;padding:7px 10px;}
+.exit-save-banner .esb-save{background:var(--gold);color:var(--gold-text);}
+.exit-save-banner .esb-close{background:rgba(255,255,255,.06);color:var(--muted);}
+@media(max-width:620px){.exit-save-banner{left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));max-width:none;}}
 .topbar{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;flex-wrap:wrap;gap:16px;}
 .topbar .hello{color:var(--muted);font-size:13px;margin:0 0 6px;letter-spacing:.3px;}
 .topbar h1{font-size:24px;margin:0;font-weight:800;display:flex;align-items:center;gap:8px;letter-spacing:-.02em;}
@@ -238,6 +247,9 @@ tbody tr:last-child td{border-bottom:none;}
 .cat-pill .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
 .val-pos{color:var(--green);font-weight:700;}
 .val-neg{color:var(--text);font-weight:700;}
+.invest-rend-pos{color:var(--green);font-weight:800;}
+.invest-rend-neg{color:var(--red);font-weight:800;}
+.invest-rend-pct{font-size:10.5px;color:currentColor;opacity:.92;}
 .tbl-actions{display:flex;justify-content:flex-end;}
 .tbl-actions button{background:none;border:none;color:var(--muted);font-size:13px;padding:6px 8px;border-radius:8px;transition:color .18s ease,background-color .18s ease,transform .18s ease;}
 .tbl-actions button:hover{color:var(--gold-bright);background:rgba(201,164,92,.10);transform:translateX(2px);}

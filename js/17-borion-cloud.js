@@ -571,7 +571,7 @@ const CloudStorage = {
     const freshData = migrateData(await this.loadData(id));
     S.data = freshData;
     setProfileData(p.id, S.data);
-    setSession({cloud:true,profileId:p.id}); recordPatrimonioSnapshot(); renderApp(); postLoginSequence(); this.updateBadge();
+    setSession({cloud:true,profileId:p.id}); recordPatrimonioSnapshot(); renderApp(); if(window.ExitSaveGuard) ExitSaveGuard.refresh(); postLoginSequence(); this.updateBadge();
   },
 
   /* V5.34.1 — se não houver cache de nuvem disponível (cloudCache), tenta o

@@ -1,3 +1,11 @@
+## V5.39.3 — Investimentos negativos e salvamento final (09/07/2026)
+
+- Investimentos: rendimento negativo em ativos agora aparece em vermelho, incluindo valor e porcentagem. Ex.: investiu R$ 1.000 e está R$ 900, mostra perda de R$ 100 / -10% em vermelho.
+- Card geral de Rendimento em Investimentos também usa vermelho quando o total estiver negativo.
+- Adicionado aviso interno para confirmar um último salvamento após alterações no perfil.
+- Ao tentar fechar/recarregar no PC, o Borion força um salvamento local e mostra o aviso nativo do navegador quando houver alteração pendente de confirmação.
+- No celular/PWA, onde o navegador pode bloquear aviso de fechamento, o Borion faz salvamento final automático ao esconder/fechar a página pelo `visibilitychange/pagehide`.
+
 ## V5.39.2 — Parcelas corretas em Despesas (09/07/2026)
 
 - Corrigido o erro em que compra no crédito parcelado aparecia em Despesas pelo valor total da compra.

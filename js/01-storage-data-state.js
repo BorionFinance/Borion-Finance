@@ -5,6 +5,7 @@ const LS_CONFIG = 'mc_config';
 const LS_PROFILES = 'mc_profiles';
 const LS_SESSION = 'mc_session';
 const LS_DATA_PREFIX = 'mc_data_';
+const LS_EXIT_SAVE_PREFIX = 'borion_exit_save_confirm_';
 
 const APP_NAME = 'Borion Finance';
 /* V5.36.0 — id fixo da conta "Carteira" (dinheiro físico). Nunca muda entre migrações,
@@ -114,6 +115,21 @@ function setProfiles(list){ writeJSON(LS_PROFILES, list); }
 
 function getSession(){ return readJSON(LS_SESSION, null); }
 function setSession(s){ if(s) writeJSON(LS_SESSION, s); else localStorage.removeItem(LS_SESSION); }
+
+function exitSaveProfileId(){ return (S && S.currentProfile && S.currentProfile.id) ? S.currentProfile.id : 'sem_perfil'; }
+function exitSaveKey(profileId){ return LS_EXIT_SAVE_PREFIX + (profileId || exitSaveProfileId()); }
+function markExitSavePending(profileId){
+  try{ writeJSON(exitSaveKey(profileId), {pending:true, updatedAt:Date.now()}); }catch(e){}
+  if(window.ExitSaveGuard && typeof ExitSaveGuard.refresh==='function'){ ExitSaveGuard.dismissed=false; ExitSaveGuard.refresh(); }
+}
+function clearExitSavePending(profileId){
+  try{ localStorage.removeItem(exitSaveKey(profileId)); }catch(e){}
+  if(window.ExitSaveGuard && typeof ExitSaveGuard.refresh==='function') ExitSaveGuard.refresh();
+}
+function hasExitSavePending(profileId){
+  const info = readJSON(exitSaveKey(profileId), null);
+  return !!(info && info.pending);
+}
 
 function getProfileData(id){ return readJSON(LS_DATA_PREFIX+id, null); }
 function setProfileData(id, data){
@@ -547,7 +563,7 @@ function toggleValuesHidden(){
   renderView();
 }
 
-function saveCurrentData(){
+function saveCurrentData(options={}){
   if(S.currentProfile && S.data){
     recordPatrimonioSnapshot();
     setProfileData(S.currentProfile.id, S.data);
@@ -557,6 +573,18 @@ function saveCurrentData(){
     // fecha qualquer janela em que os dois pudessem divergir e um perfil
     // acabasse sobrescrevendo a linha de outro no Supabase.
     if(window.CloudStorage && CloudStorage.user){ CloudStorage.queueSave(S.currentProfile.id, S.data); }
+    if(!options.finalConfirmation) markExitSavePending(S.currentProfile.id);
   }
   BackupFS.markDirty();
+}
+
+function confirmFinalSave(reason='manual'){
+  if(!S.currentProfile || !S.data) return false;
+  saveCurrentData({finalConfirmation:true});
+  clearExitSavePending(S.currentProfile.id);
+  try{
+    if(window.CloudStorage && CloudStorage.user && navigator.onLine){ CloudStorage.syncNow(); }
+    if(window.BackupFS){ BackupFS.maybeAutoBackup(); }
+  }catch(e){ console.warn('[BORION_EXIT_SAVE][FINAL_SAVE_WARN]', e); }
+  return true;
 }

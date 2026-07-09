@@ -8,11 +8,13 @@ function renderInvestments(){
   const ativos = S.data.investimentos.ativos.filter(a => (a.mercado||'BR')===S.invMercado);
   const rowsAtivos = ativos.map(a=>{
     const r = a.atual - a.investido, rp = a.investido>0? (r/a.investido*100):0;
+    const rendClass = r < 0 ? 'invest-rend-neg' : 'invest-rend-pos';
+    const rendPrefix = r>=0 ? '+' : '';
     return `<tr>
       <td><div style="font-weight:700">${esc(a.nome)}</div><div style="font-size:11px;color:var(--muted)">${esc(a.local||'')}</div></td>
       <td>${brl(a.investido)}</td>
       <td style="font-weight:700">${brl(a.atual)}</td>
-      <td class="${r>=0?'val-pos':''}">${r>=0?'+':''}${brl(r)}<br><span style="font-size:10.5px;color:var(--muted)">${r>=0?'+':''}${pct(rp)}</span></td>
+      <td class="${rendClass}">${rendPrefix}${brl(r)}<br><span class="invest-rend-pct">${rendPrefix}${pct(rp)}</span></td>
       <td class="tbl-actions"><button onclick="Invest.editAtivo('${a.id}')">✎</button></td>
     </tr>`;
   }).join('');
@@ -27,7 +29,7 @@ function renderInvestments(){
     <div class="cards-row">
       <div class="card hero-green"><div class="clabel">Valor atual</div><div class="cval">${brl(atual)}</div></div>
       <div class="card"><div class="clabel">Total investido</div><div class="cval">${brl(investido)}</div></div>
-      <div class="card"><div class="clabel">Rendimento</div><div class="cval ${rend>=0?'val-pos':''}" style="font-size:22px;">${rend>=0?'+':''}${brl(rend)}</div><div style="color:${rend>=0?'#22c55e':'#ef4444'};font-size:12px;font-weight:700;margin-top:2px;">${rend>=0?'+':''}${pct(rendPct)}</div></div>
+      <div class="card"><div class="clabel">Rendimento</div><div class="cval ${rend<0?'invest-rend-neg':'invest-rend-pos'}" style="font-size:22px;">${rend>=0?'+':''}${brl(rend)}</div><div class="${rend<0?'invest-rend-neg':'invest-rend-pos'}" style="font-size:12px;font-weight:700;margin-top:2px;">${rend>=0?'+':''}${pct(rendPct)}</div></div>
     </div>
     <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
       <div class="tabs">

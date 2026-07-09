@@ -242,12 +242,14 @@ async function enterProfile(profile, remember){
   if(remember) setSession({profileId:profile.id});
   else setSession(null);
   renderApp();
+  if(window.ExitSaveGuard) ExitSaveGuard.refresh();
   postLoginSequence();
 }
 function logout(){
   setSession(null);
   S.currentProfile=null; S.data=null;
   S.gate={mode:'list',error:''};
+  if(window.ExitSaveGuard) ExitSaveGuard.refresh();
   renderGate();
 }
 /* V5.35 — troca de perfil "estilo Netflix": volta para a tela de escolha de
@@ -256,6 +258,7 @@ function logout(){
 function switchProfileScreen(){
   S.currentProfile=null; S.data=null;
   S.gate={mode:'list',error:''};
+  if(window.ExitSaveGuard) ExitSaveGuard.refresh();
   renderGate();
 }
 window.switchProfileScreen = switchProfileScreen;
@@ -314,6 +317,7 @@ function renderApp(){
     </div>
   `;
   renderView();
+  if(window.ExitSaveGuard) ExitSaveGuard.refresh();
 }
 
 const MobileMenu = {

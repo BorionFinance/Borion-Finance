@@ -1,4 +1,4 @@
-/* Borion Cloud Foundation V5.35.1 — Supabase Auth + perfis financeiros + senha por perfil + backups de segurança. */
+/* Borion Cloud Foundation V5.36.0 — Supabase Auth + perfis financeiros + senha por perfil + backups de segurança. */
 
 const BORION_SUPABASE_URL = 'https://tankddwzxmzgnmofeiar.supabase.co';
 const BORION_SUPABASE_KEY = 'sb_publishable_oakxlWvcNNJs-taocnimzw_kr0rAQjw';
@@ -149,6 +149,37 @@ const CloudStorage = {
     const { data, error } = await this.client.auth.updateUser({ password:newPassword });
     if(error) throw error;
     this.user = data && data.user ? data.user : this.user;
+    return true;
+  },
+  async deleteAccountWithCredentials(email, password){
+    const action='DELETE_ACCOUNT';
+    if(!this.client || !this.user || !this.user.email) throw new Error('Você precisa estar logado para excluir a conta.');
+    const currentEmail=String(this.user.email||'').trim().toLowerCase();
+    const typedEmail=String(email||'').trim().toLowerCase();
+    if(typedEmail!==currentEmail) throw new Error('O e-mail digitado não confere com a conta logada.');
+    if(!password) throw new Error('Digite a senha da conta.');
+    const deletedUserId=this.user.id;
+    const oldProfiles=(this.profiles&&this.profiles.length?this.profiles:(typeof S!=='undefined'&&S.profiles)||[]).slice();
+    const {error: reauthError}=await this.client.auth.signInWithPassword({email:this.user.email,password});
+    if(reauthError) throw new Error('E-mail ou senha incorretos.');
+    try{ if(window.BackupFS) await BackupFS.createCloudBackup('before_delete_account','backup automático antes de excluir a conta',{silent:true}); }catch(e){ console.warn('[BORION_CLOUD][DELETE_ACCOUNT][BACKUP_WARN]', e); }
+    const {error: rpcError}=await this.client.rpc('delete_own_account');
+    if(rpcError){
+      throw new Error('Não foi possível excluir a conta no Supabase. Rode o SQL SUPABASE_V5.36_DELETE_ACCOUNT.sql no Supabase e tente de novo. Erro original: '+cloudErrorMessage(rpcError));
+    }
+    try{ await this.client.auth.signOut(); }catch(_e){}
+    oldProfiles.forEach(pr=>{
+      try{ localStorage.removeItem(LS_DATA_PREFIX+pr.id); }catch(_e){}
+      try{ idbDeleteProfileData(pr.id); }catch(_e){}
+      try{ localStorage.removeItem(BORION_CLOUD_CACHE+'_'+deletedUserId+'_'+pr.id); }catch(_e){}
+      try{ localStorage.removeItem(BORION_CLOUD_PENDING+'_'+deletedUserId+'_'+pr.id); }catch(_e){}
+    });
+    try{ localStorage.removeItem(BORION_ACTIVE_PROFILE_KEY+'_'+deletedUserId); }catch(_e){}
+    try{ localStorage.removeItem(BORION_CLOUD_META+'_'+deletedUserId); }catch(_e){}
+    this.user=null; this.profiles=[]; this.activeProfileId=null; this.dataRowId=null; this.dirty=false; this.schemaError=null;
+    setSession(null); S.currentProfile=null; S.data=null; S.profiles=[]; setProfiles([]);
+    this.setStatus('offline','Conta excluída');
+    cloudActionLog(action,'SUCCESS',{userId:deletedUserId});
     return true;
   },
   async signOut(){ try{ if(this.user && S && S.data) await this.syncNow(); }catch(e){} try{ await this.client.auth.signOut(); }catch(e){} this.user=null; this.profiles=[]; this.activeProfileId=null; this.dataRowId=null; this.dirty=false; setSession(null); },
@@ -858,7 +889,9 @@ const CloudAuth={
   render(){
     applyFont(); applyTheme();
     const root=document.getElementById('root'); const isCreate=this.mode==='create', isReset=this.mode==='reset', isChange=this.mode==='changePassword';
-    root.innerHTML=`<div class="gate-wrap cloud-login-wrap"><div class="gate-box"><div class="gate-logo"><img src="borion-emblem.png" alt="Borion Finance"/><div class="appname">Borion Finance</div></div><div class="gate-card cloud-card"><p class="gate-title">${isCreate?'Criar conta':isReset?'Recuperar senha':isChange?'Criar nova senha':'Entrar no Borion'}</p><p class="gate-sub">${isCreate?'Crie sua conta para sincronizar celular e computador.':isReset?'Informe seu e-mail para receber o link de recuperação.':isChange?'Defina sua nova senha para finalizar a recuperação.':'Use seu e-mail e senha para carregar seus perfis financeiros.'}</p>${this.error?`<p class="gate-error">${esc(this.error)}</p>`:''}${this.info?`<p class="gate-info">${esc(this.info)}</p>`:''}${isCreate?`<div class="field"><label>Nome</label><input type="text" id="cloud_name" autocomplete="name"></div>`:''}${!isChange?`<div class="field"><label>E-mail</label><input type="email" id="cloud_email" autocomplete="email"></div>`:''}${!isReset?`<div class="field"><label>${isChange?'Nova senha':'Senha'}</label><input type="password" id="cloud_password" autocomplete="${isChange?'new-password':'current-password'}" placeholder="Mínimo 6 caracteres"></div>`:''}${isChange?`<div class="field"><label>Repetir nova senha</label><input type="password" id="cloud_password2" autocomplete="new-password" placeholder="Repita a nova senha"></div>`:''}<button class="btn btn-primary btn-block" id="cloud_submit">${isCreate?'Criar conta':isReset?'Enviar link':isChange?'Salvar nova senha':'Entrar'}</button><div class="cloud-actions">${!isCreate&&!isReset&&!isChange?`<button class="link-btn" id="cloud_create">Criar conta</button><button class="link-btn" id="cloud_reset">Esqueci minha senha</button>`:''}${isCreate||isReset?`<button class="link-btn" id="cloud_back">Voltar para login</button>`:''}${isChange?`<button class="link-btn" id="cloud_back_app">Entrar depois</button>`:''}</div><div class="cloud-note">Cada conta pode ter vários perfis financeiros. Os dados ficam em cache local e sincronizam com o Supabase.</div></div></div></div>`;
+    const passwordHTML = !isReset ? passwordInputWrapHTML({id:'cloud_password',label:isChange?'Nova senha':'Senha',autocomplete:isChange?'new-password':(isCreate?'new-password':'current-password'),placeholder:'Mínimo 6 caracteres'}) : '';
+    const password2HTML = isChange ? passwordInputWrapHTML({id:'cloud_password2',label:'Repetir nova senha',autocomplete:'new-password',placeholder:'Repita a nova senha'}) : '';
+    root.innerHTML=`<div class="gate-wrap cloud-login-wrap"><div class="gate-box"><div class="gate-logo"><img src="borion-emblem.png" alt="Borion Finance"/><div class="appname">Borion Finance</div></div><div class="gate-card cloud-card"><p class="gate-title">${isCreate?'Criar conta':isReset?'Recuperar senha':isChange?'Criar nova senha':'Entrar no Borion'}</p><p class="gate-sub">${isCreate?'Crie sua conta para sincronizar celular e computador.':isReset?'Informe seu e-mail para receber o link de recuperação.':isChange?'Defina sua nova senha para finalizar a recuperação.':'Use seu e-mail e senha para carregar seus perfis financeiros.'}</p>${this.error?`<p class="gate-error">${esc(this.error)}</p>`:''}${this.info?`<p class="gate-info">${esc(this.info)}</p>`:''}${isCreate?`<div class="field"><label>Nome</label><input type="text" id="cloud_name" autocomplete="name"></div>`:''}${!isChange?`<div class="field"><label>E-mail</label><input type="email" id="cloud_email" autocomplete="email"></div>`:''}${passwordHTML}${password2HTML}<button class="btn btn-primary btn-block" id="cloud_submit">${isCreate?'Criar conta':isReset?'Enviar link':isChange?'Salvar nova senha':'Entrar'}</button><div class="cloud-actions">${!isCreate&&!isReset&&!isChange?`<button class="link-btn" id="cloud_create">Criar conta</button><button class="link-btn" id="cloud_reset">Esqueci minha senha</button>`:''}${isCreate||isReset?`<button class="link-btn" id="cloud_back">Voltar para login</button>`:''}${isChange?`<button class="link-btn" id="cloud_back_app">Entrar depois</button>`:''}</div><div class="cloud-note">Cada conta pode ter vários perfis financeiros. Os dados ficam em cache local e sincronizam com o Supabase.</div></div></div></div>`;
     const submit=document.getElementById('cloud_submit'); if(submit) submit.onclick=()=>this.submit();
     const c=document.getElementById('cloud_create'); if(c) c.onclick=()=>{this.mode='create';this.error='';this.info='';this.render();};
     const r=document.getElementById('cloud_reset'); if(r) r.onclick=()=>{this.mode='reset';this.error='';this.info='';this.render();};
@@ -941,4 +974,4 @@ function cloudChangePasswordFromSettings(){
     }
   });
 }
-function translateSupabaseError(msg){ const m=String(msg||''); if(/relation .*profiles|schema cache|borion_profile_data|does not exist/i.test(m)) return 'Tabelas Cloud Foundation não encontradas. Rode o SQL V5.34 no Supabase.'; if(/invalid login|Invalid login credentials/i.test(m)) return 'E-mail ou senha incorretos.'; if(/email not confirmed/i.test(m)) return 'E-mail ainda não confirmado. Desative “Confirm email” no Supabase durante os testes ou confirme pelo link recebido.'; if(/already registered|already exists|User already registered/i.test(m)) return 'Esse e-mail já tem conta. Use Entrar ou Recuperar senha.'; return m; }
+function translateSupabaseError(msg){ const m=String(msg||''); if(/delete_own_account|Could not find the function|function .* does not exist/i.test(m)) return 'Para excluir a conta inteira, rode o SQL SUPABASE_V5.36_DELETE_ACCOUNT.sql no Supabase e tente novamente.'; if(/relation .*profiles|schema cache|borion_profile_data|does not exist/i.test(m)) return 'Tabelas Cloud Foundation não encontradas. Rode o SQL V5.34 no Supabase.'; if(/invalid login|Invalid login credentials|E-mail ou senha incorretos/i.test(m)) return 'E-mail ou senha incorretos.'; if(/email not confirmed/i.test(m)) return 'E-mail ainda não confirmado. Desative “Confirm email” no Supabase durante os testes ou confirme pelo link recebido.'; if(/already registered|already exists|User already registered/i.test(m)) return 'Esse e-mail já tem conta. Use Entrar ou Recuperar senha.'; return m; }

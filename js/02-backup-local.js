@@ -1,4 +1,4 @@
-/* Borion Finance — Backup e segurança de dados V5.35.2
+/* Borion Finance — Backup e segurança de dados V5.36.0
    Camadas:
    1) backup manual completo em arquivo JSON;
    2) backup em pasta local escolhida pelo usuário (File System Access API);
@@ -9,7 +9,7 @@
 /* ---------------- Backup em pasta local (File System Access API — Chrome/Edge) ---------------- */
 const FS_ACCESS_SUPPORTED = typeof window!=='undefined' && 'showDirectoryPicker' in window;
 const IDB_NAME = 'borion_handles', IDB_STORE = 'handles';
-const BORION_APP_VERSION = '5.35.2';
+const BORION_APP_VERSION = '5.36.0';
 const BORION_BACKUP_CONSENT_PREFIX = 'borion_backup_consent_v2_';
 const BORION_BACKUP_LAST_CLOUD_PREFIX = 'borion_backup_last_cloud_v1_';
 const BORION_BACKUP_SNOOZE_PREFIX = 'borion_backup_consent_snooze_v1_';
@@ -186,7 +186,7 @@ const BackupFS = {
   lastAutoBackupAt: 0,
 
   safeRefreshUI(){
-    // V5.35.2 — a tela de aceite de backup pode aparecer antes de um perfil
+    // V5.36.0 — a tela de aceite de backup pode aparecer antes de um perfil
     // financeiro estar aberto. Nesse estado S.data é null; portanto não podemos
     // chamar renderView(), que depende de notificacoes/transacoes do perfil.
     try{

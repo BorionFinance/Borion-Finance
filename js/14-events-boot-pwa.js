@@ -184,22 +184,34 @@ function handleImport(obj){
     if(!S.currentProfile){ alert('Entre em um perfil antes de importar.'); return; }
     if((obj.type==='borion-account-backup' || obj.type==='multicap-full-backup') && obj.profiles && obj.dataByProfile){
       const count=(obj.profiles||[]).length;
-      const firstId=Object.keys(obj.dataByProfile||{})[0];
-      const firstProfile=(obj.profiles||[]).find(p=>p.id===firstId) || (obj.profiles||[])[0] || {name:'Perfil importado'};
-      const firstData=migrateData((obj.dataByProfile||{})[firstProfile.id||firstId] || emptyData());
-      const importFirstAsNew = async ()=>{
+      const importAllAsNew = async ()=>{
         try{
-          if((S.profiles||[]).length>=5) throw new Error('Máximo de 5 perfis atingido. Exclua um perfil antes de importar como novo.');
-          await CloudStorage.createProfile((firstProfile.name||'Perfil importado')+' (backup)', true, firstData, {avatarColor:firstProfile.avatarColor||firstProfile.avatar_color||avatarColor(firstProfile.name||'Perfil'), avatarImage:firstProfile.avatarImage||firstProfile.avatar_image||''});
-          closeModal(); renderApp(); toast('Primeiro perfil do backup importado como novo perfil.');
+          const incomingProfiles=(obj.profiles||[]).slice(0,5);
+          const slots=5-(S.profiles||[]).length;
+          if(incomingProfiles.length>slots) throw new Error(`Este backup tem ${incomingProfiles.length} perfil(is), mas só há ${slots} vaga(s) nesta conta. Exclua perfis ou restaure a conta inteira.`);
+          let firstCreated=null;
+          for(const ip of incomingProfiles){
+            const importedName=(ip.name||ip.nome||'Perfil importado');
+            const sourceId=ip.id;
+            const data=migrateData((obj.dataByProfile||{})[sourceId] || emptyData());
+            const options={
+              avatarColor: ip.avatarColor || ip.avatar_color || avatarColor(importedName),
+              avatarImage: ip.avatarImage || ip.avatar_image || '',
+              passwordHash: ip.passwordHash || ip.password_hash || null,
+              passwordSalt: ip.salt || ip.password_salt || null
+            };
+            const created=await CloudStorage.createProfile(importedName+' (backup)', !firstCreated, data, options);
+            if(!firstCreated) firstCreated=created;
+          }
+          closeModal(); renderApp(); toast('Todos os perfis do backup foram importados como novos perfis.');
         }catch(e){ alert(e.message||String(e)); }
       };
       openChoiceModal({
         title:'Backup completo detectado',
-        sub:'Este JSON contém '+count+' perfil(is). Você pode restaurar a conta inteira ou importar só o primeiro perfil como novo.',
+        sub:'Este JSON contém '+count+' perfil(is). Você pode restaurar a conta inteira ou importar todos os perfis como novos.',
         choices:[
           {label:'Restaurar conta inteira', desc:'Substitui todos os perfis desta conta pelo backup. Antes disso, o Borion cria um backup de segurança.', variant:'danger', onClick:()=>BackupFS.restoreAccountPayloadFromFile(obj)},
-          {label:'Importar primeiro perfil como novo', desc:'Não mexe nos outros perfis. Cria um perfil separado com os dados do primeiro perfil do JSON.', onClick:importFirstAsNew},
+          {label:'Importar todos como novos', desc:'Não mexe nos perfis atuais. Cria todos os perfis do JSON dentro desta conta, até o limite de 5.', onClick:importAllAsNew},
           {label:'Cancelar', onClick:closeModal}
         ]
       });
@@ -321,7 +333,7 @@ function handleImport(obj){
       sub:'Este arquivo contém '+((obj.profiles||[]).length)+' perfil(is). O que você quer fazer?',
       choices:[
         {label:'Substituir tudo', desc:'Apaga os perfis e dados locais atuais deste navegador e coloca no lugar o conteúdo do backup.', variant:'danger', onClick:doReplaceAll},
-        {label:'Mesclar perfis', desc:'Mantém os perfis atuais e adiciona os do backup que ainda não existem aqui (até o limite de 5).', onClick:doMergeAll},
+        {label:'Mesclar/importar todos os perfis', desc:'Mantém os perfis atuais e adiciona todos os perfis do backup que ainda não existem aqui (até o limite de 5).', onClick:doMergeAll},
         {label:'Cancelar', onClick:closeModal},
       ]
     });

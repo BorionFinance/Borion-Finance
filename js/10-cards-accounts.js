@@ -321,3 +321,6 @@ const Cards = {
   applyTransferenciaEffect(t){ if(!t) return; adjustLiquidez(t.contaOrigem, -t.valor); adjustLiquidez(t.contaDestino, t.valor); },
   reverseTransferenciaEffect(t){ if(!t) return; adjustLiquidez(t.contaOrigem, t.valor); adjustLiquidez(t.contaDestino, -t.valor); }
 };
+
+/* V5.36.0 — expõe Cards para modais internos que abrem cadastro de banco. */
+window.Cards = Cards;

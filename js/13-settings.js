@@ -32,8 +32,8 @@ function renderSettings(){
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
   else if(S.settingsTab==='cloud') content = renderSettingsCloud();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 5.35.1 • Backup Security Foundation</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
-<div><strong>Versão:</strong> 5.35.1</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 5.36.0 • Categorias e Conta</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
+<div><strong>Versão:</strong> 5.36.0</div>
 <div><strong>Lançamento:</strong> 09/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -98,12 +98,21 @@ function renderSettingsProfiles(){
     <div class="settings-section"><h3>Gerenciar perfis (${S.profiles.length}/5)</h3><p class="desc">Crie, exclua ou importe perfis. Cada perfil mantém seus próprios dados.</p>${profilesRows}<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">${S.profiles.length<5 ? `<button class="btn-outline btn-sm" onclick="logout()">+ Criar novo perfil</button>` : ''}<button class="btn-outline btn-sm" onclick="document.getElementById('import_file').click()">Importar backup/perfil</button></div><input type="file" id="import_file" accept="application/json" style="display:none;"></div>`;
 }
 function renderSettingsCategories(){
+  ensureCategoryColors();
   const catBlock = (typeKey, typeLabel) => {
-    const tags = S.data.categorias[typeKey].map(c=>`<span class="cat-tag">${esc(c)}<button onclick="Settings.renameCategory('${typeKey}','${esc(c)}')">✎</button><button onclick="Settings.deleteCategory('${typeKey}','${esc(c)}')">&times;</button></span>`).join('');
-    return `<div class="cat-manage-group cat-panel"><h4>${typeLabel}</h4><div class="cat-tag-list">${tags}</div><button class="btn-outline btn-sm" onclick="Settings.addCategory('${typeKey}')">+ Nova categoria</button></div>`;
+    const list = (S.data.categorias && S.data.categorias[typeKey]) ? S.data.categorias[typeKey] : [];
+    const tags = list.map(c=>`
+      <span class="cat-tag cat-tag-manage" style="--cat-color:${esc(categoryColor(typeKey,c))}">
+        <span class="cat-dot"></span>
+        <span class="cat-tag-name">${esc(c)}</span>
+        <input type="color" class="cat-color-inline" value="${esc(categoryColor(typeKey,c))}" title="Cor da categoria" onchange="Settings.setCategoryColor(${jsArg(typeKey)},${jsArg(c)},this.value)">
+        <button class="cat-mini-btn" onclick="Settings.renameCategory(${jsArg(typeKey)},${jsArg(c)})" title="Renomear">✎</button>
+        <button class="cat-mini-btn danger" onclick="Settings.deleteCategory(${jsArg(typeKey)},${jsArg(c)})" title="Excluir">&times;</button>
+      </span>`).join('');
+    return `<div class="cat-manage-group cat-panel"><h4>${esc(typeLabel)}</h4><p class="desc">Uma categoria pode ser usada em vários lançamentos. A cor aparece nas etiquetas e facilita bater o olho.</p><div class="cat-tag-list">${tags||'<span class="desc">Nenhuma categoria ainda.</span>'}</div><button class="btn-outline btn-sm" onclick="Settings.addCategory(${jsArg(typeKey)})">+ Nova categoria</button></div>`;
   };
   return `
-    <div class="settings-section settings-hero-section"><h3>Categorias</h3><p class="desc">Receitas, despesas fixas e despesas variáveis ficam separadas para não virar bagunça.</p></div>
+    <div class="settings-section settings-hero-section"><h3>Categorias</h3><p class="desc">Receitas, despesas fixas e despesas variáveis agora têm cor própria. Se uma categoria já estiver vinculada a lançamentos, o Borion bloqueia a exclusão para não bagunçar seu histórico.</p></div>
     <div class="settings-categories-grid">${catBlock('receita','Receitas')}${catBlock('fixa','Despesas fixas')}${catBlock('variavel','Despesas variáveis')}</div>`;
 }
 function renderSettingsPersonalization(){
@@ -226,8 +235,9 @@ function renderSettingsCloud(){
   return `
     <div class="settings-section settings-hero-section"><h3>Borion Cloud Foundation</h3><p class="desc">Conta, perfis financeiros, sincronização real, cache local e proteção contra perda de dados.</p></div>
     ${schema}
-    <div class="settings-section"><h3>Status da nuvem</h3><p class="desc"><strong>Usuário logado:</strong> ${user?esc(user.email||'logado'):'não logado'}<br><strong>Perfil financeiro ativo:</strong> ${esc(profileName)}<br><strong>Status:</strong> ${esc(status)}<br><strong>Última sincronização:</strong> ${esc(last)}<br><strong>Dados pendentes:</strong> ${pendingTxt}</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="cloudForceSync()">Sincronizar agora</button><button class="btn-outline btn-sm" onclick="cloudRunSupabaseDiagnostic()">Diagnóstico Supabase</button><button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar perfil ativo</button><button class="btn-outline btn-sm" onclick="document.getElementById('import_file_cloud').click()">Importar JSON</button><button class="btn-outline btn-sm" onclick="cloudChangePasswordFromSettings()">Trocar senha da conta/login</button><button class="btn-outline btn-sm" onclick="cloudLogout()">Sair da conta</button></div><input type="file" id="import_file_cloud" accept="application/json" style="display:none;"></div>
+    <div class="settings-section"><h3>Status da nuvem</h3><p class="desc"><strong>Usuário logado:</strong> ${user?esc(user.email||'logado'):'não logado'}<br><strong>Perfil financeiro ativo:</strong> ${esc(profileName)}<br><strong>Status:</strong> ${esc(status)}<br><strong>Última sincronização:</strong> ${esc(last)}<br><strong>Dados pendentes:</strong> ${pendingTxt}</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="cloudForceSync()">Sincronizar agora</button><button class="btn-outline btn-sm" onclick="cloudRunSupabaseDiagnostic()">Diagnóstico Supabase</button><button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button><button class="btn-outline btn-sm" onclick="document.getElementById('import_file_cloud').click()">Importar JSON</button><button class="btn-outline btn-sm" onclick="cloudChangePasswordFromSettings()">Trocar senha da conta/login</button><button class="btn-outline btn-sm" onclick="cloudLogout()">Sair da conta</button></div><input type="file" id="import_file_cloud" accept="application/json" style="display:none;"></div>
     <div class="info-box">Fluxo: alteração → salva local/offline → marca pendente → envia ao Supabase → limpa pendência. Se a internet cair, o Borion continua salvando neste dispositivo e sincroniza quando voltar.</div>
+    ${user?`<div class="settings-section danger-box"><h3>Excluir conta Borion Cloud</h3><p class="desc">Apaga a conta de login, e-mail, perfis financeiros e dados salvos no Supabase. Por segurança, o Borion pede confirmação do e-mail e da senha antes de continuar.</p><button class="btn btn-danger btn-sm" onclick="Settings.deleteCloudAccountFlow()">Excluir conta</button></div>`:''}
     ${renderInstallAppCard()}`;
 }
 
@@ -300,10 +310,10 @@ function renderSettingsBackup(){
     </div>
 
     <div class="settings-section">
-      <h3>Backup do perfil ativo</h3>
-      <p class="desc">Útil para mandar só um perfil para outra pessoa ou guardar uma cópia pequena. Perfil atual: <strong>${esc(S.currentProfile?S.currentProfile.name:'nenhum')}</strong>.</p>
+      <h3>Backup JSON completo</h3>
+      <p class="desc">Exporta a conta inteira: todos os perfis financeiros e todos os dados vinculados a eles. Perfil atual: <strong>${esc(S.currentProfile?S.currentProfile.name:'nenhum')}</strong>.</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar só este perfil</button>
+        <button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button>
         <button class="btn-outline btn-sm" onclick="Settings.emailBackup()">Preparar e-mail manual</button>
       </div>
     </div>`;
@@ -414,6 +424,142 @@ Settings.removePassword = function(){
   }});
 };
 
+
+function categoryUsageDetails(typeKey, name){
+  const parts=[];
+  let total=0;
+  const add=(label,n)=>{ n=Number(n)||0; if(n>0){ total+=n; parts.push(`${n} em ${label}`); } };
+  if(typeKey==='receita'){
+    add('receitas', (S.data.transacoes||[]).filter(t=>t.tipo==='receita' && t.categoria===name).length);
+    add('cheques recebidos', (S.data.cheques&&S.data.cheques.items||[]).filter(c=>c.tipo==='recebido' && c.categoria===name).length);
+  } else if(typeKey==='fixa'){
+    add('despesas fixas', (S.data.fixas||[]).filter(f=>f.categoria===name).length);
+  } else if(typeKey==='variavel'){
+    add('despesas variáveis', (S.data.transacoes||[]).filter(t=>t.tipo==='variavel' && t.categoria===name).length);
+    add('parcelas de cartão', (S.data.cartoes||[]).reduce((n,card)=>n+((card.parcelas||[]).filter(p=>p.categoria===name).length),0));
+    add('boletos', (S.data.boletos||[]).filter(b=>b.categoria===name).length);
+    add('cheques emitidos', (S.data.cheques&&S.data.cheques.items||[]).filter(c=>c.tipo==='emitido' && c.categoria===name).length);
+  }
+  return {total, parts};
+}
+function updateCategoryReferences(typeKey, oldName, newName){
+  if(typeKey==='receita'){
+    (S.data.transacoes||[]).forEach(t=>{ if(t.tipo==='receita' && t.categoria===oldName) t.categoria=newName; });
+    if(S.data.cheques&&Array.isArray(S.data.cheques.items)) S.data.cheques.items.forEach(c=>{ if(c.tipo==='recebido' && c.categoria===oldName) c.categoria=newName; });
+  } else if(typeKey==='fixa'){
+    (S.data.fixas||[]).forEach(f=>{ if(f.categoria===oldName) f.categoria=newName; });
+  } else if(typeKey==='variavel'){
+    (S.data.transacoes||[]).forEach(t=>{ if(t.tipo==='variavel' && t.categoria===oldName) t.categoria=newName; });
+    (S.data.cartoes||[]).forEach(card=>(card.parcelas||[]).forEach(p=>{ if(p.categoria===oldName) p.categoria=newName; }));
+    (S.data.boletos||[]).forEach(b=>{ if(b.categoria===oldName) b.categoria=newName; });
+    if(S.data.cheques&&Array.isArray(S.data.cheques.items)) S.data.cheques.items.forEach(c=>{ if(c.tipo==='emitido' && c.categoria===oldName) c.categoria=newName; });
+  }
+}
+Settings.setCategoryColor = function(typeKey, name, color){
+  setCategoryColor(typeKey, name, color);
+  saveCurrentData();
+  renderView();
+};
+Settings.addCategory = function(typeKey){
+  openModal({
+    title:'Nova categoria',
+    sub:'Você pode usar a mesma categoria em vários lançamentos, despesas ou recebimentos.',
+    fields:[{key:'nome',label:'Nome da categoria',type:'text'},{key:'cor',label:'Cor da categoria',type:'color',default:baseCatColor('Nova categoria')}],
+    saveLabel:'Criar categoria',
+    onSave(v){
+      const name=(v.nome||'').trim();
+      if(!name){ alert('Digite o nome da categoria.'); return; }
+      if(!S.data.categorias[typeKey]) S.data.categorias[typeKey]=[];
+      if(S.data.categorias[typeKey].some(c=>c.toLowerCase()===name.toLowerCase())){ alert('Essa categoria já existe.'); return; }
+      S.data.categorias[typeKey].push(name);
+      setCategoryColor(typeKey, name, v.cor||baseCatColor(name));
+      saveCurrentData(); closeModal(); renderView(); toast('Categoria criada.');
+    }
+  });
+};
+Settings.renameCategory = function(typeKey, oldName){
+  openModal({
+    title:'Editar categoria',
+    sub:'Renomear mantém o vínculo com os lançamentos já existentes.',
+    fields:[{key:'nome',label:'Nome da categoria',type:'text',default:oldName},{key:'cor',label:'Cor da categoria',type:'color',default:categoryColor(typeKey,oldName)}],
+    saveLabel:'Salvar categoria',
+    onSave(v){
+      const name=(v.nome||'').trim();
+      if(!name){ alert('Digite o nome da categoria.'); return; }
+      const list=S.data.categorias[typeKey]||[];
+      const idx=list.indexOf(oldName);
+      if(idx<0){ closeModal(); return; }
+      if(name!==oldName && list.some(c=>c.toLowerCase()===name.toLowerCase())){ alert('Já existe uma categoria com esse nome.'); return; }
+      list[idx]=name;
+      updateCategoryReferences(typeKey, oldName, name);
+      moveCategoryColor(typeKey, oldName, name, v.cor||categoryColor(typeKey,oldName));
+      saveCurrentData(); closeModal(); renderView(); toast('Categoria atualizada.');
+    }
+  });
+};
+Settings.showCategoryLinkedWarning = function(typeKey, name, usage){
+  const detail = usage && usage.parts && usage.parts.length ? ` Encontrado: ${usage.parts.join(', ')}.` : '';
+  const box = el(`
+    <div class="modal-overlay">
+      <div class="modal-box confirm-box confirm-gold">
+        <div class="modal-head"><h2>Categoria em uso</h2><button id="cw_close">&times;</button></div>
+        <p class="confirm-text"><b>Categoria vinculada a lançamentos/despesas.</b><br>Desvincule para excluir.${esc(detail)}</p>
+        <div class="info-box">Para manter seu histórico certo, o Borion não troca automaticamente essa categoria para “Outro”. Primeiro edite ou remova os lançamentos vinculados.</div>
+        <div class="confirm-actions">
+          <button class="btn btn-secondary btn-block" id="cw_ok">Entendi</button>
+          <button class="btn btn-primary btn-block" id="cw_go">Ver lançamentos</button>
+        </div>
+      </div>
+    </div>`);
+  $('#modal-root').innerHTML=''; $('#modal-root').appendChild(box); attachModalGuard(box);
+  $('#cw_close').onclick=closeModal; $('#cw_ok').onclick=closeModal;
+  $('#cw_go').onclick=()=>{ closeModal(); S.view='budget'; S.budgetTab=(typeKey==='receita'?'receita':typeKey); renderApp(); };
+};
+Settings.deleteCategory = function(typeKey, name){
+  const usage = categoryUsageDetails(typeKey, name);
+  if(usage.total>0){ Settings.showCategoryLinkedWarning(typeKey, name, usage); return; }
+  openConfirmModal({
+    title:'Excluir categoria',
+    text:`Excluir a categoria "${name}"? Ela não possui lançamentos vinculados.`,
+    confirmLabel:'Excluir categoria', cancelLabel:'Cancelar', variant:'danger',
+    onConfirm(){
+      S.data.categorias[typeKey]=(S.data.categorias[typeKey]||[]).filter(c=>c!==name);
+      if(!S.data.categorias[typeKey].includes('Outro')) S.data.categorias[typeKey].push('Outro');
+      if(S.data.categoryColors&&S.data.categoryColors[typeKey]) delete S.data.categoryColors[typeKey][name];
+      saveCurrentData(); renderView(); toast('Categoria excluída.');
+    }
+  });
+};
+Settings.deleteCloudAccountFlow = function(){
+  const cloud = window.CloudStorage;
+  if(!cloud || !cloud.user){ alert('Entre na conta Borion Cloud antes de excluir.'); return; }
+  const accountEmail = (cloud.user.email||'').trim();
+  openModal({
+    title:'Excluir conta Borion Cloud',
+    sub:'Confirme o e-mail e a senha da conta. Isso é diferente de excluir só um perfil financeiro.',
+    fields:[{key:'email',label:'Confirme o e-mail da conta',type:'email',default:accountEmail},{key:'senha',label:'Confirme a senha da conta',type:'password',autocomplete:'current-password'}],
+    saveLabel:'Continuar',
+    onSave(v){
+      const email=(v.email||'').trim().toLowerCase();
+      if(email!==accountEmail.toLowerCase()){ alert('O e-mail digitado não confere com a conta logada.'); return; }
+      if(!v.senha){ alert('Digite a senha da conta.'); return; }
+      openConfirmModal({
+        title:'Excluir conta inteira',
+        text:'Última confirmação: isto apaga a conta de login, todos os perfis e os dados salvos no Supabase. Gere um backup antes se quiser guardar algo.',
+        confirmLabel:'Excluir minha conta', cancelLabel:'Cancelar', variant:'danger',
+        onConfirm: async ()=>{
+          try{
+            await CloudStorage.deleteAccountWithCredentials(accountEmail, v.senha);
+            CloudAuth.mode='login'; CloudAuth.info='Conta excluída com sucesso.'; CloudAuth.error='';
+            closeModal();
+            if(typeof CloudAuth.render==='function') CloudAuth.render(); else location.reload();
+          }catch(e){ alert(translateSupabaseError(e.message||String(e))); }
+        }
+      });
+    }
+  });
+};
+
 Settings.deleteProfile = function(id){
   const pr=(S.profiles||[]).find(x=>x.id===id); if(!pr) return;
   openConfirmModal({title:'Excluir perfil financeiro', text:`Para excluir "${pr.name}", confirme. Esta ação apaga este perfil e seus dados financeiros na nuvem. Mantenha um backup se precisar.`, confirmLabel:'Excluir perfil', cancelLabel:'Cancelar', variant:'danger', onConfirm: async ()=>{
@@ -421,10 +567,20 @@ Settings.deleteProfile = function(id){
     catch(e){ alert(e.message||String(e)); }
   }});
 };
-Settings.exportProfile = function(){
-  const p=S.currentProfile; if(!p){ alert('Entre em um perfil antes de exportar.'); return; }
-  const payload={type:'borion-profile-backup',version:5348,exportedAt:new Date().toISOString(),accountEmail:(CloudStorage&&CloudStorage.user&&CloudStorage.user.email)||p.email||'',profile:{id:p.id,name:p.name,avatarColor:p.avatarColor,avatarImage:p.avatarImage},data:S.data};
-  downloadJSON(payload, `borion-perfil-${slug(p.name)}-${dateSlug()}.json`); toast('Backup do perfil ativo exportado.');
+Settings.exportProfile = async function(){
+  if(!S.currentProfile && !(S.profiles||[]).length){ alert('Entre em um perfil antes de exportar.'); return; }
+  try{
+    const payload = (typeof buildCloudAccountBackupPayload==='function') ? await buildCloudAccountBackupPayload('manual','exportação manual JSON completa') : await buildLocalAccountBackupPayload('manual','exportação manual JSON completa');
+    downloadJSON(payload, `borion-conta-completa-${dateSlug()}.json`);
+    toast('Backup completo exportado com todos os perfis da conta.');
+  }catch(e){ alert(e.message||String(e)); }
+};
+Settings.emailBackup = function(){
+  Settings.exportProfile();
+  const p=S.currentProfile||{};
+  const subject=encodeURIComponent('Backup completo - '+APP_NAME);
+  const body=encodeURIComponent('Olá,\n\nSegue em anexo o backup completo do '+APP_NAME+'.\nO arquivo JSON foi baixado/salvo agora e contém todos os perfis da conta; anexe-o a este e-mail antes de enviar.\n\n');
+  setTimeout(()=>{ window.location.href=`mailto:${p.email||''}?subject=${subject}&body=${body}`; },500);
 };
 
 /* ---------- V5.35.1: ações da tela Backups/Supabase ---------- */

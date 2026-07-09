@@ -79,7 +79,65 @@ function monthDiffYM(ymA, ymB){
 
 const PALETTE = ['#3b82f6','#22c55e','#a855f7','#ec4899','#ef4444','#14b8a6','#f59e0b','#6366f1','#84cc16','#06b6d4','#f43f5e','#eab308'];
 function hashStr(s){let h=0;for(let i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))>>>0;}return h;}
-function catColor(name){return PALETTE[hashStr(String(name))%PALETTE.length];}
+function baseCatColor(name){return PALETTE[hashStr(String(name))%PALETTE.length];}
+function normalizeHexColor(val, fallback){
+  const v=String(val||'').trim();
+  if(/^#[0-9a-f]{6}$/i.test(v)) return v;
+  if(/^#[0-9a-f]{3}$/i.test(v)) return '#'+v.slice(1).split('').map(c=>c+c).join('');
+  return fallback || baseCatColor('Outro');
+}
+function ensureCategoryColors(){
+  if(typeof S==='undefined' || !S.data) return null;
+  if(!S.data.categoryColors) S.data.categoryColors={};
+  ['receita','fixa','variavel'].forEach(k=>{
+    if(!S.data.categoryColors[k]) S.data.categoryColors[k]={};
+    ((S.data.categorias&&S.data.categorias[k])||[]).forEach(c=>{ if(!S.data.categoryColors[k][c]) S.data.categoryColors[k][c]=baseCatColor(c); });
+  });
+  return S.data.categoryColors;
+}
+function categoryColor(typeKey, name){
+  const colors = ensureCategoryColors();
+  if(colors && typeKey && colors[typeKey] && colors[typeKey][name]) return normalizeHexColor(colors[typeKey][name], baseCatColor(name));
+  if(colors){
+    for(const k of ['receita','fixa','variavel']){
+      if(colors[k] && colors[k][name]) return normalizeHexColor(colors[k][name], baseCatColor(name));
+    }
+  }
+  return baseCatColor(name);
+}
+function setCategoryColor(typeKey, name, color){
+  const colors=ensureCategoryColors();
+  if(!colors || !typeKey || !name) return;
+  if(!colors[typeKey]) colors[typeKey]={};
+  colors[typeKey][name]=normalizeHexColor(color, baseCatColor(name));
+}
+function moveCategoryColor(typeKey, oldName, newName, color){
+  const colors=ensureCategoryColors();
+  if(!colors || !typeKey || !oldName || !newName) return;
+  if(!colors[typeKey]) colors[typeKey]={};
+  const next=normalizeHexColor(color || colors[typeKey][oldName], baseCatColor(newName));
+  delete colors[typeKey][oldName];
+  colors[typeKey][newName]=next;
+}
+function catColor(name){return categoryColor(null, name);}
+function jsArg(v){return JSON.stringify(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function passwordEyeSVG(hidden){
+  return hidden
+    ? `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18M10.6 10.6a3 3 0 0 0 4.24 4.24M9.88 5.14A10.9 10.9 0 0 1 12 5c6 0 10 7 10 7a15.6 15.6 0 0 1-3.22 3.9M6.6 6.6C3.9 8.3 2 12 2 12a15.9 15.9 0 0 0 5.06 5.94"/></svg>`
+    : `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>`;
+}
+function passwordInputWrapHTML({id,label,value='',autocomplete='',placeholder=''}){
+  const ac = autocomplete ? ` autocomplete="${esc(autocomplete)}"` : '';
+  return `<div class="field"><label>${esc(label||'Senha')}</label><div class="password-wrap"><input type="password" id="${esc(id)}" value="${esc(value||'')}"${ac} placeholder="${esc(placeholder||'')}"/><button class="password-toggle" type="button" onclick="togglePasswordInput('${esc(id)}',this)" aria-label="Mostrar senha" title="Mostrar/ocultar senha">${passwordEyeSVG(true)}</button></div></div>`;
+}
+function togglePasswordInput(id, btn){
+  const input=document.getElementById(id); if(!input) return;
+  const show=input.type==='password';
+  input.type=show?'text':'password';
+  if(btn){ btn.innerHTML=passwordEyeSVG(!show); btn.setAttribute('aria-label', show?'Ocultar senha':'Mostrar senha'); }
+  input.focus();
+}
+window.togglePasswordInput = togglePasswordInput;
 function bankColor(name){
   const n=(name||'').toLowerCase();
   if(n.includes('nubank')) return '#8a05be';

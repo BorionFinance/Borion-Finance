@@ -212,6 +212,7 @@ function defaultCategories(){
 function emptyData(){
   return {
     categorias: defaultCategories(),
+    categoryColors: {receita:{}, fixa:{}, variavel:{}},
     investirPlanejado: {},
     transacoes: [],
     fixas: [],
@@ -234,6 +235,20 @@ function emptyData(){
 }
 function migrateData(d){
   if(!d) return emptyData();
+  if(!d.categorias) d.categorias=defaultCategories();
+  const _defaultCats = defaultCategories();
+  ['receita','fixa','variavel'].forEach(k=>{
+    if(!Array.isArray(d.categorias[k])) d.categorias[k]=(_defaultCats[k]||['Outro']).slice();
+    if(!d.categorias[k].includes('Outro')) d.categorias[k].push('Outro');
+  });
+  if(!d.categoryColors) d.categoryColors={};
+  ['receita','fixa','variavel'].forEach(k=>{
+    if(!d.categoryColors[k]) d.categoryColors[k]={};
+    d.categorias[k].forEach(c=>{
+      d.categoryColors[k][c]=normalizeHexColor(d.categoryColors[k][c], baseCatColor(c));
+    });
+    Object.keys(d.categoryColors[k]).forEach(c=>{ if(!d.categorias[k].includes(c)) delete d.categoryColors[k][c]; });
+  });
   if(!d.fixas) d.fixas=[];
   if(!d.agenda) d.agenda=[];
   if(!d.metas) d.metas=[];
@@ -322,9 +337,32 @@ function bankMatches(itemBanco){
 function bankSelectField(idPrefix, selected){
   return {key:'banco', label:'Banco/Conta', type:'select', options:['— Nenhum —',...allBankNames()], default: selected||'— Nenhum —'};
 }
+function showBankRequiredModal(msg){
+  const text = msg || 'Todo lançamento precisa de um banco/conta vinculado.';
+  if(!document.getElementById('modal-root') || typeof el!=='function'){ alert(text); return; }
+  const box = el(`
+    <div class="modal-overlay">
+      <div class="modal-box bank-required-modal">
+        <div class="modal-head"><h2>Banco/conta obrigatório</h2><button id="br_close">&times;</button></div>
+        <p class="confirm-text">${esc(text)}</p>
+        <div class="info-box">Essa conta não se conecta ao banco real. Ela serve só como referência dentro do Borion para você lançar receitas, despesas, pagamentos e rastrear suas movimentações com facilidade.</div>
+        <div class="row-btns" style="margin-top:12px;"><button class="btn btn-primary btn-block" id="br_add">Adicionar conta do banco</button></div>
+        <button class="link-btn" id="br_cancel" style="width:100%;margin-top:10px;">Cancelar</button>
+      </div>
+    </div>`);
+  $('#modal-root').innerHTML=''; $('#modal-root').appendChild(box); attachModalGuard(box);
+  $('#br_close').onclick=closeModal;
+  $('#br_cancel').onclick=closeModal;
+  $('#br_add').onclick=()=>{
+    closeModal();
+    S.view='cards';
+    renderApp();
+    setTimeout(()=>{ if(typeof Cards!=='undefined' && Cards.addConta) Cards.addConta(); }, 80);
+  };
+}
 function requireBanco(bancoVal, msg){
   const banco = bancoVal==='— Nenhum —' ? '' : (bancoVal||'');
-  if(!banco){ alert(msg||'Escolha um banco/conta/cartão para este lançamento.'); return null; }
+  if(!banco){ showBankRequiredModal(msg||'Escolha um banco/conta/cartão para este lançamento.'); return null; }
   return banco;
 }
 

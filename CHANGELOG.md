@@ -1,3 +1,13 @@
+## V5.36.0 — Categorias, conta e UX de lançamentos (09/07/2026)
+- Categorias agora têm cor própria e podem ser reutilizadas em vários recebimentos/despesas.
+- Excluir categoria vinculada agora é bloqueado por modal interno, sem bagunçar lançamentos antigos.
+- Senha com botão de visualizar/ocultar no login, criação de conta e criação/entrada de perfil.
+- Tema escuro corrige nome do perfil com fonte clara.
+- Conta Borion Cloud agora tem fluxo de exclusão com confirmação de e-mail e senha.
+- Backup JSON completo na nuvem agora permite importar todos os perfis vinculados à conta.
+- Aviso de banco/conta obrigatório saiu do alerta do navegador e virou tela flutuante com botão para cadastrar banco.
+- Inclui SQL SUPABASE_V5.36_DELETE_ACCOUNT.sql para habilitar exclusão total da conta no Supabase.
+
 
 ## V5.35.2 — Backup Null Guard
 - Corrigido erro ao aceitar/configurar pasta de backups antes de abrir um perfil financeiro.

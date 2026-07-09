@@ -51,6 +51,9 @@ function openModal({title, sub, fields, values={}, saveLabel, onSave, onDelete, 
     if(f.type==='color'){
       return `<div class="field"><label>${esc(f.label)}</label><input type="color" id="mf_${f.key}" value="${val?esc(val):'#3b6bf0'}"/></div>`;
     }
+    if(f.type==='password'){
+      return passwordInputWrapHTML({id:'mf_'+f.key,label:f.label,value:val||'',autocomplete:f.autocomplete||'',placeholder:f.placeholder||''});
+    }
     return `<div class="field"><label>${esc(f.label)}</label><input type="${f.type||'text'}" id="mf_${f.key}" value="${val!=null?esc(val):''}" ${f.step?`step="${f.step}"`:''} placeholder="${esc(f.placeholder||'')}"/></div>`;
   }).join('');
 
@@ -156,6 +159,7 @@ function wireQuickCategory(selectEl, boxEl, inputEl, addBtnEl, typeKey){
     if(!name) return;
     if(!S.data.categorias[typeKey].includes(name)){
       S.data.categorias[typeKey].push(name);
+      setCategoryColor(typeKey, name, baseCatColor(name));
       saveCurrentData();
     }
     selectEl.innerHTML = S.data.categorias[typeKey].map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('') + `<option value="__new__">➕ Criar nova categoria...</option>`;

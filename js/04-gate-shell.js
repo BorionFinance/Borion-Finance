@@ -46,7 +46,7 @@ function renderGate(){
       <p class="gate-title">Olá, ${esc(p.name)}</p>
       <p class="gate-sub">Digite sua senha para continuar.</p>
       ${S.gate.error?`<p class="gate-error">${esc(S.gate.error)}</p>`:''}
-      <div class="field"><label>Senha</label><input type="password" id="gate_pw" placeholder="••••••••"/></div>
+      ${passwordInputWrapHTML({id:'gate_pw',label:'Senha',placeholder:'••••••••',autocomplete:'current-password'})}
       <div class="field-check"><input type="checkbox" id="gate_remember"/> <label style="margin:0" for="gate_remember">Manter conectado neste dispositivo</label></div>
       <button class="btn btn-primary btn-block" id="gate_enter">Entrar</button>
       <div style="text-align:center;margin-top:14px;"><button class="link-btn" id="gate_back">Voltar</button></div>
@@ -63,7 +63,7 @@ function renderGate(){
       <p class="gate-title">Olá, ${esc(p.name)}</p>
       <p class="gate-sub">${p.passwordHash ? 'Digite sua senha para continuar.' : 'Toque em entrar para continuar.'}</p>
       ${S.gate.error?`<p class="gate-error">${esc(S.gate.error)}</p>`:''}
-      ${p.passwordHash ? `<div class="field"><label>Senha</label><input type="password" id="gate_pw" placeholder="••••••••"/></div>
+      ${p.passwordHash ? `${passwordInputWrapHTML({id:'gate_pw',label:'Senha',placeholder:'••••••••',autocomplete:'current-password'})}
       <div class="field-check"><input type="checkbox" id="gate_remember"/> <label style="margin:0" for="gate_remember">Manter conectado neste dispositivo</label></div>` : ''}
       <button class="btn btn-primary btn-block" id="gate_enter_single" data-id="${p.id}">Entrar</button>
       <div style="text-align:center;margin-top:14px;"><button class="link-btn" id="gate_new">+ Criar outro perfil</button></div>
@@ -120,8 +120,8 @@ function renderCreateProfileFormHTML(){
     <div class="field"><label>E-mail (opcional)</label><input type="email" id="np_email" placeholder="voce@email.com"/></div>
     <div class="field-check"><input type="checkbox" id="np_haspw"/> <label style="margin:0" for="np_haspw">Proteger este perfil com senha</label></div>
     <div id="np_pwfields" class="hidden">
-      <div class="field"><label>Senha</label><input type="password" id="np_pw" placeholder="Crie uma senha"/></div>
-      <div class="field"><label>Confirmar senha</label><input type="password" id="np_pw2" placeholder="Repita a senha"/></div>
+      ${passwordInputWrapHTML({id:'np_pw',label:'Senha',placeholder:'Crie uma senha',autocomplete:'new-password'})}
+      ${passwordInputWrapHTML({id:'np_pw2',label:'Confirmar senha',placeholder:'Repita a senha',autocomplete:'new-password'})}
     </div>
     <button class="btn btn-primary btn-block" id="np_save">Criar perfil</button>
     <div style="text-align:center;margin-top:14px;"><button class="link-btn" id="np_cancel">Cancelar</button></div>

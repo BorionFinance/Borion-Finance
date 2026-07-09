@@ -7,7 +7,7 @@ function renderCards(){
       <div class="card-entity-head">
         <div class="cehl">
           <div class="bank-badge" style="background:${a.cor||bankColor(a.nome)}">${esc(a.icone||(a.nome||'?')[0])}</div>
-          <div class="info"><div>${esc(a.nome)} <span style="font-weight:400;color:var(--muted);font-size:11.5px;">· ${esc(a.tipo||'Conta')}</span>${a.isCarteira?` <span class="cat-pill" style="margin-left:4px;"><span class="dot" style="background:var(--gold-bright)"></span>Fixa · não pode ser excluída</span>`:''}</div><div>Saldo inicial: ${brl(a.saldoInicial||0)}${a.rende?` · Rende ${pct(a.percentualRendimento||0)} a.m.`:' · Não rende'}</div></div>
+          <div class="info"><div>${esc(a.nome)} <span style="font-weight:400;color:var(--muted);font-size:11.5px;">· ${a.isCarteira?'(dinheiro físico)':esc(a.tipo||'Conta')}</span></div><div>Saldo inicial: ${brl(a.saldoInicial||0)}${a.rende?` · Rende ${pct(a.percentualRendimento||0)} a.m.`:' · Não rende'}${a.isCarteira?' · Não pode ser excluída':''}</div></div>
         </div>
         <button class="btn-outline btn-sm" onclick="Cards.editConta('${a.id}')">✎ Editar</button>
       </div>
@@ -173,7 +173,11 @@ const Cards = {
     onSave(v){
       const banco = (v.banco||'').trim();
       if(!banco){ alert('Digite o banco/nome do cartão.'); return; }
-      Object.assign(c,{banco,limite:Number(v.limite)||0}); saveCurrentData(); closeModal(); renderView();
+      Object.assign(c,{banco,limite:Number(v.limite)||0});
+      /* V5.39.1 — renomear o cartão precisa atualizar o banco gravado nas despesas
+         espelhadas (Cartões e Contas → Despesas), senão elas ficam com o nome antigo. */
+      (c.parcelas||[]).forEach(p=>{ if(p.apareceDespesas) linkParcelaToDespesa(c,p); });
+      saveCurrentData(); closeModal(); renderView();
     }});
   },
   addParcela(cartaoId){
@@ -243,16 +247,17 @@ const Cards = {
     if(!c || !Array.isArray(c.faturasPagas)) return;
     const idx = c.faturasPagas.findIndex(f=>f.id===pagamentoId);
     if(idx<0) return;
-    if(!confirm('Desfazer este pagamento de fatura? O valor volta a aparecer como dívida e o saldo do banco é devolvido.')) return;
-    const pg = c.faturasPagas[idx];
-    adjustLiquidez(pg.banco, pg.valor);
-    c.faturasPagas.splice(idx,1);
-    saveCurrentData(); renderView(); toast('Pagamento da fatura desfeito.');
+    openConfirmModal({title:'Desfazer pagamento de fatura', text:'Desfazer este pagamento de fatura? O valor volta a aparecer como dívida e o saldo do banco é devolvido.', confirmLabel:'Desfazer pagamento', variant:'danger', onConfirm(){
+      const pg = c.faturasPagas[idx];
+      adjustLiquidez(pg.banco, pg.valor);
+      c.faturasPagas.splice(idx,1);
+      saveCurrentData(); renderView(); toast('Pagamento da fatura desfeito.');
+    }});
   },
   addBoleto(){ Cards.editBoleto(null); },
   editBoleto(id){
     const isEdit = !!id;
-    const b = isEdit ? (S.data.boletos||[]).find(x=>x.id===id) : {descricao:'', credor:'', banco:'', categoria:'Outro', valorParcela:0, parcelaTotal:1, dataInicio:monthKey(S.month.y,S.month.m), diaVencimento:'', status:'Ativo', obs:''};
+    const b = isEdit ? (S.data.boletos||[]).find(x=>x.id===id) : {descricao:'', credor:'', banco:'', categoria:'Outro', valorParcela:0, parcelaTotal:1, dataInicio:monthKey(S.month.y,S.month.m), diaVencimento:'', status:'Ativo', obs:'', apareceDespesas:false, despesaTipo:'variavel'};
     openModal({title:isEdit?'Editar boleto':'Adicionar boleto', sub:'Use para boleto parcelado/carnê. Ele entra em Dívidas no Patrimônio, separado do cartão de crédito.', fields:[
       {key:'descricao',label:'Descrição do boleto',type:'text',placeholder:'Ex: Notebook, seguro, carnê...'},
       {key:'credor',label:'Para quem / empresa',type:'text',placeholder:'Ex: Loja, financeira, pessoa...'},
@@ -263,16 +268,22 @@ const Cards = {
       {key:'dataInicio',label:'Mês do primeiro boleto',type:'month',default:monthKey(S.month.y,S.month.m)},
       {key:'diaVencimento',label:'Dia de vencimento',type:'number',step:'1'},
       {key:'status',label:'Status',type:'select',options:['Ativo','Quitado','Cancelado']},
-      {key:'obs',label:'Observação',type:'text'}
+      {key:'obs',label:'Observação',type:'text'},
+      {key:'apareceDespesas',label:'Aparecer também em Despesas?',type:'checkbox'},
+      {key:'despesaTipo',label:'Aparecer como',type:'segmented',default:'variavel',options:[{value:'variavel',label:'Despesa variável'},{value:'fixa',label:'Despesa fixa'}],visibleWhen:{key:'apareceDespesas',value:true}},
     ], values:b,
-    onDelete:isEdit?()=>{ S.data.boletos = (S.data.boletos||[]).filter(x=>x.id!==id); saveCurrentData(); closeModal(); renderView(); }:null,
+    onDelete:isEdit?()=>{ unlinkBoletoFromDespesa(b); S.data.boletos = (S.data.boletos||[]).filter(x=>x.id!==id); saveCurrentData(); closeModal(); renderView(); }:null,
     onSave(v){
       const banco = requireBanco(v.banco,'Escolha o banco/conta vinculado a este boleto.');
       if(!banco) return;
       if(!S.data.boletos) S.data.boletos=[];
-      const obj = {descricao:v.descricao||'Boleto', credor:v.credor||'', banco, categoria:v.categoria||'Outro', valorParcela:Number(v.valorParcela)||0, parcelaTotal:Math.max(1,Math.round(v.parcelaTotal)||1), dataInicio:v.dataInicio||monthKey(S.month.y,S.month.m), diaVencimento:v.diaVencimento||'', status:v.status||'Ativo', obs:v.obs||''};
-      if(isEdit) Object.assign(b,obj); else S.data.boletos.push(Object.assign({id:uid(), createdAt:Date.now(), pagamentos:[]}, obj));
-      saveCurrentData(); closeModal(); renderView(); toast(isEdit?'Boleto atualizado.':'Boleto cadastrado.');
+      const obj = {descricao:v.descricao||'Boleto', credor:v.credor||'', banco, categoria:v.categoria||'Outro', valorParcela:Number(v.valorParcela)||0, parcelaTotal:Math.max(1,Math.round(v.parcelaTotal)||1), dataInicio:v.dataInicio||monthKey(S.month.y,S.month.m), diaVencimento:v.diaVencimento||'', status:v.status||'Ativo', obs:v.obs||'', apareceDespesas:!!v.apareceDespesas, despesaTipo:v.despesaTipo||'variavel'};
+      let alvo;
+      if(isEdit){ Object.assign(b,obj); alvo=b; }
+      else { alvo = Object.assign({id:uid(), createdAt:Date.now(), pagamentos:[], despesaTransacaoId:null, despesaFixaId:null}, obj); S.data.boletos.push(alvo); }
+      linkBoletoToDespesa(alvo);
+      saveCurrentData(); closeModal(); renderView();
+      toast(alvo.apareceDespesas ? (isEdit?'Boleto atualizado e em Despesas.':'Boleto cadastrado e em Despesas.') : (isEdit?'Boleto atualizado.':'Boleto cadastrado.'));
     }});
   },
   /* Marca a parcela do mês selecionado como paga: debita o banco escolhido e some da dívida em aberto. */
@@ -301,11 +312,12 @@ const Cards = {
     if(!b || !Array.isArray(b.pagamentos)) return;
     const idx = b.pagamentos.findIndex(p=>p.id===pagamentoId);
     if(idx<0) return;
-    if(!confirm('Desfazer este pagamento? O valor volta a aparecer como dívida e o saldo do banco é devolvido.')) return;
-    const pg = b.pagamentos[idx];
-    adjustLiquidez(pg.banco, pg.valor);
-    b.pagamentos.splice(idx,1);
-    saveCurrentData(); renderView(); toast('Pagamento do boleto desfeito.');
+    openConfirmModal({title:'Desfazer pagamento', text:'Desfazer este pagamento? O valor volta a aparecer como dívida e o saldo do banco é devolvido.', confirmLabel:'Desfazer pagamento', variant:'danger', onConfirm(){
+      const pg = b.pagamentos[idx];
+      adjustLiquidez(pg.banco, pg.valor);
+      b.pagamentos.splice(idx,1);
+      saveCurrentData(); renderView(); toast('Pagamento do boleto desfeito.');
+    }});
   },
   /* Transferência entre contas: move dinheiro de um banco para outro (não é receita nem despesa). */
   addTransferencia(){ Cards.editTransferencia(null); },

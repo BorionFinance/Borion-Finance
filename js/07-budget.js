@@ -41,7 +41,7 @@ function renderBudget(){
       rows = list.map(e=>`
         <tr>
           <td>${e.ocorrencias}x</td>
-          <td>${esc(e.f.nome)}<div style="font-size:10.5px;color:var(--muted)">recorrente desde ${shortMonthLabel(e.f.startMonth)}</div>${e.f.viaParcelaId?`<span class="cat-pill" style="opacity:.8;margin-top:3px;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via cartão</span>`:''}</td>
+          <td>${esc(e.f.nome)}<div style="font-size:10.5px;color:var(--muted)">recorrente desde ${shortMonthLabel(e.f.startMonth)}</div>${e.f.viaParcelaId?`<span class="cat-pill" style="opacity:.8;margin-top:3px;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via cartão</span>`:e.f.viaBoletoId?`<span class="cat-pill" style="opacity:.8;margin-top:3px;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via boleto</span>`:''}</td>
           <td><span class="cat-pill"><span class="dot" style="background:${catColor(e.f.categoria)}"></span>${esc(e.f.categoria)}</span></td>
           <td class="val-neg">- ${brl(e.total)}</td>
           <td class="tbl-actions"><button onclick="Budget.edit('${e.f.id}')">✎</button></td>
@@ -58,7 +58,7 @@ function renderBudget(){
       rows = list.map(f=>`
         <tr>
           <td>Dia ${f.dia||1}</td>
-          <td>${esc(f.nome)}<div style="font-size:10.5px;color:var(--muted)">recorrente desde ${shortMonthLabel(f.startMonth)}</div>${f.viaParcelaId?`<span class="cat-pill" style="opacity:.8;margin-top:3px;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via cartão</span>`:''}</td>
+          <td>${esc(f.nome)}<div style="font-size:10.5px;color:var(--muted)">recorrente desde ${shortMonthLabel(f.startMonth)}</div>${f.viaParcelaId?`<span class="cat-pill" style="opacity:.8;margin-top:3px;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via cartão</span>`:f.viaBoletoId?`<span class="cat-pill" style="opacity:.8;margin-top:3px;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via boleto</span>`:''}</td>
           <td><span class="cat-pill"><span class="dot" style="background:${catColor(f.categoria)}"></span>${esc(f.categoria)}</span></td>
           <td class="val-neg">- ${brl(f.valor)}</td>
           <td class="tbl-actions"><button onclick="Budget.edit('${f.id}')">✎</button></td>
@@ -82,7 +82,7 @@ function renderBudget(){
       const origemKey = t.origem||'propria';
       const origemPill = (tab==='receita' && origemKey!=='propria') ? ` <span class="cat-pill" style="background:rgba(240,194,110,.15);color:var(--gold-bright);"><span class="dot" style="background:var(--gold-bright)"></span>${esc(txOrigemToLabel(origemKey))}</span>` : '';
       const formaPill = (tab==='variavel' && t.formaPagamento) ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--muted)"></span>${esc(t.formaPagamento)}</span>` : '';
-      const viaCartaoPill = t.viaParcelaId ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via cartão</span>` : '';
+      const viaCartaoPill = t.viaParcelaId ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via cartão</span>` : (t.viaBoletoId ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via boleto</span>` : '');
       return `
       <tr>
         <td>${t.data.slice(8,10)}/${t.data.slice(5,7)}</td>
@@ -149,16 +149,16 @@ const Budget = {
       const f = S.data.fixas.find(x=>x.id===id);
       /* V5.39.0 — despesa fixa espelhada de uma compra no cartão: edita/remove pela
          compra no cartão, pra nunca dessincronizar os dois lados do vínculo. */
-      if(f && f.viaParcelaId){
-        toast('Essa despesa fixa vem de uma compra no cartão — edite ou remova em Cartões e Contas.');
+      if(f && (f.viaParcelaId || f.viaBoletoId)){
+        toast(f.viaParcelaId ? 'Essa despesa fixa vem de uma compra no cartão — edite ou remova em Cartões e Contas.' : 'Essa despesa fixa vem de um boleto — edite ou remova em Cartões e Contas.');
         S.view='cards'; renderApp();
         return;
       }
       openFixaModal(f);
     } else {
       const t = S.data.transacoes.find(x=>x.id===id);
-      if(t && t.viaParcelaId){
-        toast('Essa despesa vem de uma compra no cartão — edite ou remova em Cartões e Contas.');
+      if(t && (t.viaParcelaId || t.viaBoletoId)){
+        toast(t.viaParcelaId ? 'Essa despesa vem de uma compra no cartão — edite ou remova em Cartões e Contas.' : 'Essa despesa vem de um boleto — edite ou remova em Cartões e Contas.');
         S.view='cards'; renderApp();
         return;
       }

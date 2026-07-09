@@ -1,4 +1,13 @@
-## V5.39.0 — Compra no cartão pode aparecer em Despesas (09/07/2026)
+## V5.39.1 — Correção do vínculo cartão/boleto ↔ Despesas + avisos internos (09/07/2026)
+- Corrigido bug em que uma compra parcelada com "Aparecer também em Despesas?" marcado sumia da lista de Lançamentos (e dos totais) sempre que o filtro de banco/cartão estava ativo — a despesa espelhada era salva com banco em branco e nunca batia com o filtro. Agora ela herda o banco/nome do próprio cartão, então aparece de forma consistente em Lançamentos e em Cartões e Contas. Dados antigos são corrigidos automaticamente na primeira abertura do app.
+- Renomear um cartão agora também atualiza o banco das despesas já espelhadas por ele.
+- Boletos (Adicionar/Editar boleto) ganharam a mesma opção "Aparecer também em Despesas?" com escolha entre Despesa fixa/variável, com o mesmo vínculo em mão dupla do cartão (editar/excluir o boleto atualiza ou remove a despesa espelhada; não duplica). Testado com vários boletos simultâneos.
+- O aviso nativo do navegador ao desfazer pagamento de fatura/boleto virou uma tela de confirmação dentro do app, no mesmo estilo dos outros avisos.
+- Reserva: rótulo do topo simplificado para "◈ Reservado: R$ 0,00" (sem repetir "Reserva").
+- Cartões e Contas: linha da Carteira simplificada para "Carteira · (dinheiro físico) · Saldo inicial: R$ 0,00 · Não rende · Não pode ser excluída".
+
+
+
 - Corrigido: lançar uma despesa em crédito na tela de Orçamento agora aparece em Cartões e Contas **e** em Despesas (despesa variável), como deveria — antes só aparecia no cartão.
 - Nova opção "Aparecer também em Despesas?" ao adicionar/editar uma compra parcelada direto em Cartões e Contas. Se marcar Sim, aparece um alternador (estilo on/off) pra escolher se ela entra como Despesa fixa ou Despesa variável.
 - O vínculo é sempre em mão dupla e sem duplicar: editar valor/categoria/parcelas da compra no cartão atualiza a despesa espelhada; desmarcar a opção ou excluir a compra remove a despesa espelhada junto. Editar essas despesas espelhadas só é possível pela compra no cartão (Cartões e Contas), pra nunca dessincronizar os dois lados.

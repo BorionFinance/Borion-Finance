@@ -347,6 +347,28 @@ function migrateData(d){
       if(p.despesaFixaId===undefined) p.despesaFixaId=null;
     });
   });
+  // V5.39.1 — boletos: vínculo opcional com Orçamento > Despesas (mesmo mecanismo do cartão).
+  (d.boletos||[]).forEach(b=>{
+    if(b.apareceDespesas==null) b.apareceDespesas=false;
+    if(b.despesaTipo==null) b.despesaTipo='variavel';
+    if(b.despesaTransacaoId===undefined) b.despesaTransacaoId=null;
+    if(b.despesaFixaId===undefined) b.despesaFixaId=null;
+  });
+  // V5.39.1 — correção defensiva: despesas espelhadas de compra parcelada gravadas com
+  // banco:'' (bug da V5.39.0) somem da lista/total sempre que o filtro de banco/cartão
+  // está ativo. Preenche o banco correto usando o cartão de origem (viaCartaoId).
+  (d.transacoes||[]).forEach(t=>{
+    if(t.viaParcelaId && t.viaCartaoId && !t.banco){
+      const cartao = (d.cartoes||[]).find(c=>c.id===t.viaCartaoId);
+      if(cartao && cartao.banco) t.banco = cartao.banco;
+    }
+  });
+  (d.fixas||[]).forEach(f=>{
+    if(f.viaParcelaId && f.viaCartaoId && !f.banco){
+      const cartao = (d.cartoes||[]).find(c=>c.id===f.viaCartaoId);
+      if(cartao && cartao.banco) f.banco = cartao.banco;
+    }
+  });
   return d;
 }
 function allBankNames(){

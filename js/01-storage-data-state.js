@@ -344,6 +344,7 @@ function migrateData(d){
       if(p.apareceDespesas==null) p.apareceDespesas=false;
       if(p.despesaTipo==null) p.despesaTipo='variavel';
       if(p.despesaTransacaoId===undefined) p.despesaTransacaoId=null;
+      if(p.despesaTransacaoIds===undefined) p.despesaTransacaoIds=[];
       if(p.despesaFixaId===undefined) p.despesaFixaId=null;
     });
   });
@@ -352,6 +353,7 @@ function migrateData(d){
     if(b.apareceDespesas==null) b.apareceDespesas=false;
     if(b.despesaTipo==null) b.despesaTipo='variavel';
     if(b.despesaTransacaoId===undefined) b.despesaTransacaoId=null;
+    if(b.despesaTransacaoIds===undefined) b.despesaTransacaoIds=[];
     if(b.despesaFixaId===undefined) b.despesaFixaId=null;
   });
   // V5.39.1 — correção defensiva: despesas espelhadas de compra parcelada gravadas com
@@ -369,6 +371,60 @@ function migrateData(d){
       if(cartao && cartao.banco) f.banco = cartao.banco;
     }
   });
+  /* V5.39.2 — corrige dados já salvos pela V5.39.0/5.39.1: compra parcelada
+     espelhada como despesa variável não pode aparecer como valor total no primeiro
+     mês. A migração reconstrói o espelho variável como uma transação por mês,
+     cada uma com o valor da parcela. */
+  (function rebuildLinkedVariableInstallments(){
+    if(!Array.isArray(d.transacoes)) d.transacoes=[];
+    function normalizeLinkedTxIds(owner, matchFn, buildFn, total, valorParcela){
+      const existing = d.transacoes.filter(matchFn).sort((a,b)=>String(a.data||'').localeCompare(String(b.data||'')));
+      const cents = Math.round((Number(valorParcela)||0)*100);
+      const ok = existing.length===total && existing.every(t=>Math.round((Number(t.valor)||0)*100)===cents);
+      if(ok){
+        owner.despesaTransacaoIds = existing.map(t=>t.id);
+        owner.despesaTransacaoId = owner.despesaTransacaoIds[0] || null;
+        return;
+      }
+      const oldIds = new Set([...(Array.isArray(owner.despesaTransacaoIds)?owner.despesaTransacaoIds:[]), owner.despesaTransacaoId].filter(Boolean));
+      d.transacoes = d.transacoes.filter(t=>!(oldIds.has(t.id) || matchFn(t)));
+      owner.despesaTransacaoIds = [];
+      for(let i=0;i<total;i++){
+        const tx = buildFn(i);
+        d.transacoes.push(tx);
+        owner.despesaTransacaoIds.push(tx.id);
+      }
+      owner.despesaTransacaoId = owner.despesaTransacaoIds[0] || null;
+    }
+    (d.cartoes||[]).forEach(c=>{
+      (c.parcelas||[]).forEach(p=>{
+        if(p.despesaTransacaoIds===undefined) p.despesaTransacaoIds = [];
+        if(!p.apareceDespesas || p.despesaTipo==='fixa') return;
+        const total = Math.max(1, Math.round(Number(p.parcelaTotal)||1));
+        const valorParcela = Number(p.valorParcela)||0;
+        const startMonth = p.dataCompra || monthKey(todayYM().y,todayYM().m);
+        const nomeBase = p.descricao || 'Compra no cartão';
+        normalizeLinkedTxIds(p, t=>t && t.viaParcelaId===p.id, i=>{
+          const ym = shiftYM(startMonth, i);
+          const nome = total>1 ? `${nomeBase} (${i+1}/${total})` : nomeBase;
+          return {id:uid(), tipo:'variavel', nome, data:ym+'-01', categoria:p.categoria||'Outro', valor:valorParcela, banco:c.banco||'', formaPagamento:'Crédito', viaCartaoId:c.id, viaParcelaId:p.id, parcelaAtual:i+1, parcelaTotal:total};
+        }, total, valorParcela);
+      });
+    });
+    (d.boletos||[]).forEach(b=>{
+      if(b.despesaTransacaoIds===undefined) b.despesaTransacaoIds = [];
+      if(!b.apareceDespesas || b.despesaTipo==='fixa') return;
+      const total = Math.max(1, Math.round(Number(b.parcelaTotal)||1));
+      const valorParcela = Number(b.valorParcela)||0;
+      const startMonth = b.dataInicio || monthKey(todayYM().y,todayYM().m);
+      const nomeBase = b.descricao || 'Boleto';
+      normalizeLinkedTxIds(b, t=>t && t.viaBoletoId===b.id, i=>{
+        const ym = shiftYM(startMonth, i);
+        const nome = total>1 ? `${nomeBase} (${i+1}/${total})` : nomeBase;
+        return {id:uid(), tipo:'variavel', nome, data:ym+'-01', categoria:b.categoria||'Outro', valor:valorParcela, banco:b.banco||'', formaPagamento:'Boleto', viaBoletoId:b.id, parcelaAtual:i+1, parcelaTotal:total};
+      }, total, valorParcela);
+    });
+  })();
   return d;
 }
 function allBankNames(){

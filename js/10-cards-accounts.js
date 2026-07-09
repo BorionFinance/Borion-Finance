@@ -193,7 +193,7 @@ const Cards = {
       {key:'despesaTipo',label:'Aparecer como',type:'segmented',default:'variavel',options:[{value:'variavel',label:'Despesa variável'},{value:'fixa',label:'Despesa fixa'}],visibleWhen:{key:'apareceDespesas',value:true}},
     ], onSave(v){
       const c = S.data.cartoes.find(x=>x.id===cartaoId);
-      const p = {id:uid(), descricao:v.descricao, local:v.local, categoria:v.categoria||'Outro', valorParcela:Number(v.valorParcela)||0, parcelaTotal:Math.max(1,Math.round(v.parcelaTotal)||1), dataCompra:v.dataCompra||monthKey(S.month.y,S.month.m), diaEntrada:v.diaEntrada||null, apareceDespesas:!!v.apareceDespesas, despesaTipo:v.despesaTipo||'variavel', despesaTransacaoId:null, despesaFixaId:null};
+      const p = {id:uid(), descricao:v.descricao, local:v.local, categoria:v.categoria||'Outro', valorParcela:Number(v.valorParcela)||0, parcelaTotal:Math.max(1,Math.round(v.parcelaTotal)||1), dataCompra:v.dataCompra||monthKey(S.month.y,S.month.m), diaEntrada:v.diaEntrada||null, apareceDespesas:!!v.apareceDespesas, despesaTipo:v.despesaTipo||'variavel', despesaTransacaoId:null, despesaTransacaoIds:[], despesaFixaId:null};
       c.parcelas.push(p);
       linkParcelaToDespesa(c, p);
       saveCurrentData(); closeModal(); renderView();
@@ -280,7 +280,7 @@ const Cards = {
       const obj = {descricao:v.descricao||'Boleto', credor:v.credor||'', banco, categoria:v.categoria||'Outro', valorParcela:Number(v.valorParcela)||0, parcelaTotal:Math.max(1,Math.round(v.parcelaTotal)||1), dataInicio:v.dataInicio||monthKey(S.month.y,S.month.m), diaVencimento:v.diaVencimento||'', status:v.status||'Ativo', obs:v.obs||'', apareceDespesas:!!v.apareceDespesas, despesaTipo:v.despesaTipo||'variavel'};
       let alvo;
       if(isEdit){ Object.assign(b,obj); alvo=b; }
-      else { alvo = Object.assign({id:uid(), createdAt:Date.now(), pagamentos:[], despesaTransacaoId:null, despesaFixaId:null}, obj); S.data.boletos.push(alvo); }
+      else { alvo = Object.assign({id:uid(), createdAt:Date.now(), pagamentos:[], despesaTransacaoId:null, despesaTransacaoIds:[], despesaFixaId:null}, obj); S.data.boletos.push(alvo); }
       linkBoletoToDespesa(alvo);
       saveCurrentData(); closeModal(); renderView();
       toast(alvo.apareceDespesas ? (isEdit?'Boleto atualizado e em Despesas.':'Boleto cadastrado e em Despesas.') : (isEdit?'Boleto atualizado.':'Boleto cadastrado.'));

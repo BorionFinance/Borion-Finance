@@ -82,11 +82,12 @@ function renderBudget(){
       const origemKey = t.origem||'propria';
       const origemPill = (tab==='receita' && origemKey!=='propria') ? ` <span class="cat-pill" style="background:rgba(240,194,110,.15);color:var(--gold-bright);"><span class="dot" style="background:var(--gold-bright)"></span>${esc(txOrigemToLabel(origemKey))}</span>` : '';
       const formaPill = (tab==='variavel' && t.formaPagamento) ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--muted)"></span>${esc(t.formaPagamento)}</span>` : '';
+      const parcelaPill = (tab==='variavel' && Number(t.parcelaTotal||0)>1 && Number(t.parcelaAtual||0)>0) ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>Parcela ${Number(t.parcelaAtual)}/${Number(t.parcelaTotal)}</span>` : '';
       const viaCartaoPill = t.viaParcelaId ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via cartão</span>` : (t.viaBoletoId ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via boleto</span>` : '');
       return `
       <tr>
         <td>${t.data.slice(8,10)}/${t.data.slice(5,7)}</td>
-        <td>${esc(t.nome)}${origemPill}${formaPill}${viaCartaoPill}</td>
+        <td>${esc(t.nome)}${origemPill}${formaPill}${parcelaPill}${viaCartaoPill}</td>
         <td><span class="cat-pill"><span class="dot" style="background:${catColor(t.categoria)}"></span>${esc(t.categoria)}</span></td>
         <td class="${tab==='receita'?'val-pos':'val-neg'}">${tab==='receita'?'':'- '}${brl(t.valor)}</td>
         <td class="tbl-actions"><button onclick="Budget.edit('${t.id}')">✎</button></td>
@@ -331,7 +332,7 @@ function openTransactionModal({type, existing}){
         <div class="field"><label>Nome</label><input type="text" id="tm_nome" value="${isEdit?esc(existing.nome):''}"/></div>
         <div class="field"><label>Data</label><input type="date" id="tm_data" value="${isEdit?existing.data:monthKey(S.month.y,S.month.m)+'-01'}"/></div>
         ${categorySelectHTML('tm', type, isEdit?existing.categoria:null)}
-        <div class="field"><label>Valor (R$)</label><input type="text" inputmode="numeric" id="tm_valor" class="money-input" placeholder="0,00"/></div>
+        <div class="field"><label id="tm_valor_label">Valor (R$)</label><input type="text" inputmode="numeric" id="tm_valor" class="money-input" placeholder="0,00"/></div>
         ${!isReceita?`<div class="field"><label>Forma de pagamento</label><select id="tm_forma">${FORMAS_PAGAMENTO.map(f=>`<option value="${esc(f)}" ${isEdit&&(existing.formaPagamento||'Dinheiro')===f?'selected':''}>${esc(f)}</option>`).join('')}</select></div>`:''}
         <div class="field" id="tm_banco_wrap"><label>${isReceita?'Onde a receita entra':'De onde o dinheiro sai'}</label><select id="tm_banco"><option>— Nenhum —</option>${accountSelectNames().map(b=>`<option ${isEdit&&existing.banco===b?'selected':''}>${esc(b)}</option>`).join('')}</select></div>
         ${!isReceita?`
@@ -341,7 +342,7 @@ function openTransactionModal({type, existing}){
             <option value="avista">Crédito à vista</option>
             <option value="parcelado">Crédito parcelado</option>
           </select></div>
-          <div class="field hidden" id="tm_parcelas_wrap"><label>Quantidade de parcelas</label><input type="number" id="tm_parcelas" min="2" step="1" value="2"/></div>
+          <div class="field hidden" id="tm_parcelas_wrap"><label>Quantidade de parcelas <span id="tm_parcela_preview" style="color:var(--muted);font-weight:600;"></span></label><input type="number" id="tm_parcelas" min="2" step="1" value="2"/></div>
           <p class="modal-sub" style="margin:4px 0 0;">Compra no crédito não desconta o banco agora — ela vira uma compra vinculada ao cartão e entra na fatura, igual em "Cartões e Contas".</p>
         </div>`:''}
         ${isReceita?`<div class="field"><label>Origem da receita</label><select id="tm_origem">${TX_ORIGEM_OPTIONS.map(o=>`<option ${txOrigemToKey(o)===(isEdit?(existing.origem||'propria'):'propria')?'selected':''}>${esc(o)}</option>`).join('')}</select><p class="modal-sub" style="margin:4px 0 0;">Reembolso e repasse de terceiros não entram na sua Receita do mês — é dinheiro que passa pela conta, não renda sua.</p></div>`:''}
@@ -382,6 +383,25 @@ function openTransactionModal({type, existing}){
     syncReserveDestinationUI();
   }
 
+  function updateCreditoParcelPreview(){
+    if(isReceita) return;
+    const formaSel = $('#tm_forma');
+    const tipoSel = $('#tm_credito_tipo');
+    const label = $('#tm_valor_label');
+    const preview = $('#tm_parcela_preview');
+    const isCredito = formaSel && formaSel.value==='Crédito';
+    if(label) label.textContent = isCredito ? 'Valor total da compra (R$)' : 'Valor (R$)';
+    if(!preview || !isCredito || !tipoSel || tipoSel.value!=='parcelado'){
+      if(preview) preview.textContent = '';
+      return;
+    }
+    const cents = parseInt(($('#tm_valor') && $('#tm_valor').dataset.cents) || '0', 10);
+    const total = cents/100;
+    const qtd = Math.max(2, Math.round(Number(($('#tm_parcelas') && $('#tm_parcelas').value) || 2)));
+    const valorParcela = qtd>0 ? Math.round((total/qtd)*100)/100 : 0;
+    preview.textContent = `(${brlPlain(valorParcela)} cada)`;
+  }
+
   /* V5.37.0 — despesa: a forma de pagamento manda no campo de banco/conta (e não o
      contrário). "Dinheiro" trava a Carteira, sem opção de trocar — Carteira é sempre
      dinheiro físico. "Pix"/"Débito" mostram só bancos reais (a Carteira não serve pra
@@ -413,11 +433,14 @@ function openTransactionModal({type, existing}){
     const tipoSel = $('#tm_credito_tipo');
     const parcelasWrap = $('#tm_parcelas_wrap');
     if(parcelasWrap && tipoSel) parcelasWrap.classList.toggle('hidden', tipoSel.value!=='parcelado');
+    updateCreditoParcelPreview();
   }
   if(!isReceita && $('#tm_forma')){
     $('#tm_forma').onchange = ()=>syncFormaPagamentoUI();
     const tipoSel = $('#tm_credito_tipo');
     if(tipoSel) tipoSel.onchange = ()=>syncFormaPagamentoUI();
+    if($('#tm_parcelas')) $('#tm_parcelas').addEventListener('input', updateCreditoParcelPreview);
+    if($('#tm_valor')) $('#tm_valor').addEventListener('input', updateCreditoParcelPreview);
     syncFormaPagamentoUI(isEdit?existing.banco:null);
   }
 
@@ -456,7 +479,7 @@ function openTransactionModal({type, existing}){
           if(cartaoAntigo) cartaoAntigo.parcelas = cartaoAntigo.parcelas.filter(x=>x.id!==existing.viaParcelaId);
         }
       }
-      const p = {id:uid(), descricao:nome, local:'', categoria:categoria||'Outro', valorParcela, parcelaTotal, dataCompra:(data||todayISO()).slice(0,7), diaEntrada:null, apareceDespesas:true, despesaTipo:'variavel', despesaTransacaoId:null, despesaFixaId:null};
+      const p = {id:uid(), descricao:nome, local:'', categoria:categoria||'Outro', valorParcela, parcelaTotal, dataCompra:(data||todayISO()).slice(0,7), diaEntrada:null, apareceDespesas:true, despesaTipo:'variavel', despesaTransacaoId:null, despesaTransacaoIds:[], despesaFixaId:null};
       cartao.parcelas.push(p);
       linkParcelaToDespesa(cartao, p);
       saveCurrentData(); closeModal(); renderView();
@@ -516,17 +539,29 @@ function openTransactionModal({type, existing}){
 function openFixaModal(existing){
   const isEdit = !!existing;
   const monthKeyNow = monthKey(S.month.y,S.month.m);
+  const carteira = getCarteiraConta();
+  const initialForma = isEdit ? (existing.formaPagamento || (carteira && existing.banco===carteira.nome ? 'Dinheiro' : 'Pix')) : (nonCarteiraAccountNames().length ? 'Pix' : 'Dinheiro');
   const box = el(`
     <div class="modal-overlay">
       <div class="modal-box">
         <div class="modal-head"><h2>${isEdit?'Editar':'Adicionar'} despesa fixa</h2><button id="fm_close">&times;</button></div>
-        <p class="modal-sub">${isEdit? 'Alterações se aplicam a partir de '+monthLabel(S.month.y,S.month.m)+'; meses anteriores mantêm o valor antigo.' : 'Essa despesa se repete todos os meses a partir de '+monthLabel(S.month.y,S.month.m)+', até que você a remova.'}</p>
+        <p class="modal-sub">${isEdit? 'Alterações se aplicam a partir de '+monthLabel(S.month.y,S.month.m)+'; meses anteriores mantêm o valor antigo.' : 'Essa despesa se repete todos os meses a partir de '+monthLabel(S.month.y,S.month.m)+', até que você a remova. Se for compra no crédito parcelado, o Borion cria uma fixa temporária só até a última parcela.'}</p>
         <div class="field"><label>Nome</label><input type="text" id="fm_nome" value="${isEdit?esc(existing.nome):''}"/></div>
         ${categorySelectHTML('fm', 'fixa', isEdit?existing.categoria:null)}
-        <div class="field"><label>Valor mensal (R$)</label><input type="text" inputmode="numeric" id="fm_valor" class="money-input" placeholder="0,00"/></div>
+        <div class="field"><label id="fm_valor_label">Valor mensal (R$)</label><input type="text" inputmode="numeric" id="fm_valor" class="money-input" placeholder="0,00"/></div>
         <div class="field"><label>Dia do vencimento</label><input type="number" id="fm_dia" min="1" max="31" value="${isEdit?(existing.dia||1):1}"/></div>
-        <div class="field"><label>Banco/Conta</label><select id="fm_banco"><option>— Nenhum —</option>${accountSelectNames().map(b=>`<option ${isEdit&&existing.banco===b?'selected':''}>${esc(b)}</option>`).join('')}</select></div>
-        <p class="modal-sub" style="margin:4px 0 0;">Só aparecem aqui a Carteira e os bancos/contas cadastrados — cartão de crédito não é banco/conta de origem.</p>
+        <div class="field"><label>Forma de pagamento</label><select id="fm_forma">${FORMAS_PAGAMENTO.map(f=>`<option value="${esc(f)}" ${initialForma===f?'selected':''}>${esc(f)}</option>`).join('')}</select></div>
+        <div class="field" id="fm_banco_wrap"><label>Banco/Conta</label><select id="fm_banco"><option>— Nenhum —</option>${accountSelectNames().map(b=>`<option ${isEdit&&existing.banco===b?'selected':''}>${esc(b)}</option>`).join('')}</select></div>
+        <div id="fm_credito_fields" class="hidden">
+          <div class="field"><label>Cartão de crédito</label><select id="fm_cartao">${allCardNames().map(c=>`<option>${esc(c)}</option>`).join('') || '<option value="">Nenhum cartão cadastrado</option>'}</select></div>
+          <div class="field"><label>Tipo de compra</label><select id="fm_credito_tipo">
+            <option value="avista">Crédito à vista</option>
+            <option value="parcelado">Crédito parcelado</option>
+          </select></div>
+          <div class="field hidden" id="fm_parcelas_wrap"><label>Quantidade de parcelas <span id="fm_parcela_preview" style="color:var(--muted);font-weight:600;"></span></label><input type="number" id="fm_parcelas" min="2" step="1" value="2"/></div>
+          <p class="modal-sub" style="margin:4px 0 0;">No crédito, informe o valor total da compra. O Borion calcula o valor de cada parcela e cria a despesa fixa mensal somente até a última parcela.</p>
+        </div>
+        <p class="modal-sub" id="fm_banco_hint" style="margin:4px 0 0;">Só aparecem aqui a Carteira e os bancos/contas cadastrados — cartão de crédito não é banco/conta de origem.</p>
         <div class="row-btns"><button class="btn btn-primary btn-block" id="fm_save">${isEdit?'Salvar':'Adicionar'}</button></div>
         ${isEdit?`<div class="row-btns" style="margin-top:8px;"><button class="btn btn-danger btn-block" id="fm_delete">Remover a partir deste mês</button></div>`:''}
       </div>
@@ -537,6 +572,60 @@ function openFixaModal(existing){
   attachMoneyMask($('#fm_valor'), isEdit?existing.valor:0);
   wireQuickCategory($('#fm_categoria'), $('#fm_newcat_box'), $('#fm_newcat_input'), $('#fm_newcat_add'), 'fixa');
 
+  function updateFixaCreditoParcelPreview(){
+    const formaSel = $('#fm_forma');
+    const tipoSel = $('#fm_credito_tipo');
+    const label = $('#fm_valor_label');
+    const preview = $('#fm_parcela_preview');
+    const isCredito = formaSel && formaSel.value==='Crédito';
+    if(label) label.textContent = isCredito ? 'Valor total da compra (R$)' : 'Valor mensal (R$)';
+    if(!preview || !isCredito || !tipoSel || tipoSel.value!=='parcelado'){
+      if(preview) preview.textContent = '';
+      return;
+    }
+    const cents = parseInt(($('#fm_valor') && $('#fm_valor').dataset.cents) || '0', 10);
+    const total = cents/100;
+    const qtd = Math.max(2, Math.round(Number(($('#fm_parcelas') && $('#fm_parcelas').value) || 2)));
+    const valorParcela = qtd>0 ? Math.round((total/qtd)*100)/100 : 0;
+    preview.textContent = `(${brlPlain(valorParcela)} cada)`;
+  }
+  function syncFixaFormaPagamentoUI(preferBanco){
+    const formaSel = $('#fm_forma');
+    if(!formaSel) return;
+    const forma = formaSel.value;
+    const bancoWrap = $('#fm_banco_wrap');
+    const bancoSel = $('#fm_banco');
+    const creditoFields = $('#fm_credito_fields');
+    const bancoHint = $('#fm_banco_hint');
+    const isCredito = forma==='Crédito';
+    if(bancoWrap) bancoWrap.classList.toggle('hidden', isCredito);
+    if(creditoFields) creditoFields.classList.toggle('hidden', !isCredito);
+    if(bancoHint) bancoHint.classList.toggle('hidden', isCredito);
+    if(!isCredito && bancoSel){
+      if(forma==='Dinheiro'){
+        const cart = getCarteiraConta();
+        bancoSel.innerHTML = cart ? `<option>${esc(cart.nome)}</option>` : '<option value="">Carteira não encontrada</option>';
+        bancoSel.value = cart ? cart.nome : '';
+        bancoSel.disabled = true;
+      } else {
+        const names = nonCarteiraAccountNames();
+        const wanted = (preferBanco && names.includes(preferBanco)) ? preferBanco : (names.includes(bancoSel.value) ? bancoSel.value : (names[0]||''));
+        bancoSel.innerHTML = names.length ? names.map(n=>`<option ${n===wanted?'selected':''}>${esc(n)}</option>`).join('') : '<option value="">Cadastre um banco em Cartões e Contas</option>';
+        bancoSel.value = wanted;
+        bancoSel.disabled = false;
+      }
+    }
+    const tipoSel = $('#fm_credito_tipo');
+    const parcelasWrap = $('#fm_parcelas_wrap');
+    if(parcelasWrap && tipoSel) parcelasWrap.classList.toggle('hidden', tipoSel.value!=='parcelado');
+    updateFixaCreditoParcelPreview();
+  }
+  $('#fm_forma').onchange = ()=>syncFixaFormaPagamentoUI();
+  if($('#fm_credito_tipo')) $('#fm_credito_tipo').onchange = ()=>syncFixaFormaPagamentoUI();
+  if($('#fm_parcelas')) $('#fm_parcelas').addEventListener('input', updateFixaCreditoParcelPreview);
+  if($('#fm_valor')) $('#fm_valor').addEventListener('input', updateFixaCreditoParcelPreview);
+  syncFixaFormaPagamentoUI(isEdit?existing.banco:null);
+
   $('#fm_save').onclick = ()=>{
     const nome = $('#fm_nome').value.trim() || 'Sem nome';
     const categoria = $('#fm_categoria').value;
@@ -544,19 +633,40 @@ function openFixaModal(existing){
     const cents = parseInt($('#fm_valor').dataset.cents||'0',10);
     const valor = cents/100;
     const dia = Math.min(31, Math.max(1, parseInt($('#fm_dia').value,10)||1));
+    const formaPagamento = $('#fm_forma') ? $('#fm_forma').value : 'Pix';
+
+    if(formaPagamento==='Crédito'){
+      const cartaoNome = $('#fm_cartao') ? $('#fm_cartao').value : '';
+      const cartao = (S.data.cartoes||[]).find(c=>c.banco===cartaoNome);
+      if(!cartao){ alert('Escolha um cartão de crédito válido. Cadastre um cartão em "Cartões e Contas" antes de lançar uma compra no crédito.'); return; }
+      const tipoCredito = $('#fm_credito_tipo') ? $('#fm_credito_tipo').value : 'avista';
+      const parcelaTotal = tipoCredito==='parcelado' ? Math.max(2, Math.round(Number($('#fm_parcelas').value)||2)) : 1;
+      const valorParcela = Math.round((valor/parcelaTotal)*100)/100;
+      if(isEdit){
+        if(existing.startMonth===monthKeyNow) S.data.fixas = S.data.fixas.filter(x=>x.id!==existing.id);
+        else existing.endMonth = monthBeforeKey(monthKeyNow);
+      }
+      const p = {id:uid(), descricao:nome, local:'', categoria:categoria||'Outro', valorParcela, parcelaTotal, dataCompra:monthKeyNow, diaEntrada:dia, apareceDespesas:true, despesaTipo:'fixa', despesaTransacaoId:null, despesaTransacaoIds:[], despesaFixaId:null};
+      cartao.parcelas.push(p);
+      linkParcelaToDespesa(cartao, p);
+      saveCurrentData(); closeModal(); renderView();
+      toast('Compra no crédito lançada no cartão '+cartao.banco+' como despesa fixa parcelada.');
+      return;
+    }
+
     const bancoVal = $('#fm_banco').value;
     const banco = requireBanco(bancoVal, 'Toda despesa fixa precisa de um banco/conta vinculado.');
     if(!banco) return;
     if(!isEdit){
-      S.data.fixas.push({id:uid(), nome, categoria, valor, dia, startMonth:monthKeyNow, endMonth:null, banco});
+      S.data.fixas.push({id:uid(), nome, categoria, valor, dia, startMonth:monthKeyNow, endMonth:null, banco, formaPagamento});
       toast('Despesa fixa adicionada. Ela se repetirá todos os meses.');
     } else {
       if(existing.startMonth===monthKeyNow){
-        Object.assign(existing,{nome,categoria,valor,dia,banco});
+        Object.assign(existing,{nome,categoria,valor,dia,banco,formaPagamento});
         toast('Despesa fixa atualizada.');
       } else {
         existing.endMonth = monthBeforeKey(monthKeyNow);
-        S.data.fixas.push({id:uid(), nome, categoria, valor, dia, startMonth:monthKeyNow, endMonth:null, banco});
+        S.data.fixas.push({id:uid(), nome, categoria, valor, dia, startMonth:monthKeyNow, endMonth:null, banco, formaPagamento});
         toast('Alterada a partir de '+monthLabel(S.month.y,S.month.m)+'. Meses anteriores mantidos.');
       }
     }

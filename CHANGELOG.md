@@ -1,3 +1,13 @@
+## V5.39.2 — Parcelas corretas em Despesas (09/07/2026)
+
+- Corrigido o erro em que compra no crédito parcelado aparecia em Despesas pelo valor total da compra.
+- Agora, despesa variável no crédito cria uma ocorrência por mês, sempre com o valor da parcela. Ex.: R$ 1.000 em 4x vira R$ 250 em cada mês.
+- Despesa fixa no crédito também pode ser lançada como compra parcelada: o Borion calcula a parcela e cria uma fixa temporária até a última parcela.
+- O campo de valor muda para “Valor total da compra” quando a forma de pagamento é Crédito.
+- A quantidade de parcelas mostra o valor de cada parcela em tempo real.
+- Migração defensiva: compras parceladas já salvas com o valor total são reconstruídas como parcelas mensais corretas.
+- A mesma correção foi aplicada aos boletos espelhados em Despesas variáveis.
+
 ## V5.39.1 — Correção do vínculo cartão/boleto ↔ Despesas + avisos internos (09/07/2026)
 - Corrigido bug em que uma compra parcelada com "Aparecer também em Despesas?" marcado sumia da lista de Lançamentos (e dos totais) sempre que o filtro de banco/cartão estava ativo — a despesa espelhada era salva com banco em branco e nunca batia com o filtro. Agora ela herda o banco/nome do próprio cartão, então aparece de forma consistente em Lançamentos e em Cartões e Contas. Dados antigos são corrigidos automaticamente na primeira abertura do app.
 - Renomear um cartão agora também atualiza o banco das despesas já espelhadas por ele.

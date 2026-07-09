@@ -102,14 +102,29 @@ function boletoRestanteValor(b, y=S.month.y, m=S.month.m){
   }
   return {ativo:true, atual:st.atual, restante:Math.round(restante*100)/100};
 }
-/* ---------------- V5.39.0 — vínculo opcional entre compra no cartão e Despesas ----------------
-   Uma compra no cartão (parcela) pode, opcionalmente, também aparecer em Orçamento >
-   Despesas (fixa ou variável). O vínculo fica guardado na própria parcela
-   (despesaTransacaoId/despesaFixaId), então editar ou remover a parcela sempre
-   atualiza/remove o espelho em Despesas também — nunca duplica, nunca fica órfão.
-   A despesa espelhada nunca desconta banco/carteira (ela só existe pra aparecer na
-   lista/gráfico de Despesas); quem controla o dinheiro de verdade continua sendo a
-   fatura do cartão, como sempre. */
+/* ---------------- V5.39.2 — vínculo opcional entre cartão/boleto e Despesas ----------------
+   Compra parcelada nunca pode jogar o valor total em uma única despesa mensal.
+   Se aparecer como despesa fixa, vira uma fixa temporária com valor da parcela.
+   Se aparecer como despesa variável, vira uma transação por mês/parcela, também com
+   valor da parcela. O valor total fica só como referência da compra/fatura. */
+function parcelaDescricaoMensal(nome, atual, total){
+  return total>1 ? `${nome} (${atual}/${total})` : nome;
+}
+function createParcelaDespesaVariavel({nome, categoria, valorParcela, totalParcelas, startMonth, banco, formaPagamento, extra}){
+  const ids=[];
+  const valor = Number(valorParcela)||0;
+  for(let i=0;i<totalParcelas;i++){
+    const ym = shiftYM(startMonth, i);
+    const t = Object.assign({
+      id:uid(), tipo:'variavel', nome:parcelaDescricaoMensal(nome, i+1, totalParcelas),
+      data:ym+'-01', categoria, valor, banco:banco||'', formaPagamento,
+      parcelaAtual:i+1, parcelaTotal:totalParcelas
+    }, extra||{});
+    S.data.transacoes.push(t);
+    ids.push(t.id);
+  }
+  return ids;
+}
 function linkParcelaToDespesa(cartao, parcela){
   unlinkParcelaFromDespesa(parcela);
   if(!parcela || !parcela.apareceDespesas) return;
@@ -117,26 +132,24 @@ function linkParcelaToDespesa(cartao, parcela){
   const categoria = parcela.categoria || 'Outro';
   const totalParcelas = Math.max(1, Math.round(parcela.parcelaTotal||1));
   const startMonth = parcela.dataCompra || monthKey(S.month.y,S.month.m);
-  /* V5.39.1 — a despesa espelhada herda o banco/nome do cartão (em vez de banco:''),
-     senão ela some da lista de Lançamentos e dos totais sempre que o filtro de banco/
-     cartão estiver ativo (bankMatches('') nunca bate com um filtro selecionado). */
+  const valorParcela = Number(parcela.valorParcela)||0;
+  /* A despesa espelhada herda o banco/nome do cartão para respeitar o filtro por banco/cartão. */
   if(parcela.despesaTipo==='fixa'){
     const endMonth = shiftYM(startMonth, totalParcelas-1);
-    const f = {id:uid(), nome, categoria, valor:Number(parcela.valorParcela)||0, dia:parcela.diaEntrada||1, startMonth, endMonth:totalParcelas>1?endMonth:startMonth, banco:cartao.banco||'', viaCartaoId:cartao.id, viaParcelaId:parcela.id};
+    const f = {id:uid(), nome, categoria, valor:valorParcela, dia:parcela.diaEntrada||1, startMonth, endMonth:totalParcelas>1?endMonth:startMonth, banco:cartao.banco||'', viaCartaoId:cartao.id, viaParcelaId:parcela.id, parcelaTotal:totalParcelas};
     S.data.fixas.push(f);
     parcela.despesaFixaId = f.id;
+    parcela.despesaTransacaoId = null;
+    parcela.despesaTransacaoIds = [];
   } else {
-    const valorTotal = Math.round((Number(parcela.valorParcela)||0) * totalParcelas * 100) / 100;
-    const t = {id:uid(), tipo:'variavel', nome, data:startMonth+'-01', categoria, valor:valorTotal, banco:cartao.banco||'', formaPagamento:'Crédito', viaCartaoId:cartao.id, viaParcelaId:parcela.id};
-    S.data.transacoes.push(t);
-    parcela.despesaTransacaoId = t.id;
+    parcela.despesaTransacaoIds = createParcelaDespesaVariavel({
+      nome, categoria, valorParcela, totalParcelas, startMonth, banco:cartao.banco||'', formaPagamento:'Crédito',
+      extra:{viaCartaoId:cartao.id, viaParcelaId:parcela.id}
+    });
+    parcela.despesaTransacaoId = parcela.despesaTransacaoIds[0] || null; // compatibilidade com dados antigos
+    parcela.despesaFixaId = null;
   }
 }
-/* ---------------- V5.39.1 — vínculo opcional entre boleto e Despesas ----------------
-   Mesmo mecanismo do cartão (acima), mas para boletos: cada boleto pode opcionalmente
-   também aparecer em Orçamento > Despesas (fixa ou variável), sempre em mão dupla e
-   sem duplicar. O banco usado é o próprio banco do boleto (já obrigatório), então o
-   filtro de banco nunca esconde a despesa espelhada. */
 function linkBoletoToDespesa(boleto){
   unlinkBoletoFromDespesa(boleto);
   if(!boleto || !boleto.apareceDespesas) return;
@@ -144,24 +157,29 @@ function linkBoletoToDespesa(boleto){
   const categoria = boleto.categoria || 'Outro';
   const totalParcelas = Math.max(1, Math.round(boleto.parcelaTotal||1));
   const startMonth = boleto.dataInicio || monthKey(S.month.y,S.month.m);
+  const valorParcela = Number(boleto.valorParcela)||0;
   if(boleto.despesaTipo==='fixa'){
     const endMonth = shiftYM(startMonth, totalParcelas-1);
-    const f = {id:uid(), nome, categoria, valor:Number(boleto.valorParcela)||0, dia:boleto.diaVencimento||1, startMonth, endMonth:totalParcelas>1?endMonth:startMonth, banco:boleto.banco||'', viaBoletoId:boleto.id};
+    const f = {id:uid(), nome, categoria, valor:valorParcela, dia:boleto.diaVencimento||1, startMonth, endMonth:totalParcelas>1?endMonth:startMonth, banco:boleto.banco||'', viaBoletoId:boleto.id, parcelaTotal:totalParcelas};
     S.data.fixas.push(f);
     boleto.despesaFixaId = f.id;
+    boleto.despesaTransacaoId = null;
+    boleto.despesaTransacaoIds = [];
   } else {
-    const valorTotal = Math.round((Number(boleto.valorParcela)||0) * totalParcelas * 100) / 100;
-    const t = {id:uid(), tipo:'variavel', nome, data:startMonth+'-01', categoria, valor:valorTotal, banco:boleto.banco||'', formaPagamento:'Boleto', viaBoletoId:boleto.id};
-    S.data.transacoes.push(t);
-    boleto.despesaTransacaoId = t.id;
+    boleto.despesaTransacaoIds = createParcelaDespesaVariavel({
+      nome, categoria, valorParcela, totalParcelas, startMonth, banco:boleto.banco||'', formaPagamento:'Boleto',
+      extra:{viaBoletoId:boleto.id}
+    });
+    boleto.despesaTransacaoId = boleto.despesaTransacaoIds[0] || null;
+    boleto.despesaFixaId = null;
   }
 }
 function unlinkBoletoFromDespesa(boleto){
   if(!boleto) return;
-  if(boleto.despesaTransacaoId){
-    S.data.transacoes = S.data.transacoes.filter(t=>t.id!==boleto.despesaTransacaoId);
-    boleto.despesaTransacaoId = null;
-  }
+  const ids = new Set([...(Array.isArray(boleto.despesaTransacaoIds)?boleto.despesaTransacaoIds:[]), boleto.despesaTransacaoId].filter(Boolean));
+  S.data.transacoes = S.data.transacoes.filter(t=>!(ids.has(t.id) || (t.viaBoletoId && t.viaBoletoId===boleto.id)));
+  boleto.despesaTransacaoIds = [];
+  boleto.despesaTransacaoId = null;
   if(boleto.despesaFixaId){
     S.data.fixas = S.data.fixas.filter(f=>f.id!==boleto.despesaFixaId);
     boleto.despesaFixaId = null;
@@ -169,10 +187,10 @@ function unlinkBoletoFromDespesa(boleto){
 }
 function unlinkParcelaFromDespesa(parcela){
   if(!parcela) return;
-  if(parcela.despesaTransacaoId){
-    S.data.transacoes = S.data.transacoes.filter(t=>t.id!==parcela.despesaTransacaoId);
-    parcela.despesaTransacaoId = null;
-  }
+  const ids = new Set([...(Array.isArray(parcela.despesaTransacaoIds)?parcela.despesaTransacaoIds:[]), parcela.despesaTransacaoId].filter(Boolean));
+  S.data.transacoes = S.data.transacoes.filter(t=>!(ids.has(t.id) || (t.viaParcelaId && t.viaParcelaId===parcela.id)));
+  parcela.despesaTransacaoIds = [];
+  parcela.despesaTransacaoId = null;
   if(parcela.despesaFixaId){
     S.data.fixas = S.data.fixas.filter(f=>f.id!==parcela.despesaFixaId);
     parcela.despesaFixaId = null;

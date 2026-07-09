@@ -1,3 +1,11 @@
+## V5.39.0 — Compra no cartão pode aparecer em Despesas (09/07/2026)
+- Corrigido: lançar uma despesa em crédito na tela de Orçamento agora aparece em Cartões e Contas **e** em Despesas (despesa variável), como deveria — antes só aparecia no cartão.
+- Nova opção "Aparecer também em Despesas?" ao adicionar/editar uma compra parcelada direto em Cartões e Contas. Se marcar Sim, aparece um alternador (estilo on/off) pra escolher se ela entra como Despesa fixa ou Despesa variável.
+- O vínculo é sempre em mão dupla e sem duplicar: editar valor/categoria/parcelas da compra no cartão atualiza a despesa espelhada; desmarcar a opção ou excluir a compra remove a despesa espelhada junto. Editar essas despesas espelhadas só é possível pela compra no cartão (Cartões e Contas), pra nunca dessincronizar os dois lados.
+- Despesa fixa espelhada de uma compra parcelada dura exatamente o número de parcelas (começa e termina junto com a fatura); despesa variável espelhada mostra o valor total da compra.
+- Linhas de despesas vindas do cartão ganham a etiqueta "🔗 Via cartão" na lista de Orçamento.
+
+
 ## V5.38.0 — Ajustes de UX: forma de pagamento, filtro de período e reserva (09/07/2026)
 - No lançamento de despesa, "Forma de pagamento" agora vem antes do campo de banco/conta, e é ela quem manda: escolher "Dinheiro" trava o campo automaticamente na Carteira (sem opção de trocar); "Pix"/"Débito" mostram só bancos reais cadastrados (sem Carteira); "Crédito" esconde o banco e mostra o cartão.
 - Nova reserva: o campo de banco/conta agora só mostra Carteira e bancos reais — cartão de crédito não aparece mais lá.

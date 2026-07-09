@@ -102,6 +102,45 @@ function boletoRestanteValor(b, y=S.month.y, m=S.month.m){
   }
   return {ativo:true, atual:st.atual, restante:Math.round(restante*100)/100};
 }
+/* ---------------- V5.39.0 — vínculo opcional entre compra no cartão e Despesas ----------------
+   Uma compra no cartão (parcela) pode, opcionalmente, também aparecer em Orçamento >
+   Despesas (fixa ou variável). O vínculo fica guardado na própria parcela
+   (despesaTransacaoId/despesaFixaId), então editar ou remover a parcela sempre
+   atualiza/remove o espelho em Despesas também — nunca duplica, nunca fica órfão.
+   A despesa espelhada nunca desconta banco/carteira (ela só existe pra aparecer na
+   lista/gráfico de Despesas); quem controla o dinheiro de verdade continua sendo a
+   fatura do cartão, como sempre. */
+function linkParcelaToDespesa(cartao, parcela){
+  unlinkParcelaFromDespesa(parcela);
+  if(!parcela || !parcela.apareceDespesas) return;
+  const nome = parcela.descricao || 'Compra no cartão';
+  const categoria = parcela.categoria || 'Outro';
+  const totalParcelas = Math.max(1, Math.round(parcela.parcelaTotal||1));
+  const startMonth = parcela.dataCompra || monthKey(S.month.y,S.month.m);
+  if(parcela.despesaTipo==='fixa'){
+    const endMonth = shiftYM(startMonth, totalParcelas-1);
+    const f = {id:uid(), nome, categoria, valor:Number(parcela.valorParcela)||0, dia:parcela.diaEntrada||1, startMonth, endMonth:totalParcelas>1?endMonth:startMonth, banco:'', viaCartaoId:cartao.id, viaParcelaId:parcela.id};
+    S.data.fixas.push(f);
+    parcela.despesaFixaId = f.id;
+  } else {
+    const valorTotal = Math.round((Number(parcela.valorParcela)||0) * totalParcelas * 100) / 100;
+    const t = {id:uid(), tipo:'variavel', nome, data:startMonth+'-01', categoria, valor:valorTotal, banco:'', formaPagamento:'Crédito', viaCartaoId:cartao.id, viaParcelaId:parcela.id};
+    S.data.transacoes.push(t);
+    parcela.despesaTransacaoId = t.id;
+  }
+}
+function unlinkParcelaFromDespesa(parcela){
+  if(!parcela) return;
+  if(parcela.despesaTransacaoId){
+    S.data.transacoes = S.data.transacoes.filter(t=>t.id!==parcela.despesaTransacaoId);
+    parcela.despesaTransacaoId = null;
+  }
+  if(parcela.despesaFixaId){
+    S.data.fixas = S.data.fixas.filter(f=>f.id!==parcela.despesaFixaId);
+    parcela.despesaFixaId = null;
+  }
+}
+
 /* Fatura do cartão no mês selecionado: total das parcelas ativas + se já foi marcada como paga. */
 function cartaoFaturaDoMes(cartaoId, y=S.month.y, m=S.month.m){
   const c = (S.data.cartoes||[]).find(x=>x.id===cartaoId);

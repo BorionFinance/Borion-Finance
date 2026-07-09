@@ -35,26 +35,37 @@ function attachModalGuard(overlay){
 
 function openModal({title, sub, fields, values={}, saveLabel, onSave, onDelete, deleteLabel, extraHTML}){
   const moneyFields=[];
+  function fieldInitialVal(f){ return values[f.key]!=null ? values[f.key] : (f.default!=null?f.default:''); }
   const body = fields.map(f=>{
-    const val = values[f.key]!=null ? values[f.key] : (f.default!=null?f.default:'');
+    const val = fieldInitialVal(f);
+    let fieldHtml;
     if(f.type==='select'){
       const opts = f.options.map(o=>`<option value="${esc(o)}" ${String(o)===String(val)?'selected':''}>${esc(o)}</option>`).join('');
-      return `<div class="field"><label>${esc(f.label)}</label><select id="mf_${f.key}">${opts}</select></div>`;
-    }
-    if(f.type==='checkbox'){
-      return `<div class="field-check"><input type="checkbox" id="mf_${f.key}" ${val?'checked':''}/> <label style="margin:0;" for="mf_${f.key}">${esc(f.label)}</label></div>`;
-    }
-    if(f.type==='money'){
+      fieldHtml = `<div class="field"><label>${esc(f.label)}</label><select id="mf_${f.key}">${opts}</select></div>`;
+    } else if(f.type==='checkbox'){
+      fieldHtml = `<div class="field-check"><input type="checkbox" id="mf_${f.key}" ${val?'checked':''}/> <label style="margin:0;" for="mf_${f.key}">${esc(f.label)}</label></div>`;
+    } else if(f.type==='money'){
       moneyFields.push({key:f.key, initial: val===''?0:val});
-      return `<div class="field"><label>${esc(f.label)}</label><input type="text" inputmode="numeric" class="money-input" id="mf_${f.key}" placeholder="0,00"/></div>`;
+      fieldHtml = `<div class="field"><label>${esc(f.label)}</label><input type="text" inputmode="numeric" class="money-input" id="mf_${f.key}" placeholder="0,00"/></div>`;
+    } else if(f.type==='color'){
+      fieldHtml = `<div class="field"><label>${esc(f.label)}</label><input type="color" id="mf_${f.key}" value="${val?esc(val):'#3b6bf0'}"/></div>`;
+    } else if(f.type==='password'){
+      fieldHtml = passwordInputWrapHTML({id:'mf_'+f.key,label:f.label,value:val||'',autocomplete:f.autocomplete||'',placeholder:f.placeholder||''});
+    } else if(f.type==='segmented'){
+      /* V5.39.0 — alternador estilo "on/off" com 2+ opções nomeadas (ex: Despesa fixa
+         vs Despesa variável), em vez de um <select> tradicional. */
+      const opts = f.options.map(o=>`<button type="button" class="seg-btn ${String(val)===String(o.value)?'active':''}" data-value="${esc(o.value)}">${esc(o.label)}</button>`).join('');
+      fieldHtml = `<div class="field"><label>${esc(f.label)}</label><div class="segmented-toggle" id="mf_${f.key}_group">${opts}</div><input type="hidden" id="mf_${f.key}" value="${esc(val)}"/></div>`;
+    } else {
+      fieldHtml = `<div class="field"><label>${esc(f.label)}</label><input type="${f.type||'text'}" id="mf_${f.key}" value="${val!=null?esc(val):''}" ${f.step?`step="${f.step}"`:''} placeholder="${esc(f.placeholder||'')}"/></div>`;
     }
-    if(f.type==='color'){
-      return `<div class="field"><label>${esc(f.label)}</label><input type="color" id="mf_${f.key}" value="${val?esc(val):'#3b6bf0'}"/></div>`;
+    if(f.visibleWhen){
+      const depField = fields.find(ff=>ff.key===f.visibleWhen.key);
+      const depVal = depField ? fieldInitialVal(depField) : undefined;
+      const matches = String(depVal)===String(f.visibleWhen.value);
+      return `<div class="mf-conditional ${matches?'':'hidden'}" data-mf-cond-key="${esc(f.visibleWhen.key)}" data-mf-cond-value="${esc(String(f.visibleWhen.value))}">${fieldHtml}</div>`;
     }
-    if(f.type==='password'){
-      return passwordInputWrapHTML({id:'mf_'+f.key,label:f.label,value:val||'',autocomplete:f.autocomplete||'',placeholder:f.placeholder||''});
-    }
-    return `<div class="field"><label>${esc(f.label)}</label><input type="${f.type||'text'}" id="mf_${f.key}" value="${val!=null?esc(val):''}" ${f.step?`step="${f.step}"`:''} placeholder="${esc(f.placeholder||'')}"/></div>`;
+    return fieldHtml;
   }).join('');
 
   const box = el(`
@@ -75,6 +86,38 @@ function openModal({title, sub, fields, values={}, saveLabel, onSave, onDelete, 
   attachModalGuard(box);
   $('#mf_close').onclick = closeModal;
   moneyFields.forEach(mf=> attachMoneyMask(document.getElementById('mf_'+mf.key), mf.initial));
+
+  /* Segmented toggle: clique num botão troca o valor do input escondido e a classe ativa. */
+  fields.filter(f=>f.type==='segmented').forEach(f=>{
+    const group = document.getElementById('mf_'+f.key+'_group');
+    const hidden = document.getElementById('mf_'+f.key);
+    if(!group || !hidden) return;
+    group.querySelectorAll('.seg-btn').forEach(btn=>{
+      btn.onclick = ()=>{
+        group.querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        hidden.value = btn.dataset.value;
+        hidden.dispatchEvent(new Event('change', {bubbles:true}));
+      };
+    });
+  });
+
+  /* Campos condicionais: qualquer campo com visibleWhen aparece/some conforme o valor
+     atual do campo do qual ele depende (checkbox, select ou segmented). */
+  fields.forEach(f=>{
+    const node = document.getElementById('mf_'+f.key);
+    if(!node) return;
+    const evtName = (f.type==='checkbox' || f.type==='select') ? 'change' : (f.type==='segmented' ? 'change' : 'input');
+    node.addEventListener(evtName, ()=>{
+      const curVal = f.type==='checkbox' ? node.checked : node.value;
+      document.querySelectorAll(`[data-mf-cond-key="${f.key}"]`).forEach(wrap=>{
+        const want = wrap.getAttribute('data-mf-cond-value');
+        const matches = String(curVal)===want;
+        wrap.classList.toggle('hidden', !matches);
+      });
+    });
+  });
+
   $('#mf_save').onclick = ()=>{
     const out = {};
     fields.forEach(f=>{

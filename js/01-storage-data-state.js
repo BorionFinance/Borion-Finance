@@ -338,7 +338,14 @@ function migrateData(d){
   // V5.29 — cartões: categoria por compra parcelada e histórico de faturas marcadas como pagas.
   (d.cartoes||[]).forEach(c=>{
     if(!Array.isArray(c.faturasPagas)) c.faturasPagas=[];
-    (c.parcelas||[]).forEach(p=>{ if(p.categoria==null) p.categoria='Outro'; });
+    (c.parcelas||[]).forEach(p=>{
+      if(p.categoria==null) p.categoria='Outro';
+      // V5.39.0 — vínculo opcional da compra no cartão com Orçamento > Despesas.
+      if(p.apareceDespesas==null) p.apareceDespesas=false;
+      if(p.despesaTipo==null) p.despesaTipo='variavel';
+      if(p.despesaTransacaoId===undefined) p.despesaTransacaoId=null;
+      if(p.despesaFixaId===undefined) p.despesaFixaId=null;
+    });
   });
   return d;
 }

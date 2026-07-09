@@ -41,7 +41,7 @@ function renderBudget(){
       rows = list.map(e=>`
         <tr>
           <td>${e.ocorrencias}x</td>
-          <td>${esc(e.f.nome)}<div style="font-size:10.5px;color:var(--muted)">recorrente desde ${shortMonthLabel(e.f.startMonth)}</div></td>
+          <td>${esc(e.f.nome)}<div style="font-size:10.5px;color:var(--muted)">recorrente desde ${shortMonthLabel(e.f.startMonth)}</div>${e.f.viaParcelaId?`<span class="cat-pill" style="opacity:.8;margin-top:3px;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via cartão</span>`:''}</td>
           <td><span class="cat-pill"><span class="dot" style="background:${catColor(e.f.categoria)}"></span>${esc(e.f.categoria)}</span></td>
           <td class="val-neg">- ${brl(e.total)}</td>
           <td class="tbl-actions"><button onclick="Budget.edit('${e.f.id}')">✎</button></td>
@@ -58,7 +58,7 @@ function renderBudget(){
       rows = list.map(f=>`
         <tr>
           <td>Dia ${f.dia||1}</td>
-          <td>${esc(f.nome)}<div style="font-size:10.5px;color:var(--muted)">recorrente desde ${shortMonthLabel(f.startMonth)}</div></td>
+          <td>${esc(f.nome)}<div style="font-size:10.5px;color:var(--muted)">recorrente desde ${shortMonthLabel(f.startMonth)}</div>${f.viaParcelaId?`<span class="cat-pill" style="opacity:.8;margin-top:3px;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via cartão</span>`:''}</td>
           <td><span class="cat-pill"><span class="dot" style="background:${catColor(f.categoria)}"></span>${esc(f.categoria)}</span></td>
           <td class="val-neg">- ${brl(f.valor)}</td>
           <td class="tbl-actions"><button onclick="Budget.edit('${f.id}')">✎</button></td>
@@ -82,10 +82,11 @@ function renderBudget(){
       const origemKey = t.origem||'propria';
       const origemPill = (tab==='receita' && origemKey!=='propria') ? ` <span class="cat-pill" style="background:rgba(240,194,110,.15);color:var(--gold-bright);"><span class="dot" style="background:var(--gold-bright)"></span>${esc(txOrigemToLabel(origemKey))}</span>` : '';
       const formaPill = (tab==='variavel' && t.formaPagamento) ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--muted)"></span>${esc(t.formaPagamento)}</span>` : '';
+      const viaCartaoPill = t.viaParcelaId ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via cartão</span>` : '';
       return `
       <tr>
         <td>${t.data.slice(8,10)}/${t.data.slice(5,7)}</td>
-        <td>${esc(t.nome)}${origemPill}${formaPill}</td>
+        <td>${esc(t.nome)}${origemPill}${formaPill}${viaCartaoPill}</td>
         <td><span class="cat-pill"><span class="dot" style="background:${catColor(t.categoria)}"></span>${esc(t.categoria)}</span></td>
         <td class="${tab==='receita'?'val-pos':'val-neg'}">${tab==='receita'?'':'- '}${brl(t.valor)}</td>
         <td class="tbl-actions"><button onclick="Budget.edit('${t.id}')">✎</button></td>
@@ -146,9 +147,21 @@ const Budget = {
   edit(id){
     if(S.budgetTab==='fixa'){
       const f = S.data.fixas.find(x=>x.id===id);
+      /* V5.39.0 — despesa fixa espelhada de uma compra no cartão: edita/remove pela
+         compra no cartão, pra nunca dessincronizar os dois lados do vínculo. */
+      if(f && f.viaParcelaId){
+        toast('Essa despesa fixa vem de uma compra no cartão — edite ou remova em Cartões e Contas.');
+        S.view='cards'; renderApp();
+        return;
+      }
       openFixaModal(f);
     } else {
       const t = S.data.transacoes.find(x=>x.id===id);
+      if(t && t.viaParcelaId){
+        toast('Essa despesa vem de uma compra no cartão — edite ou remova em Cartões e Contas.');
+        S.view='cards'; renderApp();
+        return;
+      }
       openTransactionModal({type:t.tipo, existing:t});
     }
   },
@@ -421,7 +434,9 @@ function openTransactionModal({type, existing}){
 
     /* Crédito: não é uma transação de banco/conta — vira uma compra vinculada ao cartão
        (à vista = 1 parcela, parcelado = N parcelas), do mesmo jeito que "+ Compra
-       parcelada" em Cartões e Contas. Não desconta banco/carteira no momento da compra. */
+       parcelada" em Cartões e Contas. Não desconta banco/carteira no momento da compra.
+       V5.39.0 — como essa tela é "Adicionar despesa", a compra sempre também aparece
+       em Orçamento > Despesas (despesa variável), além de em Cartões e Contas. */
     if(isCreditoDespesa){
       const cartaoNome = $('#tm_cartao') ? $('#tm_cartao').value : '';
       const cartao = (S.data.cartoes||[]).find(c=>c.banco===cartaoNome);
@@ -429,13 +444,23 @@ function openTransactionModal({type, existing}){
       const tipoCredito = $('#tm_credito_tipo') ? $('#tm_credito_tipo').value : 'avista';
       const parcelaTotal = tipoCredito==='parcelado' ? Math.max(2, Math.round(Number($('#tm_parcelas').value)||2)) : 1;
       const valorParcela = Math.round((valor/parcelaTotal)*100)/100;
-      if(isEdit && existing.tipo==='variavel'){
-        const idx = S.data.transacoes.findIndex(x=>x.id===existing.id);
-        if(idx>=0) S.data.transacoes.splice(idx,1);
+      if(isEdit){
+        if(existing.tipo==='variavel'){
+          const idx = S.data.transacoes.findIndex(x=>x.id===existing.id);
+          if(idx>=0) S.data.transacoes.splice(idx,1);
+        }
+        if(existing.viaParcelaId && existing.viaCartaoId){
+          // estava editando uma despesa espelhada de uma parcela — remove a parcela antiga
+          // pra não duplicar a compra no cartão.
+          const cartaoAntigo = S.data.cartoes.find(c=>c.id===existing.viaCartaoId);
+          if(cartaoAntigo) cartaoAntigo.parcelas = cartaoAntigo.parcelas.filter(x=>x.id!==existing.viaParcelaId);
+        }
       }
-      cartao.parcelas.push({id:uid(), descricao:nome, local:'', categoria:categoria||'Outro', valorParcela, parcelaTotal, dataCompra:(data||todayISO()).slice(0,7), diaEntrada:null});
+      const p = {id:uid(), descricao:nome, local:'', categoria:categoria||'Outro', valorParcela, parcelaTotal, dataCompra:(data||todayISO()).slice(0,7), diaEntrada:null, apareceDespesas:true, despesaTipo:'variavel', despesaTransacaoId:null, despesaFixaId:null};
+      cartao.parcelas.push(p);
+      linkParcelaToDespesa(cartao, p);
       saveCurrentData(); closeModal(); renderView();
-      toast('Compra no crédito lançada no cartão '+cartao.banco+'.');
+      toast('Compra no crédito lançada no cartão '+cartao.banco+' e em Despesas.');
       return;
     }
 

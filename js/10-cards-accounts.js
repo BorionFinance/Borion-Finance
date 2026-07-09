@@ -23,7 +23,7 @@ function renderCards(){
     const fatura = cartaoFaturaDoMes(c.id, S.month.y, S.month.m);
     const activeRows = active.map(p=>`
       <div class="installment-row">
-        <span>${esc(p.descricao)}${p.local?` <span style="color:var(--muted)">(${esc(p.local)})</span>`:''}${p.categoria?` <span class="cat-pill" style="margin-left:4px;"><span class="dot" style="background:${catColor(p.categoria)}"></span>${esc(p.categoria)}</span>`:''}</span>
+        <span>${esc(p.descricao)}${p.local?` <span style="color:var(--muted)">(${esc(p.local)})</span>`:''}${p.categoria?` <span class="cat-pill" style="margin-left:4px;"><span class="dot" style="background:${catColor(p.categoria)}"></span>${esc(p.categoria)}</span>`:''}${p.apareceDespesas?` <span class="cat-pill" style="opacity:.85;"><span class="dot" style="background:var(--gold-bright)"></span>Também em Despesas (${p.despesaTipo==='fixa'?'fixa':'variável'})</span>`:''}</span>
         <span>${brl(p.valorParcela)}/mês</span>
         <span>${p.atual} de ${p.parcelaTotal}</span>
         <span>Dia ${p.diaEntrada || '—'}</span>
@@ -185,10 +185,15 @@ const Cards = {
       {key:'parcelaTotal',label:'Total de parcelas (1x = compra à vista neste mês)',type:'number',step:'1',default:1},
       {key:'dataCompra',label:'Mês da compra (1ª parcela)',type:'month',default:monthKey(S.month.y,S.month.m)},
       {key:'diaEntrada',label:'Dia do mês que entra na fatura',type:'number',step:'1'},
+      {key:'apareceDespesas',label:'Aparecer também em Despesas?',type:'checkbox'},
+      {key:'despesaTipo',label:'Aparecer como',type:'segmented',default:'variavel',options:[{value:'variavel',label:'Despesa variável'},{value:'fixa',label:'Despesa fixa'}],visibleWhen:{key:'apareceDespesas',value:true}},
     ], onSave(v){
       const c = S.data.cartoes.find(x=>x.id===cartaoId);
-      c.parcelas.push({id:uid(), descricao:v.descricao, local:v.local, categoria:v.categoria||'Outro', valorParcela:Number(v.valorParcela)||0, parcelaTotal:Math.max(1,Math.round(v.parcelaTotal)||1), dataCompra:v.dataCompra||monthKey(S.month.y,S.month.m), diaEntrada:v.diaEntrada||null});
+      const p = {id:uid(), descricao:v.descricao, local:v.local, categoria:v.categoria||'Outro', valorParcela:Number(v.valorParcela)||0, parcelaTotal:Math.max(1,Math.round(v.parcelaTotal)||1), dataCompra:v.dataCompra||monthKey(S.month.y,S.month.m), diaEntrada:v.diaEntrada||null, apareceDespesas:!!v.apareceDespesas, despesaTipo:v.despesaTipo||'variavel', despesaTransacaoId:null, despesaFixaId:null};
+      c.parcelas.push(p);
+      linkParcelaToDespesa(c, p);
       saveCurrentData(); closeModal(); renderView();
+      toast(p.apareceDespesas ? 'Compra adicionada ao cartão e em Despesas.' : 'Compra adicionada ao cartão.');
     }});
   },
   editParcela(cartaoId, parcelaId){
@@ -202,10 +207,13 @@ const Cards = {
       {key:'parcelaTotal',label:'Total de parcelas',type:'number',step:'1'},
       {key:'dataCompra',label:'Mês da compra (1ª parcela)',type:'month'},
       {key:'diaEntrada',label:'Dia do mês que entra na fatura',type:'number',step:'1'},
+      {key:'apareceDespesas',label:'Aparecer também em Despesas?',type:'checkbox'},
+      {key:'despesaTipo',label:'Aparecer como',type:'segmented',options:[{value:'variavel',label:'Despesa variável'},{value:'fixa',label:'Despesa fixa'}],visibleWhen:{key:'apareceDespesas',value:true}},
     ], values:p,
-    onDelete(){ c.parcelas = c.parcelas.filter(x=>x.id!==parcelaId); saveCurrentData(); closeModal(); renderView(); },
+    onDelete(){ unlinkParcelaFromDespesa(p); c.parcelas = c.parcelas.filter(x=>x.id!==parcelaId); saveCurrentData(); closeModal(); renderView(); },
     onSave(v){
-      Object.assign(p,{descricao:v.descricao, local:v.local, categoria:v.categoria||p.categoria||'Outro', valorParcela:Number(v.valorParcela)||0, parcelaTotal:Math.max(1,Math.round(v.parcelaTotal)||1), dataCompra:v.dataCompra||p.dataCompra, diaEntrada:v.diaEntrada||null});
+      Object.assign(p,{descricao:v.descricao, local:v.local, categoria:v.categoria||p.categoria||'Outro', valorParcela:Number(v.valorParcela)||0, parcelaTotal:Math.max(1,Math.round(v.parcelaTotal)||1), dataCompra:v.dataCompra||p.dataCompra, diaEntrada:v.diaEntrada||null, apareceDespesas:!!v.apareceDespesas, despesaTipo:v.despesaTipo||'variavel'});
+      linkParcelaToDespesa(c, p);
       saveCurrentData(); closeModal(); renderView();
     }});
   },

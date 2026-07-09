@@ -1,3 +1,12 @@
+## V5.38.0 — Ajustes de UX: forma de pagamento, filtro de período e reserva (09/07/2026)
+- No lançamento de despesa, "Forma de pagamento" agora vem antes do campo de banco/conta, e é ela quem manda: escolher "Dinheiro" trava o campo automaticamente na Carteira (sem opção de trocar); "Pix"/"Débito" mostram só bancos reais cadastrados (sem Carteira); "Crédito" esconde o banco e mostra o cartão.
+- Nova reserva: o campo de banco/conta agora só mostra Carteira e bancos reais — cartão de crédito não aparece mais lá.
+- Orçamento (Receita, Despesa fixa, Despesa variável): novo filtro de período com "de" e "até", podendo incluir meses anteriores ao selecionado no topo do app. Despesas fixas no período somam todas as ocorrências ativas nos meses cobertos.
+- Scroll de todas as janelas flutuantes (modais, painéis, listas internas) agora usa a cor dourada do sistema em vez do scroll padrão do navegador.
+- Reserva: a barra de porcentagem só aparece quando a reserva tem uma meta definida; agora dá pra escolher separadamente a cor do valor e a cor da barra de progresso.
+- Configurações: mensagem sobre troca de perfis simplificada.
+
+
 ## V5.37.0 — Banco/Conta, Carteira e Cartão como entidades separadas (09/07/2026)
 - Nova conta fixa "Carteira" (dinheiro físico): já existe por padrão, não pode ser excluída, e funciona como qualquer conta para entrada/saída de dinheiro. Migração defensiva cria a Carteira automaticamente em dados antigos e nunca duplica em migrações repetidas.
 - No lançamento de receita/despesa e nas despesas fixas, o campo "Banco/Conta" agora mostra só a Carteira e os bancos/contas cadastrados — cartão de crédito não aparece mais nessa lista.

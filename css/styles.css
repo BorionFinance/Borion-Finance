@@ -968,6 +968,19 @@ html[data-theme="light"] .card:hover{box-shadow:0 16px 36px rgba(90,70,34,.10),v
 }
 .sb-nav::-webkit-scrollbar{width:4px;}
 .sb-nav::-webkit-scrollbar-thumb{background:rgba(201,164,92,.25);border-radius:999px;}
+/* V5.37.0 — todo scroll de janela flutuante (modais, painéis, listas internas) usa a
+   cor dourada do sistema, em vez do scroll padrão do navegador. */
+.modal-box,.notif-panel,.bank-filter-panel,.search-results,.emoji-picker,.table-scroll,.reserva-extrato-title+.table-scroll,#global_search_results{
+  scrollbar-width:thin;
+  scrollbar-color:rgba(201,164,92,.35) transparent;
+}
+.modal-box::-webkit-scrollbar,.notif-panel::-webkit-scrollbar,.bank-filter-panel::-webkit-scrollbar,.search-results::-webkit-scrollbar,.emoji-picker::-webkit-scrollbar,.table-scroll::-webkit-scrollbar,#global_search_results::-webkit-scrollbar{width:6px;height:6px;}
+.modal-box::-webkit-scrollbar-thumb,.notif-panel::-webkit-scrollbar-thumb,.bank-filter-panel::-webkit-scrollbar-thumb,.search-results::-webkit-scrollbar-thumb,.emoji-picker::-webkit-scrollbar-thumb,.table-scroll::-webkit-scrollbar-thumb,#global_search_results::-webkit-scrollbar-thumb{background:rgba(201,164,92,.35);border-radius:999px;}
+.modal-box::-webkit-scrollbar-track,.notif-panel::-webkit-scrollbar-track,.bank-filter-panel::-webkit-scrollbar-track,.search-results::-webkit-scrollbar-track,.emoji-picker::-webkit-scrollbar-track,.table-scroll::-webkit-scrollbar-track,#global_search_results::-webkit-scrollbar-track{background:transparent;}
+html[data-theme="light"] .modal-box,html[data-theme="light"] .notif-panel,html[data-theme="light"] .bank-filter-panel,html[data-theme="light"] .search-results,html[data-theme="light"] .emoji-picker,html[data-theme="light"] .table-scroll,html[data-theme="light"] #global_search_results{
+  scrollbar-color:rgba(122,85,29,.35) transparent;
+}
+html[data-theme="light"] .modal-box::-webkit-scrollbar-thumb,html[data-theme="light"] .notif-panel::-webkit-scrollbar-thumb,html[data-theme="light"] .bank-filter-panel::-webkit-scrollbar-thumb,html[data-theme="light"] .search-results::-webkit-scrollbar-thumb,html[data-theme="light"] .emoji-picker::-webkit-scrollbar-thumb,html[data-theme="light"] .table-scroll::-webkit-scrollbar-thumb,html[data-theme="light"] #global_search_results::-webkit-scrollbar-thumb{background:rgba(122,85,29,.35);}
 .sb-item{
   min-height:62px;
   gap:17px;

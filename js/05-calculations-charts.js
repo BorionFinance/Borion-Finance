@@ -11,6 +11,24 @@ function fixasAtivasNoMes(y=S.month.y, m=S.month.m){
   const key = monthKey(y,m);
   return S.data.fixas.filter(f=> f.startMonth<=key && (!f.endMonth || key<=f.endMonth) && bankMatches(f.banco));
 }
+/* V5.37.0 — lista de {y,m,key} (y/m 0-indexados, no formato usado por S.month) entre
+   duas datas ISO (yyyy-mm-dd), inclusive, cobrindo cada mês tocado pelo intervalo.
+   Usado pelo filtro de período de Orçamento, que pode olhar vários meses (inclusive
+   anteriores) de uma vez, sem depender do mês selecionado no calendário do topo. */
+function monthsBetweenISO(fromISO, toISO){
+  if(!fromISO || !toISO) return [];
+  let a = fromISO.slice(0,7), b = toISO.slice(0,7);
+  if(b<a){ const t=a; a=b; b=t; }
+  const out=[];
+  let cur=a, guard=0;
+  while(cur<=b && guard<600){
+    const [y,m] = cur.split('-').map(Number); // m aqui é 1-indexado (formato "YYYY-MM")
+    out.push({y, m:m-1, key:cur});
+    cur = shiftYM(cur, 1);
+    guard++;
+  }
+  return out;
+}
 function fixaMes(y=S.month.y, m=S.month.m){ return sumBy(fixasAtivasNoMes(y,m),'valor'); }
 function variavelMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='variavel'&&bankMatches(t.banco)), y, m),'valor'); }
 /* Receita do mês = só dinheiro próprio (origem 'propria'). Reembolso/repasse de terceiros não contam como renda. */

@@ -329,7 +329,7 @@ function migrateData(d){
     // V5.29 — histórico de pagamentos por competência (mês), para não negativar/duplicar dívida já paga.
     if(!Array.isArray(b.pagamentos)) b.pagamentos=[];
   });
-  (d.reservas.boxes||[]).forEach(r=>{ if(r.banco==null) r.banco=''; if(r.valorAtual==null) r.valorAtual=0; if(r.valorMeta==null) r.valorMeta=0; if(r.status==null) r.status='Ativa'; if(r.metaId===undefined) r.metaId=null; });
+  (d.reservas.boxes||[]).forEach(r=>{ if(r.banco==null) r.banco=''; if(r.valorAtual==null) r.valorAtual=0; if(r.valorMeta==null) r.valorMeta=0; if(r.status==null) r.status='Ativa'; if(r.metaId===undefined) r.metaId=null; if(r.corValor==null) r.corValor='#e8c98a'; });
   (d.reservas.moves||[]).forEach(m=>{ if(m.banco==null) m.banco=''; if(m.data==null) m.data=todayISO(); if(m.tipo==null) m.tipo='Reservar'; if(m.valor==null) m.valor=0; });
   if(d.investimentos){
     (d.investimentos.ativos||[]).forEach(a=>{ if(a.banco==null) a.banco=''; });
@@ -379,7 +379,11 @@ function accountSelectField(idPrefix, selected){
   const names = accountSelectNames();
   return {key:'banco', label:'Banco/Conta', type:'select', options:names, default: selected && names.includes(selected) ? selected : (names[0]||'')};
 }
-/* Nomes dos cartões de crédito cadastrados. NUNCA inclui bancos/contas/Carteira. */
+/* Nomes dos bancos/contas reais, sem a Carteira — usado quando a forma de pagamento
+   exige banco (Pix/Débito), já que a Carteira só serve para dinheiro físico. */
+function nonCarteiraAccountNames(){
+  return (S.data.contas||[]).filter(c=>c && !c.isCarteira && c.nome).map(c=>c.nome);
+}
 function allCardNames(){
   return (S.data.cartoes||[]).filter(c=>c && c.banco).map(c=>c.banco);
 }
@@ -443,7 +447,7 @@ const S = {
   budgetTab: 'receita',
   invMercado: 'BR',
   month: todayYM(),
-  filters: {receita:{busca:'',categorias:[]}, fixa:{busca:'',categorias:[]}, variavel:{busca:'',categorias:[]}},
+  filters: {receita:{busca:'',categorias:[],dataDe:'',dataAte:''}, fixa:{busca:'',categorias:[],dataDe:'',dataAte:''}, variavel:{busca:'',categorias:[],dataDe:'',dataAte:''}},
   gate: { mode:'list', selectedProfileId:null, error:'' },
   valuesHidden: readJSON('mc_values_hidden', false),
   bankFilter: null,

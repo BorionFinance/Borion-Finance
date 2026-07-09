@@ -236,15 +236,18 @@ function renderReservasPanel(){
   const total = sumBy(boxes,'valorAtual');
   const moves = reservaMovesFiltered();
   const boxCards = boxes.map(r=>{
-    const pct = Number(r.valorMeta)>0 ? Math.min(100, Math.round(Number(r.valorAtual||0)/Number(r.valorMeta||0)*100)) : 0;
+    const temMeta = Number(r.valorMeta)>0;
+    const pct = temMeta ? Math.min(100, Math.round(Number(r.valorAtual||0)/Number(r.valorMeta||0)*100)) : 0;
     const mt = r.metaId ? (S.data.metas||[]).find(x=>x.id===r.metaId) : null;
     const metaPct = mt && Number(mt.valorMeta)>0 ? Math.min(100, Math.round(Number(mt.valorAtual||0)/Number(mt.valorMeta||0)*100)) : 0;
     const metaHTML = mt ? `<div class="reserva-foot" style="margin-top:4px;"><span>${esc(mt.emoji||'◇')} Meta de patrimônio: ${brl(mt.valorAtual||0)} de ${brl(mt.valorMeta||0)}</span><span style="font-weight:800;color:${metaPct>=100?'#22c55e':'var(--gold-bright)'}">${metaPct}%</span></div>` : '';
     return `<div class="reserva-card">
       <div class="reserva-head"><div><div class="reserva-title"><span class="dot" style="background:${esc(r.cor||'var(--gold)')}"></span>${esc(r.nome)}</div><div class="reserva-meta">${esc(r.banco||'Sem banco')} ${r.categoria?'· '+esc(r.categoria):''}</div></div>${reservaStatusPill(r.status)}</div>
-      <div class="reserva-value">${brl(Number(r.valorAtual)||0)}</div>
+      <div class="reserva-value" style="color:${esc(r.corValor||'var(--gold-bright)')};">${brl(Number(r.valorAtual)||0)}</div>
+      ${temMeta?`
       <div class="meta-progress-outer"><div class="meta-progress-inner" style="width:${pct}%;background:${esc(r.cor||'var(--gold)')};"></div></div>
-      <div class="reserva-foot"><span>${r.valorMeta?('Meta: '+brl(r.valorMeta)): 'Sem meta definida'}</span><span>${pct}%</span></div>
+      <div class="reserva-foot"><span>Meta: ${brl(r.valorMeta)}</span><span>${pct}%</span></div>` : `
+      <div class="reserva-foot"><span>Sem meta definida</span><span></span></div>`}
       ${metaHTML}
       <div class="reserva-actions"><button onclick="Reservas.move('${r.id}')">Movimentar</button><button onclick="Reservas.edit('${r.id}')">Editar</button></div>
     </div>`;
@@ -266,7 +269,7 @@ const Reservas = {
   add(){ Reservas.edit(null); },
   edit(id){
     const isEdit = !!id;
-    const r = isEdit ? S.data.reservas.boxes.find(x=>x.id===id) : {nome:'', banco:'', valorAtual:0, valorMeta:0, prazo:'', categoria:'Reserva', status:'Ativa', cor:'#c9a45c', obs:'', metaId:null};
+    const r = isEdit ? S.data.reservas.boxes.find(x=>x.id===id) : {nome:'', banco:'', valorAtual:0, valorMeta:0, prazo:'', categoria:'Reserva', status:'Ativa', cor:'#c9a45c', corValor:'#e8c98a', obs:'', metaId:null};
     const metaExistente = (isEdit && r.metaId) ? S.data.metas.find(mt=>mt.id===r.metaId) : null;
     let metaAtiva = !!metaExistente;
     let metaEmoji = (metaExistente && metaExistente.emoji) || '◇';
@@ -284,13 +287,14 @@ const Reservas = {
       </div>`;
     openModal({title:isEdit?'Editar reserva':'Nova reserva', sub:'Reservas são dinheiro separado por objetivo: não são despesa nem receita, apenas organização interna do patrimônio.', fields:[
       {key:'nome',label:'Nome da reserva',type:'text',placeholder:'Ex: Reserva de emergência'},
-      bankSelectField('reserva', r.banco),
+      accountSelectField('reserva', r.banco),
       {key:'valorAtual',label:'Valor atual',type:'money'},
       {key:'valorMeta',label:'Meta da Reserva (valor alvo)',type:'money'},
       {key:'prazo',label:'Data alvo da reserva',type:'date'},
       {key:'categoria',label:'Categoria',type:'text',placeholder:'Reserva, Viagem, Impostos...'},
       {key:'status',label:'Status',type:'select',options:['Ativa','Pausada','Concluída','Arquivada']},
-      {key:'cor',label:'Cor',type:'color'},
+      {key:'cor',label:'Cor da barra de progresso',type:'color'},
+      {key:'corValor',label:'Cor do valor',type:'color'},
       {key:'obs',label:'Observação',type:'text'}
     ], values:r, extraHTML:metaExtraHTML,
     onDelete:isEdit?()=>{
@@ -303,8 +307,8 @@ const Reservas = {
       const banco = requireBanco(v.banco, 'Escolha o banco/conta desta reserva.');
       if(!banco) return;
       let boxRef;
-      if(isEdit){ Object.assign(r,{nome:v.nome||'Reserva', banco, valorAtual:Number(v.valorAtual)||0, valorMeta:Number(v.valorMeta)||0, prazo:v.prazo||'', categoria:v.categoria||'', status:v.status||'Ativa', cor:v.cor||'#c9a45c', obs:v.obs||''}); boxRef=r; }
-      else { boxRef = {id:uid(), nome:v.nome||'Reserva', banco, valorAtual:Number(v.valorAtual)||0, valorMeta:Number(v.valorMeta)||0, prazo:v.prazo||'', categoria:v.categoria||'', status:v.status||'Ativa', cor:v.cor||'#c9a45c', obs:v.obs||'', metaId:null, createdAt:Date.now()}; S.data.reservas.boxes.push(boxRef); }
+      if(isEdit){ Object.assign(r,{nome:v.nome||'Reserva', banco, valorAtual:Number(v.valorAtual)||0, valorMeta:Number(v.valorMeta)||0, prazo:v.prazo||'', categoria:v.categoria||'', status:v.status||'Ativa', cor:v.cor||'#c9a45c', corValor:v.corValor||'#e8c98a', obs:v.obs||''}); boxRef=r; }
+      else { boxRef = {id:uid(), nome:v.nome||'Reserva', banco, valorAtual:Number(v.valorAtual)||0, valorMeta:Number(v.valorMeta)||0, prazo:v.prazo||'', categoria:v.categoria||'', status:v.status||'Ativa', cor:v.cor||'#c9a45c', corValor:v.corValor||'#e8c98a', obs:v.obs||'', metaId:null, createdAt:Date.now()}; S.data.reservas.boxes.push(boxRef); }
       // Meta de Patrimônio embutida na reserva
       const metaAtivaEl = document.getElementById('rz_meta_ativa');
       const metaHabilitada = metaAtivaEl ? metaAtivaEl.checked : false;

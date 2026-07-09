@@ -6,8 +6,9 @@ function renderBudget(){
   const saldo = saldoMes();
   const tab = S.budgetTab;
   const filt = S.filters[tab];
-  const hasFilter = filt.busca || filt.categorias.length;
-  let rows='', total=0, segments=[];
+  const hasDateRange = !!(filt.dataDe && filt.dataAte);
+  const hasFilter = !!(filt.busca || filt.categorias.length || hasDateRange);
+  let rows='', total=0, segments=[], listLength=0;
 
   function matchesFilter(nome, categoria){
     if(filt.categorias.length && !filt.categorias.includes(categoria)) return false;
@@ -16,29 +17,62 @@ function renderBudget(){
   }
 
   let receitaPropriaTotal=0, receitaExtraTotal=0;
+  let fixaColLabel = 'Venc.';
   if(tab==='fixa'){
-    const allActive = fixasAtivasNoMes(S.month.y,S.month.m);
-    const catTotals={};
-    allActive.forEach(f=> catTotals[f.categoria]=(catTotals[f.categoria]||0)+Number(f.valor||0));
-    segments = Object.keys(catTotals).map(k=>({label:k,value:catTotals[k],color:catColor(k)}));
-    let list = hasFilter ? allActive.filter(f=>matchesFilter(f.nome,f.categoria)) : allActive.slice();
-    list.sort((a,b)=>(a.dia||1)-(b.dia||1));
-    total = sumBy(list,'valor');
-    rows = list.map(f=>`
-      <tr>
-        <td>Dia ${f.dia||1}</td>
-        <td>${esc(f.nome)}<div style="font-size:10.5px;color:var(--muted)">recorrente desde ${shortMonthLabel(f.startMonth)}</div></td>
-        <td><span class="cat-pill"><span class="dot" style="background:${catColor(f.categoria)}"></span>${esc(f.categoria)}</span></td>
-        <td class="val-neg">- ${brl(f.valor)}</td>
-        <td class="tbl-actions"><button onclick="Budget.edit('${f.id}')">✎</button></td>
-      </tr>`).join('');
-    var listLength = list.length;
+    if(hasDateRange){
+      /* V5.37.0 — período pode cobrir vários meses (inclusive anteriores ao mês
+         selecionado no topo). Cada despesa fixa ativa em pelo menos um mês do período
+         entra uma vez na lista, somando o valor de todas as ocorrências no período. */
+      fixaColLabel = 'Ocorr.';
+      const months = monthsBetweenISO(filt.dataDe, filt.dataAte);
+      const agg = new Map();
+      months.forEach(({y,m})=>{
+        fixasAtivasNoMes(y,m).forEach(f=>{
+          if(!agg.has(f.id)) agg.set(f.id, {f, total:0, ocorrencias:0});
+          const e = agg.get(f.id); e.total += Number(f.valor||0); e.ocorrencias += 1;
+        });
+      });
+      const allEntries = Array.from(agg.values());
+      const catTotals={};
+      allEntries.forEach(e=> catTotals[e.f.categoria]=(catTotals[e.f.categoria]||0)+e.total);
+      segments = Object.keys(catTotals).map(k=>({label:k,value:catTotals[k],color:catColor(k)}));
+      const list = allEntries.filter(e=>matchesFilter(e.f.nome,e.f.categoria)).sort((a,b)=>a.f.nome.localeCompare(b.f.nome,'pt-BR'));
+      total = list.reduce((a,e)=>a+e.total,0);
+      rows = list.map(e=>`
+        <tr>
+          <td>${e.ocorrencias}x</td>
+          <td>${esc(e.f.nome)}<div style="font-size:10.5px;color:var(--muted)">recorrente desde ${shortMonthLabel(e.f.startMonth)}</div></td>
+          <td><span class="cat-pill"><span class="dot" style="background:${catColor(e.f.categoria)}"></span>${esc(e.f.categoria)}</span></td>
+          <td class="val-neg">- ${brl(e.total)}</td>
+          <td class="tbl-actions"><button onclick="Budget.edit('${e.f.id}')">✎</button></td>
+        </tr>`).join('');
+      listLength = list.length;
+    } else {
+      const allActive = fixasAtivasNoMes(S.month.y,S.month.m);
+      const catTotals={};
+      allActive.forEach(f=> catTotals[f.categoria]=(catTotals[f.categoria]||0)+Number(f.valor||0));
+      segments = Object.keys(catTotals).map(k=>({label:k,value:catTotals[k],color:catColor(k)}));
+      let list = hasFilter ? allActive.filter(f=>matchesFilter(f.nome,f.categoria)) : allActive.slice();
+      list.sort((a,b)=>(a.dia||1)-(b.dia||1));
+      total = sumBy(list,'valor');
+      rows = list.map(f=>`
+        <tr>
+          <td>Dia ${f.dia||1}</td>
+          <td>${esc(f.nome)}<div style="font-size:10.5px;color:var(--muted)">recorrente desde ${shortMonthLabel(f.startMonth)}</div></td>
+          <td><span class="cat-pill"><span class="dot" style="background:${catColor(f.categoria)}"></span>${esc(f.categoria)}</span></td>
+          <td class="val-neg">- ${brl(f.valor)}</td>
+          <td class="tbl-actions"><button onclick="Budget.edit('${f.id}')">✎</button></td>
+        </tr>`).join('');
+      listLength = list.length;
+    }
   } else {
-    const allInMonth = txInMonth(S.data.transacoes.filter(t=>t.tipo===tab), S.month.y, S.month.m).filter(t=>bankMatches(t.banco));
+    const source = hasDateRange
+      ? S.data.transacoes.filter(t=>t.tipo===tab && bankMatches(t.banco) && t.data>=filt.dataDe && t.data<=filt.dataAte)
+      : txInMonth(S.data.transacoes.filter(t=>t.tipo===tab), S.month.y, S.month.m).filter(t=>bankMatches(t.banco));
     const catTotals={};
-    allInMonth.forEach(t=>catTotals[t.categoria]=(catTotals[t.categoria]||0)+Number(t.valor||0));
+    source.forEach(t=>catTotals[t.categoria]=(catTotals[t.categoria]||0)+Number(t.valor||0));
     segments = Object.keys(catTotals).map(k=>({label:k,value:catTotals[k],color:catColor(k)}));
-    let list = hasFilter ? allInMonth.filter(t=>matchesFilter(t.nome,t.categoria)) : allInMonth.slice();
+    let list = hasFilter ? source.filter(t=>matchesFilter(t.nome,t.categoria)) : source.slice();
     list.sort((a,b)=> a.data<b.data?-1:1);
     total = sumBy(list,'valor');
     if(tab==='receita'){
@@ -56,10 +90,11 @@ function renderBudget(){
         <td class="${tab==='receita'?'val-pos':'val-neg'}">${tab==='receita'?'':'- '}${brl(t.valor)}</td>
         <td class="tbl-actions"><button onclick="Budget.edit('${t.id}')">✎</button></td>
       </tr>`;}).join('');
-    var listLength = list.length;
+    listLength = list.length;
   }
 
-  const filterCount = (filt.busca?1:0) + filt.categorias.length;
+  const filterCount = (filt.busca?1:0) + filt.categorias.length + (hasDateRange?1:0);
+  const periodoLabel = hasDateRange ? `${filt.dataDe.slice(8,10)}/${filt.dataDe.slice(5,7)}/${filt.dataDe.slice(0,4)} até ${filt.dataAte.slice(8,10)}/${filt.dataAte.slice(5,7)}/${filt.dataAte.slice(0,4)}` : '';
 
   return `
     <div class="cards-row">
@@ -82,9 +117,10 @@ function renderBudget(){
             <button class="btn-outline" onclick="Budget.add()">+ Adicionar</button>
           </div>
         </div>
+        ${hasDateRange?`<div class="tbl-foot" style="opacity:.85;margin-bottom:6px;"><span>📅 Período: ${periodoLabel}</span><button class="link-btn" style="padding:0;" onclick="Budget.clearPeriodo()">Limpar período</button></div>`:''}
         ${listLength? `
         <table>
-          <thead><tr><th>${tab==='fixa'?'Venc.':'Data'}</th><th>Nome</th><th>Categoria</th><th>Valor</th><th></th></tr></thead>
+          <thead><tr><th>${tab==='fixa'?fixaColLabel:'Data'}</th><th>Nome</th><th>Categoria</th><th>Valor</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
         <div class="tbl-foot"><span>Total${hasFilter?' filtrado':''}</span><span class="v">${brl(total)}</span></div>
@@ -159,10 +195,15 @@ const Budget = {
       saveCurrentData(); closeModal(); renderView();
     };
   },
-  openFilter(){ openFilterModal(S.budgetTab); }
+  openFilter(){ openFilterModal(S.budgetTab); },
+  clearPeriodo(){
+    const tab = S.budgetTab;
+    S.filters[tab] = Object.assign({}, S.filters[tab], {dataDe:'', dataAte:''});
+    renderView();
+  }
 };
 
-/* ---- modal de filtro: busca por nome + categorias (multi-seleção) ---- */
+/* ---- modal de filtro: busca por nome + categorias (multi-seleção) + período (data de/até) ---- */
 function openFilterModal(tab){
   const cats = S.data.categorias[tab];
   const current = S.filters[tab];
@@ -172,9 +213,11 @@ function openFilterModal(tab){
     <div class="modal-overlay">
       <div class="modal-box">
         <div class="modal-head"><h2>Filtrar</h2><button id="flt_close">&times;</button></div>
-        <p class="modal-sub">Escolha as categorias e/ou busque pelo nome do lançamento.</p>
+        <p class="modal-sub">Escolha as categorias, busque pelo nome e/ou filtre por período — o período pode incluir meses anteriores, sem depender do mês selecionado no topo.</p>
         <div class="field"><label>Buscar</label><input type="text" id="flt_busca" placeholder="Buscar por nome..." value="${esc(current.busca||'')}"/></div>
         <div class="field"><label>Categorias</label><div class="filter-chip-row" id="flt_chips">${chipsHTML}</div></div>
+        <div class="field"><label>Período — de</label><input type="date" id="flt_data_de" value="${esc(current.dataDe||'')}"/></div>
+        <div class="field"><label>Período — até</label><input type="date" id="flt_data_ate" value="${esc(current.dataAte||'')}"/></div>
         <div class="row-btns">
           <button class="btn btn-secondary" id="flt_limpar" style="flex:1;">Limpar</button>
           <button class="btn btn-secondary" id="flt_cancelar" style="flex:1;">Cancelar</button>
@@ -194,11 +237,14 @@ function openFilterModal(tab){
     };
   });
   $('#flt_limpar').onclick = ()=>{
-    S.filters[tab] = {busca:'', categorias:[]};
+    S.filters[tab] = {busca:'', categorias:[], dataDe:'', dataAte:''};
     closeModal(); renderView();
   };
   $('#flt_aplicar').onclick = ()=>{
-    S.filters[tab] = {busca: $('#flt_busca').value.trim(), categorias: Array.from(selected)};
+    const dataDe = $('#flt_data_de').value || '';
+    const dataAte = $('#flt_data_ate').value || '';
+    if(dataDe && dataAte && dataDe>dataAte){ alert('A data "de" não pode ser depois da data "até".'); return; }
+    S.filters[tab] = { busca: $('#flt_busca').value.trim(), categorias: Array.from(selected), dataDe, dataAte };
     closeModal(); renderView();
   };
 }
@@ -273,9 +319,9 @@ function openTransactionModal({type, existing}){
         <div class="field"><label>Data</label><input type="date" id="tm_data" value="${isEdit?existing.data:monthKey(S.month.y,S.month.m)+'-01'}"/></div>
         ${categorySelectHTML('tm', type, isEdit?existing.categoria:null)}
         <div class="field"><label>Valor (R$)</label><input type="text" inputmode="numeric" id="tm_valor" class="money-input" placeholder="0,00"/></div>
+        ${!isReceita?`<div class="field"><label>Forma de pagamento</label><select id="tm_forma">${FORMAS_PAGAMENTO.map(f=>`<option value="${esc(f)}" ${isEdit&&(existing.formaPagamento||'Dinheiro')===f?'selected':''}>${esc(f)}</option>`).join('')}</select></div>`:''}
         <div class="field" id="tm_banco_wrap"><label>${isReceita?'Onde a receita entra':'De onde o dinheiro sai'}</label><select id="tm_banco"><option>— Nenhum —</option>${accountSelectNames().map(b=>`<option ${isEdit&&existing.banco===b?'selected':''}>${esc(b)}</option>`).join('')}</select></div>
         ${!isReceita?`
-        <div class="field"><label>Forma de pagamento</label><select id="tm_forma">${FORMAS_PAGAMENTO.map(f=>`<option value="${esc(f)}" ${isEdit&&(existing.formaPagamento||'Dinheiro')===f?'selected':''}>${esc(f)}</option>`).join('')}</select></div>
         <div id="tm_credito_fields" class="hidden">
           <div class="field"><label>Cartão de crédito</label><select id="tm_cartao">${allCardNames().map(c=>`<option>${esc(c)}</option>`).join('') || '<option value="">Nenhum cartão cadastrado</option>'}</select></div>
           <div class="field"><label>Tipo de compra</label><select id="tm_credito_tipo">
@@ -323,36 +369,43 @@ function openTransactionModal({type, existing}){
     syncReserveDestinationUI();
   }
 
-  /* V5.36.0 — despesa: alterna entre "sai do banco/carteira" (Dinheiro/Pix/Débito) e
-     "vai para a fatura do cartão" (Crédito). Se a Carteira for escolhida como origem, a
-     forma de pagamento é travada em Dinheiro, porque Carteira é sempre dinheiro físico. */
-  function syncFormaPagamentoUI(){
+  /* V5.37.0 — despesa: a forma de pagamento manda no campo de banco/conta (e não o
+     contrário). "Dinheiro" trava a Carteira, sem opção de trocar — Carteira é sempre
+     dinheiro físico. "Pix"/"Débito" mostram só bancos reais (a Carteira não serve pra
+     Pix/Débito). "Crédito" esconde o banco/carteira e mostra o cartão. */
+  function syncFormaPagamentoUI(preferBanco){
     const formaSel = $('#tm_forma');
     if(!formaSel) return;
+    const forma = formaSel.value;
     const bancoWrap = $('#tm_banco_wrap');
+    const bancoSel = $('#tm_banco');
     const creditoFields = $('#tm_credito_fields');
-    const isCredito = formaSel.value==='Crédito';
+    const isCredito = forma==='Crédito';
     if(bancoWrap) bancoWrap.classList.toggle('hidden', isCredito);
     if(creditoFields) creditoFields.classList.toggle('hidden', !isCredito);
+    if(!isCredito && bancoSel){
+      if(forma==='Dinheiro'){
+        const carteira = getCarteiraConta();
+        bancoSel.innerHTML = carteira ? `<option>${esc(carteira.nome)}</option>` : '<option value="">Carteira não encontrada</option>';
+        bancoSel.value = carteira ? carteira.nome : '';
+        bancoSel.disabled = true;
+      } else {
+        const names = nonCarteiraAccountNames();
+        const wanted = (preferBanco && names.includes(preferBanco)) ? preferBanco : (names.includes(bancoSel.value) ? bancoSel.value : (names[0]||''));
+        bancoSel.innerHTML = names.length ? names.map(n=>`<option ${n===wanted?'selected':''}>${esc(n)}</option>`).join('') : '<option value="">Cadastre um banco em Cartões e Contas</option>';
+        bancoSel.value = wanted;
+        bancoSel.disabled = false;
+      }
+    }
     const tipoSel = $('#tm_credito_tipo');
     const parcelasWrap = $('#tm_parcelas_wrap');
     if(parcelasWrap && tipoSel) parcelasWrap.classList.toggle('hidden', tipoSel.value!=='parcelado');
   }
-  function syncCarteiraForcaDinheiro(){
-    const bancoSel = $('#tm_banco'), formaSel = $('#tm_forma');
-    if(!bancoSel || !formaSel) return;
-    const carteira = getCarteiraConta();
-    const isCarteiraSelected = !!carteira && bancoSel.value===carteira.nome;
-    formaSel.disabled = isCarteiraSelected;
-    if(isCarteiraSelected) formaSel.value = 'Dinheiro';
-    syncFormaPagamentoUI();
-  }
   if(!isReceita && $('#tm_forma')){
-    $('#tm_forma').onchange = syncFormaPagamentoUI;
-    $('#tm_banco').addEventListener('change', syncCarteiraForcaDinheiro);
+    $('#tm_forma').onchange = ()=>syncFormaPagamentoUI();
     const tipoSel = $('#tm_credito_tipo');
-    if(tipoSel) tipoSel.onchange = syncFormaPagamentoUI;
-    syncCarteiraForcaDinheiro();
+    if(tipoSel) tipoSel.onchange = ()=>syncFormaPagamentoUI();
+    syncFormaPagamentoUI(isEdit?existing.banco:null);
   }
 
   $('#tm_save').onclick = ()=>{

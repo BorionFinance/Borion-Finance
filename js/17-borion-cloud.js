@@ -6,6 +6,7 @@ const BORION_ACTIVE_PROFILE_KEY = 'borion_active_cloud_profile_v2';
 const BORION_CLOUD_CACHE = 'borion_cloud_profile_cache_v2';
 const BORION_CLOUD_META = 'borion_cloud_meta_v2';
 const BORION_CLOUD_PENDING = 'borion_cloud_pending_v2';
+const BORION_DELETE_PENDING = 'borion_delete_account_pending_v1';
 
 function cloudSafeClone(obj){ try{return JSON.parse(JSON.stringify(obj));}catch(e){return obj;} }
 function cloudNowISO(){ return new Date().toISOString(); }
@@ -60,7 +61,7 @@ function cloudMergeData(base, incoming){
 const CloudStorage = {
   client:null, user:null, profiles:[], activeProfileId:null, dataRowId:null,
   status:'offline', statusText:'Offline', dirty:false, syncTimer:null,
-  lastSyncAt:null, pendingReason:'', recoveryMode:false, schemaError:null, profilePasswordColumnsReady:null,
+  lastSyncAt:null, pendingReason:'', recoveryMode:false, deleteEmailReturnPending:false, schemaError:null, profilePasswordColumnsReady:null,
 
   async init(){
     this.recoveryMode = /type=recovery|password_recovery|PASSWORD_RECOVERY/i.test(location.hash + location.search);
@@ -79,6 +80,7 @@ const CloudStorage = {
     });
     const { data } = await this.client.auth.getSession();
     this.user = data && data.session ? data.session.user : null;
+    this.deleteEmailReturnPending = this.consumeDeleteAccountMagicLinkReturn();
     this.setStatus(navigator.onLine ? (this.user?'online':'offline') : 'offline', this.user?'Nuvem pronta':'Offline');
     return this.user;
   },
@@ -152,10 +154,10 @@ const CloudStorage = {
     return true;
   },
 
-  /* V5.39.5 — exclusão de conta com fluxo funcional: aviso forte,
-     confirmação escrita, senha, e-mail digitado e senha novamente.
-     O código por e-mail foi removido do fluxo obrigatório porque o Supabase,
-     por padrão, envia link mágico em vez de token numérico. */
+  /* V5.39.6 — exclusão de conta com confirmação por e-mail via link mágico.
+     O Supabase padrão envia um e-mail em inglês com o botão/link "Sign in".
+     O Borion explica isso na tela e usa o retorno do link como confirmação
+     de identidade antes da última senha e da exclusão definitiva. */
   async verifyAccountPasswordForDeletion(password){
     if(!this.client || !this.user || !this.user.email) throw new Error('Você precisa estar logado para excluir a conta.');
     if(!password) throw new Error('Digite a senha da conta.');
@@ -164,43 +166,77 @@ const CloudStorage = {
     this.deleteFirstPasswordVerifiedAt = Date.now();
     return true;
   },
-  async sendDeleteAccountEmailCode(){
+  deleteAccountRedirectUrl(){
+    const path = String(location.pathname||'/').replace(/\/?index\.html$/i,'/');
+    const normalizedPath = path.endsWith('/') ? path : path + '/';
+    const url = new URL(location.origin + normalizedPath);
+    url.searchParams.set('borion_delete_confirm','1');
+    return url.toString();
+  },
+  readDeletePending(){
+    const raw = readJSON(BORION_DELETE_PENDING, null);
+    if(!raw || !raw.requestedAt) return null;
+    if(Date.now() - Number(raw.requestedAt||0) > 30*60*1000){
+      try{ localStorage.removeItem(BORION_DELETE_PENDING); }catch(_e){}
+      return null;
+    }
+    return raw;
+  },
+  writeDeletePending(extra){
+    if(!this.user || !this.user.email) return;
+    const current = this.readDeletePending() || {};
+    const payload = Object.assign({}, current, extra||{}, {
+      email:String(this.user.email||'').trim().toLowerCase(),
+      userId:this.user.id,
+      requestedAt:(current.requestedAt || Date.now()),
+      updatedAt:Date.now()
+    });
+    writeJSON(BORION_DELETE_PENDING, payload);
+  },
+  clearDeletePending(){ try{ localStorage.removeItem(BORION_DELETE_PENDING); }catch(_e){} },
+  async sendDeleteAccountMagicLink(){
     if(!this.client || !this.user || !this.user.email) throw new Error('Você precisa estar logado para excluir a conta.');
+    if(!this.deleteFirstPasswordVerifiedAt || (Date.now()-this.deleteFirstPasswordVerifiedAt)>10*60*1000) throw new Error('Por segurança, confirme a senha antes de enviar o e-mail.');
     const email = String(this.user.email||'').trim().toLowerCase();
     this.deleteEmailVerifiedAt = 0;
     this.deleteEmailVerifiedFor = '';
+    const redirectTo = this.deleteAccountRedirectUrl();
+    this.writeDeletePending({firstPasswordVerifiedAt:this.deleteFirstPasswordVerifiedAt, emailVerifiedAt:0, redirectTo});
     const { error } = await this.client.auth.signInWithOtp({
       email,
-      options:{ shouldCreateUser:false }
+      options:{ shouldCreateUser:false, emailRedirectTo:redirectTo }
     });
     if(error) throw error;
     this.deleteEmailCodeRequestedAt = Date.now();
     return true;
   },
-  async verifyDeleteAccountEmailCode(code){
-    if(!this.client || !this.user || !this.user.email) throw new Error('Você precisa estar logado para excluir a conta.');
-    const email = String(this.user.email||'').trim().toLowerCase();
-    const token = String(code||'').trim().replace(/\s+/g,'');
-    if(!token) throw new Error('Digite o código recebido no e-mail.');
-    let result = await this.client.auth.verifyOtp({ email, token, type:'email' });
-    if(result.error){
-      // Alguns projetos Supabase enviam o OTP como magiclink. Mantém compatibilidade.
-      const retry = await this.client.auth.verifyOtp({ email, token, type:'magiclink' });
-      if(retry.error) throw retry.error;
-      result = retry;
+  consumeDeleteAccountMagicLinkReturn(){
+    const marker = /(?:\?|&)borion_delete_confirm=1\b/i.test(location.search||'') || /borion_delete_confirm=1/i.test(location.hash||'');
+    if(!marker) return false;
+    const email = this.user && this.user.email ? String(this.user.email||'').trim().toLowerCase() : '';
+    if(email){
+      const pending = this.readDeletePending() || {};
+      this.deleteEmailVerifiedAt = Date.now();
+      this.deleteEmailVerifiedFor = email;
+      if(pending.firstPasswordVerifiedAt) this.deleteFirstPasswordVerifiedAt = Number(pending.firstPasswordVerifiedAt||0);
+      this.writeDeletePending({emailVerifiedAt:this.deleteEmailVerifiedAt, emailVerifiedFor:email, firstPasswordVerifiedAt:this.deleteFirstPasswordVerifiedAt||0});
     }
-    const verifiedUser = result.data && result.data.user ? result.data.user : null;
-    if(verifiedUser && verifiedUser.email && String(verifiedUser.email).toLowerCase() !== email){
-      throw new Error('O código informado pertence a outro e-mail.');
-    }
-    this.user = verifiedUser || this.user;
-    this.deleteEmailVerifiedAt = Date.now();
-    this.deleteEmailVerifiedFor = email;
+    try{
+      const clean = new URL(location.href);
+      clean.searchParams.delete('borion_delete_confirm');
+      const keepHash = clean.hash && !/access_token|refresh_token|type=/i.test(clean.hash);
+      history.replaceState(null, document.title, clean.pathname + (clean.search||'') + (keepHash?clean.hash:''));
+    }catch(_e){}
     return true;
   },
   isDeleteEmailVerified(){
     if(!this.user || !this.user.email) return false;
     const email = String(this.user.email||'').trim().toLowerCase();
+    const pending = this.readDeletePending();
+    if(pending && String(pending.emailVerifiedFor||'').toLowerCase()===email && pending.emailVerifiedAt && (Date.now()-Number(pending.emailVerifiedAt)) < 10*60*1000){
+      this.deleteEmailVerifiedAt = Number(pending.emailVerifiedAt);
+      this.deleteEmailVerifiedFor = email;
+    }
     return !!(this.deleteEmailVerifiedAt && this.deleteEmailVerifiedFor===email && (Date.now()-this.deleteEmailVerifiedAt) < 10*60*1000);
   },
   async deleteAccountWithCredentials(email, password){
@@ -209,7 +245,8 @@ const CloudStorage = {
     const currentEmail=String(this.user.email||'').trim().toLowerCase();
     const typedEmail=String(email||'').trim().toLowerCase();
     if(typedEmail!==currentEmail) throw new Error('O e-mail digitado não confere com a conta logada.');
-    if(!this.deleteFirstPasswordVerifiedAt || (Date.now()-this.deleteFirstPasswordVerifiedAt)>10*60*1000) throw new Error('Por segurança, confirme a senha inicial novamente antes de excluir.');
+    if(!this.isDeleteEmailVerified()) throw new Error('Confirme o e-mail pelo link mágico antes de excluir.');
+    if(!this.deleteFirstPasswordVerifiedAt || (Date.now()-this.deleteFirstPasswordVerifiedAt)>30*60*1000) throw new Error('Por segurança, confirme a senha inicial novamente antes de excluir.');
     if(!password) throw new Error('Digite a senha da conta.');
     const deletedUserId=this.user.id;
     const oldProfiles=(this.profiles&&this.profiles.length?this.profiles:(typeof S!=='undefined'&&S.profiles)||[]).slice();
@@ -230,7 +267,7 @@ const CloudStorage = {
     try{ localStorage.removeItem(BORION_ACTIVE_PROFILE_KEY+'_'+deletedUserId); }catch(_e){}
     try{ localStorage.removeItem(BORION_CLOUD_META+'_'+deletedUserId); }catch(_e){}
     this.user=null; this.profiles=[]; this.activeProfileId=null; this.dataRowId=null; this.dirty=false; this.schemaError=null;
-    this.deleteEmailVerifiedAt=0; this.deleteEmailVerifiedFor=''; this.deleteFirstPasswordVerifiedAt=0;
+    this.deleteEmailVerifiedAt=0; this.deleteEmailVerifiedFor=''; this.deleteFirstPasswordVerifiedAt=0; this.clearDeletePending();
     setSession(null); S.currentProfile=null; S.data=null; S.profiles=[]; setProfiles([]);
     this.setStatus('offline','Conta excluída');
     cloudActionLog(action,'SUCCESS',{userId:deletedUserId});
@@ -1028,4 +1065,4 @@ function cloudChangePasswordFromSettings(){
     }
   });
 }
-function translateSupabaseError(msg){ const m=String(msg||''); if(/delete_own_account|Could not find the function|function .* does not exist/i.test(m)) return 'Para excluir a conta inteira, rode o SQL SUPABASE_V5.36_DELETE_ACCOUNT.sql no Supabase e tente novamente.'; if(/relation .*profiles|schema cache|borion_profile_data|does not exist/i.test(m)) return 'Tabelas Cloud Foundation não encontradas. Rode o SQL V5.34 no Supabase.'; if(/invalid login|Invalid login credentials|E-mail ou senha incorretos/i.test(m)) return 'E-mail ou senha incorretos.'; if(/invalid token|token.*expired|otp|Token has expired/i.test(m)) return 'Código inválido ou expirado. Reenvie o código e tente novamente.'; if(/rate limit|too many|over_email_send_rate_limit/i.test(m)) return 'Muitas tentativas de envio. Aguarde um pouco antes de reenviar o código.'; if(/email not confirmed/i.test(m)) return 'E-mail ainda não confirmado. Desative “Confirm email” no Supabase durante os testes ou confirme pelo link recebido.'; if(/already registered|already exists|User already registered/i.test(m)) return 'Esse e-mail já tem conta. Use Entrar ou Recuperar senha.'; return m; }
+function translateSupabaseError(msg){ const m=String(msg||''); if(/delete_own_account|Could not find the function|function .* does not exist/i.test(m)) return 'Para excluir a conta inteira, rode o SQL SUPABASE_V5.36_DELETE_ACCOUNT.sql no Supabase e tente novamente.'; if(/relation .*profiles|schema cache|borion_profile_data|does not exist/i.test(m)) return 'Tabelas Cloud Foundation não encontradas. Rode o SQL V5.34 no Supabase.'; if(/invalid login|Invalid login credentials|E-mail ou senha incorretos/i.test(m)) return 'E-mail ou senha incorretos.'; if(/invalid token|token.*expired|otp|Token has expired/i.test(m)) return 'Link de confirmação inválido ou expirado. Reenvie o e-mail e clique no Sign in mais recente.'; if(/rate limit|too many|over_email_send_rate_limit/i.test(m)) return 'Muitas tentativas de envio. Aguarde um pouco antes de reenviar o e-mail.'; if(/email not confirmed/i.test(m)) return 'E-mail ainda não confirmado. Desative “Confirm email” no Supabase durante os testes ou confirme pelo link recebido.'; if(/already registered|already exists|User already registered/i.test(m)) return 'Esse e-mail já tem conta. Use Entrar ou Recuperar senha.'; return m; }

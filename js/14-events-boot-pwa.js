@@ -170,6 +170,9 @@ window.addEventListener('pagehide', ()=> ExitSaveGuard.finalSaveSilently('pagehi
     if(CloudStorage.user){
       await enterCloudUser();
       ExitSaveGuard.refresh();
+      if(CloudStorage.deleteEmailReturnPending && window.Settings && Settings.resumeDeleteAccountFromMagicLink){
+        setTimeout(()=>Settings.resumeDeleteAccountFromMagicLink(),120);
+      }
       return;
     }
     CloudAuth.render();

@@ -1377,7 +1377,7 @@ html[data-theme="dark"] .profile-name,html[data-theme="dark"] .sb-profile .pname
 html[data-theme="light"] .password-toggle{background:rgba(122,85,29,.06);border-color:rgba(122,85,29,.16);color:#7a551d;}
 html[data-theme="light"] .cat-tag-name{color:#2b1e05;}
 
-/* ============ V5.39.5 — Exclusão de conta corrigida ============ */
+/* ============ V5.39.6 — Exclusão de conta com link mágico ============ */
 .delete-account-modal{max-width:620px!important;}
 .delete-steps{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 16px;}
 .delete-step{font-size:11.5px;border:1px solid rgba(255,255,255,.12);color:var(--muted);border-radius:999px;padding:6px 9px;background:rgba(255,255,255,.035);}
@@ -1405,3 +1405,12 @@ html[data-theme="light"] .delete-step.active{color:#8a1f24;border-color:rgba(196
 html[data-theme="light"] .delete-step.done{color:#0f7a4b;border-color:rgba(15,122,75,.25);background:rgba(15,122,75,.07);}
 html[data-theme="light"] .delete-warning-list,html[data-theme="light"] .delete-final-warning{background:rgba(196,44,52,.07);border-color:rgba(196,44,52,.22);color:#7c2d12;}
 html[data-theme="light"] .delete-warning-list p:last-child,html[data-theme="light"] .delete-final-warning,html[data-theme="light"] .delete-account-msg.error{color:#8a1f24;}
+
+.delete-email-instructions{border:1px solid rgba(217,180,107,.28);background:rgba(217,180,107,.08);border-radius:14px;padding:14px 16px;margin:12px 0 14px;}
+.delete-email-instructions h3{margin:0 0 8px;font-size:17px;color:var(--gold-bright);}
+.delete-email-instructions p{margin:0 0 10px;line-height:1.5;color:var(--text);}
+.delete-email-instructions ol{margin:8px 0 12px 20px;padding:0;color:var(--muted);line-height:1.6;}
+.delete-email-instructions li{padding-left:3px;margin:3px 0;}
+.delete-email-note{font-size:12.5px;color:var(--muted)!important;border-top:1px solid rgba(255,255,255,.10);padding-top:10px;margin-top:10px!important;}
+html[data-theme="light"] .delete-email-instructions{background:rgba(122,85,29,.06);border-color:rgba(122,85,29,.18);}
+html[data-theme="light"] .delete-email-note{border-top-color:rgba(122,85,29,.12);}

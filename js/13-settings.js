@@ -32,8 +32,8 @@ function renderSettings(){
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
   else if(S.settingsTab==='cloud') content = renderSettingsCloud();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 5.39.5 • Exclusão de conta corrigida</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
-<div><strong>Versão:</strong> 5.39.5</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 5.39.6 • Exclusão com link mágico</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
+<div><strong>Versão:</strong> 5.39.6</div>
 <div><strong>Lançamento:</strong> 09/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -237,7 +237,7 @@ function renderSettingsCloud(){
     ${schema}
     <div class="settings-section"><h3>Status da nuvem</h3><p class="desc"><strong>Usuário logado:</strong> ${user?esc(user.email||'logado'):'não logado'}<br><strong>Perfil financeiro ativo:</strong> ${esc(profileName)}<br><strong>Status:</strong> ${esc(status)}<br><strong>Última sincronização:</strong> ${esc(last)}<br><strong>Dados pendentes:</strong> ${pendingTxt}</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="cloudForceSync()">Sincronizar agora</button><button class="btn-outline btn-sm" onclick="cloudRunSupabaseDiagnostic()">Diagnóstico Supabase</button><button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button><button class="btn-outline btn-sm" onclick="document.getElementById('import_file_cloud').click()">Importar JSON</button><button class="btn-outline btn-sm" onclick="cloudChangePasswordFromSettings()">Trocar senha da conta/login</button>${user?`<button class="btn-danger btn-sm" onclick="Settings.deleteCloudAccountFlow()">Excluir conta</button>`:''}<button class="btn-outline btn-sm" onclick="cloudLogout()">Sair da conta</button></div><input type="file" id="import_file_cloud" accept="application/json" style="display:none;"></div>
     <div class="info-box">Fluxo: alteração → salva local/offline → marca pendente → envia ao Supabase → limpa pendência. Se a internet cair, o Borion continua salvando neste dispositivo e sincroniza quando voltar.</div>
-    ${user?`<div class="settings-section danger-box"><h3>Excluir conta Borion Cloud</h3><p class="desc">Apaga a conta de login, e-mail, todos os perfis financeiros e todos os dados monetários salvos no Supabase. O fluxo pede aviso, confirmação escrita, senha, e-mail digitado e senha novamente antes de apagar.</p><button class="btn btn-danger btn-sm" onclick="Settings.deleteCloudAccountFlow()">Excluir conta</button></div>`:''}
+    ${user?`<div class="settings-section danger-box"><h3>Excluir conta Borion Cloud</h3><p class="desc">Apaga a conta de login, e-mail, todos os perfis financeiros e todos os dados monetários salvos no Supabase. O fluxo pede aviso, confirmação escrita, senha, confirmação por e-mail via link mágico e senha novamente antes de apagar.</p><button class="btn btn-danger btn-sm" onclick="Settings.deleteCloudAccountFlow()">Excluir conta</button></div>`:''}
     ${renderInstallAppCard()}`;
 }
 
@@ -552,6 +552,7 @@ Settings.renderDeleteAccountModal = function(){
   const steps = [
     {key:'warning', label:'Aviso'},
     {key:'password1', label:'Senha'},
+    {key:'emailLink', label:'E-mail'},
     {key:'password2', label:'Final'}
   ];
   const currentIndex = Math.max(0, steps.findIndex(x=>x.key===step));
@@ -585,15 +586,34 @@ Settings.renderDeleteAccountModal = function(){
       </div>`;
   } else if(step==='password1'){
     body = `
-      <p class="modal-sub">Primeira trava de segurança: confirme a senha atual da conta.</p>
+      <p class="modal-sub">Primeira trava de segurança: confirme a senha atual da conta. Depois disso, o Borion enviará um e-mail padrão do Supabase para confirmar sua identidade.</p>
       ${passwordInputWrapHTML({id:'del_password1',label:'Senha da conta',autocomplete:'current-password',placeholder:'Digite sua senha'})}
       <div class="confirm-actions">
         <button class="btn btn-secondary btn-block" id="del_back">Voltar</button>
-        <button class="btn btn-danger-solid btn-block" id="del_next">Confirmar senha</button>
+        <button class="btn btn-danger-solid btn-block" id="del_next">Confirmar senha e enviar e-mail</button>
+      </div>`;
+  } else if(step==='emailLink'){
+    body = `
+      <div class="delete-email-instructions">
+        <h3>Confirme pelo e-mail</h3>
+        <p>Enviamos um e-mail para <b>${esc(email)}</b>.</p>
+        <ol>
+          <li>Abra a caixa de entrada desse e-mail.</li>
+          <li>Procure o e-mail enviado por <b>Supabase Auth</b>.</li>
+          <li>O assunto pode aparecer como <b>Your sign-in link</b>.</li>
+          <li>Clique no botão/link <b>Sign in</b>.</li>
+          <li>Você será redirecionado de volta para o Borion e a última confirmação será aberta automaticamente.</li>
+        </ol>
+        <p class="delete-email-note">Esse texto aparece em inglês porque o e-mail padrão é do Supabase. O Borion está usando esse link apenas como confirmação de identidade antes da exclusão da conta.</p>
+      </div>
+      <div class="confirm-actions">
+        <button class="btn btn-secondary btn-block" id="del_back">Voltar</button>
+        <button class="btn-outline btn-block" id="del_check_email">Já cliquei em Sign in</button>
+        <button class="btn btn-danger-solid btn-block" id="del_next">Reenviar e-mail</button>
       </div>`;
   } else if(step==='password2'){
     body = `
-      <p class="modal-sub">Última confirmação: digite o e-mail da conta e a senha novamente. Ao clicar no botão vermelho, a conta será apagada.</p>
+      <p class="modal-sub">E-mail confirmado pelo link mágico. Última confirmação: digite o e-mail da conta e a senha novamente. Ao clicar no botão vermelho, a conta será apagada.</p>
       <div class="field"><label>E-mail da conta</label><input type="email" id="del_email_final" autocomplete="email" placeholder="${esc(email)}"></div>
       ${passwordInputWrapHTML({id:'del_password2',label:'Senha novamente',autocomplete:'current-password',placeholder:'Digite sua senha novamente'})}
       <div class="delete-final-warning">Esta é a última etapa. Não existe “desfazer” depois da exclusão.</div>
@@ -631,7 +651,8 @@ Settings.renderDeleteAccountModal = function(){
   if(backBtn) backBtn.onclick = ()=>{
     st.error=''; st.message='';
     if(step==='password1') st.step='warning';
-    else if(step==='password2') st.step='password1';
+    else if(step==='emailLink') st.step='password1';
+    else if(step==='password2') st.step='emailLink';
     Settings.renderDeleteAccountModal();
   };
   const nextBtn = $('#del_next');
@@ -647,7 +668,17 @@ Settings.renderDeleteAccountModal = function(){
         const pw = ($('#del_password1')||{}).value || '';
         nextBtn.disabled=true; nextBtn.textContent='Validando...';
         await CloudStorage.verifyAccountPasswordForDeletion(pw);
-        st.step='password2'; st.message='Senha confirmada. Falta a confirmação final.'; Settings.renderDeleteAccountModal(); return;
+        if(CloudStorage.isDeleteEmailVerified && CloudStorage.isDeleteEmailVerified()){
+          st.step='password2'; st.message='Senha e e-mail confirmados. Faça a última confirmação para excluir a conta.'; Settings.renderDeleteAccountModal(); return;
+        }
+        await CloudStorage.sendDeleteAccountMagicLink();
+        st.step='emailLink'; st.message='Senha confirmada. Enviamos o e-mail de confirmação para '+email+'. Clique em Sign in no e-mail para continuar.'; Settings.renderDeleteAccountModal(); return;
+      }
+      if(step==='emailLink'){
+        nextBtn.disabled=true; nextBtn.textContent='Reenviando...';
+        await CloudStorage.sendDeleteAccountMagicLink();
+        st.message='E-mail reenviado para '+email+'. Abra o e-mail do Supabase Auth e clique em Sign in.';
+        Settings.renderDeleteAccountModal(); return;
       }
       if(step==='password2'){
         const typedEmail = (($('#del_email_final')||{}).value || '').trim();
@@ -662,10 +693,36 @@ Settings.renderDeleteAccountModal = function(){
       }
     }catch(e){ st.error=translateSupabaseError(e&&e.message?e.message:String(e)); st.message=''; Settings.renderDeleteAccountModal(); }
   };
+  const checkEmailBtn = $('#del_check_email');
+  if(checkEmailBtn) checkEmailBtn.onclick = ()=>{
+    try{
+      if(CloudStorage.isDeleteEmailVerified()){
+        st.step='password2'; st.error=''; st.message='E-mail confirmado. Faça a última confirmação para excluir a conta.';
+      } else {
+        throw new Error('Ainda não detectei a confirmação por e-mail. Abra o e-mail do Supabase Auth, clique em Sign in e aguarde voltar para o Borion.');
+      }
+    }catch(e){ st.error=e&&e.message?e.message:String(e); st.message=''; }
+    Settings.renderDeleteAccountModal();
+  };
   ['del_confirm_word','del_password1','del_email_final','del_password2'].forEach(id=>{
     const input=document.getElementById(id);
     if(input) input.addEventListener('keydown', e=>{ if(e.key==='Enter'){ const btn=document.getElementById('del_next'); if(btn) btn.click(); } });
   });
+};
+
+Settings.resumeDeleteAccountFromMagicLink = function(){
+  const cloud = window.CloudStorage;
+  if(!cloud || !cloud.user || !cloud.isDeleteEmailVerified || !cloud.isDeleteEmailVerified()) return false;
+  const firstPasswordOk = !!(cloud.deleteFirstPasswordVerifiedAt && (Date.now()-cloud.deleteFirstPasswordVerifiedAt) < 30*60*1000);
+  Settings._deleteAccountState = {
+    email: String(cloud.user.email||'').trim(),
+    step: firstPasswordOk ? 'password2' : 'password1',
+    busy: false,
+    message: firstPasswordOk ? 'E-mail confirmado pelo link mágico. Faça a última confirmação para excluir a conta.' : 'E-mail confirmado pelo link mágico. Por segurança, confirme a senha da conta para continuar.',
+    error: ''
+  };
+  Settings.renderDeleteAccountModal();
+  return true;
 };
 
 Settings.deleteProfile = function(id){

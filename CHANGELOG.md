@@ -1,3 +1,11 @@
+## V5.39.6 — Exclusão de conta com link mágico (09/07/2026)
+
+- Recolocada a etapa de confirmação por e-mail no fluxo de exclusão de conta.
+- O Borion agora usa o link mágico padrão do Supabase: o usuário recebe o e-mail, clica em **Sign in** e volta para o Borion.
+- A tela do app explica claramente que o e-mail virá como **Supabase Auth**, com assunto **Your sign-in link**, e que o botão/link será **Sign in**.
+- A exclusão só continua depois do retorno pelo link mágico, mantendo aviso forte, senha inicial, confirmação de e-mail e senha final.
+- Atualizado o cache do PWA para forçar carregamento da nova versão.
+
 ## V5.39.5 — Correção do fluxo de excluir conta (09/07/2026)
 - Corrigido o fluxo de exclusão de conta para não depender de código OTP por e-mail.
 - Motivo: o Supabase Auth, por padrão, envia link mágico de login em vez de código numérico no template de e-mail.

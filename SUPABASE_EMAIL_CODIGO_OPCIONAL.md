@@ -1,3 +1,11 @@
+# Supabase — código por e-mail é opcional
+
+Na V5.39.6, a exclusão de conta voltou a ter confirmação por e-mail, mas usando o link mágico padrão do Supabase. O e-mail aparecerá como "Your sign-in link" e o usuário deve clicar em "Sign in" para voltar ao Borion.
+
+Código numérico só será necessário se, no futuro, você configurar SMTP próprio e editar o template com `{{ .Token }}`.
+
+---
+
 # Borion Finance — Código por e-mail no Supabase (opcional)
 
 Na V5.39.5, o fluxo de excluir conta não trava mais pedindo código OTP, porque o Supabase Auth costuma mandar um link mágico por padrão.

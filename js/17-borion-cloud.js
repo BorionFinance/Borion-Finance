@@ -152,9 +152,10 @@ const CloudStorage = {
     return true;
   },
 
-  /* V5.39.4 — exclusão de conta com fluxo em etapas: aviso forte, senha,
-     código enviado por e-mail pelo Supabase Auth, senha novamente e só então
-     RPC delete_own_account(). */
+  /* V5.39.5 — exclusão de conta com fluxo funcional: aviso forte,
+     confirmação escrita, senha, e-mail digitado e senha novamente.
+     O código por e-mail foi removido do fluxo obrigatório porque o Supabase,
+     por padrão, envia link mágico em vez de token numérico. */
   async verifyAccountPasswordForDeletion(password){
     if(!this.client || !this.user || !this.user.email) throw new Error('Você precisa estar logado para excluir a conta.');
     if(!password) throw new Error('Digite a senha da conta.');
@@ -208,7 +209,7 @@ const CloudStorage = {
     const currentEmail=String(this.user.email||'').trim().toLowerCase();
     const typedEmail=String(email||'').trim().toLowerCase();
     if(typedEmail!==currentEmail) throw new Error('O e-mail digitado não confere com a conta logada.');
-    if(!this.isDeleteEmailVerified || !this.isDeleteEmailVerified()) throw new Error('Confirme primeiro o código recebido no e-mail da conta.');
+    if(!this.deleteFirstPasswordVerifiedAt || (Date.now()-this.deleteFirstPasswordVerifiedAt)>10*60*1000) throw new Error('Por segurança, confirme a senha inicial novamente antes de excluir.');
     if(!password) throw new Error('Digite a senha da conta.');
     const deletedUserId=this.user.id;
     const oldProfiles=(this.profiles&&this.profiles.length?this.profiles:(typeof S!=='undefined'&&S.profiles)||[]).slice();

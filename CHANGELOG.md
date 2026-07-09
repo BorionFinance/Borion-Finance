@@ -1,3 +1,10 @@
+## V5.39.5 — Correção do fluxo de excluir conta (09/07/2026)
+- Corrigido o fluxo de exclusão de conta para não depender de código OTP por e-mail.
+- Motivo: o Supabase Auth, por padrão, envia link mágico de login em vez de código numérico no template de e-mail.
+- A exclusão agora exige aviso forte, digitar EXCLUIR, confirmar a senha, digitar o e-mail da conta e confirmar a senha novamente.
+- Mantida a chamada RPC delete_own_account para apagar dados do Supabase e auth.users.
+- Atualizado cache do app para forçar carregamento da versão nova.
+
 ## V5.39.4 — Exclusão de conta segura (09/07/2026)
 
 - Adicionado fluxo completo para excluir conta Borion Cloud em Configurações > Nuvem.

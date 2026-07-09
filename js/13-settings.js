@@ -32,8 +32,8 @@ function renderSettings(){
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
   else if(S.settingsTab==='cloud') content = renderSettingsCloud();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 5.39.4 • Exclusão de conta segura</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
-<div><strong>Versão:</strong> 5.39.4</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 5.39.5 • Exclusão de conta corrigida</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
+<div><strong>Versão:</strong> 5.39.5</div>
 <div><strong>Lançamento:</strong> 09/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -237,7 +237,7 @@ function renderSettingsCloud(){
     ${schema}
     <div class="settings-section"><h3>Status da nuvem</h3><p class="desc"><strong>Usuário logado:</strong> ${user?esc(user.email||'logado'):'não logado'}<br><strong>Perfil financeiro ativo:</strong> ${esc(profileName)}<br><strong>Status:</strong> ${esc(status)}<br><strong>Última sincronização:</strong> ${esc(last)}<br><strong>Dados pendentes:</strong> ${pendingTxt}</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="cloudForceSync()">Sincronizar agora</button><button class="btn-outline btn-sm" onclick="cloudRunSupabaseDiagnostic()">Diagnóstico Supabase</button><button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button><button class="btn-outline btn-sm" onclick="document.getElementById('import_file_cloud').click()">Importar JSON</button><button class="btn-outline btn-sm" onclick="cloudChangePasswordFromSettings()">Trocar senha da conta/login</button>${user?`<button class="btn-danger btn-sm" onclick="Settings.deleteCloudAccountFlow()">Excluir conta</button>`:''}<button class="btn-outline btn-sm" onclick="cloudLogout()">Sair da conta</button></div><input type="file" id="import_file_cloud" accept="application/json" style="display:none;"></div>
     <div class="info-box">Fluxo: alteração → salva local/offline → marca pendente → envia ao Supabase → limpa pendência. Se a internet cair, o Borion continua salvando neste dispositivo e sincroniza quando voltar.</div>
-    ${user?`<div class="settings-section danger-box"><h3>Excluir conta Borion Cloud</h3><p class="desc">Apaga a conta de login, e-mail, todos os perfis financeiros e todos os dados monetários salvos no Supabase. O fluxo pede aviso, senha, código no e-mail e senha novamente antes de apagar.</p><button class="btn btn-danger btn-sm" onclick="Settings.deleteCloudAccountFlow()">Excluir conta</button></div>`:''}
+    ${user?`<div class="settings-section danger-box"><h3>Excluir conta Borion Cloud</h3><p class="desc">Apaga a conta de login, e-mail, todos os perfis financeiros e todos os dados monetários salvos no Supabase. O fluxo pede aviso, confirmação escrita, senha, e-mail digitado e senha novamente antes de apagar.</p><button class="btn btn-danger btn-sm" onclick="Settings.deleteCloudAccountFlow()">Excluir conta</button></div>`:''}
     ${renderInstallAppCard()}`;
 }
 
@@ -552,7 +552,6 @@ Settings.renderDeleteAccountModal = function(){
   const steps = [
     {key:'warning', label:'Aviso'},
     {key:'password1', label:'Senha'},
-    {key:'emailCode', label:'E-mail'},
     {key:'password2', label:'Final'}
   ];
   const currentIndex = Math.max(0, steps.findIndex(x=>x.key===step));
@@ -592,19 +591,10 @@ Settings.renderDeleteAccountModal = function(){
         <button class="btn btn-secondary btn-block" id="del_back">Voltar</button>
         <button class="btn btn-danger-solid btn-block" id="del_next">Confirmar senha</button>
       </div>`;
-  } else if(step==='emailCode'){
-    body = `
-      <p class="modal-sub">Segunda trava: enviamos uma verificação para <b>${esc(email)}</b>. Digite o código recebido no e-mail para provar que você tem acesso a essa conta.</p>
-      <div class="info-box">Se o Supabase enviar um link em vez de código, abra o e-mail e procure o código/token da mensagem. Em alguns projetos, é preciso ajustar o template de e-mail do Supabase para mostrar o código.</div>
-      <div class="field"><label>Código recebido no e-mail</label><input type="text" id="del_email_code" inputmode="numeric" autocomplete="one-time-code" placeholder="000000"></div>
-      <div class="delete-code-actions"><button class="link-btn" id="del_resend">Reenviar código</button></div>
-      <div class="confirm-actions">
-        <button class="btn btn-secondary btn-block" id="del_back">Voltar</button>
-        <button class="btn btn-danger-solid btn-block" id="del_next">Verificar código</button>
-      </div>`;
   } else if(step==='password2'){
     body = `
-      <p class="modal-sub">Última confirmação: digite a senha novamente. Ao clicar no botão vermelho, a conta será apagada.</p>
+      <p class="modal-sub">Última confirmação: digite o e-mail da conta e a senha novamente. Ao clicar no botão vermelho, a conta será apagada.</p>
+      <div class="field"><label>E-mail da conta</label><input type="email" id="del_email_final" autocomplete="email" placeholder="${esc(email)}"></div>
       ${passwordInputWrapHTML({id:'del_password2',label:'Senha novamente',autocomplete:'current-password',placeholder:'Digite sua senha novamente'})}
       <div class="delete-final-warning">Esta é a última etapa. Não existe “desfazer” depois da exclusão.</div>
       <div class="confirm-actions">
@@ -641,18 +631,8 @@ Settings.renderDeleteAccountModal = function(){
   if(backBtn) backBtn.onclick = ()=>{
     st.error=''; st.message='';
     if(step==='password1') st.step='warning';
-    else if(step==='emailCode') st.step='password1';
-    else if(step==='password2') st.step='emailCode';
+    else if(step==='password2') st.step='password1';
     Settings.renderDeleteAccountModal();
-  };
-  const resendBtn = $('#del_resend');
-  if(resendBtn) resendBtn.onclick = async ()=>{
-    try{
-      resendBtn.disabled=true; resendBtn.textContent='Enviando...';
-      await CloudStorage.sendDeleteAccountEmailCode();
-      st.error=''; st.message='Código reenviado para '+email+'.';
-      Settings.renderDeleteAccountModal();
-    }catch(e){ st.error=translateSupabaseError(e&&e.message?e.message:String(e)); st.message=''; Settings.renderDeleteAccountModal(); }
   };
   const nextBtn = $('#del_next');
   if(nextBtn) nextBtn.onclick = async ()=>{
@@ -667,27 +647,22 @@ Settings.renderDeleteAccountModal = function(){
         const pw = ($('#del_password1')||{}).value || '';
         nextBtn.disabled=true; nextBtn.textContent='Validando...';
         await CloudStorage.verifyAccountPasswordForDeletion(pw);
-        await CloudStorage.sendDeleteAccountEmailCode();
-        st.step='emailCode'; st.message='Senha confirmada. Código enviado para '+email+'.'; Settings.renderDeleteAccountModal(); return;
-      }
-      if(step==='emailCode'){
-        const code = ($('#del_email_code')||{}).value || '';
-        nextBtn.disabled=true; nextBtn.textContent='Verificando...';
-        await CloudStorage.verifyDeleteAccountEmailCode(code);
-        st.step='password2'; st.message='E-mail verificado. Falta a senha final.'; Settings.renderDeleteAccountModal(); return;
+        st.step='password2'; st.message='Senha confirmada. Falta a confirmação final.'; Settings.renderDeleteAccountModal(); return;
       }
       if(step==='password2'){
+        const typedEmail = (($('#del_email_final')||{}).value || '').trim();
         const pw2 = ($('#del_password2')||{}).value || '';
+        if(!typedEmail) throw new Error('Digite o e-mail da conta.');
         if(!pw2) throw new Error('Digite a senha novamente.');
         nextBtn.disabled=true; nextBtn.textContent='Excluindo...';
-        await CloudStorage.deleteAccountWithCredentials(email, pw2);
+        await CloudStorage.deleteAccountWithCredentials(typedEmail, pw2);
         st.step='done'; st.error=''; st.message='';
         Settings.renderDeleteAccountModal();
         return;
       }
     }catch(e){ st.error=translateSupabaseError(e&&e.message?e.message:String(e)); st.message=''; Settings.renderDeleteAccountModal(); }
   };
-  ['del_confirm_word','del_password1','del_email_code','del_password2'].forEach(id=>{
+  ['del_confirm_word','del_password1','del_email_final','del_password2'].forEach(id=>{
     const input=document.getElementById(id);
     if(input) input.addEventListener('keydown', e=>{ if(e.key==='Enter'){ const btn=document.getElementById('del_next'); if(btn) btn.click(); } });
   });

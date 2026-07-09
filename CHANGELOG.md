@@ -1,3 +1,11 @@
+## V5.39.4 — Exclusão de conta segura (09/07/2026)
+
+- Adicionado fluxo completo para excluir conta Borion Cloud em Configurações > Nuvem.
+- A exclusão agora passa por: aviso de perda total dos dados, digitar EXCLUIR, senha da conta, código enviado ao e-mail pelo Supabase, senha novamente e confirmação final.
+- O aviso deixa claro que e-mail, login, todos os perfis financeiros e dados monetários serão apagados e não poderão ser recuperados pelo app.
+- Após excluir, o Borion limpa sessão, cache local dos perfis e mostra a mensagem: “Sua conta foi cancelada. Todos os dados foram apagados. Esperamos vê-lo em breve novamente.”
+- O botão Excluir conta também aparece junto dos botões principais da tela Nuvem, além da zona de perigo.
+
 ## V5.39.3 — Investimentos negativos e salvamento final (09/07/2026)
 
 - Investimentos: rendimento negativo em ativos agora aparece em vermelho, incluindo valor e porcentagem. Ex.: investiu R$ 1.000 e está R$ 900, mostra perda de R$ 100 / -10% em vermelho.

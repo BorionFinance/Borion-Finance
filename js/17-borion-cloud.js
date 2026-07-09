@@ -151,12 +151,64 @@ const CloudStorage = {
     this.user = data && data.user ? data.user : this.user;
     return true;
   },
+
+  /* V5.39.4 — exclusão de conta com fluxo em etapas: aviso forte, senha,
+     código enviado por e-mail pelo Supabase Auth, senha novamente e só então
+     RPC delete_own_account(). */
+  async verifyAccountPasswordForDeletion(password){
+    if(!this.client || !this.user || !this.user.email) throw new Error('Você precisa estar logado para excluir a conta.');
+    if(!password) throw new Error('Digite a senha da conta.');
+    const { error } = await this.client.auth.signInWithPassword({ email:this.user.email, password });
+    if(error) throw new Error('Senha incorreta.');
+    this.deleteFirstPasswordVerifiedAt = Date.now();
+    return true;
+  },
+  async sendDeleteAccountEmailCode(){
+    if(!this.client || !this.user || !this.user.email) throw new Error('Você precisa estar logado para excluir a conta.');
+    const email = String(this.user.email||'').trim().toLowerCase();
+    this.deleteEmailVerifiedAt = 0;
+    this.deleteEmailVerifiedFor = '';
+    const { error } = await this.client.auth.signInWithOtp({
+      email,
+      options:{ shouldCreateUser:false }
+    });
+    if(error) throw error;
+    this.deleteEmailCodeRequestedAt = Date.now();
+    return true;
+  },
+  async verifyDeleteAccountEmailCode(code){
+    if(!this.client || !this.user || !this.user.email) throw new Error('Você precisa estar logado para excluir a conta.');
+    const email = String(this.user.email||'').trim().toLowerCase();
+    const token = String(code||'').trim().replace(/\s+/g,'');
+    if(!token) throw new Error('Digite o código recebido no e-mail.');
+    let result = await this.client.auth.verifyOtp({ email, token, type:'email' });
+    if(result.error){
+      // Alguns projetos Supabase enviam o OTP como magiclink. Mantém compatibilidade.
+      const retry = await this.client.auth.verifyOtp({ email, token, type:'magiclink' });
+      if(retry.error) throw retry.error;
+      result = retry;
+    }
+    const verifiedUser = result.data && result.data.user ? result.data.user : null;
+    if(verifiedUser && verifiedUser.email && String(verifiedUser.email).toLowerCase() !== email){
+      throw new Error('O código informado pertence a outro e-mail.');
+    }
+    this.user = verifiedUser || this.user;
+    this.deleteEmailVerifiedAt = Date.now();
+    this.deleteEmailVerifiedFor = email;
+    return true;
+  },
+  isDeleteEmailVerified(){
+    if(!this.user || !this.user.email) return false;
+    const email = String(this.user.email||'').trim().toLowerCase();
+    return !!(this.deleteEmailVerifiedAt && this.deleteEmailVerifiedFor===email && (Date.now()-this.deleteEmailVerifiedAt) < 10*60*1000);
+  },
   async deleteAccountWithCredentials(email, password){
     const action='DELETE_ACCOUNT';
     if(!this.client || !this.user || !this.user.email) throw new Error('Você precisa estar logado para excluir a conta.');
     const currentEmail=String(this.user.email||'').trim().toLowerCase();
     const typedEmail=String(email||'').trim().toLowerCase();
     if(typedEmail!==currentEmail) throw new Error('O e-mail digitado não confere com a conta logada.');
+    if(!this.isDeleteEmailVerified || !this.isDeleteEmailVerified()) throw new Error('Confirme primeiro o código recebido no e-mail da conta.');
     if(!password) throw new Error('Digite a senha da conta.');
     const deletedUserId=this.user.id;
     const oldProfiles=(this.profiles&&this.profiles.length?this.profiles:(typeof S!=='undefined'&&S.profiles)||[]).slice();
@@ -177,6 +229,7 @@ const CloudStorage = {
     try{ localStorage.removeItem(BORION_ACTIVE_PROFILE_KEY+'_'+deletedUserId); }catch(_e){}
     try{ localStorage.removeItem(BORION_CLOUD_META+'_'+deletedUserId); }catch(_e){}
     this.user=null; this.profiles=[]; this.activeProfileId=null; this.dataRowId=null; this.dirty=false; this.schemaError=null;
+    this.deleteEmailVerifiedAt=0; this.deleteEmailVerifiedFor=''; this.deleteFirstPasswordVerifiedAt=0;
     setSession(null); S.currentProfile=null; S.data=null; S.profiles=[]; setProfiles([]);
     this.setStatus('offline','Conta excluída');
     cloudActionLog(action,'SUCCESS',{userId:deletedUserId});
@@ -974,4 +1027,4 @@ function cloudChangePasswordFromSettings(){
     }
   });
 }
-function translateSupabaseError(msg){ const m=String(msg||''); if(/delete_own_account|Could not find the function|function .* does not exist/i.test(m)) return 'Para excluir a conta inteira, rode o SQL SUPABASE_V5.36_DELETE_ACCOUNT.sql no Supabase e tente novamente.'; if(/relation .*profiles|schema cache|borion_profile_data|does not exist/i.test(m)) return 'Tabelas Cloud Foundation não encontradas. Rode o SQL V5.34 no Supabase.'; if(/invalid login|Invalid login credentials|E-mail ou senha incorretos/i.test(m)) return 'E-mail ou senha incorretos.'; if(/email not confirmed/i.test(m)) return 'E-mail ainda não confirmado. Desative “Confirm email” no Supabase durante os testes ou confirme pelo link recebido.'; if(/already registered|already exists|User already registered/i.test(m)) return 'Esse e-mail já tem conta. Use Entrar ou Recuperar senha.'; return m; }
+function translateSupabaseError(msg){ const m=String(msg||''); if(/delete_own_account|Could not find the function|function .* does not exist/i.test(m)) return 'Para excluir a conta inteira, rode o SQL SUPABASE_V5.36_DELETE_ACCOUNT.sql no Supabase e tente novamente.'; if(/relation .*profiles|schema cache|borion_profile_data|does not exist/i.test(m)) return 'Tabelas Cloud Foundation não encontradas. Rode o SQL V5.34 no Supabase.'; if(/invalid login|Invalid login credentials|E-mail ou senha incorretos/i.test(m)) return 'E-mail ou senha incorretos.'; if(/invalid token|token.*expired|otp|Token has expired/i.test(m)) return 'Código inválido ou expirado. Reenvie o código e tente novamente.'; if(/rate limit|too many|over_email_send_rate_limit/i.test(m)) return 'Muitas tentativas de envio. Aguarde um pouco antes de reenviar o código.'; if(/email not confirmed/i.test(m)) return 'E-mail ainda não confirmado. Desative “Confirm email” no Supabase durante os testes ou confirme pelo link recebido.'; if(/already registered|already exists|User already registered/i.test(m)) return 'Esse e-mail já tem conta. Use Entrar ou Recuperar senha.'; return m; }

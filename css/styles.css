@@ -1376,3 +1376,32 @@ html[data-theme="dark"] .profile-name,html[data-theme="dark"] .sb-profile .pname
 .bank-required-modal .confirm-text{line-height:1.5;}
 html[data-theme="light"] .password-toggle{background:rgba(122,85,29,.06);border-color:rgba(122,85,29,.16);color:#7a551d;}
 html[data-theme="light"] .cat-tag-name{color:#2b1e05;}
+
+/* ============ V5.39.4 — Exclusão de conta segura ============ */
+.delete-account-modal{max-width:620px!important;}
+.delete-steps{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 16px;}
+.delete-step{font-size:11.5px;border:1px solid rgba(255,255,255,.12);color:var(--muted);border-radius:999px;padding:6px 9px;background:rgba(255,255,255,.035);}
+.delete-step.active{color:#fff;border-color:rgba(239,68,68,.42);background:rgba(239,68,68,.16);box-shadow:0 0 14px rgba(239,68,68,.12);}
+.delete-step.done{color:#bbf7d0;border-color:rgba(52,211,153,.35);background:rgba(52,211,153,.10);}
+.delete-account-hero{display:flex;gap:14px;align-items:flex-start;margin:8px 0 14px;}
+.delete-account-hero h3{margin:0 0 4px;font-size:18px;}
+.delete-account-hero p{margin:0;color:var(--muted);line-height:1.45;}
+.delete-danger-mark{width:42px;height:42px;flex:0 0 42px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.42);color:#fecaca;font-weight:900;font-size:24px;box-shadow:0 0 22px rgba(239,68,68,.20);}
+.delete-warning-list{border:1px solid rgba(239,68,68,.28);background:rgba(239,68,68,.08);border-radius:14px;padding:14px 16px;margin:12px 0 14px;color:var(--text);}
+.delete-warning-list p{margin:0 0 8px;line-height:1.48;}
+.delete-warning-list p:last-child{margin-bottom:0;color:#fecaca;}
+.delete-warning-list ul{margin:8px 0 10px 18px;padding:0;color:var(--muted);line-height:1.55;}
+.delete-account-msg{border-radius:12px;padding:10px 12px;margin:8px 0 12px;font-size:13px;line-height:1.45;}
+.delete-account-msg.error{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.32);color:#fecaca;}
+.delete-account-msg.ok{background:rgba(52,211,153,.10);border:1px solid rgba(52,211,153,.28);color:#bbf7d0;}
+.delete-code-actions{display:flex;justify-content:flex-end;margin:-4px 0 8px;}
+.delete-final-warning{margin:10px 0 14px;border:1px solid rgba(239,68,68,.34);background:rgba(239,68,68,.10);color:#fecaca;border-radius:12px;padding:11px 12px;font-size:13px;line-height:1.45;}
+.delete-account-success{text-align:center;padding:12px 0 18px;}
+.delete-account-success h3{margin:10px 0 6px;font-size:20px;}
+.delete-account-success p{margin:4px 0;color:var(--muted);}
+.success-mark{width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto;background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.35);color:#bbf7d0;font-weight:900;font-size:26px;box-shadow:0 0 24px rgba(52,211,153,.18);}
+html[data-theme="light"] .delete-step{border-color:rgba(122,85,29,.16);background:rgba(122,85,29,.035);}
+html[data-theme="light"] .delete-step.active{color:#8a1f24;border-color:rgba(196,44,52,.32);background:rgba(196,44,52,.08);}
+html[data-theme="light"] .delete-step.done{color:#0f7a4b;border-color:rgba(15,122,75,.25);background:rgba(15,122,75,.07);}
+html[data-theme="light"] .delete-warning-list,html[data-theme="light"] .delete-final-warning{background:rgba(196,44,52,.07);border-color:rgba(196,44,52,.22);color:#7c2d12;}
+html[data-theme="light"] .delete-warning-list p:last-child,html[data-theme="light"] .delete-final-warning,html[data-theme="light"] .delete-account-msg.error{color:#8a1f24;}

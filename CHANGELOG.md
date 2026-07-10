@@ -38,6 +38,14 @@ local — agora mostra "Modo local" com estilo neutro (não é mais o vermelho d
 **Nova tela**: Configurações → Backups → "Ver backups deste dispositivo" — lista, baixa
 e restaura o histórico de backups local (IndexedDB) criado pelo `storageProvider`.
 
+**Bug corrigido antes de ir pro ar**: `js/13-settings.js` tem 3 funções com o mesmo nome
+declaradas duas vezes cada (`renderSettingsCloud`, `renderSettingsBackup`,
+`renderSettingsProfiles` — provavelmente de sessões antigas). Em JavaScript, a segunda
+declaração "vence" e a primeira vira código morto sem erro nenhum — então meu primeiro
+patch da tela de backups foi parar silenciosamente na cópia morta e nunca apareceu.
+Corrigido para editar a cópia que realmente roda. `renderSettingsProfiles` continua
+duplicada (não mexi, não relacionada a este incremento) — vale uma limpeza futura.
+
 ## V6.0 — Refatoração da arquitetura financeira: Fluxo Financeiro x Transferências (09/07/2026)
 
 Maior mudança conceitual do Borion desde o lançamento das Reservas. Antes, retirar dinheiro

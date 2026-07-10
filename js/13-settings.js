@@ -333,6 +333,14 @@ function renderSettingsBackup(){
         <button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button>
         <button class="btn-outline btn-sm" onclick="Settings.emailBackup()">Preparar e-mail manual</button>
       </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>Backups neste dispositivo</h3>
+      <p class="desc">Histórico de backups guardado só no navegador (IndexedDB) — funciona mesmo sem conta na nuvem, e mesmo sem internet.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn-outline btn-sm" onclick="Settings.viewLocalBackups()">Ver backups deste dispositivo</button>
+      </div>
     </div>`;
 }
 

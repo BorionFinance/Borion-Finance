@@ -1159,6 +1159,7 @@ html[data-theme="light"] .sb-item.active .ic{
 .cloud-status.online{border-color:rgba(34,197,94,.32);background:rgba(34,197,94,.12);color:#86efac}
 .cloud-status.syncing,.cloud-status.dirty{border-color:rgba(201,164,92,.38);background:rgba(201,164,92,.13);color:#f6d58b}
 .cloud-status.offline{border-color:rgba(239,68,68,.32);background:rgba(239,68,68,.10);color:#fca5a5}
+.cloud-status.local{border-color:rgba(184,137,55,.35);background:rgba(184,137,55,.13);color:#e8c98a}
 @media (max-width: 760px){.cloud-status{position:fixed;left:12px;right:12px;bottom:74px;z-index:45;text-align:center;padding:9px 12px}.topbar .cloud-status{display:block}.cloud-actions{gap:10px}.cloud-login-wrap{padding:18px}}
 
 /* V5.33 — ajustes mobile/app e nuvem robusta */

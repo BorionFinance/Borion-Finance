@@ -32,7 +32,7 @@ function renderSettings(){
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
   else if(S.settingsTab==='cloud') content = renderSettingsCloud();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 5.39.6 • Exclusão com link mágico</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.3.0 • Modo offline (sem Supabase)</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
 <div><strong>Versão:</strong> 6.3.0</div>
 <div><strong>Lançamento:</strong> 09/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
@@ -154,7 +154,8 @@ function renderSettingsBackup(){
   return `
     <div class="settings-section settings-hero-section"><h3>Backups e portabilidade</h3><p class="desc">Leve seus dados para outro computador ou mantenha cópias seguras.</p></div>
     <div class="settings-section"><h3>Pasta de backups automáticos</h3>${backupFolderBlock}</div>
-    <div class="settings-section"><h3>Backup manual</h3><p class="desc">Gere um backup a qualquer momento, importe backup antigo ou envie por e-mail.</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="BackupFS.manualBackupNow()">Gerar backup agora</button><button class="btn-outline" onclick="Settings.exportProfile()">Exportar só este perfil</button><button class="btn-outline" onclick="document.getElementById('import_file_backup').click()">Importar backup</button><button class="btn-outline" onclick="Settings.emailBackup()">Enviar por e-mail</button></div><input type="file" id="import_file_backup" accept="application/json" style="display:none;"><div class="info-box">Antes de importar, o app pergunta se você quer substituir ou importar como novo perfil.</div></div>`;
+    <div class="settings-section"><h3>Backup manual</h3><p class="desc">Gere um backup a qualquer momento, importe backup antigo ou envie por e-mail.</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="BackupFS.manualBackupNow()">Gerar backup agora</button><button class="btn-outline" onclick="Settings.exportProfile()">Exportar só este perfil</button><button class="btn-outline" onclick="document.getElementById('import_file_backup').click()">Importar backup</button><button class="btn-outline" onclick="Settings.emailBackup()">Enviar por e-mail</button></div><input type="file" id="import_file_backup" accept="application/json" style="display:none;"><div class="info-box">Antes de importar, o app pergunta se você quer substituir ou importar como novo perfil.</div></div>
+    <div class="settings-section"><h3>Backups neste dispositivo</h3><p class="desc">Histórico de backups guardado só no navegador (IndexedDB) — funciona mesmo sem conta na nuvem, e mesmo sem internet.</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewLocalBackups()">Ver backups deste dispositivo</button></div></div>`;
 }
 const Settings = {
   setTab(tab){ S.settingsTab=tab; renderView(); },
@@ -227,6 +228,21 @@ function renderSettingsProfiles(){
 function renderSettingsCloud(){
   const cloud = window.CloudStorage;
   const user = cloud && cloud.user;
+  if(!user){
+    // V6.3.0 — modo local (sem conta Supabase): a versão de baixo desta tela tem
+    // botões como "Sincronizar agora", "Diagnóstico Supabase" e "Trocar senha da
+    // conta/login" que não fazem sentido (e podem mostrar erro de Supabase) sem
+    // login. Essa versão só mostra o que funciona 100% sem conta.
+    const st = (window.storageProvider ? storageProvider.getStorageStatus() : {profileCount:(S.profiles||[]).length, online:navigator.onLine});
+    return `
+    <div class="settings-section settings-hero-section"><h3>Armazenamento</h3><p class="desc">Você está usando o Borion sem conta — os dados ficam só neste dispositivo (localStorage + IndexedDB).</p></div>
+    <div class="settings-section"><h3>Status</h3><p class="desc"><strong>Modo:</strong> Local (sem conta)<br><strong>Perfis neste dispositivo:</strong> ${st.profileCount||0}<br><strong>Perfil ativo:</strong> ${esc(S.currentProfile?S.currentProfile.name:'Nenhum')}<br><strong>Conexão:</strong> ${st.online?'Online':'Offline'}</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button><button class="btn-outline btn-sm" onclick="document.getElementById('import_file_cloud').click()">Importar JSON</button><button class="btn-outline btn-sm" onclick="Settings.switchToCloudFromSettings()">Entrar com uma conta na nuvem</button></div>
+      <input type="file" id="import_file_cloud" accept="application/json" style="display:none;">
+    </div>
+    <div class="info-box">Os dados continuam salvos neste navegador. Entrar com uma conta permite sincronizar entre celular e computador e ter backup automático na nuvem — seus perfis locais continuam aqui e voltam a aparecer se você sair da conta depois.</div>
+    ${renderInstallAppCard()}`;
+  }
   const pending = cloud && cloud.pendingInfo ? cloud.pendingInfo() : null;
   const last = cloud && cloud.lastSyncAt ? new Date(cloud.lastSyncAt).toLocaleString('pt-BR') : 'Ainda não sincronizou nesta sessão';
   const status = cloud ? (cloud.statusLabel ? cloud.statusLabel() : (cloud.statusText || cloud.status || 'Indisponível')) : 'Módulo de nuvem não carregado';
@@ -741,6 +757,13 @@ Settings.exportProfile = async function(){
     toast('Backup completo exportado com todos os perfis da conta.');
   }catch(e){ alert(e.message||String(e)); }
 };
+/* V6.3.0 — mesmo caminho do botão "Entrar com uma conta na nuvem" do Gate, só que
+   acessível de dentro do app (tela Configurações), pra quem está no modo local e
+   decide, depois de já estar usando o Borion, que quer conta na nuvem. */
+Settings.switchToCloudFromSettings = function(){
+  setStorageMode('cloud');
+  if(window.CloudAuth){ CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info=''; CloudAuth.render(); }
+};
 Settings.emailBackup = function(){
   Settings.exportProfile();
   const p=S.currentProfile||{};
@@ -764,6 +787,56 @@ Settings.createCloudBackupNow = async function(type='manual', reason='backup man
     alert((e&&e.message?e.message:String(e))+'\n\nSe aparecer erro de tabela/coluna, rode o SQL SUPABASE_V5.35_BACKUP_SECURITY.sql ou o SQL Cloud Foundation atualizado.');
   }
 };
+/* V6.3.0 — mesma ideia do viewCloudBackups logo abaixo, só que lendo do histórico
+   100% local (storageProvider/IndexedDB) — funciona sem Supabase e sem internet. */
+Settings.viewLocalBackups = async function(){
+  try{
+    if(!window.storageProvider) throw new Error('Módulo de armazenamento não carregou.');
+    const rows = await storageProvider.listBackups();
+    const reasonLabels = {manual:'Manual', before_import:'Antes de importar', before_restore:'Antes de restaurar', before_schema_migration:'Antes de atualização', auto:'Automático'};
+    const html = rows.length ? rows.map(r=>{
+      const when = r.createdAt ? new Date(r.createdAt).toLocaleString('pt-BR') : '-';
+      const reason = esc(reasonLabels[r.reasonType] || r.reasonType || 'backup');
+      return `<div class="backup-vault-row">
+        <div class="backup-vault-main"><b>${reason}</b><span>${esc(when)} · ${Number(r.profileCount||0)} perfil(is) · ${esc(r.appVersion||'')}</span></div>
+        <div class="backup-vault-actions"><button class="btn-outline btn-sm" onclick="Settings.downloadLocalBackup('${r.id}')">Baixar</button><button class="btn-outline btn-sm" onclick="Settings.restoreLocalBackup('${r.id}')">Restaurar</button></div>
+      </div>`;
+    }).join('') : `<div class="info-box">Nenhum backup local ainda. Clique em "Criar backup agora".</div>`;
+    const box = el(`
+      <div class="modal-overlay">
+        <div class="modal-box backup-vault-modal">
+          <div class="modal-head"><h2>Backups neste dispositivo</h2><button id="lbv_close">&times;</button></div>
+          <p class="modal-sub">Guardados só no navegador (IndexedDB), sem depender do Supabase. Backups manuais e "antes de importar/restaurar" nunca são apagados sozinhos; automáticos ficam limitados aos últimos 50.</p>
+          <div class="backup-vault-list">${html}</div>
+          <div class="row-btns" style="margin-top:12px;"><button class="btn btn-primary btn-block" id="lbv_new">Criar backup agora</button></div>
+        </div>
+      </div>`);
+    $('#modal-root').innerHTML=''; $('#modal-root').appendChild(box); attachModalGuard(box);
+    $('#lbv_close').onclick=closeModal;
+    $('#lbv_new').onclick=async()=>{ try{ await storageProvider.createBackup('manual'); closeModal(); Settings.viewLocalBackups(); }catch(e){ alert(e.message||String(e)); } };
+  }catch(e){ alert(e.message||String(e)); }
+};
+Settings.downloadLocalBackup = async function(id){
+  try{
+    const entry = await localBackupsGet(id);
+    if(!entry) throw new Error('Backup não encontrado.');
+    downloadJSON(entry.payload, `borion-backup-local-${dateSlug()}.json`);
+  }catch(e){ alert(e.message||String(e)); }
+};
+Settings.restoreLocalBackup = function(id){
+  openConfirmModal({
+    title:'Restaurar backup local',
+    text:'Você vai substituir os dados atuais pelo backup selecionado. O Borion cria um backup de segurança do estado atual antes de restaurar.',
+    confirmLabel:'Restaurar',
+    cancelLabel:'Cancelar',
+    variant:'danger',
+    onConfirm: async ()=>{
+      try{ await storageProvider.restoreBackup(id); closeModal(); toast('Backup local restaurado.'); }
+      catch(e){ alert(e.message||String(e)); }
+    }
+  });
+};
+
 Settings.viewCloudBackups = async function(){
   try{
     if(!window.BackupFS) throw new Error('Módulo de backup não carregou.');

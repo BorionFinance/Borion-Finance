@@ -27,6 +27,17 @@ aqui é aditivo, e quem já usa conta na nuvem não percebe nenhuma diferença.
   sempre cria um backup `before_restore` antes de restaurar — nunca sobrescreve sem rede
   de segurança.
 
+**Auditoria pós-teste** (garantindo que nenhuma tela quebra sem Supabase, critério #11
+da FASE 1): a tela "Status da nuvem" em Configurações mostrava botões como "Sincronizar
+agora", "Diagnóstico Supabase" e "Trocar senha da conta" mesmo sem login — clicar neles
+gerava erro de Supabase sem sentido no modo local. Agora, sem conta, essa tela mostra um
+painel próprio ("Armazenamento") só com o que funciona localmente. O selo de status no
+topo do app ("Sincronizando...") também ficava travado nesse texto para sempre no modo
+local — agora mostra "Modo local" com estilo neutro (não é mais o vermelho de erro).
+
+**Nova tela**: Configurações → Backups → "Ver backups deste dispositivo" — lista, baixa
+e restaura o histórico de backups local (IndexedDB) criado pelo `storageProvider`.
+
 ## V6.0 — Refatoração da arquitetura financeira: Fluxo Financeiro x Transferências (09/07/2026)
 
 Maior mudança conceitual do Borion desde o lançamento das Reservas. Antes, retirar dinheiro

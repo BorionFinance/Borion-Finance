@@ -396,7 +396,9 @@ function renderView(){
         <div id="global_search_results" class="search-results hidden"></div>
       </div>
       <div style="display:flex;gap:12px;align-items:center;">
-        <button id="cloud_status_badge" class="cloud-status syncing" onclick="CloudStorage.syncNow()">Sincronizando...</button>
+        ${(window.CloudStorage && CloudStorage.user)
+          ? `<button id="cloud_status_badge" class="cloud-status syncing" onclick="CloudStorage.syncNow()">Sincronizando...</button>`
+          : `<button id="cloud_status_badge" class="cloud-status local" onclick="Nav.go('settings')" title="Sem conta na nuvem — dados salvos só neste dispositivo">Modo local</button>`}
         ${bankBtn}
         ${monthNav}
         <button class="bell-btn" onclick="Notifs.togglePanel(event)">${bellIconSVG()}${unread?`<span class="bell-badge">${unread>9?'9+':unread}</span>`:''}</button>

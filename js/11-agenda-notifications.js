@@ -7,6 +7,29 @@ function agendaAddMonthsSameDay(iso, add){
   const last = new Date(target.getFullYear(), target.getMonth()+1, 0).getDate();
   return target.getFullYear()+'-'+pad2(target.getMonth()+1)+'-'+pad2(Math.min(d,last));
 }
+/* Quantos meses futuros já existem numa série, a partir do item informado (0 se o item
+   não pertence a nenhuma série). Usado para pré-preencher o campo "Quantidade de meses
+   para replicar" ao editar, e para saber quanto ainda falta gerar. */
+function agendaFutureCount(item){
+  if(!item || !item.serieId) return 0;
+  let mx = item.serieIndex||0;
+  S.data.agenda.forEach(x=>{ if(x.serieId===item.serieId) mx = Math.max(mx, x.serieIndex||0); });
+  return Math.max(0, mx - (item.serieIndex||0));
+}
+/* Garante que `item` tenha pelo menos `novoQtd` meses replicados à frente. Só adiciona —
+   nunca remove lembretes já existentes (reduzir o número não apaga nada; use "Excluir este
+   e os próximos" para isso). Funciona tanto para criar uma série nova quanto para completar
+   uma série existente (ex: esqueceu de marcar quantos meses replicar e voltou pra editar). */
+function agendaApplyReplication(item, novoQtd){
+  novoQtd = Math.max(0, Math.min(60, Math.round(Number(novoQtd)||0)));
+  if(novoQtd<=0) return;
+  if(!item.serieId){ item.serieId = uid(); item.serieIndex = 0; }
+  const already = agendaFutureCount(item);
+  if(novoQtd<=already) return;
+  for(let i=already+1;i<=novoQtd;i++){
+    S.data.agenda.push({id:uid(), serieId:item.serieId, serieIndex:(item.serieIndex||0)+i, data:agendaAddMonthsSameDay(item.data, i), titulo:item.titulo, pago:false});
+  }
+}
 function agendaDeleteItems(mode, item){
   const snapshot = JSON.parse(JSON.stringify(S.data));
   if(mode==='future' && item.serieId){
@@ -108,18 +131,15 @@ const Agenda = {
   toggleUpcomingCollapse(){ ensureAgendaViewState(); S.agendaView.upcomingCollapsed = !S.agendaView.upcomingCollapsed; renderView(); },
   add(dateStr){
     ensureAgendaViewState();
-    openModal({title:'Novo lembrete', sub:'Ex: contas, assinaturas, parcelas com vencimento. Você também pode replicar o mesmo lembrete nos próximos meses.', fields:[
+    openModal({title:'Novo lembrete', sub:'Ex: contas, assinaturas, parcelas com vencimento. Para replicar o mesmo lembrete nos próximos meses, informe quantos meses abaixo (0 = não replicar).', fields:[
       {key:'titulo', label:'Título', type:'text'},
       {key:'data', label:'Data', type:'date', default: dateStr || (monthKey(S.agendaView.y,S.agendaView.m)+'-01')},
-      {key:'banco', label:'Banco/Conta (se for um pagamento vinculado)', type:'select', options:['— Nenhum —',...allBankNames()]},
-      {key:'replicar', label:'Replicar este lembrete nos próximos meses', type:'checkbox'},
       {key:'mesesReplicar', label:'Quantidade de meses para replicar', type:'number', step:'1', default:0},
     ], onSave(v){
-      const serieId = v.replicar ? uid() : '';
-      const qtd = v.replicar ? Math.max(0, Math.min(60, Math.round(Number(v.mesesReplicar)||0))) : 0;
-      for(let i=0;i<=qtd;i++){
-        S.data.agenda.push({id:uid(), serieId, serieIndex:i, data:agendaAddMonthsSameDay(v.data, i), titulo:v.titulo||'Sem título', pago:false, banco: v.banco==='— Nenhum —'?'':v.banco});
-      }
+      const qtd = Math.max(0, Math.min(60, Math.round(Number(v.mesesReplicar)||0)));
+      const first = {id:uid(), serieId:'', serieIndex:0, data:v.data, titulo:v.titulo||'Sem título', pago:false};
+      S.data.agenda.push(first);
+      if(qtd>0) agendaApplyReplication(first, qtd);
       saveCurrentData(); closeModal(); renderView(); Notifs.refresh();
       toast(qtd>0 ? `Lembrete criado e replicado por ${qtd} mês(es).` : 'Lembrete criado.');
     }});
@@ -128,16 +148,21 @@ const Agenda = {
     const a = S.data.agenda.find(x=>x.id===id);
     if(!a) return;
     const futureInfo = a.serieId ? '<button class="btn btn-danger btn-block" id="ag_del_future" type="button">Excluir este e os próximos</button>' : '';
-    openModal({title:'Editar lembrete', fields:[
+    openModal({title:'Editar lembrete', sub: a.serieId ? 'Este lembrete faz parte de uma série. Alterar o título atualiza o título em todos os lembretes da série.' : undefined, fields:[
       {key:'titulo', label:'Título', type:'text'},
       {key:'data', label:'Data', type:'date'},
-      {key:'banco', label:'Banco/Conta (se for um pagamento vinculado)', type:'select', options:['— Nenhum —',...allBankNames()], default:a.banco||'— Nenhum —'},
+      {key:'mesesReplicar', label:'Quantidade de meses para replicar', type:'number', step:'1', default: agendaFutureCount(a)},
       {key:'pago', label:'Já paga / concluída', type:'checkbox'},
     ], values:a,
     extraHTML:`<div class="agenda-delete-options"><div class="modal-sub" style="margin:4px 0 8px;">Excluir lembrete</div><div class="row-btns"><button class="btn btn-danger btn-block" id="ag_del_one" type="button">Excluir apenas este</button></div>${futureInfo}</div>`,
     onSave(v){
       const wasPago = a.pago;
-      Object.assign(a,{titulo:v.titulo, data:v.data, pago:!!v.pago, banco:v.banco==='— Nenhum —'?'':v.banco});
+      const tituloMudou = v.titulo!==a.titulo;
+      Object.assign(a,{titulo:v.titulo, data:v.data, pago:!!v.pago});
+      if(tituloMudou && a.serieId){
+        S.data.agenda.forEach(x=>{ if(x.serieId===a.serieId) x.titulo = a.titulo; });
+      }
+      agendaApplyReplication(a, v.mesesReplicar);
       if(a.pago && !wasPago){
         S.data.notificacoes.forEach(n=>{ if(n.lembreteId===a.id) n.lida=true; });
       }

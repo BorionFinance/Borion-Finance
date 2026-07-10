@@ -1,3 +1,32 @@
+## V6.3.0 — Modo offline (Incremento 1 da migração pra sair do Supabase) (10/07/2026)
+
+Primeiro passo do plano de migração: dá pra abrir e usar o Borion **sem login no
+Supabase**. Nenhum código do Supabase foi removido ou alterado em comportamento — tudo
+aqui é aditivo, e quem já usa conta na nuvem não percebe nenhuma diferença.
+
+- **Novo botão "Usar sem conta (só neste dispositivo)"** na tela de login. Escolhendo
+  essa opção, o Borion vai direto pro seletor de perfil local (mesma tela "Quem é você?"
+  de sempre) e nunca mais mostra a tela de login Supabase sozinho — só se você pedir
+  ("Entrar com uma conta na nuvem", agora disponível no rodapé do seletor de perfil).
+- **Perfis locais nunca são perdidos ao logar numa conta depois**: antes, se você criasse
+  perfis 100% locais e depois logasse numa conta Supabase no mesmo navegador, o registro
+  desses perfis sumia da lista (`mergeLocalAndCloudProfiles`, em `17-borion-cloud.js`).
+  Corrigido — os perfis locais continuam salvos e voltam a aparecer quando você sair da
+  conta ou usar "sem conta" de novo.
+- **`validateBorionJson(data)`** (`01-storage-data-state.js`): validação central de um
+  JSON de backup antes de importar, reaproveitável por qualquer tela.
+- **`storageProvider`** (novo arquivo `01b-storage-provider.js`): camada única com
+  `loadUserData`, `saveUserData`, `importJson`, `exportJson`, `createBackup`,
+  `listBackups`, `restoreBackup`, `validateBorionJson` e `getStorageStatus` — todos
+  envelopando funções que já existiam no app, sem duplicar lógica.
+- **Histórico de backups 100% local** (nova store IndexedDB, `storageProvider.
+  createBackup/listBackups/restoreBackup`): antes, listar e restaurar backups só existia
+  via Supabase. Agora existe também offline, com a mesma regra de retenção (manual,
+  before_import e before_restore nunca são apagados sozinhos).
+- `importJson` sempre cria um backup `before_import` antes de importar; `restoreBackup`
+  sempre cria um backup `before_restore` antes de restaurar — nunca sobrescreve sem rede
+  de segurança.
+
 ## V6.0 — Refatoração da arquitetura financeira: Fluxo Financeiro x Transferências (09/07/2026)
 
 Maior mudança conceitual do Borion desde o lançamento das Reservas. Antes, retirar dinheiro

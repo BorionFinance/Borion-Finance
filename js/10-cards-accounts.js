@@ -84,9 +84,13 @@ function renderCards(){
     </div>`;
   }).join('');
 
-  const transfRows = (S.data.transferencias||[]).filter(t=>bankMatches(t.contaOrigem)||bankMatches(t.contaDestino)).sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))).slice(0,15).map(t=>`
+  /* V6.0 — Transferências agora podem ter Conta OU Reserva nos dois lados (não é mais só
+     conta → conta). origemNome/destinoNome já vêm resolvidos e prontos para exibir; um
+     ícone ◈ marca quando a ponta é uma reserva, para diferenciar de banco/conta. */
+  const transfLegLabel = (tipo, nome)=> tipo==='reserva' ? `◈ ${esc(nome||'Reserva')}` : esc(nome||'');
+  const transfRows = (S.data.transferencias||[]).filter(t=>bankMatches(t.origemBanco||t.origemId)||bankMatches(t.destinoBanco||t.destinoId)).sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))).slice(0,15).map(t=>`
     <div class="installment-row">
-      <span>${esc(t.contaOrigem)} → ${esc(t.contaDestino)}${t.descricao?` <span style="color:var(--muted)">(${esc(t.descricao)})</span>`:''}</span>
+      <span>${transfLegLabel(t.origemTipo,t.origemNome)} → ${transfLegLabel(t.destinoTipo,t.destinoNome)}${t.descricao?` <span style="color:var(--muted)">(${esc(t.descricao)})</span>`:''}${t.historico?` <span class="cat-pill" style="opacity:.8;">migrado</span>`:''}</span>
       <span>${brl(t.valor)}</span>
       <span>${t.data?t.data.slice(8,10)+'/'+t.data.slice(5,7)+'/'+t.data.slice(0,4):''}</span>
       <span></span>
@@ -103,8 +107,8 @@ function renderCards(){
     <div class="toolbar" style="margin-top:18px;"><div class="toolbar-left">Boletos</div><button class="btn-outline" onclick="Cards.addBoleto()">+ Adicionar boleto</button></div>
     <p style="font-size:11.5px;color:var(--muted-2);margin:-6px 0 12px;">Use para boletos parcelados, carnês, financiamentos curtos ou cobranças recorrentes. Entram como dívida no patrimônio separado do cartão de crédito.</p>
     ${boletoBlocks || '<div class="empty-note">Nenhum boleto cadastrado ainda.</div>'}
-    <div class="toolbar" style="margin-top:18px;"><div class="toolbar-left">Transferências entre contas</div><button class="btn-outline" onclick="Cards.addTransferencia()">+ Nova transferência</button></div>
-    <p style="font-size:11.5px;color:var(--muted-2);margin:-6px 0 12px;">Move dinheiro de um banco para outro. Não é receita nem despesa — só troca o banco onde o dinheiro está.</p>
+    <div class="toolbar" style="margin-top:18px;"><div class="toolbar-left">Transferências</div><button class="btn-outline" onclick="Cards.addTransferencia()">+ Nova transferência</button></div>
+    <p style="font-size:11.5px;color:var(--muted-2);margin:-6px 0 12px;">Move dinheiro entre contas e reservas (Conta → Reserva, Reserva → Conta, Reserva → Reserva ou Conta → Conta). Nunca é receita nem despesa — só muda onde o dinheiro está guardado, e nunca deixa uma reserva negativa.</p>
     <div class="installment-row ih"><span>De → Para</span><span>Valor</span><span>Data</span><span></span><span></span></div>
     ${transfRows || '<div class="empty-note">Nenhuma transferência registrada ainda.</div>'}
   `;
@@ -319,39 +323,124 @@ const Cards = {
       saveCurrentData(); renderView(); toast('Pagamento do boleto desfeito.');
     }});
   },
-  /* Transferência entre contas: move dinheiro de um banco para outro (não é receita nem despesa). */
+  /* ---------------- V6.0 — Transferências genéricas ----------------
+     Move dinheiro entre Conta↔Reserva, Reserva↔Reserva ou Conta↔Conta. Nunca é receita
+     nem despesa e nunca entra em receitaMes()/despesasMes(). Quando uma ponta é reserva,
+     gera também uma movimentação no extrato dessa reserva ('Transferência enviada'/
+     'Transferência recebida'), ligada de volta pela transferência (origemMoveId/
+     destinoMoveId) — exatamente o mesmo padrão de vínculo já usado em Despesas/Reserva. */
   addTransferencia(){ Cards.editTransferencia(null); },
   editTransferencia(id){
     const isEdit = !!id;
-    const t = isEdit ? (S.data.transferencias||[]).find(x=>x.id===id) : {contaOrigem:'', contaDestino:'', valor:0, data:todayISO(), descricao:''};
+    const t = isEdit ? (S.data.transferencias||[]).find(x=>x.id===id) : {origemTipo:'conta', origemId:'', destinoTipo:'conta', destinoId:'', valor:0, data:todayISO(), descricao:''};
     const banks = accountSelectNames();
-    if(banks.length<2){ alert('Cadastre pelo menos mais uma conta/banco além da Carteira antes de transferir.'); return; }
-    openModal({title:isEdit?'Editar transferência':'Nova transferência entre contas', sub:'Move dinheiro de uma conta para outra. Não conta como receita nem despesa.', fields:[
-      {key:'contaOrigem',label:'Conta de origem',type:'select',options:banks,default:t.contaOrigem||banks[0]},
-      {key:'contaDestino',label:'Conta de destino',type:'select',options:banks,default:t.contaDestino||banks[0]},
-      {key:'valor',label:'Valor (R$)',type:'money'},
-      {key:'data',label:'Data',type:'date'},
-      {key:'descricao',label:'Descrição (opcional)',type:'text'}
-    ], values:t,
+    const reservaBoxesAll = reservasEnabled() ? ((S.data.reservas&&S.data.reservas.boxes)||[]).filter(r=>bankMatches(r.banco)) : [];
+    const hasReservas = reservaBoxesAll.length>0;
+    if(banks.length<2 && !hasReservas){ alert('Cadastre pelo menos mais uma conta/banco além da Carteira, ou crie uma reserva, antes de transferir.'); return; }
+    const reservaLabelOf = r=>`${r.nome}${r.banco?' · '+r.banco:''}`;
+    const findReservaByLabel = lbl => reservaBoxesAll.find(r=>reservaLabelOf(r)===lbl);
+    const origemTipoIni = (isEdit && t.origemTipo==='reserva') ? 'reserva' : 'conta';
+    const destinoTipoIni = (isEdit && t.destinoTipo==='reserva') ? 'reserva' : 'conta';
+    const origemContaIni = (isEdit && t.origemTipo==='conta' && banks.includes(t.origemId)) ? t.origemId : (banks[0]||'');
+    const destinoContaIni = (isEdit && t.destinoTipo==='conta' && banks.includes(t.destinoId)) ? t.destinoId : (banks[0]||'');
+    const origemReservaObjIni = (isEdit && t.origemTipo==='reserva') ? reservaBoxesAll.find(r=>r.id===t.origemId) : null;
+    const destinoReservaObjIni = (isEdit && t.destinoTipo==='reserva') ? reservaBoxesAll.find(r=>r.id===t.destinoId) : null;
+    const fields = [];
+    if(hasReservas){
+      fields.push({key:'origemTipo',label:'De onde sai',type:'segmented',options:[{value:'conta',label:'Conta'},{value:'reserva',label:'Reserva'}],default:origemTipoIni});
+      fields.push({key:'origemConta',label:'Conta de origem',type:'select',options:banks.length?banks:['Nenhuma conta cadastrada'],default:origemContaIni,visibleWhen:{key:'origemTipo',value:'conta'}});
+      fields.push({key:'origemReservaSel',label:'Reserva de origem',type:'select',options:reservaBoxesAll.map(reservaLabelOf),default:origemReservaObjIni?reservaLabelOf(origemReservaObjIni):reservaLabelOf(reservaBoxesAll[0]),visibleWhen:{key:'origemTipo',value:'reserva'}});
+      fields.push({key:'destinoTipo',label:'Para onde vai',type:'segmented',options:[{value:'conta',label:'Conta'},{value:'reserva',label:'Reserva'}],default:destinoTipoIni});
+      fields.push({key:'destinoConta',label:'Conta de destino',type:'select',options:banks.length?banks:['Nenhuma conta cadastrada'],default:destinoContaIni,visibleWhen:{key:'destinoTipo',value:'conta'}});
+      fields.push({key:'destinoReservaSel',label:'Reserva de destino',type:'select',options:reservaBoxesAll.map(reservaLabelOf),default:destinoReservaObjIni?reservaLabelOf(destinoReservaObjIni):reservaLabelOf(reservaBoxesAll[0]),visibleWhen:{key:'destinoTipo',value:'reserva'}});
+    } else {
+      fields.push({key:'origemConta',label:'Conta de origem',type:'select',options:banks,default:origemContaIni});
+      fields.push({key:'destinoConta',label:'Conta de destino',type:'select',options:banks,default:destinoContaIni});
+    }
+    fields.push({key:'valor',label:'Valor (R$)',type:'money',default:t.valor||0});
+    fields.push({key:'data',label:'Data',type:'date',default:t.data||todayISO()});
+    fields.push({key:'descricao',label:'Descrição (opcional)',type:'text',default:t.descricao||''});
+    openModal({title:isEdit?'Editar transferência':'Nova transferência', sub:'Move dinheiro entre contas e reservas. Nunca conta como receita nem despesa, e nunca deixa uma reserva negativa.', fields,
     onDelete:isEdit?()=>{
       Cards.reverseTransferenciaEffect(t);
       S.data.transferencias = (S.data.transferencias||[]).filter(x=>x.id!==id);
       saveCurrentData(); closeModal(); renderView();
     }:null,
     onSave(v){
-      if(!v.contaOrigem || !v.contaDestino){ alert('Escolha a conta de origem e a conta de destino.'); return; }
-      if(v.contaOrigem===v.contaDestino){ alert('A conta de origem e destino não podem ser a mesma.'); return; }
+      const origemTipo = hasReservas ? (v.origemTipo||'conta') : 'conta';
+      const destinoTipo = hasReservas ? (v.destinoTipo||'conta') : 'conta';
+      const origemReserva = origemTipo==='reserva' ? findReservaByLabel(v.origemReservaSel) : null;
+      const destinoReserva = destinoTipo==='reserva' ? findReservaByLabel(v.destinoReservaSel) : null;
+      const origemId = origemTipo==='reserva' ? (origemReserva&&origemReserva.id) : v.origemConta;
+      const destinoId = destinoTipo==='reserva' ? (destinoReserva&&destinoReserva.id) : v.destinoConta;
+      const origemNome = origemTipo==='reserva' ? (origemReserva&&origemReserva.nome) : v.origemConta;
+      const destinoNome = destinoTipo==='reserva' ? (destinoReserva&&destinoReserva.nome) : v.destinoConta;
+      if(!origemId || !destinoId){ alert('Escolha a origem e o destino da transferência.'); return; }
+      if(origemTipo===destinoTipo && origemId===destinoId){ alert('A origem e o destino não podem ser os mesmos.'); return; }
       const valor = Number(v.valor)||0;
       if(valor<=0){ alert('Digite um valor maior que zero.'); return; }
       if(isEdit) Cards.reverseTransferenciaEffect(t);
-      const obj = {contaOrigem:v.contaOrigem, contaDestino:v.contaDestino, valor, data:v.data||todayISO(), descricao:v.descricao||''};
-      if(isEdit) Object.assign(t,obj); else S.data.transferencias.push(Object.assign({id:uid(), createdAt:Date.now()}, obj));
-      Cards.applyTransferenciaEffect(isEdit?t:S.data.transferencias[S.data.transferencias.length-1]);
+      if(origemTipo==='reserva' && !reservaTemSaldo(origemReserva, valor)){
+        if(isEdit) Cards.applyTransferenciaEffect(t); // desfaz o reverse acima antes de cancelar
+        showReservaInsuficienteModal(origemReserva, valor);
+        return;
+      }
+      const obj = {origemTipo, origemId, origemNome, destinoTipo, destinoId, destinoNome, valor, data:v.data||todayISO(), descricao:v.descricao||'',
+        origemBanco: origemTipo==='reserva' ? (origemReserva&&origemReserva.banco||'') : origemId,
+        destinoBanco: destinoTipo==='reserva' ? (destinoReserva&&destinoReserva.banco||'') : destinoId,
+        contaOrigem: origemTipo==='conta'?origemId:'', contaDestino: destinoTipo==='conta'?destinoId:''};
+      let alvo;
+      if(isEdit){ Object.assign(t,obj); alvo=t; } else { alvo = Object.assign({id:uid(), createdAt:Date.now()}, obj); S.data.transferencias.push(alvo); }
+      Cards.applyTransferenciaEffect(alvo);
       saveCurrentData(); closeModal(); renderView(); toast(isEdit?'Transferência atualizada.':'Transferência registrada.');
     }});
   },
-  applyTransferenciaEffect(t){ if(!t) return; adjustLiquidez(t.contaOrigem, -t.valor); adjustLiquidez(t.contaDestino, t.valor); },
-  reverseTransferenciaEffect(t){ if(!t) return; adjustLiquidez(t.contaOrigem, t.valor); adjustLiquidez(t.contaDestino, -t.valor); }
+  applyTransferenciaEffect(t){
+    if(!t) return;
+    if(t.origemTipo==='reserva'){
+      const bx = (S.data.reservas.boxes||[]).find(r=>r.id===t.origemId);
+      if(bx){
+        const mv = {id:uid(), boxId:bx.id, tipo:'Transferência enviada', data:t.data||todayISO(), valor:t.valor, banco:bx.banco||'', descricao:t.descricao||('Transferência para '+(t.destinoNome||'')), transferenciaId:t.id, createdAt:Date.now()};
+        S.data.reservas.moves.push(mv);
+        Reservas.applyMoveEffect(mv);
+        t.origemMoveId = mv.id;
+      }
+    } else {
+      adjustLiquidez(t.origemId, -t.valor);
+    }
+    if(t.destinoTipo==='reserva'){
+      const bx = (S.data.reservas.boxes||[]).find(r=>r.id===t.destinoId);
+      if(bx){
+        const mv = {id:uid(), boxId:bx.id, tipo:'Transferência recebida', data:t.data||todayISO(), valor:t.valor, banco:bx.banco||'', descricao:t.descricao||('Transferência de '+(t.origemNome||'')), transferenciaId:t.id, createdAt:Date.now()};
+        S.data.reservas.moves.push(mv);
+        Reservas.applyMoveEffect(mv);
+        t.destinoMoveId = mv.id;
+      }
+    } else {
+      adjustLiquidez(t.destinoId, t.valor);
+    }
+  },
+  reverseTransferenciaEffect(t){
+    if(!t) return;
+    if(t.origemTipo==='reserva'){
+      if(t.origemMoveId){
+        const idx = (S.data.reservas.moves||[]).findIndex(m=>m.id===t.origemMoveId);
+        if(idx>=0){ Reservas.reverseMoveEffect(S.data.reservas.moves[idx]); S.data.reservas.moves.splice(idx,1); }
+        t.origemMoveId = null;
+      }
+    } else {
+      adjustLiquidez(t.origemId, t.valor);
+    }
+    if(t.destinoTipo==='reserva'){
+      if(t.destinoMoveId){
+        const idx = (S.data.reservas.moves||[]).findIndex(m=>m.id===t.destinoMoveId);
+        if(idx>=0){ Reservas.reverseMoveEffect(S.data.reservas.moves[idx]); S.data.reservas.moves.splice(idx,1); }
+        t.destinoMoveId = null;
+      }
+    } else {
+      adjustLiquidez(t.destinoId, -t.valor);
+    }
+  }
 };
 
 /* V5.36.0 — expõe Cards para modais internos que abrem cadastro de banco. */

@@ -145,6 +145,8 @@ function renderOverview(){
   const desp = despesasMes();
   const rec = receitaMes();
   const saldo = saldoMes();
+  const resultado = resultadoPeriodo();
+  const disponivel = disponivelEmConta();
   const dividasDebt = computeCardsDebt();
   const divCartao = dividasDebt.cartoesTotal;
   const divBoletos = dividasDebt.boletosTotal;
@@ -170,27 +172,28 @@ function renderOverview(){
 
   return `
     <div class="indicators-grid">
-      <div class="card card-sm hero-green"><div class="clabel">Patrimônio líquido</div><div class="cval">${brl(patLiq)}</div></div>
-      <div class="card card-sm hero-blue"><div class="clabel">Total investido</div><div class="cval">${brl(inv)}</div></div>
-      <div class="card card-sm hero-gold"><div class="clabel">Patrimônio total</div><div class="cval">${brl(pt)}</div></div>
-      <div class="card card-sm hero-green"><div class="clabel">Caixa disponível</div><div class="cval">${brl(caixa)}</div></div>
+      <div class="card card-sm hero-gold"><div class="clabel">Patrimônio Total</div><div class="cval">${brl(pt)}</div></div>
+      <div class="card card-sm hero-green"><div class="clabel">Disponível em Conta</div><div class="cval">${brl(disponivel)}</div></div>
+      <div class="card card-sm"><div class="clabel">Receitas do período</div><div class="cval" style="color:${iconColor('receita')}">${brl(rec)}</div></div>
+      <div class="card card-sm"><div class="clabel">Despesas do período</div><div class="cval" style="color:${iconColor('despesas')}">${brl(desp)}</div></div>
     </div>
     <div class="indicators-grid">
-      <div class="card card-sm"><div class="clabel">Receita do mês</div><div class="cval" style="color:${iconColor('receita')}">${brl(rec)}</div></div>
-      <div class="card card-sm"><div class="clabel">Saldo do mês</div><div class="cval" style="color:${saldo>=0?iconColor('receita'):iconColor('despesas')}">${brl(saldo)}</div></div>
-      <div class="card card-sm"><div class="clabel">Despesa do mês</div><div class="cval" style="color:${iconColor('despesas')}">${brl(desp)}</div></div>
+      <div class="card card-sm hero-blue"><div class="clabel">Resultado do período</div><div class="cval" style="color:${resultado>=0?iconColor('receita'):iconColor('despesas')}">${brl(resultado)}</div></div>
+      <div class="card card-sm"><div class="clabel">Total investido</div><div class="cval">${brl(inv)}</div></div>
       <div class="card card-sm"><div class="clabel">Total em reserva</div><div class="cval" style="color:var(--gold-bright)">${brl(reservas)}</div></div>
+      <div class="card card-sm"><div class="clabel">Patrimônio líquido</div><div class="cval">${brl(patLiq)}</div></div>
     </div>
 
     <div class="overview-top-grid">
       <div class="panel-box">
         <div class="panel-title">Resumo rápido de ${monthLabel(S.month.y,S.month.m)}</div>
-        <div class="list-row"><span class="lname">Receita do mês</span><span class="lval val-pos">${brl(rec)}</span></div>
-        <div class="list-row"><span class="lname">Despesas do mês</span><span class="lval" style="color:${iconColor('despesas')}">- ${brl(desp)}</span></div>
-        <div class="list-row"><span class="lname">Saldo do mês</span><span class="lval ${saldo>=0?'val-pos':''}" style="${saldo<0?'color:'+iconColor('despesas'):''}">${brl(saldo)}</span></div>
+        <div class="list-row"><span class="lname">Receitas do período</span><span class="lval val-pos">${brl(rec)}</span></div>
+        <div class="list-row"><span class="lname">Despesas do período</span><span class="lval" style="color:${iconColor('despesas')}">- ${brl(desp)}</span></div>
+        <div class="list-row"><span class="lname">Resultado do período</span><span class="lval ${resultado>=0?'val-pos':''}" style="${resultado<0?'color:'+iconColor('despesas'):''}">${brl(resultado)}</span></div>
         <div class="list-row"><span class="lname">Crédito usado em cartões</span><span class="lval" style="color:${iconColor('dividas')}">- ${brl(divCartao)}</span></div>
         <div class="list-row"><span class="lname">Boletos a pagar</span><span class="lval" style="color:${iconColor('dividas')}">- ${brl(divBoletos)}</span></div>
-        <div class="list-row"><span class="lname">Reserva</span><span class="lval" style="color:var(--gold-bright)">${brl(reservas)}</span></div>
+        <div class="list-row"><span class="lname">Reserva (patrimônio guardado)</span><span class="lval" style="color:var(--gold-bright)">${brl(reservas)}</span></div>
+        <div class="list-row"><span class="lname">Disponível em conta (fora das reservas)</span><span class="lval">${brl(disponivel)}</span></div>
         ${entradasExtra>0?`<div class="list-row"><span class="lname">Reembolsos/repasses recebidos (não é renda)</span><span class="lval" style="color:var(--gold-bright)">${brl(entradasExtra)}</span></div>`:''}
       </div>
 

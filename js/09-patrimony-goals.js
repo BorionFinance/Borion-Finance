@@ -254,9 +254,11 @@ function renderReservasPanel(){
   }).join('');
   const moveRows = moves.map(m=>{
     const box = (S.data.reservas.boxes||[]).find(r=>r.id===m.boxId);
-    const positive = ['Reservar','Rendimento','Receita direta'].includes(m.tipo);
+    const positive = Reservas.POSITIVE_TYPES.includes(m.tipo);
+    const negative = Reservas.NEGATIVE_TYPES.includes(m.tipo);
     const isAdjust = m.tipo==='Ajuste manual';
-    return `<tr><td>${reservaFmtDate(m.data)}</td><td>${esc(box?box.nome:'Reserva removida')}</td><td>${esc(m.tipo)}</td><td>${esc(m.banco||'')}</td><td class="${positive||isAdjust?'val-pos':''}">${positive?'+ ':m.tipo==='Resgatar'?'- ':''}${brl(m.valor)}</td><td>${esc(m.descricao||'')}</td><td style="text-align:right;white-space:nowrap;"><button class="ledit" onclick="Reservas.editMove('${m.id}')">✎</button><button class="ledit danger-mini" onclick="Reservas.deleteMove('${m.id}')">×</button></td></tr>`;
+    const linked = m.despesaTransacaoId ? ' <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Despesa</span>' : (m.transferenciaId ? ' <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Transferência</span>' : '');
+    return `<tr><td>${reservaFmtDate(m.data)}</td><td>${esc(box?box.nome:'Reserva removida')}</td><td>${esc(m.tipo)}</td><td>${esc(m.banco||'')}</td><td class="${positive||isAdjust?'val-pos':negative?'val-neg':''}">${positive?'+ ':negative?'- ':''}${brl(m.valor)}</td><td>${esc(m.descricao||'')}${linked}</td><td style="text-align:right;white-space:nowrap;"><button class="ledit" onclick="Reservas.editMove('${m.id}')">✎</button><button class="ledit danger-mini" onclick="Reservas.deleteMove('${m.id}')">×</button></td></tr>`;
   }).join('');
   return `<div class="panel-box reservas-panel">
     <div class="toolbar"><div class="toolbar-left">◈ <span class="lmeta">Reservado: ${brl(total)}</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn-outline" onclick="Reservas.add()">+ Nova reserva</button><button class="btn-outline" onclick="Reservas.move()">+ Movimentação</button></div></div>
@@ -360,6 +362,7 @@ const Reservas = {
       if(!bx){ toast('Reserva não encontrada.'); return; }
       const valor = Number(v.valor)||0;
       if(valor<=0){ toast('Digite um valor maior que zero.'); return; }
+      if(v.tipo==='Resgatar' && !reservaTemSaldo(bx, valor)){ showReservaInsuficienteModal(bx, valor); return; }
       const saldoAntes = Number(bx.valorAtual||0);
       if(v.tipo==='Reservar' || v.tipo==='Rendimento') bx.valorAtual = saldoAntes + valor;
       else if(v.tipo==='Resgatar') bx.valorAtual = Math.max(0, saldoAntes - valor);
@@ -370,13 +373,18 @@ const Reservas = {
     }});
   },
   findMove(id){ return (S.data.reservas&&S.data.reservas.moves||[]).find(m=>m.id===id); },
+  /* V6.0 — tipos que aumentam o saldo da reserva vs. tipos que diminuem. 'Pagamento direto'
+     é uma despesa paga direto da reserva (nunca vira Receita); 'Transferência enviada'/
+     'Transferência recebida' vêm da tela genérica de Transferências (Cartões e Contas). */
+  POSITIVE_TYPES: ['Reservar','Rendimento','Receita direta','Transferência recebida'],
+  NEGATIVE_TYPES: ['Resgatar','Pagamento direto','Transferência enviada'],
   reverseMoveEffect(mv){
     if(!mv) return;
     const bx = (S.data.reservas.boxes||[]).find(r=>r.id===mv.boxId);
     if(!bx) return;
     const valor = Number(mv.valor)||0;
-    if(mv.tipo==='Reservar' || mv.tipo==='Rendimento' || mv.tipo==='Receita direta') bx.valorAtual = Math.max(0, Number(bx.valorAtual||0) - valor);
-    else if(mv.tipo==='Resgatar') bx.valorAtual = Number(bx.valorAtual||0) + valor;
+    if(Reservas.POSITIVE_TYPES.includes(mv.tipo)) bx.valorAtual = Math.max(0, Number(bx.valorAtual||0) - valor);
+    else if(Reservas.NEGATIVE_TYPES.includes(mv.tipo)) bx.valorAtual = Number(bx.valorAtual||0) + valor;
     else if(mv.tipo==='Ajuste manual' && mv.saldoAntes!=null) bx.valorAtual = Number(mv.saldoAntes)||0;
     syncMetaFromReserva(bx);
   },
@@ -387,8 +395,8 @@ const Reservas = {
     const valor = Number(mv.valor)||0;
     const saldoAntes = Number(bx.valorAtual||0);
     mv.saldoAntes = saldoAntes;
-    if(mv.tipo==='Reservar' || mv.tipo==='Rendimento' || mv.tipo==='Receita direta') bx.valorAtual = saldoAntes + valor;
-    else if(mv.tipo==='Resgatar') bx.valorAtual = Math.max(0, saldoAntes - valor);
+    if(Reservas.POSITIVE_TYPES.includes(mv.tipo)) bx.valorAtual = saldoAntes + valor;
+    else if(Reservas.NEGATIVE_TYPES.includes(mv.tipo)) bx.valorAtual = Math.max(0, saldoAntes - valor);
     else if(mv.tipo==='Ajuste manual') bx.valorAtual = valor;
     mv.saldoDepois = Number(bx.valorAtual||0);
     mv.banco = bx.banco||mv.banco||'';
@@ -397,6 +405,11 @@ const Reservas = {
   editMove(id){
     const mv = Reservas.findMove(id);
     if(!mv){ toast('Movimentação não encontrada.'); return; }
+    /* V6.0 — movimentações geradas automaticamente por uma despesa (Pagamento direto) ou por
+       uma transferência só podem ser editadas pela origem, para nunca dessincronizar os dois
+       lados do vínculo (mesmo padrão já usado por compras de cartão/boleto em Despesas). */
+    if(mv.despesaTransacaoId){ toast('Esta movimentação vem de uma despesa paga direto da reserva — edite ou exclua pela despesa em Lançamentos.'); S.view='budget'; S.budgetTab='variavel'; renderApp(); return; }
+    if(mv.transferenciaId){ toast('Esta movimentação vem de uma transferência — edite ou exclua em Cartões e Contas → Transferências.'); S.view='cards'; renderApp(); return; }
     const boxes = (S.data.reservas.boxes||[]).filter(r=>bankMatches(r.banco));
     const labels = boxes.map(r=>`${r.nome}${r.banco?' · '+r.banco:''}`);
     const curBox = boxes.find(r=>r.id===mv.boxId) || boxes[0];
@@ -418,6 +431,11 @@ const Reservas = {
       Reservas.reverseMoveEffect(mv);
       const idx = labels.indexOf(v.boxLabel);
       const bx = boxes[idx>=0?idx:0];
+      if(Reservas.NEGATIVE_TYPES.includes(v.tipo) && !reservaTemSaldo(bx, valor)){
+        Reservas.applyMoveEffect(mv); // desfaz o reverse acima antes de cancelar
+        showReservaInsuficienteModal(bx, valor);
+        return;
+      }
       Object.assign(mv,{boxId:bx.id, tipo:v.tipo, data:v.data||todayISO(), valor, banco:bx.banco||'', descricao:v.descricao||'', editedAt:Date.now()});
       Reservas.applyMoveEffect(mv);
       saveCurrentData(); closeModal(); renderView(); toast('Movimentação atualizada.');
@@ -430,6 +448,8 @@ const Reservas = {
   deleteMove(id){
     const mv = Reservas.findMove(id);
     if(!mv) return;
+    if(mv.despesaTransacaoId){ toast('Esta movimentação vem de uma despesa paga direto da reserva — edite ou exclua pela despesa em Lançamentos.'); S.view='budget'; S.budgetTab='variavel'; renderApp(); return; }
+    if(mv.transferenciaId){ toast('Esta movimentação vem de uma transferência — edite ou exclua em Cartões e Contas → Transferências.'); S.view='cards'; renderApp(); return; }
     openConfirmModal({
       title:'Excluir movimentação',
       text:'Excluir esta movimentação da reserva? O saldo da reserva será recalculado. Você poderá desfazer logo em seguida.',

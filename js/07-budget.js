@@ -84,10 +84,12 @@ function renderBudget(){
       const formaPill = (tab==='variavel' && t.formaPagamento) ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--muted)"></span>${esc(t.formaPagamento)}</span>` : '';
       const parcelaPill = (tab==='variavel' && Number(t.parcelaTotal||0)>1 && Number(t.parcelaAtual||0)>0) ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>Parcela ${Number(t.parcelaAtual)}/${Number(t.parcelaTotal)}</span>` : '';
       const viaCartaoPill = t.viaParcelaId ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via cartão</span>` : (t.viaBoletoId ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via boleto</span>` : '');
+      const reservaOrigemBox = (tab==='variavel' && t.origemPagamento==='reserva' && t.reservaOrigemId) ? ((S.data.reservas&&S.data.reservas.boxes)||[]).find(r=>r.id===t.reservaOrigemId) : null;
+      const origemReservaPill = (tab==='variavel' && t.origemPagamento==='reserva') ? ` <span class="cat-pill" style="background:rgba(240,194,110,.15);color:var(--gold-bright);"><span class="dot" style="background:var(--gold-bright)"></span>◈ Pago com Reserva${reservaOrigemBox?': '+esc(reservaOrigemBox.nome):''}</span>` : '';
       return `
       <tr>
         <td>${t.data.slice(8,10)}/${t.data.slice(5,7)}</td>
-        <td>${esc(t.nome)}${origemPill}${formaPill}${parcelaPill}${viaCartaoPill}</td>
+        <td>${esc(t.nome)}${origemPill}${origemReservaPill}${formaPill}${parcelaPill}${viaCartaoPill}</td>
         <td><span class="cat-pill"><span class="dot" style="background:${catColor(t.categoria)}"></span>${esc(t.categoria)}</span></td>
         <td class="${tab==='receita'?'val-pos':'val-neg'}">${tab==='receita'?'':'- '}${brl(t.valor)}</td>
         <td class="tbl-actions"><button onclick="Budget.edit('${t.id}')">✎</button></td>
@@ -303,9 +305,43 @@ function createLinkedReservaMoveFromTransaction(tx, reservaBox, reservaValor){
   tx.reservaValor = valor;
   tx.destinoReserva = true;
 }
+
+/* ---------------- V6.0 — despesa variável paga direto de uma reserva ----------------
+   Núcleo da nova arquitetura financeira: retirar dinheiro de uma reserva para pagar uma
+   despesa NUNCA mais precisa passar por uma Receita. O usuário só escolhe "Origem do
+   pagamento: Reserva" e o Borion, num único clique, desconta o valor da reserva e cria a
+   despesa — ligadas uma à outra por reservaOrigemMoveId/despesaTransacaoId, no mesmo
+   padrão já usado para "Receita direta". Espelha removeLinkedReservaMoveFromTransaction /
+   createLinkedReservaMoveFromTransaction (acima), só que na direção contrária (saída). */
+function removeLinkedReservaWithdrawalFromDespesa(tx){
+  if(!tx || !tx.reservaOrigemMoveId || !S.data.reservas) return;
+  const idx = (S.data.reservas.moves||[]).findIndex(m=>m.id===tx.reservaOrigemMoveId);
+  if(idx>=0){
+    const mv = S.data.reservas.moves[idx];
+    Reservas.reverseMoveEffect(mv);
+    S.data.reservas.moves.splice(idx,1);
+  }
+  tx.reservaOrigemId = null;
+  tx.reservaOrigemMoveId = null;
+}
+function createLinkedReservaWithdrawalFromDespesa(tx, reservaBox, valor){
+  if(!tx || !reservaBox || !S.data.reservas) return;
+  const v = Number(valor)||0;
+  if(v<=0) return;
+  const mv = {
+    id:uid(), boxId:reservaBox.id, tipo:'Pagamento direto', data:tx.data||todayISO(), valor:v,
+    banco:reservaBox.banco||'', descricao:'Pagamento direto: '+(tx.nome||'Despesa'),
+    despesaTransacaoId:tx.id, createdAt:Date.now()
+  };
+  S.data.reservas.moves.push(mv);
+  Reservas.applyMoveEffect(mv);
+  tx.reservaOrigemId = reservaBox.id;
+  tx.reservaOrigemMoveId = mv.id;
+}
 function openTransactionModal({type, existing}){
   const isEdit = !!existing;
   const isReceita = type==='receita';
+  const isDespesaVariavel = type==='variavel';
   const reservaBoxes = reservaBoxesForLancamento();
   const linkedBox = isReceita && isEdit && existing.reservaBoxId ? reservaBoxes.find(r=>r.id===existing.reservaBoxId) : null;
   const initialDestino = isReceita && isEdit && existing.reservaMoveId ? 'Reserva' : 'Conta livre';
@@ -325,6 +361,26 @@ function openTransactionModal({type, existing}){
             ` : `<p class="modal-sub reserve-hint">Crie uma reserva primeiro para enviar receita direto para ela.</p>`}
           </div>
         </div>` : '';
+  /* V6.0 — despesa variável: "Origem do pagamento" (Conta ou Reserva). Escolhendo Reserva,
+     o Borion desconta o valor direto da reserva escolhida e cria só a despesa — sem Receita,
+     num único clique. Só aparece quando o módulo de Reserva está ativo e existe ao menos uma. */
+  const podeOrigemPagamentoReserva = isDespesaVariavel && reservasEnabled() && reservaBoxes.length>0;
+  const origemPagamentoInicial = (isDespesaVariavel && isEdit && existing.origemPagamento==='reserva') ? 'reserva' : 'conta';
+  const origemPagamentoBoxSel = (isDespesaVariavel && isEdit && existing.reservaOrigemId) ? reservaBoxes.find(r=>r.id===existing.reservaOrigemId) : null;
+  const origemPagamentoOptions = reservaBoxes.map(r=>`<option value="${esc(reservaBoxLabel(r))}" ${origemPagamentoBoxSel&&origemPagamentoBoxSel.id===r.id?'selected':''}>${esc(reservaBoxLabel(r))}</option>`).join('');
+  const origemPagamentoHTML = podeOrigemPagamentoReserva ? `
+        <div class="field">
+          <label>Origem do pagamento</label>
+          <div class="segmented-toggle" id="tm_origempg_group">
+            <button type="button" class="seg-btn ${origemPagamentoInicial==='conta'?'active':''}" data-value="conta">Conta</button>
+            <button type="button" class="seg-btn ${origemPagamentoInicial==='reserva'?'active':''}" data-value="reserva">Reserva</button>
+          </div>
+          <input type="hidden" id="tm_origempg" value="${origemPagamentoInicial}"/>
+        </div>
+        <div class="reserve-destination-box ${origemPagamentoInicial==='reserva'?'':'hidden'}" id="tm_reserva_pg_wrap">
+          <div class="field"><label>Selecionar reserva</label><select id="tm_reserva_pg_box">${origemPagamentoOptions}</select></div>
+          <p class="modal-sub reserve-hint">O valor sai direto do saldo dessa reserva. Não passa pela conta, não vira receita — é só o seu próprio dinheiro mudando de lugar.</p>
+        </div>` : '';
   const box = el(`
     <div class="modal-overlay">
       <div class="modal-box">
@@ -333,7 +389,9 @@ function openTransactionModal({type, existing}){
         <div class="field"><label>Data</label><input type="date" id="tm_data" value="${isEdit?existing.data:monthKey(S.month.y,S.month.m)+'-01'}"/></div>
         ${categorySelectHTML('tm', type, isEdit?existing.categoria:null)}
         <div class="field"><label id="tm_valor_label">Valor (R$)</label><input type="text" inputmode="numeric" id="tm_valor" class="money-input" placeholder="0,00"/></div>
-        ${!isReceita?`<div class="field"><label>Forma de pagamento</label><select id="tm_forma">${FORMAS_PAGAMENTO.map(f=>`<option value="${esc(f)}" ${isEdit&&(existing.formaPagamento||'Dinheiro')===f?'selected':''}>${esc(f)}</option>`).join('')}</select></div>`:''}
+        ${origemPagamentoHTML}
+        <div id="tm_conta_fields_wrap" class="${podeOrigemPagamentoReserva&&origemPagamentoInicial==='reserva'?'hidden':''}">
+        ${!isReceita?`<div class="field" id="tm_forma_wrap"><label>Forma de pagamento</label><select id="tm_forma">${FORMAS_PAGAMENTO.map(f=>`<option value="${esc(f)}" ${isEdit&&(existing.formaPagamento||'Dinheiro')===f?'selected':''}>${esc(f)}</option>`).join('')}</select></div>`:''}
         <div class="field" id="tm_banco_wrap"><label>${isReceita?'Onde a receita entra':'De onde o dinheiro sai'}</label><select id="tm_banco"><option>— Nenhum —</option>${accountSelectNames().map(b=>`<option ${isEdit&&existing.banco===b?'selected':''}>${esc(b)}</option>`).join('')}</select></div>
         ${!isReceita?`
         <div id="tm_credito_fields" class="hidden">
@@ -345,6 +403,7 @@ function openTransactionModal({type, existing}){
           <div class="field hidden" id="tm_parcelas_wrap"><label>Quantidade de parcelas <span id="tm_parcela_preview" style="color:var(--muted);font-weight:600;"></span></label><input type="number" id="tm_parcelas" min="2" step="1" value="2"/></div>
           <p class="modal-sub" style="margin:4px 0 0;">Compra no crédito não desconta o banco agora — ela vira uma compra vinculada ao cartão e entra na fatura, igual em "Cartões e Contas".</p>
         </div>`:''}
+        </div>
         ${isReceita?`<div class="field"><label>Origem da receita</label><select id="tm_origem">${TX_ORIGEM_OPTIONS.map(o=>`<option ${txOrigemToKey(o)===(isEdit?(existing.origem||'propria'):'propria')?'selected':''}>${esc(o)}</option>`).join('')}</select><p class="modal-sub" style="margin:4px 0 0;">Reembolso e repasse de terceiros não entram na sua Receita do mês — é dinheiro que passa pela conta, não renda sua.</p></div>`:''}
         ${reservaHTML}
         <div class="row-btns"><button class="btn btn-primary btn-block" id="tm_save">${isEdit?'Salvar':'Adicionar'}</button></div>
@@ -381,6 +440,29 @@ function openTransactionModal({type, existing}){
     $('#tm_destino').onchange = syncReserveDestinationUI;
     $('#tm_valor').addEventListener('input', syncReserveDestinationUI);
     syncReserveDestinationUI();
+  }
+
+  /* V6.0 — alterna entre "pagar da Conta" (fluxo normal, com forma de pagamento/banco/
+     crédito) e "pagar da Reserva" (esconde tudo isso e mostra só o seletor de reserva). */
+  function syncOrigemPagamentoUI(){
+    const hidden = $('#tm_origempg');
+    if(!hidden) return;
+    const isReserva = hidden.value==='reserva';
+    const contaWrap = $('#tm_conta_fields_wrap');
+    const reservaWrap = $('#tm_reserva_pg_wrap');
+    if(contaWrap) contaWrap.classList.toggle('hidden', isReserva);
+    if(reservaWrap) reservaWrap.classList.toggle('hidden', !isReserva);
+    if(!isReserva && typeof syncFormaPagamentoUI==='function') syncFormaPagamentoUI();
+  }
+  if($('#tm_origempg_group')){
+    $('#tm_origempg_group').querySelectorAll('.seg-btn').forEach(btn=>{
+      btn.onclick = ()=>{
+        $('#tm_origempg_group').querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        $('#tm_origempg').value = btn.dataset.value;
+        syncOrigemPagamentoUI();
+      };
+    });
   }
 
   function updateCreditoParcelPreview(){
@@ -452,6 +534,35 @@ function openTransactionModal({type, existing}){
     const cents = parseInt($('#tm_valor').dataset.cents||'0',10);
     const valor = cents/100;
 
+    /* V6.0 — se estava editando uma despesa paga direto de uma reserva, devolve o saldo
+       ANTES de qualquer outra decisão (troca de origem, novo valor, etc.). Espelha o que já
+       acontece com removeLinkedReservaMoveFromTransaction para receita → reserva. */
+    if(isEdit && !isReceita && existing.origemPagamento==='reserva'){
+      removeLinkedReservaWithdrawalFromDespesa(existing);
+    }
+
+    const origemPagamento = (isDespesaVariavel && $('#tm_origempg')) ? $('#tm_origempg').value : 'conta';
+    if(isDespesaVariavel && origemPagamento==='reserva'){
+      const reservaSel = $('#tm_reserva_pg_box') ? $('#tm_reserva_pg_box').value : '';
+      const rbox = reservaBoxes.find(r=>reservaBoxLabel(r)===reservaSel) || reservaBoxes[0];
+      if(!rbox){ toast('Escolha uma reserva válida.'); return; }
+      if(valor<=0){ alert('Digite um valor maior que zero.'); return; }
+      if(!reservaTemSaldo(rbox, valor)){ showReservaInsuficienteModal(rbox, valor); return; }
+      let tx;
+      if(isEdit){
+        Object.assign(existing, {nome, data, categoria, valor, banco:rbox.banco||'', origemPagamento:'reserva', formaPagamento:null});
+        tx = existing;
+        toast('Despesa atualizada — paga direto da reserva.');
+      } else {
+        tx = {id:uid(), tipo:'variavel', nome, data, categoria, valor, banco:rbox.banco||'', origemPagamento:'reserva', formaPagamento:null};
+        S.data.transacoes.push(tx);
+        toast('Despesa paga direto da reserva "'+rbox.nome+'".');
+      }
+      createLinkedReservaWithdrawalFromDespesa(tx, rbox, valor);
+      saveCurrentData(); closeModal(); renderView();
+      return;
+    }
+
     const formaPagamento = (!isReceita && $('#tm_forma')) ? $('#tm_forma').value : null;
     const isCreditoDespesa = formaPagamento==='Crédito';
 
@@ -506,13 +617,13 @@ function openTransactionModal({type, existing}){
       removeLinkedReservaMoveFromTransaction(existing);
       Object.assign(existing, {nome, data, categoria, valor, banco});
       if(isReceita) existing.origem = origem;
-      else existing.formaPagamento = formaPagamento || 'Dinheiro';
+      else { existing.formaPagamento = formaPagamento || 'Dinheiro'; existing.origemPagamento = 'conta'; }
       tx = existing;
       toast('Lançamento atualizado.');
     } else {
       tx = {id:uid(), tipo:type, nome, data, categoria, valor, banco};
       if(isReceita) tx.origem = origem;
-      else tx.formaPagamento = formaPagamento || 'Dinheiro';
+      else { tx.formaPagamento = formaPagamento || 'Dinheiro'; tx.origemPagamento = 'conta'; }
       S.data.transacoes.push(tx);
       toast(isReceita && reservaBox ? 'Receita adicionada e enviada para reserva.' : 'Lançamento adicionado.');
     }
@@ -528,6 +639,7 @@ function openTransactionModal({type, existing}){
       if(idx<0) return;
       const snapshot = JSON.parse(JSON.stringify(S.data));
       removeLinkedReservaMoveFromTransaction(existing);
+      removeLinkedReservaWithdrawalFromDespesa(existing); // V6.0 — devolve o saldo à reserva, se era pagamento direto
       S.data.transacoes.splice(idx,1);
       saveCurrentData(); closeModal(); renderView();
       showUndoToast('Lançamento excluído.', ()=>{ S.data = snapshot; saveCurrentData(); renderView(); });

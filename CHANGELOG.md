@@ -1,3 +1,53 @@
+## V6.0 — Refatoração da arquitetura financeira: Fluxo Financeiro x Transferências (09/07/2026)
+
+Maior mudança conceitual do Borion desde o lançamento das Reservas. Antes, retirar dinheiro
+de uma reserva (cofrinho) exigia lançar uma Receita falsa para depois lançar a Despesa de
+verdade — o que nunca deveria ter contado como renda. A partir da V6.0 isso deixa de existir.
+
+- **Fluxo Financeiro** (Receitas e Despesas) passa a representar só dinheiro novo entrando
+  ou dinheiro realmente saindo. Reserva nunca mais gera Receita.
+- **Transferências** (`js/10-cards-accounts.js`) deixam de ser só "conta → conta": agora
+  aceitam Conta→Reserva, Reserva→Conta, Reserva→Reserva e Conta→Conta. Nunca alteram
+  patrimônio, receita ou despesa — só trocam onde o dinheiro está guardado. Cada uma tem
+  histórico próprio e, quando envolve uma reserva, aparece também no extrato dela.
+- **Despesa variável** (`js/07-budget.js`) ganhou o campo "Origem do pagamento": Conta ou
+  Reserva. Escolhendo Reserva, o Borion desconta o valor da reserva e cria a despesa num
+  único clique — sem Receita, sem passo intermediário. Editar essa despesa devolve o valor
+  antigo à reserva antes de aplicar o novo (inclusive ao trocar de reserva); excluir devolve
+  o saldo automaticamente. O Desfazer (5s após excluir) restaura despesa, saldo e histórico
+  juntos, porque tudo usa o mesmo mecanismo de snapshot completo do perfil.
+- **Proteção contra reserva negativa**: nenhuma reserva pode ficar negativa em nenhum fluxo
+  (pagamento direto, transferência ou resgate manual). Sem saldo suficiente, o Borion mostra
+  um aviso elegante e não deixa salvar.
+- **Extrato da reserva** (`js/09-patrimony-goals.js`) agora mostra "Pagamento direto" (despesa
+  paga direto da reserva) e "Transferência enviada/recebida", com o mesmo padrão visual do
+  extrato existente. Itens vindos de uma despesa ou transferência só podem ser editados pela
+  origem, para nunca dessincronizar os dois lados (mesmo padrão já usado por cartão/boleto).
+- **Novo Dashboard** (`js/06-overview.js`): cards principais agora são Patrimônio Total,
+  Disponível em Conta, Receitas do período, Despesas do período e Resultado do período
+  (Receitas − Despesas, sem contar Transferências). Patrimônio Total nunca depende de
+  Receita — continua somando contas + reservas + investimentos + bens − dívidas
+  (`patrimonioTotal()`, sem mudança de fórmula). Gráficos e estatísticas continuam
+  considerando só Receitas e Despesas reais; Transferências nunca entram neles (já era assim
+  antes e continua sendo).
+- **Migração automática e conservadora**: ao abrir um perfil antigo, o Borion procura Receitas
+  cujo nome bate com um padrão claro de "retirada/resgate/saque de reserva" (ex: "Retirada de
+  reserva"). Quando dá pra identificar com segurança qual reserva era (só existe uma reserva
+  no perfil, ou o nome da reserva aparece no lançamento), converte para uma Transferência
+  histórica (Reserva → Conta) e a receita some da lista — nunca mais entra nos seus números de
+  Receita. A conversão NUNCA mexe no saldo atual da reserva ou da conta: é só uma
+  reclassificação do registro para fins de histórico, e o lançamento original inteiro fica
+  guardado dentro da transferência (nada é apagado). Quando não dá pra identificar com
+  segurança, o lançamento antigo é mantido exatamente como estava.
+- **Banco de dados**: nenhuma tabela nova foi criada no Supabase. Todo o perfil financeiro do
+  Borion (incluindo reservas, transferências e despesas) já é sincronizado como um único
+  documento (`borion_profile_data.data jsonb`) — os novos campos entram nesse mesmo documento
+  e sincronizam normalmente, sem precisar de migração de schema.
+- Compatibilidade total: login, perfis, Supabase, backup local, importação/exportação,
+  categorias, cartões, boletos, cheques, patrimônio, metas, agenda e notificações continuam
+  funcionando exatamente como antes. Nenhum layout, animação ou identidade visual foi alterado
+  — só os campos novos necessários foram adicionados.
+
 ## V5.39.6 — Exclusão de conta com link mágico (09/07/2026)
 
 - Recolocada a etapa de confirmação por e-mail no fluxo de exclusão de conta.
@@ -279,50 +329,4 @@
 - Aplicado acabamento branco, dourado e discreto para combinar com o tema claro premium.
 
 ## 2026-07-07 — V5.24 Popup ao entrar no app
-- Corrigido o comportamento dos popups de notificação na entrada do app.
-- Agora, ao abrir um perfil, o app mostra os lembretes pendentes/não lidos, mesmo que eles já tivessem sido gerados antes.
-- Popups continuam respeitando o liga/desliga e a duração escolhida em Configurações.
-- Adicionada animação suave de entrada nos popups verdes translúcidos.
-
-
-## v5.25 Distribuição — Categorias padrão
-
-- Removidas categorias pessoais da base inicial.
-- Mantidas apenas categorias genéricas para novos usuários.
-- Ajustada a sugestão automática de categoria de veículos para usar "Veículo" em vez de nomes pessoais.
-
-## V5.26 — Modais protegidos e campos refinados
-- Janelas flutuantes não fecham mais ao clicar fora delas.
-- Fechamento/cancelamento agora acontece somente pelo X ou pela tecla Esc.
-- Adicionado feedback visual sutil quando o usuário clica fora do modal.
-- Ícones de calendário em campos de data/mês ficaram mais aparentes e dinâmicos.
-- Campos de valor agora recebem indicação visual de R$ nos formulários.
-- Cache atualizado.
-## 2026-07-07 — V5.27 Reserva com receita direta e rendimentos
-- Receita pode ser enviada direto para uma reserva, sem virar despesa nem exigir movimentação manual depois.
-- Adicionada opção de dividir receita entre conta livre e reserva.
-- Movimentações de reserva agora registram "Receita direta" quando vierem de um lançamento de receita.
-- Adicionado painel recolhível de rendimentos das reservas no mês.
-- Página Reserva agora mostra rendimentos mensais por reserva quando expandido.
-- Rótulo de total de reserva ajustado para "Reservado: R$ ...".
-- Cache atualizado.
-
-## 2026-07-08 — V5.29 Lançamentos, fatura/boleto pago e Meta de Patrimônio na Reserva
-- Guia "Orçamento" renomeada para "Lançamentos" (menu e título da tela; a tela e seus dados continuam os mesmos).
-- Receitas agora têm "Origem": Receita própria, Reembolso recebido ou Repasse de terceiros. Reembolso e repasse não entram mais na Receita do mês nem contam como renda — ficam separados na listagem e em um total à parte.
-- Banco/conta agora é obrigatório em: receita, despesa variável, despesa fixa, boleto e reserva (o app pede para escolher um banco antes de salvar).
-- Compra parcelada no cartão ganhou campo de Categoria.
-- Cartões: cada fatura mensal pode ser marcada como paga escolhendo o banco usado para pagar. Ao marcar como paga, o valor é debitado da liquidez desse banco e a fatura some da dívida em aberto daquele mês (sem duplicar e sem afetar meses futuros). É possível desfazer o pagamento.
-- Boletos: mesma lógica de "marcar parcela do mês como paga", com banco de pagamento e débito da liquidez; ganharam campo de Categoria.
-- Nova seção "Transferências entre contas" em Cartões e Contas: move valor de um banco para outro sem virar receita nem despesa.
-- Visão Geral agora separa "Crédito usado em cartões" de "Boletos a pagar" (antes vinham somados na mesma linha). No Patrimônio, cartões e boletos continuam somados como dívida total, mas aparecem identificados separadamente na lista de dívidas.
-- Meta de Patrimônio deixou de ser uma tela/criação separada: agora é criada e editada dentro de "Editar reserva", logo abaixo da "Meta da Reserva", reaproveitando emoji e cor. A meta continua aparecendo em Patrimônio → Metas e passou a aparecer também dentro do card da própria reserva.
-- Migração automática e segura dos dados antigos: perfis existentes ganham os novos campos (origem da receita, categoria de parcela/boleto, histórico de pagamentos, transferências, vínculo de meta com reserva) sem perder nem duplicar nenhum valor já cadastrado.
-
-## 2026-07-07 — V5.28 Boletos, Reserva e Agenda
-- Extrato recente de Reserva agora permite editar e apagar movimentações.
-- Campos de data em janelas flutuantes ficaram mais aparentes, centralizados e dourados.
-- Cartões e Contas ganhou seção de Boletos parcelados.
-- Dívidas em Patrimônio agora somam cartões e boletos.
-- Agenda ganhou replicação de lembrete para meses futuros.
-- Exclusão de lembrete agora permite apagar apenas este ou este e os próximos da série.
+- Corrigido o comportamento d

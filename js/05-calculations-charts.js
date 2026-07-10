@@ -40,6 +40,14 @@ function repassesMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.tr
 function despesasMes(y=S.month.y, m=S.month.m){ return fixaMes(y,m)+variavelMes(y,m); }
 function investirPlanejado(){ return S.data.investirPlanejado[monthKey(S.month.y,S.month.m)] || 0; }
 function saldoMes(){ return receitaMes() - despesasMes() - investirPlanejado(); }
+/* V6.0 — "Resultado do período" do novo Dashboard: Receitas - Despesas, sem descontar o
+   valor planejado para investir (que é só uma intenção, não uma saída de dinheiro) e sem
+   nunca contar Transferências (elas não são receita nem despesa em nenhum lugar do app). */
+function resultadoPeriodo(y=S.month.y, m=S.month.m){ return receitaMes(y,m) - despesasMes(y,m); }
+/* "Disponível em conta": quanto dinheiro está fora das reservas — só o saldo de
+   contas/carteira (liquidez), sem reserva, investimento, bem ou dívida. No perfil de quem
+   guarda quase tudo em reservas (ex: Mercado Pago), isso fica perto de zero — esperado. */
+function disponivelEmConta(){ return liquidezTotal(); }
 
 /* -- credit-card installments: status is computed relative to the selected calendar month -- */
 function parcelaStatus(p, y=S.month.y, m=S.month.m){

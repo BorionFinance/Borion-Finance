@@ -295,6 +295,19 @@ function migrateData(d){
   if(!Array.isArray(d.boletos)) d.boletos=[];
   if(!d.transferencias) d.transferencias=[];
   if(!Array.isArray(d.transferencias)) d.transferencias=[];
+  // V6.0 — Transferências deixam de ser só "conta → conta": agora qualquer transferência
+  // guarda o tipo de origem/destino ('conta' ou 'reserva'). Dados antigos (só contaOrigem/
+  // contaDestino, sempre conta → conta) recebem os campos novos sem perder nada.
+  d.transferencias.forEach(t=>{
+    if(t.origemTipo==null) t.origemTipo='conta';
+    if(t.destinoTipo==null) t.destinoTipo='conta';
+    if(t.origemId==null) t.origemId = t.contaOrigem||'';
+    if(t.destinoId==null) t.destinoId = t.contaDestino||'';
+    if(t.origemNome==null) t.origemNome = t.contaOrigem||t.origemId||'';
+    if(t.destinoNome==null) t.destinoNome = t.contaDestino||t.destinoId||'';
+    if(t.origemBanco==null) t.origemBanco = t.origemTipo==='conta' ? (t.origemId||'') : '';
+    if(t.destinoBanco==null) t.destinoBanco = t.destinoTipo==='conta' ? (t.destinoId||'') : '';
+  });
   // V5.36.0 — "Carteira" (dinheiro físico) é uma conta fixa que sempre precisa existir,
   // não pode ser excluída e nunca pode ser confundida com cartão de crédito. Migração
   // defensiva: cria a Carteira se ainda não existir (dado antigo) e garante a flag
@@ -328,6 +341,12 @@ function migrateData(d){
     // V5.36.0 — forma de pagamento das despesas (dinheiro/pix/débito). Compras no crédito
     // não viram transação aqui — elas passam a existir como parcela vinculada ao cartão.
     if(t.tipo==='variavel' && t.formaPagamento==null) t.formaPagamento='Dinheiro';
+    // V6.0 — despesa variável agora pode ser paga direto de uma Reserva, sem passar por
+    // Receita. origemPagamento indica de onde saiu o dinheiro ('conta' = fluxo normal via
+    // banco/carteira/cartão, 'reserva' = pagamento direto de uma reserva/cofrinho).
+    if(t.tipo==='variavel' && t.origemPagamento==null) t.origemPagamento='conta';
+    if(t.reservaOrigemId===undefined) t.reservaOrigemId=null;
+    if(t.reservaOrigemMoveId===undefined) t.reservaOrigemMoveId=null;
   });
   (d.fixas||[]).forEach(f=>{ if(f.banco==null) f.banco=''; });
   (d.liquidez||[]).forEach(l=>{ if(l.banco==null) l.banco=''; });
@@ -346,7 +365,18 @@ function migrateData(d){
     if(!Array.isArray(b.pagamentos)) b.pagamentos=[];
   });
   (d.reservas.boxes||[]).forEach(r=>{ if(r.banco==null) r.banco=''; if(r.valorAtual==null) r.valorAtual=0; if(r.valorMeta==null) r.valorMeta=0; if(r.status==null) r.status='Ativa'; if(r.metaId===undefined) r.metaId=null; if(r.corValor==null) r.corValor='#e8c98a'; });
-  (d.reservas.moves||[]).forEach(m=>{ if(m.banco==null) m.banco=''; if(m.data==null) m.data=todayISO(); if(m.tipo==null) m.tipo='Reservar'; if(m.valor==null) m.valor=0; });
+  // V6.0 — novos tipos de movimentação da reserva: 'Pagamento direto' (despesa paga direto
+  // da reserva, sem virar receita) e 'Transferência enviada'/'Transferência recebida'
+  // (movimentações genéricas entre conta/reserva). despesaTransacaoId liga o pagamento
+  // direto à despesa correspondente em Orçamento > Despesas.
+  (d.reservas.moves||[]).forEach(m=>{
+    if(m.banco==null) m.banco='';
+    if(m.data==null) m.data=todayISO();
+    if(m.tipo==null) m.tipo='Reservar';
+    if(m.valor==null) m.valor=0;
+    if(m.despesaTransacaoId===undefined) m.despesaTransacaoId=null;
+    if(m.transferenciaId===undefined) m.transferenciaId=null;
+  });
   if(d.investimentos){
     (d.investimentos.ativos||[]).forEach(a=>{ if(a.banco==null) a.banco=''; });
     (d.investimentos.emCaixa||[]).forEach(c=>{ if(c.banco==null) c.banco=''; });
@@ -441,6 +471,49 @@ function migrateData(d){
       }, total, valorParcela);
     });
   })();
+  /* ---------------- V6.0 — migração automática e conservadora: "Retirada de reserva" ----------------
+     Antes da V6.0, retirar dinheiro de uma reserva exigia lançar uma Receita falsa (ex: nome
+     "Retirada de reserva") para depois lançar a Despesa de verdade. Isso nunca deveria ter
+     contado como Receita. Aqui o Borion procura, entre as receitas antigas, aquelas cujo nome
+     bate com um padrão claro e inequívoco de retirada de reserva. Quando consegue identificar
+     com segurança qual reserva era (só existe uma reserva no perfil, ou o nome da reserva
+     aparece no texto do lançamento), converte o registro em uma Transferência histórica
+     (Reserva → Conta) e remove da lista de Receitas — assim ela nunca mais entra em
+     receitaMes()/nos gráficos. Nada é apagado de verdade: o lançamento original inteiro fica
+     guardado dentro da transferência (migratedFromTransacao), e a conversão NUNCA mexe no saldo
+     atual da reserva ou da conta (ela só reclassifica um registro histórico — o saldo que você
+     já vê hoje continua exatamente o mesmo antes e depois desta migração). Quando não dá pra
+     identificar com segurança, o lançamento antigo é mantido exatamente como estava.
+     Reversível: como nada é apagado, dá pra revisar migradas em Cartões e Contas → Transferências. */
+  (function migrateRetiradaDeReservaParaTransferencia(){
+    if(!Array.isArray(d.transacoes) || !d.transacoes.length) return;
+    if(!d.reservas || !Array.isArray(d.reservas.boxes) || !d.reservas.boxes.length) return;
+    const padraoRetirada = /\b(retirada|retirado|resgate|resgatado|saque)\b[\s\S]{0,25}\breserva\b|\breserva\b[\s\S]{0,25}\b(retirada|retirado|resgate|resgatado|saque)\b/i;
+    function normalizeTxt(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase(); }
+    function resolveBox(nome){
+      const boxes = d.reservas.boxes;
+      if(boxes.length===1) return boxes[0];
+      const nrm = normalizeTxt(nome);
+      const matches = boxes.filter(bx=> bx.nome && nrm.includes(normalizeTxt(bx.nome)));
+      return matches.length===1 ? matches[0] : null;
+    }
+    const keep = [];
+    d.transacoes.forEach(t=>{
+      if(t.tipo!=='receita' || t.migradoV6 || !padraoRetirada.test(normalizeTxt(t.nome))){ keep.push(t); return; }
+      const box = resolveBox(t.nome);
+      if(!box){ keep.push(t); return; } // não deu pra identificar com segurança — mantém como estava
+      d.transferencias.push({
+        id: uid(), origemTipo:'reserva', origemId:box.id, origemNome:box.nome, origemBanco:'',
+        destinoTipo:'conta', destinoId:t.banco||box.banco||'', destinoNome:t.banco||box.banco||'', destinoBanco:t.banco||box.banco||'',
+        valor: Number(t.valor)||0, data: t.data||todayISO(),
+        descricao: (t.nome||'Retirada de reserva')+' — migrado automaticamente de uma receita antiga (V6.0). Saldo não foi alterado por esta migração.',
+        createdAt: Date.now(), historico:true, migratedFromTransacaoId: t.id, migratedFromTransacao: JSON.parse(JSON.stringify(t))
+      });
+      // não entra em "keep": some da lista de Receitas, mas o lançamento original
+      // continua preservado dentro da transferência acima (migratedFromTransacao).
+    });
+    d.transacoes = keep;
+  })();
   return d;
 }
 function allBankNames(){
@@ -519,6 +592,32 @@ function requireBanco(bancoVal, msg){
   const banco = bancoVal==='— Nenhum —' ? '' : (bancoVal||'');
   if(!banco){ showBankRequiredModal(msg||'Escolha um banco/conta/cartão para este lançamento.'); return null; }
   return banco;
+}
+
+/* ---------------- V6.0 — proteção: reserva nunca pode ficar negativa ----------------
+   Usado por qualquer fluxo que tire dinheiro de uma reserva (despesa paga direto da
+   reserva, transferência com origem reserva, resgate manual). */
+function reservaTemSaldo(box, valor){
+  return !!box && (Number(box.valorAtual)||0) >= (Number(valor)||0) - 1e-9;
+}
+function showReservaInsuficienteModal(box, valorNecessario){
+  const disponivel = Number(box && box.valorAtual || 0);
+  if(!document.getElementById('modal-root') || typeof el!=='function'){
+    alert('Saldo insuficiente na reserva.'); return;
+  }
+  const boxNome = box ? box.nome : 'Reserva';
+  const boxEl = el(`
+    <div class="modal-overlay">
+      <div class="modal-box bank-required-modal">
+        <div class="modal-head"><h2>Saldo insuficiente na reserva</h2><button id="ri_close">&times;</button></div>
+        <p class="confirm-text">A reserva "${esc(boxNome)}" tem ${brl(disponivel)} disponível, mas o valor informado é ${brl(valorNecessario)}.</p>
+        <div class="info-box">Uma reserva nunca pode ficar negativa. Reduza o valor, escolha outra reserva ou reserve mais dinheiro antes de continuar.</div>
+        <button class="link-btn" id="ri_ok" style="width:100%;margin-top:10px;">Entendi</button>
+      </div>
+    </div>`);
+  $('#modal-root').innerHTML=''; $('#modal-root').appendChild(boxEl); attachModalGuard(boxEl);
+  $('#ri_close').onclick=closeModal;
+  $('#ri_ok').onclick=closeModal;
 }
 
 /* ---------------- Liquidez: ajuste de saldo por banco (usado por fatura paga, boleto pago e transferências) ---------------- */

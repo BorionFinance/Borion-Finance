@@ -60,6 +60,46 @@ function todayISO(){
   const d = new Date();
   return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
 }
+/* V6.1 — período rápido reutilizado pelos filtros de Lançamentos e do extrato de cada
+   reserva. opt='todos' significa "sem restrição de período" ({de:'',ate:''}). */
+function computePeriodoRange(opt, customDe, customAte){
+  const t = new Date(); t.setHours(0,0,0,0);
+  const y = t.getFullYear(), m = t.getMonth();
+  function iso(dt){ return dt.getFullYear()+'-'+pad2(dt.getMonth()+1)+'-'+pad2(dt.getDate()); }
+  if(opt==='hoje'){ const s=todayISO(); return {de:s, ate:s}; }
+  if(opt==='semana'){
+    const dow = t.getDay();
+    const diffToMonday = (dow===0?6:dow-1);
+    const mon = new Date(t); mon.setDate(t.getDate()-diffToMonday);
+    const sun = new Date(mon); sun.setDate(mon.getDate()+6);
+    return {de:iso(mon), ate:iso(sun)};
+  }
+  if(opt==='mes'){
+    const first = new Date(y,m,1), last = new Date(y,m+1,0);
+    return {de:iso(first), ate:iso(last)};
+  }
+  if(opt==='mes_anterior'){
+    const first = new Date(y,m-1,1), last = new Date(y,m,0);
+    return {de:iso(first), ate:iso(last)};
+  }
+  if(opt==='30dias'){
+    const start = new Date(t); start.setDate(t.getDate()-29);
+    return {de:iso(start), ate:iso(t)};
+  }
+  if(opt==='ano') return {de:y+'-01-01', ate:y+'-12-31'};
+  if(opt==='personalizado') return {de:customDe||'', ate:customAte||''};
+  return {de:'', ate:''};
+}
+const PERIODO_QUICK_OPTIONS = [
+  {v:'todos', l:'Todos'},
+  {v:'hoje', l:'Hoje'},
+  {v:'semana', l:'Esta semana'},
+  {v:'mes', l:'Este mês'},
+  {v:'mes_anterior', l:'Mês anterior'},
+  {v:'30dias', l:'Últimos 30 dias'},
+  {v:'ano', l:'Este ano'},
+  {v:'personalizado', l:'Personalizado'}
+];
 function dateDiffDays(isoA, isoB){
   const a = new Date(isoA+'T00:00:00'), b = new Date(isoB+'T00:00:00');
   return Math.round((a-b)/86400000);

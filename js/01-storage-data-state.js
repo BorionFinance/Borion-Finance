@@ -236,6 +236,15 @@ function emptyData(){
     investirPlanejado: {},
     transacoes: [],
     fixas: [],
+    /* V6.1 — estado de pagamento de cada ocorrência mensal de uma despesa fixa. Uma
+       despesa fixa (S.data.fixas) é só o "cadastro" (o compromisso recorrente); cada mês
+       em que ela está ativa é uma ocorrência independente, com seu próprio pago/pendente.
+       Marcar uma ocorrência como paga NUNCA marca outra ocorrência (outro mês) como paga. */
+    fixaPagamentos: [],
+    /* V6.1 — log leve e só-para-consulta de estornos (desfazer pagamento por reserva,
+       redução de valor de despesa já paga, etc.). Não participa de nenhum cálculo de saldo:
+       serve apenas para o filtro "Estornos" em Lançamentos e no extrato da reserva. */
+    estornos: [],
     liquidez: [],
     bens: [],
     investimentos:{emCaixa:[],ativos:[]},
@@ -270,6 +279,8 @@ function migrateData(d){
     Object.keys(d.categoryColors[k]).forEach(c=>{ if(!d.categorias[k].includes(c)) delete d.categoryColors[k][c]; });
   });
   if(!d.fixas) d.fixas=[];
+  if(!Array.isArray(d.fixaPagamentos)) d.fixaPagamentos=[];
+  if(!Array.isArray(d.estornos)) d.estornos=[];
   if(!d.agenda) d.agenda=[];
   if(!d.metas) d.metas=[];
   if(!d.notificacoes) d.notificacoes=[];
@@ -348,7 +359,26 @@ function migrateData(d){
     if(t.reservaOrigemId===undefined) t.reservaOrigemId=null;
     if(t.reservaOrigemMoveId===undefined) t.reservaOrigemMoveId=null;
   });
-  (d.fixas||[]).forEach(f=>{ if(f.banco==null) f.banco=''; });
+  (d.fixas||[]).forEach(f=>{
+    if(f.banco==null) f.banco='';
+    // V6.1 — despesa fixa paga por Conta/carteira OU por Reserva/cofrinho. Continua sendo
+    // só o "cadastro" da recorrência: a origem aqui é o padrão herdado por cada ocorrência
+    // nova, mas o desconto de verdade só acontece quando a ocorrência do mês é marcada como
+    // paga (ver fixaPagamentos). Nunca retira dinheiro só por a despesa existir no mês.
+    if(f.origemPagamento==null) f.origemPagamento='conta';
+    if(f.reservaOrigemId===undefined) f.reservaOrigemId=null;
+  });
+  // V6.1 — defensivo: remove ocorrências de despesa fixa cujo cadastro (fixas) não existe
+  // mais (ex.: backup antigo restaurado fora de ordem). Nunca movimenta saldo aqui — é só
+  // limpeza de referências órfãs; qualquer devolução de reserva já acontece no momento da
+  // exclusão real da despesa fixa dentro do app.
+  d.fixaPagamentos = (d.fixaPagamentos||[]).filter(r=> r && (d.fixas||[]).some(f=>f.id===r.fixaId));
+  (d.fixaPagamentos||[]).forEach(r=>{
+    if(r.origemPagamento==null) r.origemPagamento='conta';
+    if(r.reservaId===undefined) r.reservaId=null;
+    if(r.reservaMoveId===undefined) r.reservaMoveId=null;
+    if(r.pago==null) r.pago=true;
+  });
   (d.liquidez||[]).forEach(l=>{ if(l.banco==null) l.banco=''; });
   (d.bens||[]).forEach(b=>{ if(b.banco==null) b.banco=''; });
   (d.metas||[]).forEach(mt=>{ if(mt.banco==null) mt.banco=''; if(mt.reservaId===undefined) mt.reservaId=null; });
@@ -376,6 +406,11 @@ function migrateData(d){
     if(m.valor==null) m.valor=0;
     if(m.despesaTransacaoId===undefined) m.despesaTransacaoId=null;
     if(m.transferenciaId===undefined) m.transferenciaId=null;
+    // V6.1 — mesmo mecanismo de vínculo, agora para despesa fixa paga direto da reserva.
+    // despesaFixaId liga ao cadastro da despesa fixa; fixaOcorrenciaId liga à ocorrência
+    // (mês) específica em fixaPagamentos — nunca à despesa fixa como um todo.
+    if(m.despesaFixaId===undefined) m.despesaFixaId=null;
+    if(m.fixaOcorrenciaId===undefined) m.fixaOcorrenciaId=null;
   });
   if(d.investimentos){
     (d.investimentos.ativos||[]).forEach(a=>{ if(a.banco==null) a.banco=''; });
@@ -647,7 +682,15 @@ const S = {
   budgetTab: 'receita',
   invMercado: 'BR',
   month: todayYM(),
-  filters: {receita:{busca:'',categorias:[],dataDe:'',dataAte:''}, fixa:{busca:'',categorias:[],dataDe:'',dataAte:''}, variavel:{busca:'',categorias:[],dataDe:'',dataAte:''}},
+  filters: {
+    receita:{busca:'',categorias:[],dataDe:'',dataAte:''},
+    fixa:{busca:'',categorias:[],dataDe:'',dataAte:''},
+    variavel:{busca:'',categorias:[],dataDe:'',dataAte:''},
+    /* V6.1 — filtros da aba "Central" de Lançamentos (consulta unificada de todas as
+       movimentações do perfil). Não afeta os filtros das abas Receita/Fixa/Variável acima. */
+    central:{tipo:'todos', origem:'todas', reservaId:'', contaId:'', periodo:'todos', dataDe:'', dataAte:'', status:'todos', categoria:'', busca:'', sort:'data_desc'}
+  },
+  centralPageSize: 30,
   gate: { mode:'list', selectedProfileId:null, error:'' },
   valuesHidden: readJSON('mc_values_hidden', false),
   bankFilter: null,

@@ -249,7 +249,7 @@ function renderReservasPanel(){
       <div class="reserva-foot"><span>Meta: ${brl(r.valorMeta)}</span><span>${pct}%</span></div>` : `
       <div class="reserva-foot"><span>Sem meta definida</span><span></span></div>`}
       ${metaHTML}
-      <div class="reserva-actions"><button onclick="Reservas.move('${r.id}')">Movimentar</button><button onclick="Reservas.edit('${r.id}')">Editar</button></div>
+      <div class="reserva-actions"><button onclick="Reservas.move('${r.id}')">Movimentar</button><button onclick="Reservas.viewExtrato('${r.id}')">Ver extrato</button><button onclick="Reservas.edit('${r.id}')">Editar</button></div>
     </div>`;
   }).join('');
   const moveRows = moves.map(m=>{
@@ -377,7 +377,11 @@ const Reservas = {
      é uma despesa paga direto da reserva (nunca vira Receita); 'Transferência enviada'/
      'Transferência recebida' vêm da tela genérica de Transferências (Cartões e Contas). */
   POSITIVE_TYPES: ['Reservar','Rendimento','Receita direta','Transferência recebida'],
-  NEGATIVE_TYPES: ['Resgatar','Pagamento direto','Transferência enviada'],
+  /* V6.1 — 'Pagamento de despesa fixa' segue exatamente o mesmo mecanismo já usado por
+     'Pagamento direto' (despesa variável paga direto da reserva): aparece no extrato,
+     some do saldo, e é revertido via Reservas.reverseMoveEffect quando a despesa fixa
+     volta a pendente ou é excluída. */
+  NEGATIVE_TYPES: ['Resgatar','Pagamento direto','Pagamento de despesa fixa','Transferência enviada'],
   reverseMoveEffect(mv){
     if(!mv) return;
     const bx = (S.data.reservas.boxes||[]).find(r=>r.id===mv.boxId);
@@ -409,6 +413,7 @@ const Reservas = {
        uma transferência só podem ser editadas pela origem, para nunca dessincronizar os dois
        lados do vínculo (mesmo padrão já usado por compras de cartão/boleto em Despesas). */
     if(mv.despesaTransacaoId){ toast('Esta movimentação vem de uma despesa paga direto da reserva — edite ou exclua pela despesa em Lançamentos.'); S.view='budget'; S.budgetTab='variavel'; renderApp(); return; }
+    if(mv.despesaFixaId){ toast('Esta movimentação vem de uma despesa fixa paga com a reserva — edite ou exclua pela despesa fixa em Lançamentos.'); S.view='budget'; S.budgetTab='fixa'; renderApp(); return; }
     if(mv.transferenciaId){ toast('Esta movimentação vem de uma transferência — edite ou exclua em Cartões e Contas → Transferências.'); S.view='cards'; renderApp(); return; }
     const boxes = (S.data.reservas.boxes||[]).filter(r=>bankMatches(r.banco));
     const labels = boxes.map(r=>`${r.nome}${r.banco?' · '+r.banco:''}`);
@@ -449,6 +454,7 @@ const Reservas = {
     const mv = Reservas.findMove(id);
     if(!mv) return;
     if(mv.despesaTransacaoId){ toast('Esta movimentação vem de uma despesa paga direto da reserva — edite ou exclua pela despesa em Lançamentos.'); S.view='budget'; S.budgetTab='variavel'; renderApp(); return; }
+    if(mv.despesaFixaId){ toast('Esta movimentação vem de uma despesa fixa paga com a reserva — edite ou exclua pela despesa fixa em Lançamentos.'); S.view='budget'; S.budgetTab='fixa'; renderApp(); return; }
     if(mv.transferenciaId){ toast('Esta movimentação vem de uma transferência — edite ou exclua em Cartões e Contas → Transferências.'); S.view='cards'; renderApp(); return; }
     openConfirmModal({
       title:'Excluir movimentação',
@@ -464,6 +470,95 @@ const Reservas = {
         showUndoToast('Movimentação excluída.', ()=>{ S.data = snapshot; saveCurrentData(); renderView(); });
       }
     });
+  },
+  /* V6.1 — extrato individual de uma reserva: mostra só as movimentações daquele
+     cofrinho (nunca de outro), com filtros próprios de período/tipo/busca e totais de
+     entradas/saídas do período. Abre em modal para não precisar de uma aba nova. */
+  viewExtrato(boxId){
+    const box = (S.data.reservas.boxes||[]).find(r=>r.id===boxId);
+    if(!box){ toast('Reserva não encontrada.'); return; }
+    const state = {periodo:'todos', dataDe:'', dataAte:'', tipo:'todos', busca:''};
+    const tiposPresentes = Array.from(new Set(((S.data.reservas.moves||[]).filter(m=>m.boxId===boxId)).map(m=>m.tipo))).sort();
+    const box_ = el(`
+      <div class="modal-overlay">
+        <div class="modal-box" style="max-width:640px;">
+          <div class="modal-head"><h2>Extrato — ${esc(box.nome)}</h2><button id="rzx_close">&times;</button></div>
+          <p class="modal-sub">Só movimentações desta reserva. Nunca mistura com outras reservas ou outro perfil.</p>
+          <div class="cards-row" style="margin-bottom:10px;">
+            <div class="card"><div class="clabel">Saldo atual</div><div class="cval">${brl(Number(box.valorAtual)||0)}</div></div>
+            <div class="card"><div class="clabel">Entradas no período</div><div class="cval val-pos" id="rzx_in">—</div></div>
+            <div class="card"><div class="clabel">Saídas no período</div><div class="cval" id="rzx_out">—</div></div>
+          </div>
+          <div class="field"><label>Buscar</label><input type="text" id="rzx_busca" placeholder="Buscar por tipo, descrição ou despesa vinculada..."/></div>
+          <div class="field"><label>Tipo de movimentação</label><select id="rzx_tipo"><option value="todos">Todos</option>${tiposPresentes.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></div>
+          <div class="field"><label>Período</label><select id="rzx_periodo">${PERIODO_QUICK_OPTIONS.map(o=>`<option value="${o.v}">${o.l}</option>`).join('')}</select></div>
+          <div id="rzx_custom_wrap" class="hidden" style="display:flex;gap:8px;">
+            <div class="field" style="flex:1;"><label>De</label><input type="date" id="rzx_de"/></div>
+            <div class="field" style="flex:1;"><label>Até</label><input type="date" id="rzx_ate"/></div>
+          </div>
+          <div id="rzx_list_wrap"></div>
+        </div>
+      </div>`);
+    $('#modal-root').innerHTML=''; $('#modal-root').appendChild(box_);
+    attachModalGuard(box_);
+    $('#rzx_close').onclick = closeModal;
+
+    function renderList(){
+      const range = computePeriodoRange(state.periodo, state.dataDe, state.dataAte);
+      const q = state.busca.trim().toLowerCase();
+      let moves = (S.data.reservas.moves||[]).filter(m=>m.boxId===boxId);
+      if(range.de) moves = moves.filter(m=>(m.data||'')>=range.de);
+      if(range.ate) moves = moves.filter(m=>(m.data||'')<=range.ate);
+      if(state.tipo!=='todos') moves = moves.filter(m=>m.tipo===state.tipo);
+      if(q){
+        moves = moves.filter(m=>{
+          const fixaRef = m.despesaFixaId ? (S.data.fixas||[]).find(f=>f.id===m.despesaFixaId) : null;
+          const txRef = m.despesaTransacaoId ? (S.data.transacoes||[]).find(t=>t.id===m.despesaTransacaoId) : null;
+          const haystack = [m.tipo, m.descricao, m.banco, fixaRef&&fixaRef.nome, txRef&&txRef.nome].filter(Boolean).join(' ').toLowerCase();
+          return haystack.includes(q);
+        });
+      }
+      moves = moves.slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||'')));
+      let entradas=0, saidas=0;
+      moves.forEach(m=>{
+        if(Reservas.POSITIVE_TYPES.includes(m.tipo)) entradas += Number(m.valor)||0;
+        else if(Reservas.NEGATIVE_TYPES.includes(m.tipo)) saidas += Number(m.valor)||0;
+      });
+      $('#rzx_in').textContent = brl(entradas);
+      $('#rzx_out').textContent = '- '+brl(saidas).replace('R$ -','R$ ');
+      const rows = moves.map(m=>{
+        const positive = Reservas.POSITIVE_TYPES.includes(m.tipo);
+        const negative = Reservas.NEGATIVE_TYPES.includes(m.tipo);
+        const fixaRef = m.despesaFixaId ? (S.data.fixas||[]).find(f=>f.id===m.despesaFixaId) : null;
+        const txRef = m.despesaTransacaoId ? (S.data.transacoes||[]).find(t=>t.id===m.despesaTransacaoId) : null;
+        const vinculo = fixaRef ? `<button class="link-btn" style="padding:0;" onclick="Reservas.gotoVinculo('fixa','${fixaRef.id}')">🔗 ${esc(fixaRef.nome)}</button>` : (txRef ? `<button class="link-btn" style="padding:0;" onclick="Reservas.gotoVinculo('variavel','${txRef.id}')">🔗 ${esc(txRef.nome)}</button>` : '');
+        return `<tr>
+          <td>${reservaFmtDate(m.data)}</td>
+          <td>${esc(m.tipo)}</td>
+          <td class="${positive?'val-pos':negative?'val-neg':''}">${positive?'+ ':negative?'- ':''}${brl(m.valor)}</td>
+          <td>${esc(m.descricao||'')}</td>
+          <td>${vinculo}</td>
+        </tr>`;
+      }).join('');
+      $('#rzx_list_wrap').innerHTML = rows ? `<div class="table-scroll"><table><thead><tr><th>Data</th><th>Tipo</th><th>Valor</th><th>Descrição</th><th>Vínculo</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty-note">Nenhuma movimentação encontrada para esse filtro.</div>';
+    }
+    $('#rzx_busca').oninput = ()=>{ state.busca = $('#rzx_busca').value; renderList(); };
+    $('#rzx_tipo').onchange = ()=>{ state.tipo = $('#rzx_tipo').value; renderList(); };
+    $('#rzx_periodo').onchange = ()=>{
+      state.periodo = $('#rzx_periodo').value;
+      $('#rzx_custom_wrap').classList.toggle('hidden', state.periodo!=='personalizado');
+      renderList();
+    };
+    $('#rzx_de').onchange = ()=>{ state.dataDe = $('#rzx_de').value; renderList(); };
+    $('#rzx_ate').onchange = ()=>{ state.dataAte = $('#rzx_ate').value; renderList(); };
+    renderList();
+  },
+  /* Abre o lançamento vinculado (despesa fixa ou variável) a partir de uma movimentação
+     da reserva, sem duplicar o mesmo evento — só navega até o registro correspondente. */
+  gotoVinculo(tipo, id){
+    closeModal();
+    S.view='budget'; S.budgetTab = tipo==='fixa' ? 'fixa' : 'variavel'; renderApp();
+    setTimeout(()=>{ if(typeof Budget!=='undefined' && Budget.edit) Budget.edit(id); }, 80);
   }
 };
 

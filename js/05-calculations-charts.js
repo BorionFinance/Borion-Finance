@@ -29,6 +29,26 @@ function monthsBetweenISO(fromISO, toISO){
   }
   return out;
 }
+/* V6.1 — janela de meses (passado + futuro) em volta do mês atual real (não do mês
+   selecionado no topo), usada pela Central de Lançamentos para listar ocorrências de
+   despesa fixa sem precisar varrer todo o histórico. */
+function monthsAroundToday(back=24, fwd=2){
+  const baseKey = monthKey(todayYM().y, todayYM().m);
+  const fromKey = shiftYM(baseKey, -back), toKey = shiftYM(baseKey, fwd);
+  return monthsBetweenISO(fromKey+'-01', toKey+'-01');
+}
+/* V6.1 — ocorrência (mês) de uma despesa fixa: existe um registro em fixaPagamentos só
+   quando a ocorrência já foi marcada como paga; sem registro = pendente (nunca retirou
+   dinheiro de conta/reserva só por a despesa fixa estar cadastrada no mês). */
+function fixaOcorrenciaFor(fixaId, mesKey){
+  return (S.data.fixaPagamentos||[]).find(r=>r.fixaId===fixaId && r.mesKey===mesKey) || null;
+}
+function fixaOcorrenciaStatus(f, mesKey){
+  const rec = fixaOcorrenciaFor(f.id, mesKey);
+  if(rec && rec.pago) return 'Pago';
+  const dueDate = mesKey+'-'+pad2(f.dia||1);
+  return dueDate < todayISO() ? 'Vencido' : 'Pendente';
+}
 function fixaMes(y=S.month.y, m=S.month.m){ return sumBy(fixasAtivasNoMes(y,m),'valor'); }
 function variavelMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='variavel'&&bankMatches(t.banco)), y, m),'valor'); }
 /* Receita do mês = só dinheiro próprio (origem 'propria'). Reembolso/repasse de terceiros não contam como renda. */

@@ -60,7 +60,8 @@ function renderSettingsModules(){
         <div class="module-toggle-status">${popupEnabled?'Ativo':'Desativado'} — os lembretes continuam no sino; isto controla só o popup flutuante.</div>
         <div class="field" style="margin:12px 0 0;"><label>Tempo do popup</label><select id="cfg_popup_duration"><option value="30000" ${dur===30000?'selected':''}>30 segundos</option><option value="40000" ${dur===40000?'selected':''}>40 segundos</option><option value="50000" ${dur===50000?'selected':''}>50 segundos</option></select></div>
       </div>
-    </div>`;
+    </div>
+    ${window.OrderPreferences ? OrderPreferences.renderModulesOrganizePanel() : ''}`;
 }
 function renderSettingsDashboard(){
   const cards = DEFAULT_DASHBOARD_WIDGETS.map(k=>{

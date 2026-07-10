@@ -293,7 +293,12 @@ function renderApp(){
     return;
   }
   const p=S.currentProfile;
-  const nav = getNavItems().map(n=>`
+  /* Organização visual (opcional): quando o usuário personaliza a ordem dos módulos em
+     Configurações → Módulos, a barra lateral segue essa ordem. Sem personalização salva,
+     a ordem é exatamente a mesma de sempre (NAV original). Não afeta quais módulos aparecem
+     (isso continua sendo decidido por getNavItems()), só a posição de cada um. */
+  const navItemsForDisplay = (window.OrderPreferences ? OrderPreferences.applyOrder('modules', getNavItems(), {idKey:'key', labelKey:'label'}) : getNavItems());
+  const nav = navItemsForDisplay.map(n=>`
     <button class="sb-item ${S.view===n.key?'active':''}" onclick="Nav.go('${n.key}')">
       <span class="ic">${navIconSVG(n.key)}</span><span class="sb-label">${n.label}</span>
     </button>`).join('');
@@ -394,6 +399,7 @@ function renderView(){
   else if(S.view==='imports') body.innerHTML = renderImportStatement();
   else if(S.view==='settings') body.innerHTML = renderSettings();
   wireViewEvents();
+  if(window.OrderPreferences) OrderPreferences.ensureBanner();
 }
 
 const Months = {

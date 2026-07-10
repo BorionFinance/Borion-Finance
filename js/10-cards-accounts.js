@@ -1,19 +1,60 @@
 /* Borion Finance — Tela Contas, Cartões, Boletos e parcelas. */
 
+/* ---------------- Ordenação da fatura (mais antigo ⇄ mais recente) ----------------
+   Camada leve e independente, só de exibição: guarda por cartão (escopo conta+perfil, igual
+   ao OrderPreferences) se a lista de compras ativas da fatura deve aparecer da mais antiga
+   para a mais nova ou o contrário. Nunca altera parcelas, valores ou saldos — só a ordem em
+   que as linhas da fatura do mês aparecem na tela. */
+const FaturaSort = {
+  storageKey(cartaoId){
+    const userId = (window.CloudStorage && CloudStorage.user && CloudStorage.user.id) ? CloudStorage.user.id : 'anon';
+    const profileId = (typeof S!=='undefined' && S.currentProfile && S.currentProfile.id) ? S.currentProfile.id : 'sem_perfil';
+    return 'borion_faturasort_' + userId + '_' + profileId + '_' + cartaoId;
+  },
+  get(cartaoId){
+    const v = readJSON(this.storageKey(cartaoId), 'old');
+    return v==='recent' ? 'recent' : 'old';
+  },
+  toggle(cartaoId){
+    writeJSON(this.storageKey(cartaoId), this.get(cartaoId)==='old' ? 'recent' : 'old');
+    if(typeof renderView==='function') renderView();
+  },
+  /* Chave de data aproximada: mês/ano da 1ª parcela (dataCompra) + dia em que ela entra na
+     fatura (diaEntrada), quando existir. É o dado mais preciso disponível por parcela. */
+  sortKey(p){
+    return String(p.dataCompra||'') + '-' + String(p.diaEntrada||0).padStart(2,'0');
+  }
+};
+window.FaturaSort = FaturaSort;
+
 /* ---------------- VIEW: CARDS & ACCOUNTS ---------------- */
 function renderCards(){
-  const accRows = S.data.contas.filter(a=>bankMatches(a.nome)).map(a=>`
-    <div class="card-entity">
+  /* Organização visual (opcional): quando o modo Organizar está ligado (Configurações →
+     Módulos), mostra alça de arrastar + setas nos cards de conta/cartão em vez do botão de
+     editar (evita abrir o cadastro sem querer no meio da reorganização). Sem filtro de banco
+     ativo, para nunca gravar uma ordem baseada só na lista filtrada. */
+  const orgActive = !!(window.OrderPreferences && OrderPreferences.active);
+  const canReorderNow = !!(window.OrderPreferences && OrderPreferences.canReorderNow());
+  const showReorderContas = orgActive && canReorderNow;
+  const contasBase = S.data.contas.filter(a=>bankMatches(a.nome));
+  const contasOrdered = window.OrderPreferences ? OrderPreferences.applyOrder('contas', contasBase, {idKey:'id', labelKey:'nome'}) : contasBase;
+  const contasNaturalIds = contasOrdered.map(a=>a.id);
+  const accRows = contasOrdered.map(a=>`
+    <div class="card-entity" data-order-id="${esc(a.id)}">
       <div class="card-entity-head">
         <div class="cehl">
           <div class="bank-badge" style="background:${a.cor||bankColor(a.nome)}">${esc(a.icone||(a.nome||'?')[0])}</div>
           <div class="info"><div>${esc(a.nome)} <span style="font-weight:400;color:var(--muted);font-size:11.5px;">· ${a.isCarteira?'(dinheiro físico)':esc(a.tipo||'Conta')}</span></div><div>Saldo inicial: ${brl(a.saldoInicial||0)}${a.rende?` · Rende ${pct(a.percentualRendimento||0)} a.m.`:' · Não rende'}${a.isCarteira?' · Não pode ser excluída':''}</div></div>
         </div>
-        <button class="btn-outline btn-sm" onclick="Cards.editConta('${a.id}')">✎ Editar</button>
+        ${showReorderContas ? OrderPreferences.reorderRowControlsHTML('contas', a.id, a.nome, contasNaturalIds) : `<button class="btn-outline btn-sm" onclick="Cards.editConta('${a.id}')">✎ Editar</button>`}
       </div>
     </div>`).join('');
 
-  const cardBlocks = S.data.cartoes.filter(c=>bankMatches(c.banco)).map(c=>{
+  const cartoesBase = S.data.cartoes.filter(c=>bankMatches(c.banco));
+  const cartoesOrdered = window.OrderPreferences ? OrderPreferences.applyOrder('cartoes', cartoesBase, {idKey:'id', labelKey:'banco'}) : cartoesBase;
+  const cartoesNaturalIds = cartoesOrdered.map(c=>c.id);
+  const showReorderCartoes = orgActive && canReorderNow;
+  const cardBlocks = cartoesOrdered.map(c=>{
     const active=[], inactive=[];
     c.parcelas.forEach(p=>{
       const st = parcelaStatus(p, S.month.y, S.month.m);
@@ -21,6 +62,16 @@ function renderCards(){
       else inactive.push(p);
     });
     const fatura = cartaoFaturaDoMes(c.id, S.month.y, S.month.m);
+    const faturaSortDir = FaturaSort.get(c.id);
+    active.sort((a,b)=>{
+      const ka = FaturaSort.sortKey(a), kb = FaturaSort.sortKey(b);
+      return faturaSortDir==='old' ? ka.localeCompare(kb) : kb.localeCompare(ka);
+    });
+    /* Botão de ícone único (mesmo padrão do ✎/↺ já usados nas linhas da fatura) para caber na
+       coluna estreita do cabeçalho — o title explica o estado atual e o toque inverte. */
+    const faturaSortBtn = active.length>1
+      ? `<button type="button" onclick="FaturaSort.toggle('${c.id}')" title="${faturaSortDir==='old'?'Mostrando do mais antigo ao mais recente — toque para inverter':'Mostrando do mais recente ao mais antigo — toque para inverter'}" aria-label="Inverter ordem da fatura">${faturaSortDir==='old' ? '↑' : '↓'}</button>`
+      : '';
     const activeRows = active.map(p=>`
       <div class="installment-row">
         <span>${esc(p.descricao)}${p.local?` <span style="color:var(--muted)">(${esc(p.local)})</span>`:''}${p.categoria?` <span class="cat-pill" style="margin-left:4px;"><span class="dot" style="background:${catColor(p.categoria)}"></span>${esc(p.categoria)}</span>`:''}${p.apareceDespesas?` <span class="cat-pill" style="opacity:.85;"><span class="dot" style="background:var(--gold-bright)"></span>Também em Despesas (${p.despesaTipo==='fixa'?'fixa':'variável'})</span>`:''}</span>
@@ -43,19 +94,20 @@ function renderCards(){
       ? `<div class="installment-row" style="color:#22c55e;"><span>Fatura de ${monthLabel(S.month.y,S.month.m)} — <b>PAGA</b></span><span>${brl(fatura.pagamento.valor)}</span><span>via ${esc(fatura.pagamento.banco)}</span><span>${fatura.pagamento.data?fatura.pagamento.data.slice(8,10)+'/'+fatura.pagamento.data.slice(5,7):''}</span><button onclick="Cards.undoFaturaPagamento('${c.id}','${fatura.pagamento.id}')" title="Desfazer pagamento">↺</button></div>`
       : (fatura.total>0 ? `<div class="installment-row"><span>Fatura de ${monthLabel(S.month.y,S.month.m)}: <b style="color:#ef4444">${brl(fatura.total)}</b></span><span></span><span></span><span></span><button class="btn-outline btn-sm" onclick="Cards.payFatura('${c.id}')" style="width:auto;">Marcar fatura como paga</button></div>` : '');
     return `
-    <div class="card-entity">
+    <div class="card-entity" data-order-id="${esc(c.id)}">
       <div class="card-entity-head">
         <div class="cehl">
           <div class="bank-badge" style="background:${bankColor(c.banco)}">${esc((c.banco||'?')[0])}</div>
           <div class="info"><div>${esc(c.banco)}</div><div>Limite: ${c.limite?brl(c.limite):'não definido'} · Dívida total em cartão a partir de ${monthLabel(S.month.y,S.month.m)}: <b style="color:#ef4444">${brl(computeCardsDebtForCartao(c,S.month.y,S.month.m))}</b> · ${active.length} compra(s) ativa(s)</div></div>
         </div>
         <div style="display:flex;gap:8px;">
+          ${showReorderCartoes ? OrderPreferences.reorderRowControlsHTML('cartoes', c.id, c.banco, cartoesNaturalIds) : `
           <button class="btn-outline btn-sm" onclick="Cards.editCartao('${c.id}')">✎ Editar cartão</button>
-          <button class="btn-outline btn-sm" onclick="Cards.addParcela('${c.id}')">+ Compra parcelada</button>
+          <button class="btn-outline btn-sm" onclick="Cards.addParcela('${c.id}')">+ Compra parcelada</button>`}
         </div>
       </div>
       ${faturaHTML}
-      <div class="installment-row ih"><span>Descrição</span><span>Valor</span><span>Parcela</span><span>Dia</span><span></span></div>
+      <div class="installment-row ih"><span>Descrição</span><span>Valor</span><span>Parcela</span><span>Dia</span><span>${faturaSortBtn}</span></div>
       ${activeRows || '<div class="empty-note">Nenhuma parcela ativa neste mês.</div>'}
       ${inactive.length? `<details><summary>Ver compras fora deste período (${inactive.length})</summary>${inactiveRows}</details>` : ''}
     </div>`;
@@ -97,13 +149,17 @@ function renderCards(){
       <button onclick="Cards.editTransferencia('${t.id}')">✎</button>
     </div>`).join('');
 
+  const orgFilterNoticeContas = orgActive && !canReorderNow ? OrderPreferences.filterBlockedNoticeHTML() : '';
+  const orgFilterNoticeCartoes = orgActive && !canReorderNow ? OrderPreferences.filterBlockedNoticeHTML() : '';
   return `
-    <div class="toolbar"><div class="toolbar-left">Bancos e contas</div><button class="btn-outline" onclick="Cards.addConta()">+ Adicionar conta</button></div>
+    <div class="toolbar"><div class="toolbar-left">Bancos e contas</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">${window.OrderPreferences?OrderPreferences.sortSelectHTML('contas'):''}<button class="btn-outline" onclick="Cards.addConta()">+ Adicionar conta</button></div></div>
     <p style="font-size:11.5px;color:var(--muted-2);margin:-6px 0 12px;">Cadastre aqui cada banco/conta. Eles ficam disponíveis para vincular em receitas, despesas, parcelas, investimentos, metas, agenda, reserva e filtro por banco.</p>
-    ${accRows || '<div class="empty-note" style="margin-bottom:20px;">Nenhuma conta cadastrada ainda.</div>'}
-    <div class="toolbar" style="margin-top:10px;"><div class="toolbar-left">Cartões de crédito</div><button class="btn-outline" onclick="Cards.addCartao()">+ Adicionar cartão</button></div>
+    ${orgFilterNoticeContas}
+    <div data-order-list="contas" style="display:contents;">${accRows || '<div class="empty-note" style="margin-bottom:20px;">Nenhuma conta cadastrada ainda.</div>'}</div>
+    <div class="toolbar" style="margin-top:10px;"><div class="toolbar-left">Cartões de crédito</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">${window.OrderPreferences?OrderPreferences.sortSelectHTML('cartoes'):''}<button class="btn-outline" onclick="Cards.addCartao()">+ Adicionar cartão</button></div></div>
     <p style="font-size:11.5px;color:var(--muted-2);margin:-6px 0 12px;">Compras no cartão viram parcelas dentro da fatura e não mexem no saldo do banco. O saldo só muda quando você marcar a fatura como paga.</p>
-    ${cardBlocks || '<div class="empty-note">Nenhum cartão cadastrado ainda.</div>'}
+    ${orgFilterNoticeCartoes}
+    <div data-order-list="cartoes" style="display:contents;">${cardBlocks || '<div class="empty-note">Nenhum cartão cadastrado ainda.</div>'}</div>
     <div class="toolbar" style="margin-top:18px;"><div class="toolbar-left">Boletos</div><button class="btn-outline" onclick="Cards.addBoleto()">+ Adicionar boleto</button></div>
     <p style="font-size:11.5px;color:var(--muted-2);margin:-6px 0 12px;">Use para boletos parcelados, carnês, financiamentos curtos ou cobranças recorrentes. Entram como dívida no patrimônio separado do cartão de crédito.</p>
     ${boletoBlocks || '<div class="empty-note">Nenhum boleto cadastrado ainda.</div>'}

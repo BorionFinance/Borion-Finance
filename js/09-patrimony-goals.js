@@ -133,7 +133,12 @@ const Patr = {
 
 /* ---------------- Reserva (dentro de Patrimônio) ---------------- */
 function reservaFmtDate(iso){ if(!iso) return ''; const parts=String(iso).slice(0,10).split('-'); return parts.length===3 ? parts[2]+'/'+parts[1]+'/'+parts[0] : esc(iso); }
-function reservaBoxesFiltered(){ return ((S.data.reservas&&S.data.reservas.boxes)||[]).filter(r=>bankMatches(r.banco)); }
+function reservaBoxesFiltered(){
+  const base = ((S.data.reservas&&S.data.reservas.boxes)||[]).filter(r=>bankMatches(r.banco));
+  /* Organização visual (opcional): aplica a ordem personalizada/A-Z/Z-A/recentes salva pelo
+     usuário. Só muda a ordem de exibição — nunca altera os dados da reserva nem seu saldo. */
+  return window.OrderPreferences ? OrderPreferences.applyOrder('reservas', base, {idKey:'id', labelKey:'nome'}) : base;
+}
 function reservaMovesFiltered(){
   const ids = new Set(reservaBoxesFiltered().map(r=>r.id));
   return ((S.data.reservas&&S.data.reservas.moves)||[]).filter(m=>ids.has(m.boxId) || bankMatches(m.banco)).sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))).slice(0,12);
@@ -235,13 +240,20 @@ function renderReservasPanel(){
   const boxes = reservaBoxesFiltered();
   const total = sumBy(boxes,'valorAtual');
   const moves = reservaMovesFiltered();
+  /* Organização visual (opcional): mesma regra das outras listas — alça/setas só aparecem
+     com o modo Organizar ligado e sem filtro de banco ativo (a ordem salva é sempre da
+     lista completa de reservas do perfil, nunca de uma lista já filtrada). */
+  const orgActive = !!(window.OrderPreferences && OrderPreferences.active);
+  const canReorderNow = !!(window.OrderPreferences && OrderPreferences.canReorderNow());
+  const showReorder = orgActive && canReorderNow;
+  const boxNaturalIds = boxes.map(r=>r.id);
   const boxCards = boxes.map(r=>{
     const temMeta = Number(r.valorMeta)>0;
     const pct = temMeta ? Math.min(100, Math.round(Number(r.valorAtual||0)/Number(r.valorMeta||0)*100)) : 0;
     const mt = r.metaId ? (S.data.metas||[]).find(x=>x.id===r.metaId) : null;
     const metaPct = mt && Number(mt.valorMeta)>0 ? Math.min(100, Math.round(Number(mt.valorAtual||0)/Number(mt.valorMeta||0)*100)) : 0;
     const metaHTML = mt ? `<div class="reserva-foot" style="margin-top:4px;"><span>${esc(mt.emoji||'◇')} Meta de patrimônio: ${brl(mt.valorAtual||0)} de ${brl(mt.valorMeta||0)}</span><span style="font-weight:800;color:${metaPct>=100?'#22c55e':'var(--gold-bright)'}">${metaPct}%</span></div>` : '';
-    return `<div class="reserva-card">
+    return `<div class="reserva-card" data-order-id="${esc(r.id)}">
       <div class="reserva-head"><div><div class="reserva-title"><span class="dot" style="background:${esc(r.cor||'var(--gold)')}"></span>${esc(r.nome)}</div><div class="reserva-meta">${esc(r.banco||'Sem banco')} ${r.categoria?'· '+esc(r.categoria):''}</div></div>${reservaStatusPill(r.status)}</div>
       <div class="reserva-value" style="color:${esc(r.corValor||'var(--gold-bright)')};">${brl(Number(r.valorAtual)||0)}</div>
       ${temMeta?`
@@ -249,9 +261,10 @@ function renderReservasPanel(){
       <div class="reserva-foot"><span>Meta: ${brl(r.valorMeta)}</span><span>${pct}%</span></div>` : `
       <div class="reserva-foot"><span>Sem meta definida</span><span></span></div>`}
       ${metaHTML}
-      <div class="reserva-actions"><button onclick="Reservas.move('${r.id}')">Movimentar</button><button onclick="Reservas.viewExtrato('${r.id}')">Ver extrato</button><button onclick="Reservas.edit('${r.id}')">Editar</button></div>
+      ${showReorder ? OrderPreferences.reorderRowControlsHTML('reservas', r.id, r.nome, boxNaturalIds) : `<div class="reserva-actions"><button onclick="Reservas.move('${r.id}')">Movimentar</button><button onclick="Reservas.viewExtrato('${r.id}')">Ver extrato</button><button onclick="Reservas.edit('${r.id}')">Editar</button></div>`}
     </div>`;
   }).join('');
+  const orgFilterNotice = orgActive && !canReorderNow ? OrderPreferences.filterBlockedNoticeHTML() : '';
   const moveRows = moves.map(m=>{
     const box = (S.data.reservas.boxes||[]).find(r=>r.id===m.boxId);
     const positive = Reservas.POSITIVE_TYPES.includes(m.tipo);
@@ -261,8 +274,9 @@ function renderReservasPanel(){
     return `<tr><td>${reservaFmtDate(m.data)}</td><td>${esc(box?box.nome:'Reserva removida')}</td><td>${esc(m.tipo)}</td><td>${esc(m.banco||'')}</td><td class="${positive||isAdjust?'val-pos':negative?'val-neg':''}">${positive?'+ ':negative?'- ':''}${brl(m.valor)}</td><td>${esc(m.descricao||'')}${linked}</td><td style="text-align:right;white-space:nowrap;"><button class="ledit" onclick="Reservas.editMove('${m.id}')">✎</button><button class="ledit danger-mini" onclick="Reservas.deleteMove('${m.id}')">×</button></td></tr>`;
   }).join('');
   return `<div class="panel-box reservas-panel">
-    <div class="toolbar"><div class="toolbar-left">◈ <span class="lmeta">Reservado: ${brl(total)}</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn-outline" onclick="Reservas.add()">+ Nova reserva</button><button class="btn-outline" onclick="Reservas.move()">+ Movimentação</button></div></div>
-    ${boxes.length?`<div class="reserva-grid">${boxCards}</div>`:'<div class="empty-note">Nenhuma reserva cadastrada ainda. Use para separar reserva de emergência, viagem, manutenção, impostos e objetivos.</div>'}
+    <div class="toolbar"><div class="toolbar-left">◈ <span class="lmeta">Reservado: ${brl(total)}</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">${window.OrderPreferences?OrderPreferences.sortSelectHTML('reservas'):''}<button class="btn-outline" onclick="Reservas.add()">+ Nova reserva</button><button class="btn-outline" onclick="Reservas.move()">+ Movimentação</button></div></div>
+    ${orgFilterNotice}
+    ${boxes.length?`<div class="reserva-grid" data-order-list="reservas">${boxCards}</div>`:'<div class="empty-note">Nenhuma reserva cadastrada ainda. Use para separar reserva de emergência, viagem, manutenção, impostos e objetivos.</div>'}
     <div class="reserva-extrato-title">Extrato recente das reservas</div>
     ${moveRows?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Reserva</th><th>Tipo</th><th>Banco</th><th>Valor</th><th>Descrição</th><th></th></tr></thead><tbody>${moveRows}</tbody></table></div>`:'<div class="empty-note">Nenhuma movimentação registrada ainda.</div>'}
   </div>`;

@@ -31,6 +31,17 @@ function navIconSVG(key){
 }
 
 
+/* V6.3.0 — link de conta mostrado no rodapé do Gate local. Se já tem login Supabase,
+   mostra "Sair da conta" (comportamento de sempre). Se está no modo local (sem conta),
+   mostra "Entrar com uma conta na nuvem" — único jeito de sair do modo local sem mexer
+   em nada além da tela de login já existente (CloudAuth). Nunca aparece as duas juntas. */
+function gateCloudLinkHTML(){
+  if(window.CloudStorage && CloudStorage.user){
+    return `<div style="text-align:center;margin-top:6px;"><button class="link-btn" id="gate_signout">Sair da conta</button></div>`;
+  }
+  return `<div style="text-align:center;margin-top:6px;"><button class="link-btn" id="gate_use_cloud">Entrar com uma conta na nuvem</button></div>`;
+}
+
 /* ---------------- RENDER: GATE ---------------- */
 function renderGate(){
   const root = $('#root');
@@ -56,6 +67,7 @@ function renderGate(){
       <p class="gate-title">Bem-vindo!</p>
       <p class="gate-sub">Crie seu primeiro perfil para começar a usar o app.</p>
       <button class="btn btn-primary btn-block" id="gate_new">+ Criar meu perfil</button>
+      ${gateCloudLinkHTML()}
     `;
   } else if(profiles.length===1){
     const p = profiles[0];
@@ -67,7 +79,7 @@ function renderGate(){
       <div class="field-check"><input type="checkbox" id="gate_remember"/> <label style="margin:0" for="gate_remember">Manter conectado neste dispositivo</label></div>` : ''}
       <button class="btn btn-primary btn-block" id="gate_enter_single" data-id="${p.id}">Entrar</button>
       <div style="text-align:center;margin-top:14px;"><button class="link-btn" id="gate_new">+ Criar outro perfil</button></div>
-      ${(window.CloudStorage && CloudStorage.user) ? `<div style="text-align:center;margin-top:6px;"><button class="link-btn" id="gate_signout">Sair da conta</button></div>` : ''}
+      ${gateCloudLinkHTML()}
     `;
   } else {
     const chips = profiles.map(p=>`
@@ -86,7 +98,7 @@ function renderGate(){
       <p class="gate-sub">Selecione seu perfil para continuar.</p>
       <div class="profile-grid">${chips}${addChip}</div>
       <p class="limit-note">${profiles.length}/5 perfis criados${profiles.length>=5?' — máximo atingido':''}</p>
-      ${(window.CloudStorage && CloudStorage.user) ? `<div style="text-align:center;margin-top:6px;"><button class="link-btn" id="gate_signout">Sair da conta</button></div>` : ''}
+      ${gateCloudLinkHTML()}
     `;
   }
 
@@ -107,6 +119,11 @@ function renderGate(){
   if(enterBtn) enterBtn.onclick = async ()=>{ await Gate.tryEnter(S.gate.selectedProfileId); };
   const signOutBtn = $('#gate_signout');
   if(signOutBtn) signOutBtn.onclick = async ()=>{ if(window.cloudLogout) await cloudLogout(); };
+  const useCloudBtn = $('#gate_use_cloud');
+  if(useCloudBtn) useCloudBtn.onclick = ()=>{
+    setStorageMode('cloud');
+    if(window.CloudAuth){ CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info=''; CloudAuth.render(); }
+  };
 
   if(S.gate.mode==='createProfile') wireCreateProfileForm();
 }

@@ -175,6 +175,14 @@ window.addEventListener('pagehide', ()=> ExitSaveGuard.finalSaveSilently('pagehi
       }
       return;
     }
+    // V6.3.0 — se a pessoa já escolheu "usar sem conta" antes, pula a tela de login
+    // Supabase e vai direto pro seletor de perfil local. Só ativa depois de uma escolha
+    // explícita (ver botão "Usar sem conta" em CloudAuth.render); sem isso, comportamento
+    // de sempre (mostrar CloudAuth) continua idêntico.
+    if(getStorageMode()==='offline'){
+      enterLocalMode();
+      return;
+    }
     CloudAuth.render();
   });
 })();

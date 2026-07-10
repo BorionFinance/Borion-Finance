@@ -8,6 +8,18 @@ const BORION_CLOUD_META = 'borion_cloud_meta_v2';
 const BORION_CLOUD_PENDING = 'borion_cloud_pending_v2';
 const BORION_DELETE_PENDING = 'borion_delete_account_pending_v1';
 
+/* V6.3.0 — protege perfis criados no modo local (sem conta) de serem apagados da lista
+   (LS_PROFILES) quando essa pessoa loga numa conta Supabase no mesmo navegador. Só
+   preserva perfis com cloud !== true que ainda não estão na lista da nuvem — nunca
+   mistura dados de dentro dos perfis, só evita que o registro do perfil local (e o
+   acesso aos dados dele) desapareça do seletor. */
+function mergeLocalAndCloudProfiles(cloudList){
+  const cloud = cloudList || [];
+  const cloudIds = new Set(cloud.map(p=>p.id));
+  const existingLocal = (typeof getProfiles==='function' ? (getProfiles()||[]) : []).filter(p=> p && !p.cloud && !cloudIds.has(p.id));
+  return [...cloud, ...existingLocal];
+}
+
 function cloudSafeClone(obj){ try{return JSON.parse(JSON.stringify(obj));}catch(e){return obj;} }
 function cloudNowISO(){ return new Date().toISOString(); }
 const BORION_PROFILE_COLUMNS_BASE = 'id,name,avatar_color,avatar_image,created_at,updated_at';
@@ -297,7 +309,12 @@ const CloudStorage = {
       const fresh = wantedId ? list.find(p=>p.id===wantedId) : null;
       if(fresh) S.currentProfile=fresh;
     }
-    setProfiles(list);
+    // V6.3.0 — persiste nuvem + preserva perfis locais (modo offline) que ainda não
+    // estão nesta conta. S.profiles (acima) continua só com a lista da nuvem, pra não
+    // misturar visualmente no seletor durante a sessão logada — só o storage local
+    // (LS_PROFILES) guarda os dois, pra não perder o perfil local quando essa pessoa
+    // sair da conta ou abrir o Borion offline de novo.
+    setProfiles(mergeLocalAndCloudProfiles(list));
     cloudActionLog('RUNTIME_STATE','PROFILES_APPLIED',{count:list.length, activeProfileId:(typeof S!=='undefined'&&S.currentProfile)?S.currentProfile.id:this.activeProfileId, profileIds:list.map(p=>p.id)});
     return list;
   },
@@ -982,12 +999,13 @@ const CloudAuth={
     const root=document.getElementById('root'); const isCreate=this.mode==='create', isReset=this.mode==='reset', isChange=this.mode==='changePassword';
     const passwordHTML = !isReset ? passwordInputWrapHTML({id:'cloud_password',label:isChange?'Nova senha':'Senha',autocomplete:isChange?'new-password':(isCreate?'new-password':'current-password'),placeholder:'Mínimo 6 caracteres'}) : '';
     const password2HTML = isChange ? passwordInputWrapHTML({id:'cloud_password2',label:'Repetir nova senha',autocomplete:'new-password',placeholder:'Repita a nova senha'}) : '';
-    root.innerHTML=`<div class="gate-wrap cloud-login-wrap"><div class="gate-box"><div class="gate-logo"><img src="borion-emblem.png" alt="Borion Finance"/><div class="appname">Borion Finance</div></div><div class="gate-card cloud-card"><p class="gate-title">${isCreate?'Criar conta':isReset?'Recuperar senha':isChange?'Criar nova senha':'Entrar no Borion'}</p><p class="gate-sub">${isCreate?'Crie sua conta para sincronizar celular e computador.':isReset?'Informe seu e-mail para receber o link de recuperação.':isChange?'Defina sua nova senha para finalizar a recuperação.':'Use seu e-mail e senha para carregar seus perfis financeiros.'}</p>${this.error?`<p class="gate-error">${esc(this.error)}</p>`:''}${this.info?`<p class="gate-info">${esc(this.info)}</p>`:''}${isCreate?`<div class="field"><label>Nome</label><input type="text" id="cloud_name" autocomplete="name"></div>`:''}${!isChange?`<div class="field"><label>E-mail</label><input type="email" id="cloud_email" autocomplete="email"></div>`:''}${passwordHTML}${password2HTML}<button class="btn btn-primary btn-block" id="cloud_submit">${isCreate?'Criar conta':isReset?'Enviar link':isChange?'Salvar nova senha':'Entrar'}</button><div class="cloud-actions">${!isCreate&&!isReset&&!isChange?`<button class="link-btn" id="cloud_create">Criar conta</button><button class="link-btn" id="cloud_reset">Esqueci minha senha</button>`:''}${isCreate||isReset?`<button class="link-btn" id="cloud_back">Voltar para login</button>`:''}${isChange?`<button class="link-btn" id="cloud_back_app">Entrar depois</button>`:''}</div><div class="cloud-note">Cada conta pode ter vários perfis financeiros. Os dados ficam em cache local e sincronizam com o Supabase.</div></div></div></div>`;
+    root.innerHTML=`<div class="gate-wrap cloud-login-wrap"><div class="gate-box"><div class="gate-logo"><img src="borion-emblem.png" alt="Borion Finance"/><div class="appname">Borion Finance</div></div><div class="gate-card cloud-card"><p class="gate-title">${isCreate?'Criar conta':isReset?'Recuperar senha':isChange?'Criar nova senha':'Entrar no Borion'}</p><p class="gate-sub">${isCreate?'Crie sua conta para sincronizar celular e computador.':isReset?'Informe seu e-mail para receber o link de recuperação.':isChange?'Defina sua nova senha para finalizar a recuperação.':'Use seu e-mail e senha para carregar seus perfis financeiros.'}</p>${this.error?`<p class="gate-error">${esc(this.error)}</p>`:''}${this.info?`<p class="gate-info">${esc(this.info)}</p>`:''}${isCreate?`<div class="field"><label>Nome</label><input type="text" id="cloud_name" autocomplete="name"></div>`:''}${!isChange?`<div class="field"><label>E-mail</label><input type="email" id="cloud_email" autocomplete="email"></div>`:''}${passwordHTML}${password2HTML}<button class="btn btn-primary btn-block" id="cloud_submit">${isCreate?'Criar conta':isReset?'Enviar link':isChange?'Salvar nova senha':'Entrar'}</button><div class="cloud-actions">${!isCreate&&!isReset&&!isChange?`<button class="link-btn" id="cloud_create">Criar conta</button><button class="link-btn" id="cloud_reset">Esqueci minha senha</button><button class="link-btn" id="cloud_use_local">Usar sem conta (só neste dispositivo)</button>`:''}${isCreate||isReset?`<button class="link-btn" id="cloud_back">Voltar para login</button>`:''}${isChange?`<button class="link-btn" id="cloud_back_app">Entrar depois</button>`:''}</div><div class="cloud-note">Cada conta pode ter vários perfis financeiros. Os dados ficam em cache local e sincronizam com o Supabase.</div>${(!isCreate&&!isReset&&!isChange&&typeof getProfiles==='function'&&(getProfiles()||[]).some(p=>p&&!p.cloud))?`<div class="cloud-note">Você já tem perfil(is) salvos só neste dispositivo. Eles continuam aqui e voltam a aparecer quando você usar "sem conta" ou sair desta conta.</div>`:''}</div></div></div>`;
     const submit=document.getElementById('cloud_submit'); if(submit) submit.onclick=()=>this.submit();
     const c=document.getElementById('cloud_create'); if(c) c.onclick=()=>{this.mode='create';this.error='';this.info='';this.render();};
     const r=document.getElementById('cloud_reset'); if(r) r.onclick=()=>{this.mode='reset';this.error='';this.info='';this.render();};
     const b=document.getElementById('cloud_back'); if(b) b.onclick=()=>{this.mode='login';this.error='';this.info='';this.render();};
     const ba=document.getElementById('cloud_back_app'); if(ba) ba.onclick=()=>enterCloudUser();
+    const ul=document.getElementById('cloud_use_local'); if(ul) ul.onclick=()=>{ setStorageMode('offline'); enterLocalMode(); };
     ['cloud_email','cloud_password','cloud_password2','cloud_name'].forEach(id=>{const el=document.getElementById(id); if(el) el.addEventListener('keydown',e=>{if(e.key==='Enter') this.submit();});});
   },
   async submit(){
@@ -1004,6 +1022,16 @@ const CloudAuth={
     }catch(e){ this.error=translateSupabaseError(e&&e.message?e.message:String(e)); this.render(); }
   }
 };
+
+/* V6.3.0 — par local de enterCloudUser(): entra no Borion usando só os perfis já
+   salvos neste dispositivo (S.profiles/LS_PROFILES), sem chamar nada do Supabase.
+   Usado pelo bypass do boot() e pelo link "Usar sem conta" da tela de login. */
+function enterLocalMode(){
+  S.data = null;
+  S.currentProfile = null;
+  S.gate = {mode:'list', error:''};
+  renderGate();
+}
 
 async function enterCloudUser(){
   if(!CloudStorage.user){ CloudAuth.render(); return; }

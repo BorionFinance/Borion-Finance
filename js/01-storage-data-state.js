@@ -6,6 +6,13 @@ const LS_PROFILES = 'mc_profiles';
 const LS_SESSION = 'mc_session';
 const LS_DATA_PREFIX = 'mc_data_';
 const LS_EXIT_SAVE_PREFIX = 'borion_exit_save_confirm_';
+/* V6.3.0 — modo de armazenamento escolhido pela pessoa: 'offline' (usar sem conta,
+   só neste dispositivo) ou 'cloud' (login Supabase). null = ainda não escolheu, mantém
+   o comportamento de sempre mostrar a tela de login Supabase primeiro. Ver storageProvider
+   em js/01b-storage-provider.js e o bypass em boot() (14-events-boot-pwa.js). */
+const LS_STORAGE_MODE = 'borion_storage_mode';
+function getStorageMode(){ return readJSON(LS_STORAGE_MODE, null); }
+function setStorageMode(mode){ writeJSON(LS_STORAGE_MODE, mode); }
 
 const APP_NAME = 'Borion Finance';
 /* V5.36.0 — id fixo da conta "Carteira" (dinheiro físico). Nunca muda entre migrações,
@@ -551,6 +558,33 @@ function migrateData(d){
   })();
   return d;
 }
+/* V6.3.0 — validação central de um JSON de backup/importação do Borion, antes de
+   qualquer tela chamar handleImport(). Não substitui handleImport() nem sua lógica de
+   escolha (novo perfil/substituir/mesclar) — só garante, cedo, que o arquivo tem o
+   mínimo necessário pra não gerar um perfil quebrado. Retorna {valid, errors[]}. */
+const BORION_JSON_TYPES = ['borion-account-backup','multicap-full-backup','borion-profile-backup','multicap-profile-backup'];
+function validateBorionJson(obj){
+  const errors = [];
+  if(!obj || typeof obj!=='object' || Array.isArray(obj)){
+    return {valid:false, errors:['Arquivo vazio, inválido ou corrompido.']};
+  }
+  if(!obj.type || !BORION_JSON_TYPES.includes(obj.type)){
+    errors.push('Formato não reconhecido: o campo "type" está ausente ou não é um formato de backup do Borion.');
+    return {valid:false, errors};
+  }
+  if(obj.type==='borion-account-backup' || obj.type==='multicap-full-backup'){
+    if(!Array.isArray(obj.profiles) || !obj.profiles.length) errors.push('Backup completo sem nenhum perfil dentro de "profiles".');
+    if(!obj.dataByProfile || typeof obj.dataByProfile!=='object' || Array.isArray(obj.dataByProfile)) errors.push('Backup completo sem dados de perfil em "dataByProfile".');
+    else if(Array.isArray(obj.profiles)){
+      const missing = obj.profiles.filter(p=>p && p.id && !(p.id in obj.dataByProfile));
+      if(missing.length) errors.push('Existem '+missing.length+' perfil(is) em "profiles" sem dados correspondentes em "dataByProfile".');
+    }
+  } else if(obj.type==='borion-profile-backup' || obj.type==='multicap-profile-backup'){
+    if(!obj.data || typeof obj.data!=='object' || Array.isArray(obj.data)) errors.push('Backup de perfil sem dados em "data".');
+  }
+  return {valid: errors.length===0, errors};
+}
+
 function allBankNames(){
   const names = new Set();
   (S.data.contas||[]).forEach(c=>{ if(c.nome) names.add(c.nome); });

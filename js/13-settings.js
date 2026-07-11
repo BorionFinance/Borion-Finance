@@ -32,8 +32,8 @@ function renderSettings(){
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
   else if(S.settingsTab==='cloud') content = renderSettingsCloud();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.3.0 • Modo offline (sem Supabase)</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
-<div><strong>Versão:</strong> 6.3.0</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.4.0 • Google Drive (FASE 3)</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
+<div><strong>Versão:</strong> 6.4.0</div>
 <div><strong>Lançamento:</strong> 09/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -76,28 +76,6 @@ function renderSettingsDashboard(){
     <div class="dashboard-toggle-grid">${cards}</div>
     <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.resetDashboardWidgets()">Restaurar dashboard padrão</button><button class="btn-outline btn-sm" onclick="S.view='overview';renderApp();">Ver visão geral</button></div>`;
 }
-function renderSettingsProfiles(){
-  const p = S.currentProfile;
-  const profilesRows = S.profiles.map(pr=>`
-    <div class="profile-row">
-      ${profileAvatarHTML(pr)}
-      <div class="info"><div class="n">${esc(pr.name)} ${pr.id===p.id?'(você)':''}</div><div class="e">${esc(pr.email||'sem e-mail')} · ${pr.passwordHash?'com senha':'sem senha'}</div></div>
-      <button class="btn-outline btn-sm" onclick="Settings.deleteProfile('${pr.id}')">Excluir</button>
-    </div>`).join('');
-  return `
-    <div class="settings-section settings-hero-section"><h3>Perfil atual</h3><p class="desc">Gerencie nome, e-mail, senha e aparência do avatar.</p></div>
-    <div class="profile-editor-card">
-      <div class="profile-editor-avatar">${profileAvatarHTML(p,'profile-avatar-xl')}<button class="btn-outline btn-sm" onclick="document.getElementById('pf_avatar_file').click()">Trocar foto</button><button class="btn-outline btn-sm" onclick="Settings.removeAvatarImage()">Remover foto</button></div>
-      <div class="profile-editor-fields">
-        <div class="field"><label>Nome</label><input type="text" id="pf_name" value="${esc(p.name)}"/></div>
-        <div class="field"><label>E-mail</label><input type="email" id="pf_email" value="${esc(p.email||'')}"/></div>
-        <div class="field"><label>Cor do fundo do avatar</label><input type="color" id="pf_avatar_color" value="${esc(profileAvatarBg(p))}"/></div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="Settings.savePersonal()">Salvar perfil</button>${p.passwordHash ? `<button class="btn-outline btn-sm" onclick="Settings.changePassword()">Alterar senha</button><button class="btn-outline btn-sm" onclick="Settings.removePassword()">Remover senha</button>` : `<button class="btn-outline btn-sm" onclick="Settings.setPasswordFlow()">Definir senha</button>`}</div>
-        <input type="file" id="pf_avatar_file" accept="image/*" style="display:none" onchange="Settings.readAvatarFile(this)">
-      </div>
-    </div>
-    <div class="settings-section"><h3>Gerenciar perfis (${S.profiles.length}/5)</h3><p class="desc">Crie, exclua ou importe perfis. Cada perfil mantém seus próprios dados.</p>${profilesRows}<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">${S.profiles.length<5 ? `<button class="btn-outline btn-sm" onclick="logout()">+ Criar novo perfil</button>` : ''}<button class="btn-outline btn-sm" onclick="document.getElementById('import_file').click()">Importar backup/perfil</button></div><input type="file" id="import_file" accept="application/json" style="display:none;"></div>`;
-}
 function renderSettingsCategories(){
   ensureCategoryColors();
   const catBlock = (typeKey, typeLabel) => {
@@ -126,37 +104,7 @@ function renderSettingsPersonalization(){
     <div class="info-box">A personalização de cores dos ícones continua fora da tela para manter o visual premium e consistente.</div>`;
 }
 
-function renderSettingsCloud(){
-  const cloud = window.CloudStorage;
-  const user = cloud && cloud.user;
-  const pending = cloud && cloud.pendingInfo ? cloud.pendingInfo() : null;
-  const last = cloud && cloud.lastSyncAt ? new Date(cloud.lastSyncAt).toLocaleString('pt-BR') : 'Ainda não sincronizou nesta sessão';
-  const status = cloud ? (cloud.statusText || cloud.status || 'Indisponível') : 'Módulo de nuvem não carregado';
-  const pendingTxt = pending ? `Existe sincronização pendente desde ${new Date(pending.savedAt).toLocaleString('pt-BR')}. Motivo: ${esc(pending.reason||'pendente')}` : 'Nenhum dado pendente no cache local.';
-  return `
-    <div class="settings-section settings-hero-section"><h3>Borion Cloud</h3><p class="desc">Login, senha, sincronização e segurança dos dados na nuvem.</p></div>
-    <div class="settings-section"><h3>Status da nuvem</h3><p class="desc"><strong>Conta:</strong> ${user?esc(user.email||'logado'):'não logado'}<br><strong>Status:</strong> ${esc(status)}<br><strong>Última sincronização:</strong> ${esc(last)}<br><strong>Cache local:</strong> ${pendingTxt}</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="cloudForceSync()">Sincronizar agora</button><button class="btn-outline btn-sm" onclick="cloudChangePasswordFromSettings()">Alterar senha da nuvem</button><button class="btn-outline btn-sm" onclick="cloudLogout()">Sair da conta</button></div></div>
-    <div class="info-box">Se a internet cair, o Borion salva no cache local e tenta enviar para o Supabase automaticamente quando a conexão voltar. Se houver pendência, o app avisa ao tentar fechar a página.</div>
-  `;
-}
 
-function renderSettingsBackup(){
-  let backupFolderBlock;
-  if(!FS_ACCESS_SUPPORTED){
-    backupFolderBlock = `<p class="desc">Seu navegador não permite escolher uma pasta fixa para backups automáticos. Use backup manual abaixo.</p>`;
-  } else if(BackupFS.needsReconnect){
-    backupFolderBlock = `<div class="reconnect-banner"><span>A pasta de backups precisa ser reautorizada após reabrir o app.</span><button class="btn-outline btn-sm" onclick="BackupFS.reconnect()">Reconectar pasta</button></div>`;
-  } else if(BackupFS.dirHandle){
-    backupFolderBlock = `<div class="gold-box">Pasta de backups configurada. O app salva backups automáticos dentro da subpasta <b>Backups</b>.</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;"><button class="btn-outline btn-sm" onclick="BackupFS.choose()">Trocar pasta</button><button class="btn-outline btn-sm" onclick="BackupFS.disconnect()">Desconectar pasta</button></div>`;
-  } else {
-    backupFolderBlock = `<p class="desc">Escolha uma pasta para o app salvar backups automáticos. Dica: use uma pasta dentro do Google Drive sincronizado.</p><button class="btn btn-primary btn-sm" onclick="BackupFS.choose()">Escolher pasta de backups</button>`;
-  }
-  return `
-    <div class="settings-section settings-hero-section"><h3>Backups e portabilidade</h3><p class="desc">Leve seus dados para outro computador ou mantenha cópias seguras.</p></div>
-    <div class="settings-section"><h3>Pasta de backups automáticos</h3>${backupFolderBlock}</div>
-    <div class="settings-section"><h3>Backup manual</h3><p class="desc">Gere um backup a qualquer momento, importe backup antigo ou envie por e-mail.</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="BackupFS.manualBackupNow()">Gerar backup agora</button><button class="btn-outline" onclick="Settings.exportProfile()">Exportar só este perfil</button><button class="btn-outline" onclick="document.getElementById('import_file_backup').click()">Importar backup</button><button class="btn-outline" onclick="Settings.emailBackup()">Enviar por e-mail</button></div><input type="file" id="import_file_backup" accept="application/json" style="display:none;"><div class="info-box">Antes de importar, o app pergunta se você quer substituir ou importar como novo perfil.</div></div>
-    <div class="settings-section"><h3>Backups neste dispositivo</h3><p class="desc">Histórico de backups guardado só no navegador (IndexedDB) — funciona mesmo sem conta na nuvem, e mesmo sem internet.</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewLocalBackups()">Ver backups deste dispositivo</button></div></div>`;
-}
 const Settings = {
   setTab(tab){ S.settingsTab=tab; renderView(); },
   addCategory(typeKey){
@@ -228,6 +176,18 @@ function renderSettingsProfiles(){
 function renderSettingsCloud(){
   const cloud = window.CloudStorage;
   const user = cloud && cloud.user;
+  if(!user && window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){
+    // V6.4.0 — conectado via Google Drive (não Supabase): tela própria, sem os botões
+    // de "Sincronizar/Diagnóstico/Trocar senha" do Supabase (não fazem sentido aqui) e
+    // sem o texto de "modo local" (os dados NÃO ficam só neste dispositivo).
+    const gs = GoogleDriveProvider.getStatus();
+    return `
+    <div class="settings-section settings-hero-section"><h3>Google Drive</h3><p class="desc">Seus dados ficam salvos na pasta compartilhada do Google Drive, sincronizados automaticamente.</p></div>
+    <div class="settings-section"><h3>Status</h3><p class="desc"><strong>Conta:</strong> ${esc(gs.email||'')}<br><strong>Status:</strong> ${gs.pending?'Salvando alterações...':'Tudo sincronizado'}<br><strong>Perfil ativo:</strong> ${esc(S.currentProfile?S.currentProfile.name:'Nenhum')}</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="GoogleDriveProvider.syncNow()">Sincronizar agora</button><button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button><button class="btn-outline btn-sm" onclick="GoogleDriveProvider.disconnect();S.currentProfile=null;S.data=null;CloudAuth.mode='login';CloudAuth.error='';CloudAuth.info='';CloudAuth.render();">Sair da conta Google</button></div>
+    </div>
+    <div class="info-box">Se a internet cair, o Borion continua salvando neste dispositivo e envia pro Drive automaticamente quando a conexão voltar.</div>`;
+  }
   if(!user){
     // V6.3.0 — modo local (sem conta Supabase): a versão de baixo desta tela tem
     // botões como "Sincronizar agora", "Diagnóstico Supabase" e "Trocar senha da

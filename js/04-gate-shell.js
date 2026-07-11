@@ -39,6 +39,9 @@ function gateCloudLinkHTML(){
   if(window.CloudStorage && CloudStorage.user){
     return `<div style="text-align:center;margin-top:6px;"><button class="link-btn" id="gate_signout">Sair da conta</button></div>`;
   }
+  if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){
+    return `<div style="text-align:center;margin-top:6px;"><button class="link-btn" id="gate_signout_gdrive">Sair da conta Google (Drive)</button></div>`;
+  }
   return `<div style="text-align:center;margin-top:6px;"><button class="link-btn" id="gate_use_cloud">Entrar com uma conta na nuvem</button></div>`;
 }
 
@@ -119,6 +122,13 @@ function renderGate(){
   if(enterBtn) enterBtn.onclick = async ()=>{ await Gate.tryEnter(S.gate.selectedProfileId); };
   const signOutBtn = $('#gate_signout');
   if(signOutBtn) signOutBtn.onclick = async ()=>{ if(window.cloudLogout) await cloudLogout(); };
+  const signOutGdriveBtn = $('#gate_signout_gdrive');
+  if(signOutGdriveBtn) signOutGdriveBtn.onclick = ()=>{
+    GoogleDriveProvider.disconnect();
+    S.currentProfile=null; S.data=null;
+    CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info='';
+    CloudAuth.render();
+  };
   const useCloudBtn = $('#gate_use_cloud');
   if(useCloudBtn) useCloudBtn.onclick = ()=>{
     setStorageMode('cloud');
@@ -398,6 +408,8 @@ function renderView(){
       <div style="display:flex;gap:12px;align-items:center;">
         ${(window.CloudStorage && CloudStorage.user)
           ? `<button id="cloud_status_badge" class="cloud-status syncing" onclick="CloudStorage.syncNow()">Sincronizando...</button>`
+          : (window.GoogleDriveProvider && GoogleDriveProvider.isConnected())
+          ? `<button id="cloud_status_badge" class="cloud-status local" onclick="GoogleDriveProvider.syncNow()" title="Conectado ao Google Drive — ${esc(GoogleDriveAuth.user?GoogleDriveAuth.user.email:'')}">Google Drive${GoogleDriveProvider.dirty?' — salvando...':''}</button>`
           : `<button id="cloud_status_badge" class="cloud-status local" onclick="Nav.go('settings')" title="Sem conta na nuvem — dados salvos só neste dispositivo">Modo local</button>`}
         ${bankBtn}
         ${monthNav}

@@ -1,3 +1,34 @@
+## V6.4.0 — Google Drive (FASE 3 da migração) (10/07/2026)
+
+Primeira versão do armazenamento por Google Drive, no modelo "central" que você
+escolheu: cada pessoa entra com a própria conta Google; os dados ficam guardados numa
+pasta que você (dono do Drive) compartilha com o e-mail de cada uma. Nenhum backend
+extra, nenhuma senha/token compartilhado — a segurança é a do próprio Google Drive.
+
+- **Login "Entrar com Google (Drive)"** na tela de login, ao lado de "Usar sem conta".
+- **Primeira conexão**: abre o seletor nativo do Google (Picker) pra pessoa escolher a
+  pasta compartilhada. Depois disso, o ID da pasta fica salvo neste navegador — nunca
+  mais precisa abrir o seletor de novo.
+- **`current.json`** dentro da pasta: mesmo formato do backup completo que o app já usa
+  (`borion-account-backup`, `profiles[]` + `dataByProfile{}`) — continua suportando
+  vários perfis por conta, igual ao modelo Netflix que você descreveu.
+- **Sincronização automática**: qualquer alteração salva localmente (mesmo gancho que já
+  existe para o Supabase) também enfileira uma gravação no Drive, com debounce de 800ms.
+- **Reconexão silenciosa no boot**: se o token expirar, tenta renovar sem popup; se
+  falhar, mostra uma tela simples de reconectar (nunca trava o app).
+- Selo no topo do app e aba "Nuvem" em Configurações ganharam uma variante própria pro
+  Google Drive (antes só existiam variantes Supabase/local).
+
+**Isso ainda não tem**: histórico de backups dentro do Drive (pasta `backups/`),
+detecção de conflito por `modifiedTime` (duas pessoas editando ao mesmo tempo), e a
+tela de "nenhum dado encontrado, importar ou começar do zero" pra pasta vazia (hoje só
+cria um `current.json` vazio direto). Ficam pro próximo incremento, depois de validar
+que o básico (entrar → escolher pasta → ler/escrever) funciona de verdade.
+
+**Importante**: diferente do modo offline, essa parte só se prova testando ao vivo
+(OAuth, Picker e Drive API não dá pra simular sem navegador). Espere precisar de ajustes
+depois do primeiro teste real.
+
 ## V6.3.0 — Modo offline (Incremento 1 da migração pra sair do Supabase) (10/07/2026)
 
 Primeiro passo do plano de migração: dá pra abrir e usar o Borion **sem login no
@@ -46,7 +77,13 @@ patch da tela de backups foi parar silenciosamente na cópia morta e nunca apare
 Corrigido para editar a cópia que realmente roda. `renderSettingsProfiles` continua
 duplicada (não mexi, não relacionada a este incremento) — vale uma limpeza futura.
 
-## V6.0 — Refatoração da arquitetura financeira: Fluxo Financeiro x Transferências (09/07/2026)
+**Limpeza**: removidas as 3 cópias mortas (`renderSettingsProfiles`, `renderSettingsCloud`,
+`renderSettingsBackup`) do `13-settings.js`. Nenhuma removida tinha efeito — eram sempre
+sobrescritas pela segunda declaração — mas deixavam a próxima edição (minha ou sua)
+vulnerável ao mesmo tropeço.
+
+(OAuth, Picker e Drive API não dá pra simular sem navegador). Espere precisar de ajustes
+depois do primeiro teste real.
 
 Maior mudança conceitual do Borion desde o lançamento das Reservas. Antes, retirar dinheiro
 de uma reserva (cofrinho) exigia lançar uma Receita falsa para depois lançar a Despesa de

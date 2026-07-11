@@ -1,0 +1,350 @@
+/* Borion Finance — Google Drive Provider (V6.4.0, FASE 3 da migração)
+
+   Modelo "central" que você escolheu: cada pessoa entra com a PRÓPRIA conta Google
+   (login e token de acesso individuais, nada de segredo compartilhado). A primeira vez,
+   ela escolhe (via seletor nativo do Google — o "Picker") a pasta que você compartilhou
+   com o e-mail dela. Depois disso, o Borion guarda o ID dessa pasta neste navegador e
+   nunca mais precisa abrir o seletor — lê e escreve direto nela pela Drive API.
+
+   Isso É ADITIVO: ninguém que usa modo local ou conta Supabase é afetado. Só entra em
+   ação quando a pessoa escolhe "Entrar com Google (Drive)" ou quando STORAGE_MODE já
+   salvo for 'google_drive'.
+
+   Arquivo principal por pasta: current.json — o mesmo formato de "backup completo da
+   conta" que o app já usa (type: borion-account-backup, profiles[], dataByProfile{}).
+   Isso significa que o current.json de qualquer pessoa já é abrível/legível pelo botão
+   normal de "Importar backup" do app, mesmo fora do fluxo Google.
+
+   Autenticação: Google Identity Services (token client, OAuth 2.0 implícito) — só
+   pede o escopo drive.file (a pessoa só concede acesso à pasta que ela mesma abrir pelo
+   Picker, nunca ao Drive inteiro dela) + openid/email/profile só pra saber quem é quem.
+*/
+
+const GOOGLE_CLIENT_ID = '946105310952-gp143h81mm3704lrq3877hsie49njgak.apps.googleusercontent.com';
+const GOOGLE_API_KEY = 'AIzaSyAMm_8CtFg_YP2ssG4XaiBbOc7wuJFq7xs';
+const GOOGLE_PROJECT_NUMBER = '946105310952';
+const GOOGLE_DRIVE_SCOPES = 'openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/drive.file';
+
+const LS_GDRIVE_FOLDER_PREFIX = 'borion_gdrive_folder_'; // + googleSub -> folderId
+const LS_GDRIVE_USER = 'borion_gdrive_user'; // cache do último usuário Google {sub,email,name,picture}
+
+function gdriveReadFolderId(sub){ return localStorage.getItem(LS_GDRIVE_FOLDER_PREFIX + sub) || null; }
+function gdriveWriteFolderId(sub, id){ localStorage.setItem(LS_GDRIVE_FOLDER_PREFIX + sub, id); }
+function gdriveForgetFolderId(sub){ localStorage.removeItem(LS_GDRIVE_FOLDER_PREFIX + sub); }
+
+/* ---------------- Autenticação (Google Identity Services) ---------------- */
+const GoogleDriveAuth = {
+  tokenClient: null,
+  accessToken: null,
+  tokenExpiresAt: 0,
+  user: null, // {sub, email, name, picture}
+  _gisReady: false,
+  _gapiReady: false,
+
+  loadScript(src){
+    return new Promise((resolve, reject)=>{
+      if(document.querySelector(`script[src="${src}"]`)){ resolve(); return; }
+      const s = document.createElement('script');
+      s.src = src; s.async = true; s.defer = true;
+      s.onload = ()=>resolve();
+      s.onerror = ()=>reject(new Error('Falha ao carregar script do Google (' + src + '). Verifique sua internet.'));
+      document.head.appendChild(s);
+    });
+  },
+
+  async ensureLoaded(){
+    if(!this._gisReady){
+      await this.loadScript('https://accounts.google.com/gsi/client');
+      this._gisReady = true;
+    }
+    if(!this._gapiReady){
+      await this.loadScript('https://apis.google.com/js/api.js');
+      await new Promise((resolve)=>{ gapi.load('picker', resolve); });
+      this._gapiReady = true;
+    }
+  },
+
+  /* interactive=true abre popup de consentimento; false tenta renovar token em
+     silêncio (só funciona se a pessoa já autorizou antes nesta sessão do navegador). */
+  requestToken(interactive){
+    return new Promise((resolve, reject)=>{
+      this.tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: GOOGLE_DRIVE_SCOPES,
+        callback: (resp)=>{
+          if(resp.error){ reject(new Error('Google recusou o acesso: ' + resp.error)); return; }
+          this.accessToken = resp.access_token;
+          this.tokenExpiresAt = Date.now() + ((resp.expires_in || 3300) * 1000);
+          resolve(resp.access_token);
+        },
+        error_callback: (err)=>{ reject(new Error((err && err.message) || 'Login com Google cancelado ou falhou.')); }
+      });
+      this.tokenClient.requestAccessToken({ prompt: interactive ? 'consent' : '' });
+    });
+  },
+
+  async login(interactive){
+    await this.ensureLoaded();
+    await this.requestToken(interactive);
+    return await this.fetchUserInfo();
+  },
+
+  async ensureFreshToken(){
+    if(this.accessToken && Date.now() < this.tokenExpiresAt - 60000) return this.accessToken;
+    await this.ensureLoaded();
+    return await this.requestToken(false);
+  },
+
+  async fetchUserInfo(){
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: 'Bearer ' + this.accessToken }
+    });
+    if(!res.ok) throw new Error('Não foi possível confirmar a conta Google (status ' + res.status + ').');
+    const info = await res.json();
+    this.user = { sub: info.sub, email: info.email, name: info.name || info.email, picture: info.picture || '' };
+    writeJSON(LS_GDRIVE_USER, this.user);
+    return this.user;
+  },
+
+  signOut(){
+    if(this.accessToken){ try{ google.accounts.oauth2.revoke(this.accessToken, ()=>{}); }catch(e){} }
+    this.accessToken = null; this.tokenExpiresAt = 0; this.user = null;
+    localStorage.removeItem(LS_GDRIVE_USER);
+  }
+};
+
+/* ---------------- Chamadas cruas à Drive API ---------------- */
+const GoogleDriveFS = {
+  async authHeaders(){
+    const token = await GoogleDriveAuth.ensureFreshToken();
+    return { Authorization: 'Bearer ' + token };
+  },
+
+  async findChild(parentId, name, mimeType){
+    const safeName = name.replace(/'/g, "\\'");
+    let q = `'${parentId}' in parents and name='${safeName}' and trashed=false`;
+    if(mimeType) q += ` and mimeType='${mimeType}'`;
+    const url = 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=' + encodeURIComponent('files(id,name,modifiedTime,mimeType)');
+    const res = await fetch(url, { headers: await this.authHeaders() });
+    if(!res.ok) throw new Error('Falha ao consultar o Google Drive (status ' + res.status + ').');
+    const data = await res.json();
+    return (data.files && data.files[0]) || null;
+  },
+
+  async createFolder(parentId, name){
+    const res = await fetch('https://www.googleapis.com/drive/v3/files?fields=id,name', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, await this.authHeaders()),
+      body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] })
+    });
+    if(!res.ok) throw new Error('Falha ao criar pasta "' + name + '" no Google Drive.');
+    return await res.json();
+  },
+
+  async findOrCreateFolder(parentId, name){
+    const existing = await this.findChild(parentId, name, 'application/vnd.google-apps.folder');
+    if(existing) return existing;
+    return await this.createFolder(parentId, name);
+  },
+
+  async readFile(fileId){
+    const res = await fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media', { headers: await this.authHeaders() });
+    if(!res.ok) throw new Error('Falha ao ler arquivo do Google Drive (status ' + res.status + ').');
+    return await res.json();
+  },
+
+  async getFileMeta(fileId){
+    const res = await fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?fields=id,name,modifiedTime', { headers: await this.authHeaders() });
+    if(!res.ok) throw new Error('Falha ao consultar metadados do arquivo no Drive.');
+    return await res.json();
+  },
+
+  async createFile(parentId, name, obj){
+    const boundary = 'borion_' + Date.now();
+    const metadata = { name, parents: [parentId], mimeType: 'application/json' };
+    const body = '--' + boundary + '\r\n'
+      + 'Content-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(metadata) + '\r\n'
+      + '--' + boundary + '\r\n'
+      + 'Content-Type: application/json\r\n\r\n' + JSON.stringify(obj) + '\r\n'
+      + '--' + boundary + '--';
+    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'multipart/related; boundary=' + boundary }, await this.authHeaders()),
+      body
+    });
+    if(!res.ok) throw new Error('Falha ao criar arquivo "' + name + '" no Google Drive.');
+    return await res.json();
+  },
+
+  async updateFile(fileId, obj){
+    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files/' + fileId + '?uploadType=media&fields=id,name,modifiedTime', {
+      method: 'PATCH',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, await this.authHeaders()),
+      body: JSON.stringify(obj)
+    });
+    if(!res.ok) throw new Error('Falha ao salvar no Google Drive (status ' + res.status + ').');
+    return await res.json();
+  }
+};
+
+/* Abre o seletor nativo do Google ("Picker") pra pessoa escolher a pasta que foi
+   compartilhada com ela. Só roda na primeira conexão — depois o folderId fica salvo. */
+function openDriveFolderPicker(){
+  return new Promise((resolve, reject)=>{
+    const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+      .setSelectFolderEnabled(true)
+      .setIncludeFolders(true)
+      .setMimeTypes('application/vnd.google-apps.folder');
+    const picker = new google.picker.PickerBuilder()
+      .setTitle('Escolha a pasta do Borion Finance compartilhada com você')
+      .addView(view)
+      .setOAuthToken(GoogleDriveAuth.accessToken)
+      .setDeveloperKey(GOOGLE_API_KEY)
+      .setAppId(GOOGLE_PROJECT_NUMBER)
+      .setCallback((data)=>{
+        if(data.action === google.picker.Action.PICKED){ resolve(data.docs[0]); }
+        else if(data.action === google.picker.Action.CANCEL){ reject(new Error('Nenhuma pasta selecionada.')); }
+      })
+      .build();
+    picker.setVisible(true);
+  });
+}
+
+/* Aplica um payload de conta (mesmo formato de buildFullBackupPayload) direto no
+   estado local, SEM mostrar modal de escolha — é o equivalente, pro Google Drive, do
+   que enterCloudUser() faz para o Supabase: carregar e pronto, sem perguntar nada,
+   porque é o carregamento normal de entrada, não uma importação manual. */
+function applyAccountPayloadSilently(obj){
+  S.config = obj.config || S.config;
+  S.profiles = (obj.profiles || []).slice(0, 5);
+  setConfig(S.config); setProfiles(S.profiles);
+  Object.keys(obj.dataByProfile || {}).forEach(pid=>{
+    const d = migrateData((obj.dataByProfile || {})[pid] || emptyData());
+    setProfileData(pid, d);
+  });
+  S.currentProfile = null; S.data = null;
+}
+
+/* ---------------- Provider principal ---------------- */
+const GoogleDriveProvider = {
+  folderId: null,
+  currentFileId: null,
+  currentFileMeta: null,
+  dirty: false,
+  syncTimer: null,
+
+  isConnected(){ return !!(GoogleDriveAuth.user && this.folderId); },
+
+  /* Login + (primeira vez) escolher pasta + carregar current.json. */
+  async connect(interactive){
+    await GoogleDriveAuth.login(interactive);
+    const sub = GoogleDriveAuth.user.sub;
+    let folderId = gdriveReadFolderId(sub);
+    if(!folderId){
+      const folder = await openDriveFolderPicker();
+      folderId = folder.id;
+      gdriveWriteFolderId(sub, folderId);
+    }
+    this.folderId = folderId;
+    setStorageMode('google_drive');
+    await this.loadFromDrive();
+  },
+
+  async loadFromDrive(){
+    const file = await GoogleDriveFS.findChild(this.folderId, 'current.json');
+    if(!file){
+      // Pasta nova/vazia: cria o current.json inicial (sem perfis ainda) e deixa a
+      // pessoa criar o primeiro perfil normalmente pelo Gate, como já acontece hoje.
+      const empty = {
+        type: 'borion-account-backup', backupSchema: 5352, app: 'Borion Finance',
+        appVersion: BORION_APP_VERSION, backupType: 'initial',
+        reason: 'primeira conexão com o Google Drive', source: 'google_drive',
+        exportedAt: new Date().toISOString(),
+        account: { userId: GoogleDriveAuth.user.sub, email: GoogleDriveAuth.user.email },
+        config: {}, profileCount: 0, profiles: [], dataByProfile: {}
+      };
+      const created = await GoogleDriveFS.createFile(this.folderId, 'current.json', empty);
+      this.currentFileId = created.id; this.currentFileMeta = created;
+      S.profiles = []; setProfiles([]); S.currentProfile = null; S.data = null;
+      return;
+    }
+    this.currentFileId = file.id; this.currentFileMeta = file;
+    const data = await GoogleDriveFS.readFile(file.id);
+    const check = validateBorionJson(data);
+    if(!check.valid) throw new Error('O current.json desta pasta parece corrompido: ' + check.errors.join(' '));
+    applyAccountPayloadSilently(data);
+  },
+
+  /* Chamado de dentro de saveCurrentData() (mesmo gancho que o Supabase usa) — só
+     marca como pendente e debate 800ms antes de mandar pro Drive, pra não fazer uma
+     chamada de rede a cada tecla digitada. */
+  queueSave(){
+    if(!this.isConnected()) return;
+    this.dirty = true;
+    clearTimeout(this.syncTimer);
+    this.syncTimer = setTimeout(()=>this.syncNow(), 800);
+  },
+
+  async syncNow(){
+    if(!this.isConnected() || !this.dirty || !this.currentFileId) return;
+    this.dirty = false;
+    try{
+      const payload = await buildFullBackupPayload();
+      const updated = await GoogleDriveFS.updateFile(this.currentFileId, payload);
+      this.currentFileMeta = updated;
+    }catch(e){
+      console.warn('[GoogleDriveProvider] falha ao sincronizar com o Drive (tenta de novo na próxima alteração):', e);
+      this.dirty = true;
+    }
+  },
+
+  disconnect(){
+    GoogleDriveAuth.signOut();
+    this.folderId = null; this.currentFileId = null; this.currentFileMeta = null;
+    setStorageMode(null);
+  },
+
+  getStatus(){
+    return {
+      connected: this.isConnected(),
+      email: GoogleDriveAuth.user ? GoogleDriveAuth.user.email : null,
+      folderId: this.folderId,
+      pending: this.dirty
+    };
+  }
+};
+
+window.GoogleDriveProvider = GoogleDriveProvider;
+
+/* Tela simples mostrada quando a renovação silenciosa do token do Google falha no
+   boot (ex: sessão expirada, revogou acesso pela conta Google). Só tem um botão —
+   não tenta adivinhar o motivo, só oferece reconectar (com popup de consentimento). */
+function renderGoogleDriveReconnect(errorMessage){
+  applyFont(); applyTheme();
+  const root = document.getElementById('root');
+  root.innerHTML = `
+    <div class="gate-wrap">
+      <div class="gate-box">
+        <div class="gate-logo"><img src="borion-emblem.png" alt="Borion Finance"/><div class="appname">Borion Finance</div></div>
+        <div class="gate-card">
+          <h2>Reconectar ao Google Drive</h2>
+          <p class="gate-sub">Sua sessão do Google expirou ou foi desconectada. Seus dados continuam salvos no Drive — é só entrar de novo.</p>
+          <div class="info-box" style="margin-bottom:14px;">${esc(errorMessage||'')}</div>
+          <button class="btn btn-primary btn-block" id="gdrive_reconnect">Reconectar Google Drive</button>
+          <div style="text-align:center;margin-top:14px;"><button class="link-btn" id="gdrive_use_other">Usar outra forma de entrar</button></div>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('gdrive_reconnect').onclick = async ()=>{
+    try{
+      await GoogleDriveProvider.connect(true);
+      S.gate={mode:'list', error:''};
+      renderGate();
+    }catch(e){ renderGoogleDriveReconnect(e.message||String(e)); }
+  };
+  document.getElementById('gdrive_use_other').onclick = ()=>{
+    setStorageMode(null);
+    CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info='';
+    CloudAuth.render();
+  };
+}

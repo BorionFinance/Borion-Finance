@@ -749,6 +749,7 @@ function saveCurrentData(options={}){
     // fecha qualquer janela em que os dois pudessem divergir e um perfil
     // acabasse sobrescrevendo a linha de outro no Supabase.
     if(window.CloudStorage && CloudStorage.user){ CloudStorage.queueSave(S.currentProfile.id, S.data); }
+    if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){ GoogleDriveProvider.queueSave(); }
     if(!options.finalConfirmation) markExitSavePending(S.currentProfile.id);
   }
   BackupFS.markDirty();

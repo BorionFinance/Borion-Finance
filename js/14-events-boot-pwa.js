@@ -175,6 +175,20 @@ window.addEventListener('pagehide', ()=> ExitSaveGuard.finalSaveSilently('pagehi
       }
       return;
     }
+    // V6.4.0 — se a pessoa já conectou o Google Drive antes, tenta renovar o acesso
+    // em silêncio (sem popup) e recarregar o current.json da pasta. Se a sessão do
+    // Google expirou ou algo falhar, mostra uma tela simples pra reconectar — nunca
+    // trava o app numa tela em branco nem mistura com o fluxo Supabase/local.
+    if(getStorageMode()==='google_drive'){
+      try{
+        await GoogleDriveProvider.connect(false);
+        S.gate={mode:'list', error:''};
+        renderGate();
+      }catch(e){
+        renderGoogleDriveReconnect(e.message||String(e));
+      }
+      return;
+    }
     // V6.3.0 — se a pessoa já escolheu "usar sem conta" antes, pula a tela de login
     // Supabase e vai direto pro seletor de perfil local. Só ativa depois de uma escolha
     // explícita (ver botão "Usar sem conta" em CloudAuth.render); sem isso, comportamento

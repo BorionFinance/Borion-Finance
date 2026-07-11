@@ -112,6 +112,10 @@ const CloudStorage = {
   updateBottomNotice(){
     let el=document.getElementById('cloud_bottom_notice');
     if(!el){ el=document.createElement('div'); el.id='cloud_bottom_notice'; document.body.appendChild(el); }
+    // V6.14.0 — esse aviso é só sobre sincronização com o Supabase. Antes aparecia
+    // pra qualquer pessoa (mesmo usando Google Drive ou modo local, sem Supabase
+    // nenhum), porque init() sempre chama setStatus() independente do modo em uso.
+    if(!this.user){ el.className='cloud-bottom-notice'; el.innerHTML=''; return; }
     const show = this.status==='offline' || this.status==='dirty' || this.hasPendingSync();
     el.className='cloud-bottom-notice '+this.status+(show?' show':'');
     el.innerHTML = `<strong>${esc(this.statusLabel())}</strong>${this.lastSyncAt?`<span>Última sincronização: ${esc(new Date(this.lastSyncAt).toLocaleTimeString('pt-BR'))}</span>`:''}<button onclick="CloudStorage.syncNow()">Sincronizar</button>`;

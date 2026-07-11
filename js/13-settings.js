@@ -14,6 +14,7 @@ function moduleToggleHTML({key,title,desc,enabled,onClick}){
 function dashboardEnabled(key){ return !!(S.data.dashboard && Array.isArray(S.data.dashboard.widgets) && S.data.dashboard.widgets.includes(key)); }
 function renderSettings(){
   if(!S.settingsTab) S.settingsTab='modules';
+  if(S.settingsTab==='cloud') S.settingsTab='backup'; // V6.14.0 — aba "Nuvem" foi unificada em "Backups"
   const tabs = `
     <div class="settings-tabs">
       ${settingsTabButton('modules','Módulos')}
@@ -22,7 +23,6 @@ function renderSettings(){
       ${settingsTabButton('categories','Categorias')}
       ${settingsTabButton('personalization','Personalização')}
       ${settingsTabButton('backup','Backups')}
-      ${settingsTabButton('cloud','Nuvem')}
     </div>`;
   let content='';
   if(S.settingsTab==='modules') content = renderSettingsModules();
@@ -31,9 +31,8 @@ function renderSettings(){
   else if(S.settingsTab==='categories') content = renderSettingsCategories();
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
-  else if(S.settingsTab==='cloud') content = renderSettingsCloud();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.12.0 • Corrigido autosave duplicado</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
-<div><strong>Versão:</strong> 6.12.0</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.14.0 • Nuvem e Backups unificados</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
+<div><strong>Versão:</strong> 6.14.0</div>
 <div><strong>Lançamento:</strong> 09/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -174,55 +173,80 @@ function renderSettingsProfiles(){
     <div class="settings-section"><h3>Perfis desta conta (${(S.profiles||[]).length}/5)</h3><p class="desc">Troque entre perfis sem misturar dados. Cada perfil tem armazenamento local e registro separado no Supabase.</p>${profilesRows}<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">${(S.profiles||[]).length<5?`<button class="btn-outline btn-sm" onclick="Settings.createFinancialProfile()">+ Criar perfil</button>`:''}<button class="btn-outline btn-sm" onclick="document.getElementById('import_file').click()">Importar JSON</button></div><input type="file" id="import_file" accept="application/json" style="display:none;"></div>`;
 }
 
-function renderSettingsCloud(){
+/* V6.14.0 — "Nuvem" e "Backups" eram duas abas separadas, e a de Backups sempre
+   mostrava textos do Supabase (nomes de tabela, "Salvar snapshot no Supabase" etc.)
+   mesmo pra quem usa Google Drive ou modo local — informação irrelevante e confusa.
+   Unificado numa aba só, que mostra só o que é relevante pro modo atual. */
+function renderSettingsBackup(){
   const cloud = window.CloudStorage;
   const user = cloud && cloud.user;
-  if(!user && window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){
-    // V6.4.0 — conectado via Google Drive (não Supabase): tela própria, sem os botões
-    // de "Sincronizar/Diagnóstico/Trocar senha" do Supabase (não fazem sentido aqui) e
-    // sem o texto de "modo local" (os dados NÃO ficam só neste dispositivo).
+  const isDrive = !user && window.GoogleDriveProvider && GoogleDriveProvider.isConnected();
+  const isLocal = !user && !isDrive;
+
+  const localBackupsBlock = `
+    <div class="settings-section"><h3>Backups neste dispositivo</h3><p class="desc">Histórico guardado só no navegador (IndexedDB) — funciona mesmo sem conta na nuvem, e mesmo sem internet.</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewLocalBackups()">Ver backups deste dispositivo</button></div></div>`;
+
+  let backupFolderBlock;
+  if(!FS_ACCESS_SUPPORTED) backupFolderBlock = `<p class="desc">Este navegador não permite escolher uma pasta fixa pra backup automático.</p>`;
+  else if(BackupFS.needsReconnect) backupFolderBlock = `<div class="reconnect-banner"><span>A pasta de backups precisa ser reautorizada após reabrir o app.</span><button class="btn-outline btn-sm" onclick="BackupFS.reconnect()">Reconectar pasta</button></div>`;
+  else if(BackupFS.dirHandle) backupFolderBlock = `<div class="gold-box">Pasta local configurada. O Borion salva arquivos dentro da subpasta <b>Backups_Borion</b>.</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;"><button class="btn-outline btn-sm" onclick="BackupFS.choose()">Trocar pasta</button><button class="btn-outline btn-sm" onclick="BackupFS.disconnect()">Desconectar pasta</button></div>`;
+  else backupFolderBlock = `<p class="desc">Escolha uma pasta local (ex: uma pasta sincronizada com Google Drive/OneDrive) pra cópias automáticas extras neste dispositivo.</p><button class="btn btn-primary btn-sm" onclick="BackupFS.choose()">Escolher pasta de backups</button>`;
+  const folderSection = `
+    <div class="settings-section"><h3>Pasta local extra (opcional)</h3>
+      ${backupFolderBlock}
+      <div class="info-box">Por segurança do navegador, o Borion não pode criar uma pasta sozinho sem você autorizar.</div>
+    </div>`;
+
+  if(isDrive){
     const gs = GoogleDriveProvider.getStatus();
     const conflictBanner = gs.conflict ? `<div class="info-box danger-box"><b>Atenção:</b> existe uma versão mais recente desta conta salva no Google Drive (provavelmente de outro dispositivo). <button class="btn-outline btn-sm" onclick="GoogleDriveProvider.reload()">Recarregar agora</button></div>` : '';
     return `
-    <div class="settings-section settings-hero-section"><h3>Google Drive</h3><p class="desc">Seus dados ficam salvos na pasta compartilhada do Google Drive, sincronizados automaticamente.</p></div>
+    <div class="settings-section settings-hero-section"><h3>Backups e Google Drive</h3><p class="desc">Seus dados sincronizam automaticamente com a pasta compartilhada do Google Drive.</p></div>
     ${conflictBanner}
     <div class="settings-section"><h3>Status</h3><p class="desc"><strong>Conta:</strong> ${esc(gs.email||'')}<br><strong>Pasta conectada:</strong> ${esc(gs.folderName||'(não identificada)')} ${gs.folderLink?`<a href="${esc(gs.folderLink)}" target="_blank" rel="noopener">Abrir no Google Drive ↗</a>`:''}<br><strong>Status:</strong> ${gs.conflict?'Conflito — veja acima':gs.pending?'Salvando alterações...':'Tudo sincronizado'}<br><strong>Perfil ativo:</strong> ${esc(S.currentProfile?S.currentProfile.name:'Nenhum')}</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="GoogleDriveProvider.syncNow()">Sincronizar agora</button><button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button><button class="btn-outline btn-sm" onclick="GoogleDriveProvider.disconnect();S.currentProfile=null;S.data=null;CloudAuth.mode='login';CloudAuth.error='';CloudAuth.info='';CloudAuth.render();">Sair da conta Google</button></div>
     </div>
-    <div class="settings-section"><h3>Backups no Google Drive</h3><p class="desc">Histórico de backups guardado na pasta <b>backups</b> dentro da pasta acima. Limpeza automática mantém no máximo ~10GB (arquivos mais antigos são apagados — o histórico completo continua no disco local).</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewDriveBackups()">Ver backups no Drive</button></div></div>
+    <div class="settings-section"><h3>Backups no Google Drive</h3><p class="desc">Histórico guardado na pasta <b>backups</b>, dentro da pasta acima. Limpeza automática mantém no máximo ~10GB (mais antigos são apagados — o histórico completo continua no disco local).</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewDriveBackups()">Ver backups no Drive</button></div></div>
+    ${localBackupsBlock}
+    ${folderSection}
     <div class="info-box">Se a internet cair, o Borion continua salvando neste dispositivo e envia pro Drive automaticamente quando a conexão voltar.</div>`;
   }
-  if(!user){
-    // V6.3.0 — modo local (sem conta Supabase): a versão de baixo desta tela tem
-    // botões como "Sincronizar agora", "Diagnóstico Supabase" e "Trocar senha da
-    // conta/login" que não fazem sentido (e podem mostrar erro de Supabase) sem
-    // login. Essa versão só mostra o que funciona 100% sem conta.
+
+  if(isLocal){
     const st = (window.storageProvider ? storageProvider.getStorageStatus() : {profileCount:(S.profiles||[]).length, online:navigator.onLine});
     return `
-    <div class="settings-section settings-hero-section"><h3>Armazenamento</h3><p class="desc">Você está usando o Borion sem conta — os dados ficam só neste dispositivo (localStorage + IndexedDB).</p></div>
+    <div class="settings-section settings-hero-section"><h3>Backups</h3><p class="desc">Você está usando o Borion sem conta — os dados ficam só neste dispositivo.</p></div>
     <div class="settings-section"><h3>Status</h3><p class="desc"><strong>Modo:</strong> Local (sem conta)<br><strong>Perfis neste dispositivo:</strong> ${st.profileCount||0}<br><strong>Perfil ativo:</strong> ${esc(S.currentProfile?S.currentProfile.name:'Nenhum')}<br><strong>Conexão:</strong> ${st.online?'Online':'Offline'}</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button><button class="btn-outline btn-sm" onclick="document.getElementById('import_file_cloud').click()">Importar JSON</button><button class="btn-outline btn-sm" onclick="Settings.switchToCloudFromSettings()">Entrar com uma conta na nuvem</button></div>
       <input type="file" id="import_file_cloud" accept="application/json" style="display:none;">
     </div>
-    <div class="info-box">Os dados continuam salvos neste navegador. Entrar com uma conta permite sincronizar entre celular e computador e ter backup automático na nuvem — seus perfis locais continuam aqui e voltam a aparecer se você sair da conta depois.</div>
+    ${localBackupsBlock}
+    ${folderSection}
+    <div class="info-box">Entrar com uma conta permite sincronizar entre celular e computador — seus perfis locais continuam aqui e voltam a aparecer se você sair da conta depois.</div>
     ${renderInstallAppCard()}`;
   }
+
+  // ---- Só chega aqui se realmente estiver logado no Supabase (legado) ----
   const pending = cloud && cloud.pendingInfo ? cloud.pendingInfo() : null;
   const last = cloud && cloud.lastSyncAt ? new Date(cloud.lastSyncAt).toLocaleString('pt-BR') : 'Ainda não sincronizou nesta sessão';
   const status = cloud ? (cloud.statusLabel ? cloud.statusLabel() : (cloud.statusText || cloud.status || 'Indisponível')) : 'Módulo de nuvem não carregado';
   const pendingTxt = pending ? `Existe sincronização pendente desde ${new Date(pending.savedAt).toLocaleString('pt-BR')}. Motivo: ${esc(pending.reason||'pendente')}` : 'Nenhum dado pendente no cache local.';
   const profileName = S.currentProfile ? S.currentProfile.name : 'Nenhum perfil ativo';
   const schema = cloud && cloud.schemaError ? `<div class="info-box danger-box"><b>Atenção:</b> ${esc(cloud.schemaError)}<br>Rode o arquivo <b>SUPABASE_V5.34_CLOUD_FOUNDATION.sql</b> no Supabase.</div>` : '';
+  const consent = window.BackupFS ? BackupFS.hasConsent() : null;
+  const consentText = consent ? `Aceito em ${new Date(consent.acceptedAt).toLocaleString('pt-BR')} · modo: ${esc(consent.mode||'backup')}` : 'Ainda não configurado neste dispositivo.';
   return `
     <div class="settings-section settings-hero-section"><h3>Borion Cloud Foundation</h3><p class="desc">Conta, perfis financeiros, sincronização real, cache local e proteção contra perda de dados.</p></div>
     ${schema}
     <div class="settings-section"><h3>Status da nuvem</h3><p class="desc"><strong>Usuário logado:</strong> ${user?esc(user.email||'logado'):'não logado'}<br><strong>Perfil financeiro ativo:</strong> ${esc(profileName)}<br><strong>Status:</strong> ${esc(status)}<br><strong>Última sincronização:</strong> ${esc(last)}<br><strong>Dados pendentes:</strong> ${pendingTxt}</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="cloudForceSync()">Sincronizar agora</button><button class="btn-outline btn-sm" onclick="cloudRunSupabaseDiagnostic()">Diagnóstico Supabase</button><button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button><button class="btn-outline btn-sm" onclick="document.getElementById('import_file_cloud').click()">Importar JSON</button><button class="btn-outline btn-sm" onclick="cloudChangePasswordFromSettings()">Trocar senha da conta/login</button>${user?`<button class="btn-danger btn-sm" onclick="Settings.deleteCloudAccountFlow()">Excluir conta</button>`:''}<button class="btn-outline btn-sm" onclick="cloudLogout()">Sair da conta</button></div><input type="file" id="import_file_cloud" accept="application/json" style="display:none;"></div>
-    <div class="info-box">Fluxo: alteração → salva local/offline → marca pendente → envia ao Supabase → limpa pendência. Se a internet cair, o Borion continua salvando neste dispositivo e sincroniza quando voltar.</div>
-    ${user?`<div class="settings-section danger-box"><h3>Excluir conta Borion Cloud</h3><p class="desc">Apaga a conta de login, e-mail, todos os perfis financeiros e todos os dados monetários salvos no Supabase. O fluxo pede aviso, confirmação escrita, senha, confirmação por e-mail via link mágico e senha novamente antes de apagar.</p><button class="btn btn-danger btn-sm" onclick="Settings.deleteCloudAccountFlow()">Excluir conta</button></div>`:''}
+    <div class="settings-section"><h3>Aceite de proteção de dados</h3><p class="desc"><strong>Status:</strong> ${consentText}</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.showBackupConsent()">Ver termo/configurar proteção</button><button class="btn-outline btn-sm" onclick="Settings.createCloudBackupNow('first_setup','backup criado manualmente pela tela de segurança')">Criar backup inicial agora</button></div></div>
+    <div class="settings-section"><h3>Backups no Supabase</h3><p class="desc">Gera um JSON completo com todos os perfis da conta.</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.createCloudBackupNow('manual','backup manual completo')">Salvar snapshot no Supabase</button><button class="btn-outline btn-sm" onclick="Settings.viewCloudBackups()">Ver backups do Supabase</button></div></div>
+    ${localBackupsBlock}
+    ${folderSection}
+    <div class="info-box">Fluxo: alteração → salva local/offline → marca pendente → envia ao Supabase → limpa pendência.</div>
+    ${user?`<div class="settings-section danger-box"><h3>Excluir conta Borion Cloud</h3><p class="desc">Apaga a conta de login, e-mail, todos os perfis financeiros e todos os dados monetários salvos no Supabase.</p><button class="btn btn-danger btn-sm" onclick="Settings.deleteCloudAccountFlow()">Excluir conta</button></div>`:''}
     ${renderInstallAppCard()}`;
 }
-
-/* ---------- V5.34.1: card "Instalar o app" (Android/iPhone/computador) ---------- */
 function renderInstallAppCard(){
   if(typeof isStandalonePWA==='function' && isStandalonePWA()){
     return `<div class="settings-section"><h3>Instalar o app</h3><div class="gold-box">Você já está usando o Borion Finance instalado como app (tela cheia, fora do navegador).</div></div>`;
@@ -242,71 +266,6 @@ Settings.promptInstall = async function(){
   renderView();
 };
 
-function renderSettingsBackup(){
-  const cloudReady = !!(window.CloudStorage && CloudStorage.user);
-  const consent = window.BackupFS ? BackupFS.hasConsent() : null;
-  const consentText = consent ? `Aceito em ${new Date(consent.acceptedAt).toLocaleString('pt-BR')} · modo: ${esc(consent.mode||'backup')}` : 'Ainda não configurado neste dispositivo.';
-  let backupFolderBlock;
-  if(!FS_ACCESS_SUPPORTED) backupFolderBlock = `<p class="desc">Este navegador não permite escolher uma pasta fixa. Use o backup manual em JSON e o backup salvo no Supabase.</p>`;
-  else if(BackupFS.needsReconnect) backupFolderBlock = `<div class="reconnect-banner"><span>A pasta de backups precisa ser reautorizada após reabrir o app.</span><button class="btn-outline btn-sm" onclick="BackupFS.reconnect()">Reconectar pasta</button></div>`;
-  else if(BackupFS.dirHandle) backupFolderBlock = `<div class="gold-box">Pasta local configurada. O Borion salva arquivos dentro da subpasta <b>Backups_Borion</b>.</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;"><button class="btn-outline btn-sm" onclick="BackupFS.choose()">Trocar pasta</button><button class="btn-outline btn-sm" onclick="BackupFS.disconnect()">Desconectar pasta</button></div>`;
-  else backupFolderBlock = `<p class="desc">Escolha uma pasta local para cópias automáticas. Dica: use uma pasta sincronizada no Google Drive, OneDrive ou outro backup do Windows.</p><button class="btn btn-primary btn-sm" onclick="BackupFS.choose()">Escolher pasta de backups</button>`;
-  return `
-    <div class="settings-section settings-hero-section">
-      <h3>Backups e segurança dos dados</h3>
-      <p class="desc">A camada de backup protege contra erro humano, bug, sincronização ruim e perda de dispositivo. Os dados vivos continuam em <b>profiles</b> e <b>borion_profile_data</b>; os snapshots ficam em <b>borion_backups</b>.</p>
-    </div>
-
-    <div class="settings-section">
-      <h3>Aceite de proteção de dados</h3>
-      <p class="desc"><strong>Status:</strong> ${consentText}</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="btn-outline btn-sm" onclick="Settings.showBackupConsent()">Ver termo/configurar proteção</button>
-        <button class="btn-outline btn-sm" onclick="Settings.createCloudBackupNow('first_setup','backup criado manualmente pela tela de segurança')">Criar backup inicial agora</button>
-      </div>
-    </div>
-
-    <div class="settings-section">
-      <h3>Backup completo da conta</h3>
-      <p class="desc">Gera um JSON completo com todos os perfis da conta, não só o perfil aberto. No Supabase, lê direto de <b>profiles</b> e <b>borion_profile_data</b>.</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="btn btn-primary btn-sm" onclick="BackupFS.manualBackupNow()">Baixar JSON completo</button>
-        <button class="btn-outline btn-sm" onclick="Settings.createCloudBackupNow('manual','backup manual completo')" ${cloudReady?'':'disabled'}>Salvar snapshot no Supabase</button>
-        <button class="btn-outline btn-sm" onclick="Settings.viewCloudBackups()" ${cloudReady?'':'disabled'}>Ver backups do Supabase</button>
-        <button class="btn-outline btn-sm" onclick="document.getElementById('import_file_backup').click()">Restaurar/importar JSON</button>
-      </div>
-      <input type="file" id="import_file_backup" accept="application/json" style="display:none;">
-      <div class="info-box">Onde ver em caso de BO: <b>Supabase → Table Editor → borion_backups</b>. Os dados atuais ficam em <b>profiles</b> e <b>borion_profile_data</b>.</div>
-    </div>
-
-    <div class="settings-section">
-      <h3>Pasta local no computador/tablet</h3>
-      ${backupFolderBlock}
-      <div class="info-box">Por segurança do navegador, o Borion não pode criar uma pasta sozinho sem você autorizar. Ao escolher uma pasta, o navegador guarda uma permissão local neste dispositivo.</div>
-    </div>
-
-    <div class="settings-section danger-box">
-      <h3>Backup antes de ações perigosas</h3>
-      <p class="desc">Antes de excluir perfil, substituir dados por JSON ou restaurar a conta, o Borion tenta criar um snapshot em <b>borion_backups</b>. Se o SQL V5.35.1 não foi rodado, a proteção não fica completa.</p>
-    </div>
-
-    <div class="settings-section">
-      <h3>Backup JSON completo</h3>
-      <p class="desc">Exporta a conta inteira: todos os perfis financeiros e todos os dados vinculados a eles. Perfil atual: <strong>${esc(S.currentProfile?S.currentProfile.name:'nenhum')}</strong>.</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button>
-        <button class="btn-outline btn-sm" onclick="Settings.emailBackup()">Preparar e-mail manual</button>
-      </div>
-    </div>
-
-    <div class="settings-section">
-      <h3>Backups neste dispositivo</h3>
-      <p class="desc">Histórico de backups guardado só no navegador (IndexedDB) — funciona mesmo sem conta na nuvem, e mesmo sem internet.</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="btn-outline btn-sm" onclick="Settings.viewLocalBackups()">Ver backups deste dispositivo</button>
-      </div>
-    </div>`;
-}
 
 Settings.createFinancialProfile = async function(){
   openModal({title:'Novo perfil financeiro', sub:'Crie um perfil separado dentro da sua conta.', fields:[{key:'nome',label:'Nome do perfil',type:'text',placeholder:'Ex: Pedro Pessoal'}], saveLabel:'Criar perfil', onSave: async (v)=>{

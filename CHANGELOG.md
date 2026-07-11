@@ -1,3 +1,48 @@
+## V6.14.0 — Nuvem e Backups unificados, sem menção ao Supabase pra quem usa Drive/local (10/07/2026)
+
+Resposta direta ao seu feedback: a tela estava confusa e cheia de referência ao
+Supabase mesmo pra quem nunca usou.
+
+- **Abas "Nuvem" e "Backups" viraram uma só** ("Backups"). Menos cliques, menos
+  duplicação de informação.
+- **Conteúdo agora se adapta ao que você realmente usa**: conectado no Google Drive,
+  só aparece Drive (status, pasta, backups no Drive, backups locais, pasta de backup
+  extra) — nenhuma menção a Supabase, `profiles`, `borion_backups` ou SQL. Em modo
+  local, mesma lógica. O conteúdo do Supabase só aparece pra quem realmente estiver
+  logado nele (ninguém no seu caso).
+- **Corrigido bug real**: o aviso "Erro ao sincronizar — cache local" no rodapé
+  aparecia pra QUALQUER pessoa, mesmo sem usar Supabase — porque o `CloudStorage.init()`
+  sempre define esse status, independente do modo escolhido. Agora esse aviso só
+  aparece de verdade pra quem está logado no Supabase.
+- Achei uma duplicata de função no meio dessa edição (aconteceu de novo, mesmo padrão
+  de antes) e já corrigi antes de te mandar.
+
+**Sobre o aviso do Google toda vez que abre a página**: isso é esperado, ainda em modo
+Testing — mas não deveria pedir consentimento completo toda hora se a renovação
+silenciosa estiver funcionando. A correção da V6.13 (pasta "esquecida" por engano)
+deve reduzir bastante isso, já que menos reconexões completas serão necessárias. Se
+continuar toda vez mesmo assim, pode ser bloqueio de cookies de terceiros no navegador
+— não é algo 100% eliminável em modo Testing, mas o volume deve cair bastante.
+
+## V6.13.0 — Corrigido "pede pra começar do zero" com perfil já existente (10/07/2026)
+
+Bug real, mais sério que os anteriores: a checagem "essa pasta ainda existe?" (criada na
+V6.7.0 pra lidar com pastas realmente apagadas) tratava **qualquer erro** — rede
+instável, token ainda renovando, limite de taxa da API — como se a pasta tivesse sido
+apagada. Isso fazia o app esquecer o vínculo salvo com a pasta certa e forçar escolher
+de novo, arriscando conectar num lugar diferente e mostrar "nenhum dado encontrado"
+mesmo com o perfil intacto na pasta de sempre.
+
+- Corrigido: só considera "apagada de verdade" quando a Drive API responde **404**
+  (não encontrada). Qualquer outro erro agora falha a tentativa de forma visível (dá
+  pra tentar de novo) **sem mexer no vínculo salvo** com a pasta correta.
+
+**Se isso já aconteceu com você**: seus dados não foram apagados — estão intactos na
+pasta onde sempre estiveram. Não clique em "Começar do zero" nem "Importar JSON antigo"
+se cair nessa tela por engano. Use "Usar outra forma de entrar", reconecte, e no
+seletor confirme que está escolhendo a pasta certa (a que já tem seu `current.json` de
+verdade, não uma pasta de teste vazia).
+
 ## V6.12.0 — Corrigido autosave duplicado (autosave-1/2/3.json aparecendo 2x) (10/07/2026)
 
 Mesma causa-raiz do bug da pasta de backups (V6.11.0), só que no autosave rotativo:

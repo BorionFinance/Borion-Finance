@@ -178,7 +178,11 @@ const GoogleDriveFS = {
 
   async getFileMeta(fileId){
     const res = await fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?fields=id,name,modifiedTime', { headers: await this.authHeaders() });
-    if(!res.ok) throw new Error('Falha ao consultar metadados do arquivo no Drive.');
+    if(!res.ok){
+      const err = new Error('Falha ao consultar metadados do arquivo no Drive (status ' + res.status + ').');
+      err.status = res.status;
+      throw err;
+    }
     return await res.json();
   },
 
@@ -307,11 +311,22 @@ const GoogleDriveProvider = {
     }
   },
 
+  /* V6.13.0 — bug real corrigido: essa função tratava QUALQUER erro (rede
+     instável, token ainda renovando, limite de taxa da API) como "a pasta foi
+     apagada" — e o connect() então esquecia o vínculo salvo e forçava escolher a
+     pasta nervamente, o que podia levar a pessoa (sem querer) a conectar numa pasta
+     diferente/errada e ver "nenhum dado encontrado" mesmo com o perfil intacto na
+     pasta certa. Agora só considera "apagada de verdade" quando a API responde 404 —
+     qualquer outro erro propaga (o connect() mostra uma mensagem de falha e tenta de
+     novo depois, sem mexer no vínculo salvo). */
   async _folderStillExists(folderId){
     try{
       const meta = await GoogleDriveFS.getFileMeta(folderId);
       return !!(meta && meta.id);
-    }catch(e){ return false; }
+    }catch(e){
+      if(e && e.status === 404) return false;
+      throw e;
+    }
   },
 
   /* Só localiza e lê o current.json — não cria nada. Retorna {empty:true} se a pasta

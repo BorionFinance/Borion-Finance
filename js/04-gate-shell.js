@@ -126,13 +126,13 @@ function renderGate(){
   if(signOutGdriveBtn) signOutGdriveBtn.onclick = ()=>{
     GoogleDriveProvider.disconnect();
     S.currentProfile=null; S.data=null;
-    CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info='';
+    CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info=''; CloudAuth.emailExpanded=false;
     CloudAuth.render();
   };
   const useCloudBtn = $('#gate_use_cloud');
   if(useCloudBtn) useCloudBtn.onclick = ()=>{
     setStorageMode('cloud');
-    if(window.CloudAuth){ CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info=''; CloudAuth.render(); }
+    if(window.CloudAuth){ CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info=''; CloudAuth.emailExpanded=false; CloudAuth.render(); }
   };
 
   if(S.gate.mode==='createProfile') wireCreateProfileForm();

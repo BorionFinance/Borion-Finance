@@ -1,3 +1,19 @@
+## V6.21.0 — Tela de entrada mais limpa: Google em destaque (11/07/2026)
+
+Pedido: como ninguém do grupo entra mais com e-mail/senha (todo mundo já migrou pro
+Google Drive), a tela de login tinha campos e textos que não faziam mais sentido como
+opção principal.
+
+- **Tela padrão agora é só**: logo, botão grande "Continuar com Google" e, como
+  alternativa discreta, "Usar sem conta (só neste dispositivo)".
+- **Removido da tela principal** (mas nada foi apagado por baixo — só reorganizado):
+  os campos de e-mail/senha, o botão "Entrar", "Criar conta", "Esqueci minha senha" e
+  os textos explicativos.
+- **Novo**: link "Instruções e mais opções" abre um painel com a explicação da pasta
+  do Google Drive, aviso de perfis já salvos neste dispositivo (quando existirem),
+  "Problemas para entrar? Limpar dados deste navegador", e o acesso ao login antigo de
+  e-mail/senha (Supabase) pra quem realmente ainda precisar dele.
+
 ## V6.20.0 — Saves de 1 em 1 minuto, histórico do Ctrl+S e corrigido bug do "voltar" (11/07/2026)
 
 - **Bug real corrigido** (o do "atualizar a página e voltar mostra a versão errada,

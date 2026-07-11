@@ -998,30 +998,110 @@ console.log('[BORION_CLOUD][BOOT][WINDOW_EXPORT]', { hasCloudStorage: !!window.C
 
 const CloudAuth={
   mode:'login', error:'', info:'',
+  /* V6.21.0 — pedido: a tela de entrada não faz mais sentido oferecer e-mail/senha
+     como opção principal (o grupo todo já usa só Google Drive). `emailExpanded`
+     controla um estado secundário, só dentro de mode==='login': false = tela limpa
+     (só o botão do Google), true = o formulário antigo de e-mail/senha (Supabase),
+     acessível a partir do painel "Instruções e mais opções". Nada foi removido por
+     baixo — CloudStorage/Supabase continuam funcionando exatamente como antes, só
+     deixaram de ser o destaque da tela. */
+  emailExpanded:false,
+
   render(){
     applyFont(); applyTheme();
-    const root=document.getElementById('root'); const isCreate=this.mode==='create', isReset=this.mode==='reset', isChange=this.mode==='changePassword';
+    const root=document.getElementById('root');
+    if(this.mode==='login' && !this.emailExpanded){ this.renderCleanLogin(root); return; }
+    this.renderEmailForm(root);
+  },
+
+  /* Tela padrão: só o essencial — logo, um botão grande "Continuar com Google" e,
+     como alternativa discreta, "Usar sem conta". Tudo mais (explicação da pasta do
+     Drive, e-mail/senha antigo, "esqueci a pasta"/limpar dados) fica atrás do link
+     "Instruções e mais opções", pra quem realmente precisar. */
+  renderCleanLogin(root){
+    root.innerHTML = `<div class="gate-wrap cloud-login-wrap"><div class="gate-box">
+      <div class="gate-logo"><img src="borion-emblem.png" alt="Borion Finance"/><div class="appname">Borion Finance</div></div>
+      <div class="gate-card cloud-card">
+        <p class="gate-title">Entrar no Borion</p>
+        <p class="gate-sub">Entre com sua conta Google para carregar seus perfis financeiros.</p>
+        ${this.error?`<p class="gate-error">${esc(this.error)}</p>`:''}
+        ${this.info?`<p class="gate-info">${esc(this.info)}</p>`:''}
+        <button class="btn btn-primary btn-block" id="cloud_gdrive">Continuar com Google</button>
+        <div class="cloud-actions"><button class="link-btn" id="cloud_use_local">Usar sem conta (só neste dispositivo)</button></div>
+        <div style="text-align:center;margin-top:20px;"><button class="link-btn" id="cloud_more_info" style="opacity:.65;">Instruções e mais opções</button></div>
+      </div>
+    </div></div>`;
+    const gd=document.getElementById('cloud_gdrive'); if(gd) gd.onclick=async()=>{
+      gd.disabled=true; gd.textContent='Conectando...';
+      try{ await GoogleDriveProvider.connect(true); }
+      catch(e){ gd.disabled=false; gd.textContent='Continuar com Google'; alert(e.message||String(e)); }
+    };
+    const ul=document.getElementById('cloud_use_local'); if(ul) ul.onclick=()=>{ setStorageMode('offline'); enterLocalMode(); };
+    const mi=document.getElementById('cloud_more_info'); if(mi) mi.onclick=()=>this.showMoreInfoModal();
+  },
+
+  /* Painel "Instruções e mais opções": explica como o login funciona, avisa sobre
+     perfis locais existentes, e dá as duas saídas que não fazem sentido na tela
+     principal mais: entrar com e-mail/senha antigo (Supabase) e limpar dados do
+     navegador em caso de problema. */
+  showMoreInfoModal(){
+    const hasLocalProfiles = typeof getProfiles==='function' && (getProfiles()||[]).some(p=>p&&!p.cloud);
+    const box = el(`<div class="modal-overlay">
+      <div class="modal-box">
+        <div class="modal-head"><h2>Instruções e mais opções</h2><button id="cai_close">&times;</button></div>
+        <p class="modal-sub">Como o login do Borion funciona, e outras formas de entrar.</p>
+        <div class="info-box">"Continuar com Google" usa a pasta do Google Drive que foi compartilhada com a sua conta — escolha a pasta que tem o seu nome quando o seletor abrir. Cada conta pode ter vários perfis financeiros.</div>
+        ${hasLocalProfiles?`<div class="info-box">Você já tem perfil(is) salvos só neste dispositivo. Eles continuam aqui e voltam a aparecer quando você usar "sem conta".</div>`:''}
+        <div class="row-btns" style="margin-top:14px;flex-direction:column;gap:10px;">
+          <button class="btn-outline btn-block" id="cai_email_login">Entrar com e-mail e senha</button>
+        </div>
+        <div style="text-align:center;margin-top:16px;"><button class="link-btn" id="cai_reset_device" style="opacity:.55;font-size:.85em;">Problemas para entrar? Limpar dados deste navegador</button></div>
+      </div>
+    </div>`);
+    $('#modal-root').innerHTML=''; $('#modal-root').appendChild(box); attachModalGuard(box);
+    $('#cai_close').onclick=closeModal;
+    $('#cai_email_login').onclick=()=>{ closeModal(); this.emailExpanded=true; this.error=''; this.info=''; this.render(); };
+    $('#cai_reset_device').onclick=()=>{ closeModal(); if(window.confirmResetDeviceState) confirmResetDeviceState(); };
+  },
+
+  /* Formulário antigo de e-mail/senha (Supabase) — cobre login, criar conta,
+     recuperar senha e trocar senha. Só aparece a partir de agora se a pessoa pedir
+     explicitamente (ver showMoreInfoModal acima) ou se estiver no meio de um fluxo
+     que depende dele (criar conta, recuperar senha, trocar senha após recuperação). */
+  renderEmailForm(root){
+    const isCreate=this.mode==='create', isReset=this.mode==='reset', isChange=this.mode==='changePassword';
     const passwordHTML = !isReset ? passwordInputWrapHTML({id:'cloud_password',label:isChange?'Nova senha':'Senha',autocomplete:isChange?'new-password':(isCreate?'new-password':'current-password'),placeholder:'Mínimo 6 caracteres'}) : '';
     const password2HTML = isChange ? passwordInputWrapHTML({id:'cloud_password2',label:'Repetir nova senha',autocomplete:'new-password',placeholder:'Repita a nova senha'}) : '';
-    root.innerHTML=`<div class="gate-wrap cloud-login-wrap"><div class="gate-box"><div class="gate-logo"><img src="borion-emblem.png" alt="Borion Finance"/><div class="appname">Borion Finance</div></div><div class="gate-card cloud-card"><p class="gate-title">${isCreate?'Criar conta':isReset?'Recuperar senha':isChange?'Criar nova senha':'Entrar no Borion'}</p><p class="gate-sub">${isCreate?'Crie sua conta para sincronizar celular e computador.':isReset?'Informe seu e-mail para receber o link de recuperação.':isChange?'Defina sua nova senha para finalizar a recuperação.':'Use seu e-mail e senha para carregar seus perfis financeiros.'}</p>${this.error?`<p class="gate-error">${esc(this.error)}</p>`:''}${this.info?`<p class="gate-info">${esc(this.info)}</p>`:''}${isCreate?`<div class="field"><label>Nome</label><input type="text" id="cloud_name" autocomplete="name"></div>`:''}${!isChange?`<div class="field"><label>E-mail</label><input type="email" id="cloud_email" autocomplete="email"></div>`:''}${passwordHTML}${password2HTML}<button class="btn btn-primary btn-block" id="cloud_submit">${isCreate?'Criar conta':isReset?'Enviar link':isChange?'Salvar nova senha':'Entrar'}</button><div class="cloud-actions">${!isCreate&&!isReset&&!isChange?`<button class="link-btn" id="cloud_create">Criar conta</button><button class="link-btn" id="cloud_reset">Esqueci minha senha</button><button class="link-btn" id="cloud_gdrive">Entrar com Google (Drive)</button><button class="link-btn" id="cloud_use_local">Usar sem conta (só neste dispositivo)</button>`:''}${isCreate||isReset?`<button class="link-btn" id="cloud_back">Voltar para login</button>`:''}${isChange?`<button class="link-btn" id="cloud_back_app">Entrar depois</button>`:''}</div><div class="cloud-note">Cada conta pode ter vários perfis financeiros. Os dados ficam em cache local e sincronizam com o Supabase.</div>${!isCreate&&!isReset&&!isChange?`<div class="cloud-note">"Entrar com Google (Drive)" usa a pasta do Google Drive que foi compartilhada com a sua conta — escolha a pasta que tem o seu nome quando o seletor abrir.</div>`:''}${(!isCreate&&!isReset&&!isChange&&typeof getProfiles==='function'&&(getProfiles()||[]).some(p=>p&&!p.cloud))?`<div class="cloud-note">Você já tem perfil(is) salvos só neste dispositivo. Eles continuam aqui e voltam a aparecer quando você usar "sem conta" ou sair desta conta.</div>`:''}${!isCreate&&!isReset&&!isChange?`<div style="text-align:center;margin-top:16px;"><button class="link-btn" id="cloud_reset_device" style="opacity:.55;font-size:.85em;">Problemas para entrar? Limpar dados deste navegador</button></div>`:''}</div></div></div>`;
+    const title = isCreate?'Criar conta':isReset?'Recuperar senha':isChange?'Criar nova senha':'Entrar com e-mail e senha';
+    const sub = isCreate?'Crie sua conta para sincronizar celular e computador.':isReset?'Informe seu e-mail para receber o link de recuperação.':isChange?'Defina sua nova senha para finalizar a recuperação.':'Login antigo por e-mail e senha (Supabase) — a maioria já usa só "Continuar com Google".';
+    root.innerHTML = `<div class="gate-wrap cloud-login-wrap"><div class="gate-box">
+      <div class="gate-logo"><img src="borion-emblem.png" alt="Borion Finance"/><div class="appname">Borion Finance</div></div>
+      <div class="gate-card cloud-card">
+        <p class="gate-title">${title}</p>
+        <p class="gate-sub">${sub}</p>
+        ${this.error?`<p class="gate-error">${esc(this.error)}</p>`:''}
+        ${this.info?`<p class="gate-info">${esc(this.info)}</p>`:''}
+        ${isCreate?`<div class="field"><label>Nome</label><input type="text" id="cloud_name" autocomplete="name"></div>`:''}
+        ${!isChange?`<div class="field"><label>E-mail</label><input type="email" id="cloud_email" autocomplete="email"></div>`:''}
+        ${passwordHTML}${password2HTML}
+        <button class="btn btn-primary btn-block" id="cloud_submit">${isCreate?'Criar conta':isReset?'Enviar link':isChange?'Salvar nova senha':'Entrar'}</button>
+        <div class="cloud-actions">
+          ${!isCreate&&!isReset&&!isChange?`<button class="link-btn" id="cloud_create">Criar conta</button><button class="link-btn" id="cloud_reset">Esqueci minha senha</button>`:''}
+          ${isCreate||isReset?`<button class="link-btn" id="cloud_back">Voltar</button>`:''}
+          ${isChange?`<button class="link-btn" id="cloud_back_app">Entrar depois</button>`:''}
+          ${!isCreate&&!isReset&&!isChange?`<button class="link-btn" id="cloud_back_clean">← Voltar pro login simples</button>`:''}
+        </div>
+      </div>
+    </div></div>`;
     const submit=document.getElementById('cloud_submit'); if(submit) submit.onclick=()=>this.submit();
     const c=document.getElementById('cloud_create'); if(c) c.onclick=()=>{this.mode='create';this.error='';this.info='';this.render();};
     const r=document.getElementById('cloud_reset'); if(r) r.onclick=()=>{this.mode='reset';this.error='';this.info='';this.render();};
     const b=document.getElementById('cloud_back'); if(b) b.onclick=()=>{this.mode='login';this.error='';this.info='';this.render();};
     const ba=document.getElementById('cloud_back_app'); if(ba) ba.onclick=()=>enterCloudUser();
-    const ul=document.getElementById('cloud_use_local'); if(ul) ul.onclick=()=>{ setStorageMode('offline'); enterLocalMode(); };
-    const gd=document.getElementById('cloud_gdrive'); if(gd) gd.onclick=async()=>{
-      gd.disabled=true; gd.textContent='Conectando...';
-      try{
-        await GoogleDriveProvider.connect(true);
-      }catch(e){
-        gd.disabled=false; gd.textContent='Entrar com Google (Drive)';
-        alert(e.message||String(e));
-      }
-    };
-    const rd=document.getElementById('cloud_reset_device'); if(rd) rd.onclick=()=>{ if(window.confirmResetDeviceState) confirmResetDeviceState(); };
-    ['cloud_email','cloud_password','cloud_password2','cloud_name'].forEach(id=>{const el=document.getElementById(id); if(el) el.addEventListener('keydown',e=>{if(e.key==='Enter') this.submit();});});
+    const bc=document.getElementById('cloud_back_clean'); if(bc) bc.onclick=()=>{this.emailExpanded=false;this.error='';this.info='';this.render();};
+    ['cloud_email','cloud_password','cloud_password2','cloud_name'].forEach(id=>{const elx=document.getElementById(id); if(elx) elx.addEventListener('keydown',e=>{if(e.key==='Enter') this.submit();});});
   },
+
   async submit(){
     const email=(document.getElementById('cloud_email')||{}).value?.trim(); const password=(document.getElementById('cloud_password')||{}).value||''; const password2=(document.getElementById('cloud_password2')||{}).value||''; const name=(document.getElementById('cloud_name')||{}).value?.trim();
     this.error=''; this.info='';
@@ -1076,7 +1156,7 @@ async function enterCloudUser(){
 }
 async function cloudLogout(){
   await CloudStorage.guardExit(async ()=>{
-    await CloudStorage.signOut(); S.currentProfile=null; S.data=null; CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info=''; CloudAuth.render();
+    await CloudStorage.signOut(); S.currentProfile=null; S.data=null; CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info=''; CloudAuth.emailExpanded=false; CloudAuth.render();
   });
 }
 async function cloudForceSync(){ const ok=await CloudStorage.syncNow(); CloudStorage.updateBadge(); toast(ok?'Nuvem sincronizada e confirmada no Supabase.':'Falha ao sincronizar: '+(CloudStorage.pendingReason||'erro desconhecido do Supabase.')); return ok; }

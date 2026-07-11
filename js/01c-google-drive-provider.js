@@ -755,7 +755,7 @@ function renderGoogleDriveOnboarding(){
   };
   document.getElementById('gdrive_onboarding_back').onclick = ()=>{
     GoogleDriveProvider.disconnect();
-    CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info='';
+    CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info=''; CloudAuth.emailExpanded=false;
     CloudAuth.render();
   };
 }
@@ -786,7 +786,7 @@ function renderGoogleDriveReconnect(errorMessage){
   };
   document.getElementById('gdrive_use_other').onclick = ()=>{
     setStorageMode(null);
-    CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info='';
+    CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info=''; CloudAuth.emailExpanded=false;
     CloudAuth.render();
   };
 }

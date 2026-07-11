@@ -31,8 +31,8 @@ function renderSettings(){
   else if(S.settingsTab==='categories') content = renderSettingsCategories();
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.20.0 • Saves 1x/min, Ctrl+S com histórico e corrigido bug do "voltar"</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
-<div><strong>Versão:</strong> 6.20.0</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.21.0 • Tela de entrada mais limpa (Google em destaque)</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
+<div><strong>Versão:</strong> 6.21.0</div>
 <div><strong>Lançamento:</strong> 09/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -204,7 +204,7 @@ function renderSettingsBackup(){
     <div class="settings-section settings-hero-section"><h3>Backups e Google Drive</h3><p class="desc">Seus dados sincronizam automaticamente com a pasta compartilhada do Google Drive.</p></div>
     ${conflictBanner}
     <div class="settings-section"><h3>Status</h3><p class="desc"><strong>Conta:</strong> ${esc(gs.email||'')}<br><strong>Pasta conectada:</strong> ${esc(gs.folderName||'(não identificada)')} ${gs.folderLink?`<a href="${esc(gs.folderLink)}" target="_blank" rel="noopener">Abrir no Google Drive ↗</a>`:''}<br><strong>Status:</strong> ${gs.conflict?'Conflito — veja acima':gs.pending?'Salvando alterações...':'Tudo sincronizado'}<br><strong>Perfil ativo:</strong> ${esc(S.currentProfile?S.currentProfile.name:'Nenhum')}</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="GoogleDriveProvider.syncNow()">Sincronizar agora</button><button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button><button class="btn-outline btn-sm" onclick="GoogleDriveProvider.disconnect();S.currentProfile=null;S.data=null;CloudAuth.mode='login';CloudAuth.error='';CloudAuth.info='';CloudAuth.render();">Sair da conta Google</button></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="GoogleDriveProvider.syncNow()">Sincronizar agora</button><button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button><button class="btn-outline btn-sm" onclick="GoogleDriveProvider.disconnect();S.currentProfile=null;S.data=null;CloudAuth.mode='login';CloudAuth.error='';CloudAuth.info='';CloudAuth.emailExpanded=false;CloudAuth.render();">Sair da conta Google</button></div>
     </div>
     <div class="settings-section"><h3>Backups no Google Drive</h3><p class="desc">Histórico guardado na pasta <b>backups</b>, dentro da pasta acima. Limpeza automática mantém no máximo ~10GB (mais antigos são apagados — o histórico completo continua no disco local).</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewDriveBackups()">Ver backups no Drive</button></div></div>
     ${localBackupsBlock}
@@ -594,7 +594,7 @@ Settings.renderDeleteAccountModal = function(){
   attachModalGuard(box);
   const closeBtn = $('#del_close'); if(closeBtn) closeBtn.onclick = closeModal;
   const cancelBtn = $('#del_cancel'); if(cancelBtn) cancelBtn.onclick = closeModal;
-  const finishBtn = $('#del_finish'); if(finishBtn) finishBtn.onclick = ()=>{ closeModal(); CloudAuth.mode='login'; CloudAuth.info='Sua conta foi cancelada. Todos os dados foram apagados. Esperamos vê-lo em breve novamente.'; CloudAuth.error=''; CloudAuth.render(); };
+  const finishBtn = $('#del_finish'); if(finishBtn) finishBtn.onclick = ()=>{ closeModal(); CloudAuth.mode='login'; CloudAuth.info='Sua conta foi cancelada. Todos os dados foram apagados. Esperamos vê-lo em breve novamente.'; CloudAuth.error=''; CloudAuth.emailExpanded=false; CloudAuth.render(); };
   const backBtn = $('#del_back');
   if(backBtn) backBtn.onclick = ()=>{
     st.error=''; st.message='';
@@ -693,7 +693,7 @@ Settings.exportProfile = async function(){
    decide, depois de já estar usando o Borion, que quer conta na nuvem. */
 Settings.switchToCloudFromSettings = function(){
   setStorageMode('cloud');
-  if(window.CloudAuth){ CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info=''; CloudAuth.render(); }
+  if(window.CloudAuth){ CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info=''; CloudAuth.emailExpanded=false; CloudAuth.render(); }
 };
 Settings.emailBackup = function(){
   Settings.exportProfile();

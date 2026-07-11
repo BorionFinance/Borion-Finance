@@ -182,8 +182,6 @@ window.addEventListener('pagehide', ()=> ExitSaveGuard.finalSaveSilently('pagehi
     if(getStorageMode()==='google_drive'){
       try{
         await GoogleDriveProvider.connect(false);
-        S.gate={mode:'list', error:''};
-        renderGate();
       }catch(e){
         renderGoogleDriveReconnect(e.message||String(e));
       }

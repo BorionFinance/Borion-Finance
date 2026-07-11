@@ -1,3 +1,20 @@
+## V6.5.0 — Conflitos, backup e pasta vazia no Google Drive (10/07/2026)
+
+Fecha os 3 pontos que ficaram de fora do V6.4.0, depois de validado com a Amanda que o
+modelo de pasta compartilhada funciona de verdade entre contas diferentes.
+
+- **Detecção de conflito**: antes de gravar, o Borion confere se alguém (outro
+  dispositivo, mesma conta) salvou depois da última leitura. Se sim, não sobrescreve —
+  mostra um selo "Conflito — recarregar" no topo do app e um aviso em Configurações,
+  com botão pra recarregar a versão mais recente do Drive.
+- **Nunca sobrescreve com 0 perfis por cima de um arquivo que tinha perfis** — proteção
+  contra apagar tudo por um bug de sincronização.
+- **Backups no Google Drive**: pasta `backups/` dentro da pasta principal. Configurações
+  → Nuvem → "Ver backups no Drive" já lista, cria e restaura — mesmo padrão visual do
+  histórico de backup local.
+- **Pasta vazia não cria mais current.json em silêncio**: agora pergunta "Começar do
+  zero" ou "Importar um JSON antigo", como estava no plano original.
+
 ## V6.4.0 — Google Drive (FASE 3 da migração) (10/07/2026)
 
 Primeira versão do armazenamento por Google Drive, no modelo "central" que você

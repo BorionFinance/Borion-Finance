@@ -32,8 +32,8 @@ function renderSettings(){
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
   else if(S.settingsTab==='cloud') content = renderSettingsCloud();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.4.0 • Google Drive (FASE 3)</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
-<div><strong>Versão:</strong> 6.4.0</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.5.0 • Conflitos e backup no Drive</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
+<div><strong>Versão:</strong> 6.5.0</div>
 <div><strong>Lançamento:</strong> 09/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -181,11 +181,14 @@ function renderSettingsCloud(){
     // de "Sincronizar/Diagnóstico/Trocar senha" do Supabase (não fazem sentido aqui) e
     // sem o texto de "modo local" (os dados NÃO ficam só neste dispositivo).
     const gs = GoogleDriveProvider.getStatus();
+    const conflictBanner = gs.conflict ? `<div class="info-box danger-box"><b>Atenção:</b> existe uma versão mais recente desta conta salva no Google Drive (provavelmente de outro dispositivo). <button class="btn-outline btn-sm" onclick="GoogleDriveProvider.reload()">Recarregar agora</button></div>` : '';
     return `
     <div class="settings-section settings-hero-section"><h3>Google Drive</h3><p class="desc">Seus dados ficam salvos na pasta compartilhada do Google Drive, sincronizados automaticamente.</p></div>
-    <div class="settings-section"><h3>Status</h3><p class="desc"><strong>Conta:</strong> ${esc(gs.email||'')}<br><strong>Status:</strong> ${gs.pending?'Salvando alterações...':'Tudo sincronizado'}<br><strong>Perfil ativo:</strong> ${esc(S.currentProfile?S.currentProfile.name:'Nenhum')}</p>
+    ${conflictBanner}
+    <div class="settings-section"><h3>Status</h3><p class="desc"><strong>Conta:</strong> ${esc(gs.email||'')}<br><strong>Status:</strong> ${gs.conflict?'Conflito — veja acima':gs.pending?'Salvando alterações...':'Tudo sincronizado'}<br><strong>Perfil ativo:</strong> ${esc(S.currentProfile?S.currentProfile.name:'Nenhum')}</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="GoogleDriveProvider.syncNow()">Sincronizar agora</button><button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button><button class="btn-outline btn-sm" onclick="GoogleDriveProvider.disconnect();S.currentProfile=null;S.data=null;CloudAuth.mode='login';CloudAuth.error='';CloudAuth.info='';CloudAuth.render();">Sair da conta Google</button></div>
     </div>
+    <div class="settings-section"><h3>Backups no Google Drive</h3><p class="desc">Histórico de backups guardado na pasta <b>backups</b> dentro da sua pasta do Drive.</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewDriveBackups()">Ver backups no Drive</button></div></div>
     <div class="info-box">Se a internet cair, o Borion continua salvando neste dispositivo e envia pro Drive automaticamente quando a conexão voltar.</div>`;
   }
   if(!user){
@@ -800,6 +803,47 @@ Settings.restoreLocalBackup = function(id){
     variant:'danger',
     onConfirm: async ()=>{
       try{ await storageProvider.restoreBackup(id); closeModal(); toast('Backup local restaurado.'); }
+      catch(e){ alert(e.message||String(e)); }
+    }
+  });
+};
+
+/* V6.5.0 — mesma ideia do viewLocalBackups, lendo da pasta "backups" dentro da pasta
+   do Google Drive em vez do IndexedDB local. */
+Settings.viewDriveBackups = async function(){
+  try{
+    if(!window.GoogleDriveProvider || !GoogleDriveProvider.isConnected()) throw new Error('Google Drive não está conectado.');
+    const rows = await GoogleDriveProvider.listBackups();
+    const html = rows.length ? rows.map(r=>{
+      const when = r.modifiedTime ? new Date(r.modifiedTime).toLocaleString('pt-BR') : '-';
+      return `<div class="backup-vault-row">
+        <div class="backup-vault-main"><b>${esc(r.name)}</b><span>${esc(when)}</span></div>
+        <div class="backup-vault-actions"><button class="btn-outline btn-sm" onclick="Settings.restoreDriveBackup('${r.id}')">Restaurar</button></div>
+      </div>`;
+    }).join('') : `<div class="info-box">Nenhum backup no Drive ainda. Clique em "Criar backup agora".</div>`;
+    const box = el(`
+      <div class="modal-overlay">
+        <div class="modal-box backup-vault-modal">
+          <div class="modal-head"><h2>Backups no Google Drive</h2><button id="dbv_close">&times;</button></div>
+          <p class="modal-sub">Guardados na pasta "backups", dentro da sua pasta do Drive.</p>
+          <div class="backup-vault-list">${html}</div>
+          <div class="row-btns" style="margin-top:12px;"><button class="btn btn-primary btn-block" id="dbv_new">Criar backup agora</button></div>
+        </div>
+      </div>`);
+    $('#modal-root').innerHTML=''; $('#modal-root').appendChild(box); attachModalGuard(box);
+    $('#dbv_close').onclick=closeModal;
+    $('#dbv_new').onclick=async()=>{ try{ await GoogleDriveProvider.createBackup('manual'); closeModal(); toast('Backup criado no Drive.'); Settings.viewDriveBackups(); }catch(e){ alert(e.message||String(e)); } };
+  }catch(e){ alert(e.message||String(e)); }
+};
+Settings.restoreDriveBackup = function(fileId){
+  openConfirmModal({
+    title:'Restaurar backup do Google Drive',
+    text:'Você vai substituir os dados atuais pelo backup selecionado. O Borion cria um backup de segurança do estado atual antes de restaurar.',
+    confirmLabel:'Restaurar',
+    cancelLabel:'Cancelar',
+    variant:'danger',
+    onConfirm: async ()=>{
+      try{ await GoogleDriveProvider.restoreBackup(fileId); closeModal(); toast('Backup restaurado.'); renderGate(); }
       catch(e){ alert(e.message||String(e)); }
     }
   });

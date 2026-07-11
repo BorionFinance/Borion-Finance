@@ -1010,8 +1010,6 @@ const CloudAuth={
       gd.disabled=true; gd.textContent='Conectando...';
       try{
         await GoogleDriveProvider.connect(true);
-        S.gate={mode:'list', error:''};
-        renderGate();
       }catch(e){
         gd.disabled=false; gd.textContent='Entrar com Google (Drive)';
         alert(e.message||String(e));

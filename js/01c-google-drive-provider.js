@@ -235,7 +235,9 @@ const GoogleDriveProvider = {
 
   isConnected(){ return !!(GoogleDriveAuth.user && this.folderId); },
 
-  /* Login + (primeira vez) escolher pasta + carregar current.json. */
+  /* Login + (primeira vez) escolher pasta + carregar/ou perguntar o que fazer. Essa
+     função já decide sozinha pra qual tela ir (Gate normal ou onboarding de pasta
+     vazia) — quem chama connect() não precisa mais renderizar nada depois. */
   async connect(interactive){
     await GoogleDriveAuth.login(interactive);
     const sub = GoogleDriveAuth.user.sub;
@@ -247,32 +249,53 @@ const GoogleDriveProvider = {
     }
     this.folderId = folderId;
     setStorageMode('google_drive');
-    await this.loadFromDrive();
+    const result = await this.loadFromDrive();
+    if(result && result.empty){
+      renderGoogleDriveOnboarding();
+    } else {
+      S.gate = { mode: 'list', error: '' };
+      renderGate();
+    }
   },
 
+  /* Só localiza e lê o current.json — não cria nada. Retorna {empty:true} se a pasta
+     ainda não tiver backup nenhum, pra quem chamou decidir o que mostrar. */
   async loadFromDrive(){
     const file = await GoogleDriveFS.findChild(this.folderId, 'current.json');
-    if(!file){
-      // Pasta nova/vazia: cria o current.json inicial (sem perfis ainda) e deixa a
-      // pessoa criar o primeiro perfil normalmente pelo Gate, como já acontece hoje.
-      const empty = {
-        type: 'borion-account-backup', backupSchema: 5352, app: 'Borion Finance',
-        appVersion: BORION_APP_VERSION, backupType: 'initial',
-        reason: 'primeira conexão com o Google Drive', source: 'google_drive',
-        exportedAt: new Date().toISOString(),
-        account: { userId: GoogleDriveAuth.user.sub, email: GoogleDriveAuth.user.email },
-        config: {}, profileCount: 0, profiles: [], dataByProfile: {}
-      };
-      const created = await GoogleDriveFS.createFile(this.folderId, 'current.json', empty);
-      this.currentFileId = created.id; this.currentFileMeta = created;
-      S.profiles = []; setProfiles([]); S.currentProfile = null; S.data = null;
-      return;
-    }
+    if(!file) return { empty: true };
     this.currentFileId = file.id; this.currentFileMeta = file;
     const data = await GoogleDriveFS.readFile(file.id);
     const check = validateBorionJson(data);
     if(!check.valid) throw new Error('O current.json desta pasta parece corrompido: ' + check.errors.join(' '));
     applyAccountPayloadSilently(data);
+    this.lastKnownProfileCount = (data.profiles || []).length;
+    return { empty: false };
+  },
+
+  /* Cria o current.json inicial vazio (escolha "Começar do zero" no onboarding). */
+  async createEmptyCurrentFile(){
+    const empty = {
+      type: 'borion-account-backup', backupSchema: 5352, app: 'Borion Finance',
+      appVersion: BORION_APP_VERSION, backupType: 'initial',
+      reason: 'primeira conexão com o Google Drive', source: 'google_drive',
+      exportedAt: new Date().toISOString(),
+      account: { userId: GoogleDriveAuth.user.sub, email: GoogleDriveAuth.user.email },
+      config: {}, profileCount: 0, profiles: [], dataByProfile: {}
+    };
+    const created = await GoogleDriveFS.createFile(this.folderId, 'current.json', empty);
+    this.currentFileId = created.id; this.currentFileMeta = created;
+    this.lastKnownProfileCount = 0;
+    S.profiles = []; setProfiles([]); S.currentProfile = null; S.data = null;
+  },
+
+  /* Recarrega o current.json mais recente do Drive, descartando qualquer alteração
+     local ainda não sincronizada — usado depois de um conflito detectado. */
+  async reload(){
+    this.dirty = false; this.conflict = false;
+    clearTimeout(this.syncTimer);
+    const result = await this.loadFromDrive();
+    if(result && result.empty){ renderGoogleDriveOnboarding(); }
+    else { S.gate = { mode: 'list', error: '' }; renderGate(); }
   },
 
   /* Chamado de dentro de saveCurrentData() (mesmo gancho que o Supabase usa) — só
@@ -287,20 +310,80 @@ const GoogleDriveProvider = {
 
   async syncNow(){
     if(!this.isConnected() || !this.dirty || !this.currentFileId) return;
-    this.dirty = false;
     try{
+      // V6.5.0 — proteção contra conflito: se outro dispositivo (celular, outro PC)
+      // salvou depois da última vez que ESTE dispositivo leu o arquivo, não escreve
+      // por cima — avisa e espera a pessoa decidir (botão "Recarregar" no selo do topo).
+      const freshMeta = await GoogleDriveFS.getFileMeta(this.currentFileId);
+      if(this.currentFileMeta && this.currentFileMeta.modifiedTime && freshMeta.modifiedTime && freshMeta.modifiedTime !== this.currentFileMeta.modifiedTime){
+        this.conflict = true;
+        toast('Existe uma versão mais recente no Google Drive. Clique no selo "Conflito" no topo pra recarregar.');
+        return;
+      }
       const payload = await buildFullBackupPayload();
+      // V6.5.0 — nunca sobrescreve um current.json que tinha perfis com um payload
+      // vazio (0 perfis) — isso só aconteceria por bug, nunca por ação normal da
+      // pessoa (excluir perfil é uma ação explícita em outra tela, não por aqui).
+      if((payload.profiles || []).length === 0 && this.lastKnownProfileCount > 0){
+        console.warn('[GoogleDriveProvider] gravação automática bloqueada: tentaria salvar 0 perfis por cima de um arquivo que tinha ' + this.lastKnownProfileCount + '.');
+        this.dirty = true;
+        return;
+      }
+      this.dirty = false;
       const updated = await GoogleDriveFS.updateFile(this.currentFileId, payload);
       this.currentFileMeta = updated;
+      this.conflict = false;
+      this.lastKnownProfileCount = (payload.profiles || []).length;
     }catch(e){
       console.warn('[GoogleDriveProvider] falha ao sincronizar com o Drive (tenta de novo na próxima alteração):', e);
       this.dirty = true;
     }
   },
 
+  /* ---------------- Histórico de backups (pasta "backups" dentro da pasta principal) ---------------- */
+  async ensureBackupsFolder(){
+    if(this._backupsFolderId) return this._backupsFolderId;
+    const folder = await GoogleDriveFS.findOrCreateFolder(this.folderId, 'backups');
+    this._backupsFolderId = folder.id;
+    return folder.id;
+  },
+
+  async createBackup(reason){
+    reason = reason || 'manual';
+    const folderId = await this.ensureBackupsFolder();
+    const payload = await buildFullBackupPayload();
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const name = 'backup_' + ts + '_v' + BORION_APP_VERSION + '_' + reason + '.json';
+    const created = await GoogleDriveFS.createFile(folderId, name, payload);
+    return { id: created.id, name, createdAt: Date.now(), reasonType: reason };
+  },
+
+  async listBackups(){
+    const folderId = await this.ensureBackupsFolder();
+    const q = "'" + folderId + "' in parents and trashed=false";
+    const url = 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q)
+      + '&fields=' + encodeURIComponent('files(id,name,modifiedTime)') + '&orderBy=' + encodeURIComponent('modifiedTime desc');
+    const res = await fetch(url, { headers: await GoogleDriveFS.authHeaders() });
+    if(!res.ok) throw new Error('Falha ao listar backups no Drive.');
+    const data = await res.json();
+    return (data.files || []).map(f=>({ id: f.id, name: f.name, modifiedTime: f.modifiedTime }));
+  },
+
+  async restoreBackup(fileId){
+    const data = await GoogleDriveFS.readFile(fileId);
+    const check = validateBorionJson(data);
+    if(!check.valid) throw new Error('Backup corrompido: ' + check.errors.join(' '));
+    await this.createBackup('before_restore');
+    applyAccountPayloadSilently(data);
+    this.lastKnownProfileCount = (data.profiles || []).length;
+    this.dirty = true;
+    await this.syncNow();
+  },
+
   disconnect(){
     GoogleDriveAuth.signOut();
     this.folderId = null; this.currentFileId = null; this.currentFileMeta = null;
+    this._backupsFolderId = null; this.conflict = false; this.dirty = false;
     setStorageMode(null);
   },
 
@@ -309,12 +392,55 @@ const GoogleDriveProvider = {
       connected: this.isConnected(),
       email: GoogleDriveAuth.user ? GoogleDriveAuth.user.email : null,
       folderId: this.folderId,
-      pending: this.dirty
+      pending: this.dirty,
+      conflict: this.conflict
     };
   }
 };
 
 window.GoogleDriveProvider = GoogleDriveProvider;
+
+/* Tela de onboarding pra pasta compartilhada que ainda não tem nenhum current.json —
+   pede pra escolher entre importar um JSON antigo (ex: exportado do Supabase) ou
+   começar do zero, em vez de criar um arquivo vazio silenciosamente. */
+function renderGoogleDriveOnboarding(){
+  applyFont(); applyTheme();
+  const root = document.getElementById('root');
+  root.innerHTML = `
+    <div class="gate-wrap">
+      <div class="gate-box">
+        <div class="gate-logo"><img src="borion-emblem.png" alt="Borion Finance"/><div class="appname">Borion Finance</div></div>
+        <div class="gate-card">
+          <h2>Nenhum dado encontrado nesta pasta</h2>
+          <p class="gate-sub">Essa pasta do Google Drive ainda não tem nenhum backup do Borion. O que você quer fazer?</p>
+          <button class="btn btn-primary btn-block" id="gdrive_start_fresh">Começar do zero</button>
+          <div style="text-align:center;margin-top:10px;"><button class="link-btn" id="gdrive_import_old">Importar um JSON antigo</button></div>
+          <input type="file" id="gdrive_import_file" accept="application/json" style="display:none;">
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('gdrive_start_fresh').onclick = async ()=>{
+    try{ await GoogleDriveProvider.createEmptyCurrentFile(); S.gate={mode:'list',error:''}; renderGate(); }
+    catch(e){ alert(e.message||String(e)); }
+  };
+  document.getElementById('gdrive_import_old').onclick = ()=>{ document.getElementById('gdrive_import_file').click(); };
+  document.getElementById('gdrive_import_file').onchange = async (ev)=>{
+    const file = ev.target.files[0]; if(!file) return;
+    try{
+      const text = await file.text();
+      const obj = JSON.parse(text);
+      const check = validateBorionJson(obj);
+      if(!check.valid){ alert(check.errors.join(' ')); return; }
+      const created = await GoogleDriveFS.createFile(GoogleDriveProvider.folderId, 'current.json', obj);
+      GoogleDriveProvider.currentFileId = created.id;
+      GoogleDriveProvider.currentFileMeta = created;
+      GoogleDriveProvider.lastKnownProfileCount = (obj.profiles || []).length;
+      applyAccountPayloadSilently(obj);
+      S.gate = { mode: 'list', error: '' };
+      renderGate();
+    }catch(e){ alert('Arquivo inválido: ' + (e.message || String(e))); }
+  };
+}
 
 /* Tela simples mostrada quando a renovação silenciosa do token do Google falha no
    boot (ex: sessão expirada, revogou acesso pela conta Google). Só tem um botão —
@@ -338,8 +464,6 @@ function renderGoogleDriveReconnect(errorMessage){
   document.getElementById('gdrive_reconnect').onclick = async ()=>{
     try{
       await GoogleDriveProvider.connect(true);
-      S.gate={mode:'list', error:''};
-      renderGate();
     }catch(e){ renderGoogleDriveReconnect(e.message||String(e)); }
   };
   document.getElementById('gdrive_use_other').onclick = ()=>{

@@ -259,6 +259,15 @@ window.addEventListener('appinstalled', () => {
 })();
 
 /* ---------- V5.34.8: importação JSON ciente de nuvem/perfil ativo ---------- */
+/* V6.6.0 — os fluxos de importação abaixo (novo perfil, substituir tudo, mesclar
+   tudo) escrevem direto em setProfiles()/setProfileData(), sem passar por
+   saveCurrentData() — que é onde normalmente o Google Drive é avisado pra sincronizar.
+   Sem isso, um perfil importado só chegaria ao Drive na próxima vez que algo mais
+   disparasse um save. Chamado no fim de cada fluxo de importação/mesclagem local. */
+function notifyGoogleDriveAfterImport(){
+  if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){ GoogleDriveProvider.queueSave(); }
+}
+
 function handleImport(obj){
   const isCloud = !!(window.CloudStorage && CloudStorage.user);
   if(isCloud){
@@ -367,11 +376,11 @@ function handleImport(obj){
     const existingIdx = S.profiles.findIndex(p=>p.id===incoming.id);
     const doImportAsNew = ()=>{
       if(S.profiles.length>=5){ alert('Máximo de 5 perfis atingido.'); closeModal(); return; }
-      const newId=uid(); S.profiles.push({...incoming,id:newId,name:(incoming.name||'Perfil')+' (importado)'}); setProfiles(S.profiles); setProfileData(newId,incomingData); closeModal(); toast('Perfil importado.'); if(S.currentProfile) renderView(); else renderGate();
+      const newId=uid(); S.profiles.push({...incoming,id:newId,name:(incoming.name||'Perfil')+' (importado)'}); setProfiles(S.profiles); setProfileData(newId,incomingData); notifyGoogleDriveAfterImport(); closeModal(); toast('Perfil importado.'); if(S.currentProfile) renderView(); else renderGate();
     };
     if(existingIdx>-1){
       openChoiceModal({title:'Este perfil já existe', sub:'Já existe um perfil "'+S.profiles[existingIdx].name+'" neste app.', choices:[
-        {label:'Substituir dados deste perfil', variant:'danger', onClick:()=>{ S.profiles[existingIdx]={...S.profiles[existingIdx],...incoming}; setProfiles(S.profiles); setProfileData(incoming.id,incomingData); if(S.currentProfile&&S.currentProfile.id===incoming.id) S.data=incomingData; closeModal(); renderView(); toast('Perfil substituído.'); }},
+        {label:'Substituir dados deste perfil', variant:'danger', onClick:()=>{ S.profiles[existingIdx]={...S.profiles[existingIdx],...incoming}; setProfiles(S.profiles); setProfileData(incoming.id,incomingData); if(S.currentProfile&&S.currentProfile.id===incoming.id) S.data=incomingData; notifyGoogleDriveAfterImport(); closeModal(); renderView(); toast('Perfil substituído.'); }},
         {label:'Importar como novo perfil', onClick:doImportAsNew},
         {label:'Cancelar', onClick:closeModal}
       ]});
@@ -389,6 +398,7 @@ function handleImport(obj){
         setProfileData(pid, d);
       });
       S.currentProfile=null; S.data=null;
+      notifyGoogleDriveAfterImport();
       closeModal();
       toast('Backup completo restaurado (perfis locais substituídos).');
       renderGate();
@@ -405,6 +415,7 @@ function handleImport(obj){
         added++;
       });
       setProfiles(S.profiles);
+      notifyGoogleDriveAfterImport();
       closeModal();
       toast(`Mesclado: ${added} perfil(is) adicionado(s)${skipped?', '+skipped+' ignorado(s) (já existiam ou limite de 5 atingido)':''}.`);
       if(S.currentProfile) renderView(); else renderGate();

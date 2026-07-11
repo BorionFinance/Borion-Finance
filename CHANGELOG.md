@@ -1,3 +1,18 @@
+## V6.6.0 — Consolidar perfis por JSON, sem precisar logar cada pessoa no Google (10/07/2026)
+
+Mudança de plano (mais simples): em vez de cada pessoa logar com a própria conta Google
+numa pasta compartilhada, os perfis do Gustavo/Amanda/Marco entram por **importação do
+JSON de backup** direto na sua conta Google Drive — igual ao exemplo original do seu
+plano ("Conta Google Pedro → vários perfis dentro dela, tipo Netflix").
+
+- **Corrigido**: os fluxos de importar/mesclar perfis (`doImportAsNew`, `doReplaceAll`,
+  `doMergeAll` em `handleImport()`) escreviam direto no armazenamento local sem avisar o
+  Google Drive — um perfil mesclado só chegava ao Drive na próxima vez que *outra* coisa
+  disparasse uma sincronização. Agora, qualquer importação/mesclagem já dispara o envio
+  pro Drive na hora (`notifyGoogleDriveAfterImport()`).
+- Não precisa mais organizar pastas separadas por pessoa no Drive — todos os perfis
+  ficam dentro do mesmo `current.json`, na mesma pasta que você já está usando.
+
 ## V6.5.0 — Conflitos, backup e pasta vazia no Google Drive (10/07/2026)
 
 Fecha os 3 pontos que ficaram de fora do V6.4.0, depois de validado com a Amanda que o

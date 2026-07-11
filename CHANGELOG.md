@@ -1,3 +1,26 @@
+## V6.20.0 — Saves de 1 em 1 minuto, histórico do Ctrl+S e corrigido bug do "voltar" (11/07/2026)
+
+- **Bug real corrigido** (o do "atualizar a página e voltar mostra a versão errada,
+  atualizar de novo mostra a certa"): o navegador pode restaurar a página inteira a
+  partir do **bfcache** (cache de ida-e-volta) quando você usa o botão **Voltar** logo
+  depois de um F5 — isso reexibe um estado congelado de um instante anterior, sem
+  rodar o boot do app de novo nem buscar o `current.json` mais recente no Drive. Um F5
+  de verdade corrige na hora porque aí sim o boot roda do zero. Agora o app detecta
+  esse retorno do bfcache (`pageshow` com `persisted:true`) e força um recarregamento
+  de verdade, então a versão errada nunca fica visível.
+- **Bug real corrigido** (efeito colateral do anterior, também citado por você): o
+  índice de rotação dos slots de autosave só existia em memória e recomeçava do slot 1
+  a cada F5/reabertura — o que podia deixar um slot mais antigo com "cara" de mais
+  recente dentro da pasta por alguns ciclos. Agora esse índice fica salvo por pasta e
+  a rotação sempre continua de onde parou.
+- **Autosave automático**: trocado de 3 slots girando a cada ~90s (ciclo completo de
+  ~4-5min) por **20 slots girando 1 vez por minuto** (`autosave-1.json` até
+  `autosave-20.json`, dentro da pasta "backups").
+- **Novo — histórico do Ctrl+S**: além de sobrescrever o `current.json` na hora, cada
+  Ctrl+S agora também grava num rodízio próprio de **até 40 slots**
+  (`forcesave-1.json` até `forcesave-40.json`), separado do autosave automático — um
+  histórico só dos momentos em que você mesmo decidiu "salvar agora".
+
 ## V6.19.0 — Ctrl+S força salvar + corrigido conflito falso por corrida (10/07/2026)
 
 - **Ctrl+S** agora força um salvamento imediato. No Google Drive, ignora de propósito

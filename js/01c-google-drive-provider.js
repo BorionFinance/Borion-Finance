@@ -28,11 +28,17 @@ const GOOGLE_DRIVE_SCOPES = 'openid https://www.googleapis.com/auth/userinfo.ema
    Com arquivos de ~1MB cada, dá muito espaço de sobra; o histórico completo continua
    no disco local de qualquer forma, então apagar os mais antigos do Drive é seguro. */
 const GOOGLE_DRIVE_BACKUP_MAX_BYTES = 10 * 1024 * 1024 * 1024;
-/* V6.10.0 — intervalo do autosave rotativo e quantos slots ficam girando. 90 segundos
-   fica dentro do "1 a 2 minutos" combinado — frequente o suficiente pra proteger uma
-   sessão longa de lançamentos, sem gerar tráfego desnecessário na Drive API. */
-const GOOGLE_DRIVE_AUTOSAVE_INTERVAL_MS = 90 * 1000;
-const GOOGLE_DRIVE_AUTOSAVE_SLOTS = 3;
+/* V6.20.0 — pedido: trocar os 3 slots girando a cada ~4-5min (90s × 3) por uma janela
+   bem mais fina — 1 save por minuto, girando entre 20 slots (autosave-1.json ...
+   autosave-20.json). Dá ~20 minutos de histórico curto granular, minuto a minuto. */
+const GOOGLE_DRIVE_AUTOSAVE_INTERVAL_MS = 60 * 1000;
+const GOOGLE_DRIVE_AUTOSAVE_SLOTS = 20;
+/* V6.20.0 — novo: além do autosave automático acima, cada Ctrl+S (forceSyncNow)
+   agora também grava num rodízio PRÓPRIO de até 40 slots (forcesave-1.json ...
+   forcesave-40.json), separado do autosave normal — histórico só dos momentos em que
+   você mesmo decidiu "salvar agora", que tende a ser justamente antes/depois dos
+   pontos que você quer poder voltar. Ver forceSyncNow(). */
+const GOOGLE_DRIVE_FORCESAVE_SLOTS = 40;
 
 const LS_GDRIVE_FOLDER_PREFIX = 'borion_gdrive_folder_'; // + googleSub -> folderId
 const LS_GDRIVE_USER = 'borion_gdrive_user'; // cache do último usuário Google {sub,email,name,picture}
@@ -51,9 +57,33 @@ function gdriveWriteBackupsFolderId(mainFolderId, id){ localStorage.setItem(LS_G
 /* V6.12.0 — mesma ideia, agora pro arquivo de cada slot de autosave (evita duplicar
    autosave-1.json/2.json/3.json quando duas abas ou sessões calculam o mesmo slot perto
    uma da outra). Keyed por pasta de backups + número do slot. */
+/* V6.20.0 — generalizado pra servir os dois rodízios (autosave e forcesave), cada um
+   com seu próprio "namespace" de slots — sem isso, "slot 5" do autosave e "slot 5" do
+   forcesave colidiriam na mesma chave e um pisaria no ID de arquivo do outro. */
 const LS_GDRIVE_AUTOSAVE_FILE_PREFIX = 'borion_gdrive_autosave_file_';
-function gdriveReadAutosaveFileId(folderId, slot){ return localStorage.getItem(LS_GDRIVE_AUTOSAVE_FILE_PREFIX + folderId + '_' + slot) || null; }
-function gdriveWriteAutosaveFileId(folderId, slot, id){ localStorage.setItem(LS_GDRIVE_AUTOSAVE_FILE_PREFIX + folderId + '_' + slot, id); }
+function gdriveReadAutosaveFileId(folderId, kind, slot){ return localStorage.getItem(LS_GDRIVE_AUTOSAVE_FILE_PREFIX + kind + '_' + folderId + '_' + slot) || null; }
+function gdriveWriteAutosaveFileId(folderId, kind, slot, id){ localStorage.setItem(LS_GDRIVE_AUTOSAVE_FILE_PREFIX + kind + '_' + folderId + '_' + slot, id); }
+
+/* V6.20.0 — bug real corrigido: o índice de rotação (qual slot é "o próximo") vivia
+   só em memória (this.autosaveSlotIndex = 0 sempre no boot). Como o Google Drive não
+   é consultado pra descobrir "qual slot foi escrito por último", cada F5/fechar-e-abrir
+   aba fazia a rotação recomeçar do slot 1 — o que podia sobrescrever um slot recente
+   fora de ordem e deixar, por um tempo, um slot MAIS ANTIGO com "cara" de mais recente
+   dentro da pasta (ex: reabrir o app 2x seguidas dava a impressão de "voltar" pra uma
+   versão de alguns minutos atrás, até a rotação se realinhar sozinha depois de mais
+   alguns ciclos). Agora o índice fica salvo por pasta, sobrevive a reload/fechar aba,
+   e cada slot novo é sempre realmente o próximo depois do último gravado nesta pasta,
+   nunca o slot 1 de novo por acaso. Mesma lógica serve autosave e forcesave (Ctrl+S),
+   com chaves separadas (kind='autosave' | 'forcesave'). */
+const LS_GDRIVE_SLOT_INDEX_PREFIX = 'borion_gdrive_slot_index_';
+function gdriveReadSlotIndex(folderId, kind){
+  const raw = localStorage.getItem(LS_GDRIVE_SLOT_INDEX_PREFIX + kind + '_' + folderId);
+  const n = raw != null ? parseInt(raw, 10) : 0;
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+function gdriveWriteSlotIndex(folderId, kind, index){
+  try{ localStorage.setItem(LS_GDRIVE_SLOT_INDEX_PREFIX + kind + '_' + folderId, String(index)); }catch(e){}
+}
 
 /* V6.16.0 — marcador "existe alteração local ainda não confirmada no Drive",
    persistido (sobrevive a reload/fechar aba) — ver queueSave()/syncNow()/loadFromDrive(). */
@@ -266,6 +296,7 @@ const GoogleDriveProvider = {
   syncTimer: null,
   autosaveTimer: null,
   autosaveSlotIndex: 0,
+  forcesaveSlotIndex: 0,
   autosaveDirtySinceLast: false,
 
   isConnected(){ return !!(GoogleDriveAuth.user && this.folderId); },
@@ -306,6 +337,10 @@ const GoogleDriveProvider = {
       toast('Conectado à pasta "' + (this.folderName||'') + '" — confira em Configurações → Nuvem.');
     }
     setStorageMode('google_drive');
+    // V6.20.0 — retoma a rotação de onde parou nesta pasta, em vez de sempre do slot 1
+    // (ver comentário em gdriveReadSlotIndex/gdriveWriteSlotIndex acima).
+    this.autosaveSlotIndex = gdriveReadSlotIndex(this.folderId, 'autosave');
+    this.forcesaveSlotIndex = gdriveReadSlotIndex(this.folderId, 'forcesave');
     const result = await this.loadFromDrive();
     this.startAutosaveLoop();
     if(result && result.empty){
@@ -406,11 +441,12 @@ const GoogleDriveProvider = {
 
   /* V6.10.0 — rede de segurança extra, além do current.json (que já salva ~800ms
      depois de qualquer mudança): a cada GOOGLE_DRIVE_AUTOSAVE_INTERVAL_MS, se algo
-     mudou desde o último autosave, grava um snapshot completo num de 3 "slots" fixos
-     que giram (autosave-1 → autosave-2 → autosave-3 → autosave-1 de novo). Não cria
-     arquivo novo a cada vez — só revezam os mesmos 3, então não acumula. Protege
-     contra current.json corrompido, conflito mal resolvido, ou qualquer coisa que dê
-     errado bem no meio de uma sessão longa de lançamentos. */
+     mudou desde o último autosave, grava um snapshot completo num rodízio de slots
+     fixos (autosave-1 → autosave-2 → ... → autosave-20 → autosave-1 de novo — V6.20.0:
+     eram só 3 slots a cada 90s, agora são 20 a cada 1 minuto). Não cria arquivo novo a
+     cada vez — só revezam os mesmos slots, então não acumula. Protege contra
+     current.json corrompido, conflito mal resolvido, ou qualquer coisa que dê errado
+     bem no meio de uma sessão longa de lançamentos. */
   startAutosaveLoop(){
     this.stopAutosaveLoop();
     this.autosaveTimer = setInterval(()=>{ this.runAutosaveTick(); }, GOOGLE_DRIVE_AUTOSAVE_INTERVAL_MS);
@@ -420,31 +456,42 @@ const GoogleDriveProvider = {
     if(this.autosaveTimer){ clearInterval(this.autosaveTimer); this.autosaveTimer = null; }
   },
 
+  /* V6.20.0 — lógica de rodízio compartilhada entre o autosave automático
+     ('autosave', 20 slots) e o rodízio de Ctrl+S ('forcesave', 40 slots) — mesma regra
+     nos dois: descobre o próximo slot a partir do índice PERSISTIDO desta pasta (nunca
+     mais reseta pro slot 1 sozinho por causa de um reload no meio do caminho — ver
+     gdriveReadSlotIndex/gdriveWriteSlotIndex), grava o payload nele e avança o índice. */
+  async writeRotatingSnapshot(kind, totalSlots, payload){
+    const folderId = await this.ensureBackupsFolder();
+    const indexProp = kind + 'SlotIndex';
+    const slot = (this[indexProp] % totalSlots) + 1;
+    const name = kind + '-' + slot + '.json';
+    // V6.12.0 — mesma correção da pasta de backups: guarda o ID real do arquivo deste
+    // slot assim que descoberto, pra nunca mais precisar buscar por nome de novo (a
+    // busca por nome tem consistência eventual + risco de corrida entre abas/sessões,
+    // o que gerava arquivo duplicado).
+    let fileId = gdriveReadAutosaveFileId(folderId, kind, slot);
+    if(fileId && !(await this._folderStillExists(fileId))) fileId = null;
+    if(fileId){
+      await GoogleDriveFS.updateFile(fileId, payload);
+    } else {
+      const existing = await GoogleDriveFS.findChild(folderId, name);
+      if(existing){ fileId = existing.id; await GoogleDriveFS.updateFile(fileId, payload); }
+      else { fileId = (await GoogleDriveFS.createFile(folderId, name, payload)).id; }
+      gdriveWriteAutosaveFileId(folderId, kind, slot, fileId);
+    }
+    this[indexProp]++;
+    gdriveWriteSlotIndex(folderId, kind, this[indexProp]);
+  },
+
   async runAutosaveTick(){
     if(!this.isConnected() || !this.autosaveDirtySinceLast) return;
     // V6.17.0 — extra segurança: não tenta nada enquanto a aba está em segundo plano
     // (Alt-Tab). Evita checagem de token do Google acontecendo sem a pessoa por perto.
     if(typeof document!=='undefined' && document.visibilityState==='hidden') return;
     try{
-      const folderId = await this.ensureBackupsFolder();
       const payload = await buildFullBackupPayload();
-      const slot = (this.autosaveSlotIndex % GOOGLE_DRIVE_AUTOSAVE_SLOTS) + 1;
-      const name = 'autosave-' + slot + '.json';
-      // V6.12.0 — mesma correção da pasta de backups: guarda o ID real do arquivo
-      // deste slot assim que descoberto, pra nunca mais precisar buscar por nome de
-      // novo (a busca por nome tem consistência eventual + risco de corrida entre
-      // abas/sessões, o que gerava "autosave-1.json" duplicado).
-      let fileId = gdriveReadAutosaveFileId(folderId, slot);
-      if(fileId && !(await this._folderStillExists(fileId))) fileId = null;
-      if(fileId){
-        await GoogleDriveFS.updateFile(fileId, payload);
-      } else {
-        const existing = await GoogleDriveFS.findChild(folderId, name);
-        if(existing){ fileId = existing.id; await GoogleDriveFS.updateFile(fileId, payload); }
-        else { fileId = (await GoogleDriveFS.createFile(folderId, name, payload)).id; }
-        gdriveWriteAutosaveFileId(folderId, slot, fileId);
-      }
-      this.autosaveSlotIndex++;
+      await this.writeRotatingSnapshot('autosave', GOOGLE_DRIVE_AUTOSAVE_SLOTS, payload);
       this.autosaveDirtySinceLast = false;
     }catch(e){
       console.warn('[GoogleDriveProvider] autosave rotativo falhou (não crítico — o current.json continua sincronizando normalmente):', e);
@@ -502,7 +549,12 @@ const GoogleDriveProvider = {
 
   /* V6.19.0 — "Ctrl+S": ignora a checagem de conflito de propósito e grava o estado
      local por cima do que estiver no Drive agora — é o botão de escape explícito pra
-     quando a pessoa sabe que a versão dela é a certa e só quer resolver o conflito. */
+     quando a pessoa sabe que a versão dela é a certa e só quer resolver o conflito.
+     V6.20.0 — além de current.json, cada Ctrl+S agora também grava num rodízio próprio
+     de até 40 slots (forcesave-1.json...forcesave-40.json), pra dar um histórico dos
+     momentos em que você mesmo pediu pra salvar — ver writeRotatingSnapshot(). Isso é
+     redundância de segurança; se falhar (rede, etc.) não desfaz o Ctrl+S em si, que já
+     terminou com sucesso no current.json. */
   async forceSyncNow(){
     if(!this.isConnected() || !this.currentFileId) return false;
     clearTimeout(this.syncTimer);
@@ -516,6 +568,8 @@ const GoogleDriveProvider = {
       this.dirty = false;
       this.lastKnownProfileCount = (payload.profiles || []).length;
       try{ localStorage.removeItem(gdrivePendingKey(this.folderId)); }catch(e){}
+      try{ await this.writeRotatingSnapshot('forcesave', GOOGLE_DRIVE_FORCESAVE_SLOTS, payload); }
+      catch(e){ console.warn('[GoogleDriveProvider] forcesave rotativo falhou (não crítico — o Ctrl+S em current.json já foi salvo):', e); }
       return true;
     }finally{
       this._syncInFlight = false;

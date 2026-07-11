@@ -148,6 +148,21 @@ window.addEventListener('visibilitychange', ()=>{
 });
 window.addEventListener('pagehide', ()=> ExitSaveGuard.finalSaveSilently('pagehide'));
 
+/* V6.20.0 — bug real corrigido: "atualizar a página e voltar (botão Voltar do
+   navegador) mostra uma versão antiga, atualizar de novo mostra a certa". Causa: o
+   navegador pode restaurar a página inteira a partir do bfcache (back-forward cache)
+   ao usar o botão Voltar depois de um F5 — isso NÃO reexecuta o boot() abaixo nem
+   `loadFromDrive()`, só devolve o DOM/estado congelado de um instante anterior (que
+   podia ser de antes do current.json terminar de sincronizar). Um F5 de verdade
+   corrige na hora porque aí sim o boot roda de novo do zero e busca o current.json
+   mais recente — daí a impressão de "só corrige na segunda vez". O evento `pageshow`
+   com `event.persisted===true` é como o navegador avisa "essa página veio do
+   bfcache" — usamos isso pra forçar um reload de verdade e garantir que o app sempre
+   mostra o estado mais recente, nunca um congelado. */
+window.addEventListener('pageshow', (e)=>{
+  if(e.persisted) location.reload();
+});
+
 /* ---------------- BOOT ---------------- */
 (function boot(){
   BackupFS.init();

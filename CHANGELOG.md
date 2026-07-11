@@ -1,3 +1,15 @@
+## V6.17.0 — Corrigido popup do Google abrindo a cada Alt-Tab (10/07/2026)
+
+Efeito colateral direto da correção anterior (V6.16.0): o "salvamento final" no
+`visibilitychange` rodava **toda vez** que a aba ficava em segundo plano (qualquer
+Alt-Tab), mesmo sem nada pra salvar — forçando uma checagem do token do Google a cada
+troca de janela, o que podia abrir/piscar a tela de login do Google.
+
+- Corrigido: só tenta salvar/sincronizar no Alt-Tab se existir mesmo uma alteração
+  pendente (mesma checagem que o `beforeunload` já usava corretamente).
+- Extra: o autosave rotativo de 90s agora também pula a tentativa enquanto a aba está
+  em segundo plano, evitando checagem de token acontecendo sem você por perto.
+
 ## V6.16.0 — Salvamento 100% silencioso + corrigido bug sério de reload voltando ao valor antigo (10/07/2026)
 
 **Pedido atendido**: removido o banner "Confirme o salvamento" e o diálogo nativo do

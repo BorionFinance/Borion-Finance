@@ -422,6 +422,9 @@ const GoogleDriveProvider = {
 
   async runAutosaveTick(){
     if(!this.isConnected() || !this.autosaveDirtySinceLast) return;
+    // V6.17.0 — extra segurança: não tenta nada enquanto a aba está em segundo plano
+    // (Alt-Tab). Evita checagem de token do Google acontecendo sem a pessoa por perto.
+    if(typeof document!=='undefined' && document.visibilityState==='hidden') return;
     try{
       const folderId = await this.ensureBackupsFolder();
       const payload = await buildFullBackupPayload();

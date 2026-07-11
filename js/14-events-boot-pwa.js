@@ -103,7 +103,12 @@ const ExitSaveGuard = {
   },
   finalSaveSilently(reason='exit'){
     try{
-      if(S && S.currentProfile && S.data) confirmFinalSave(reason);
+      // V6.17.0 — bug real corrigido: isso rodava em TODO Alt-Tab (tab ficando
+      // oculta), mesmo sem nada pra salvar — forçando uma checagem de token do
+      // Google a cada vez, o que podia acabar abrindo/piscando a janela de login do
+      // Google. Agora só faz alguma coisa se existir mesmo uma alteração pendente.
+      if(!(S && S.currentProfile && S.data && hasExitSavePending(S.currentProfile.id))) return;
+      confirmFinalSave(reason);
       if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.syncNow();
     }catch(e){ console.warn('[BORION_EXIT_SAVE][SILENT_WARN]', e); }
   }

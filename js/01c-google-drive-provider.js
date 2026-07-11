@@ -242,6 +242,17 @@ const GoogleDriveProvider = {
     await GoogleDriveAuth.login(interactive);
     const sub = GoogleDriveAuth.user.sub;
     let folderId = gdriveReadFolderId(sub);
+    if(folderId){
+      // V6.7.0 — a pasta salva pode ter sido excluída/movida (ex: você apagou uma
+      // pasta de teste no Drive). Sem essa checagem, o app tentava usar um ID que não
+      // existe mais e caía numa tela de "pasta vazia" enganosa. Confirma que a pasta
+      // ainda existe antes de pular o seletor.
+      const stillThere = await this._folderStillExists(folderId);
+      if(!stillThere){
+        gdriveForgetFolderId(sub);
+        folderId = null;
+      }
+    }
     if(!folderId){
       const folder = await openDriveFolderPicker();
       folderId = folder.id;
@@ -256,6 +267,13 @@ const GoogleDriveProvider = {
       S.gate = { mode: 'list', error: '' };
       renderGate();
     }
+  },
+
+  async _folderStillExists(folderId){
+    try{
+      const meta = await GoogleDriveFS.getFileMeta(folderId);
+      return !!(meta && meta.id);
+    }catch(e){ return false; }
   },
 
   /* Só localiza e lê o current.json — não cria nada. Retorna {empty:true} se a pasta
@@ -380,6 +398,29 @@ const GoogleDriveProvider = {
     await this.syncNow();
   },
 
+  /* V6.7.0 — grava o JSON de UM perfil específico (não a conta inteira) como arquivo
+     separado dentro da pasta "backups" no Drive — pedido pra organizar um arquivo por
+     pessoa (perfil-pedro.json, perfil-amanda.json, perfil-marco.json...), redundante
+     com o current.json completo, só que mais fácil de identificar de qual pessoa é. */
+  async exportSingleProfileToDrive(profileId){
+    const p = (S.profiles || []).find(x=>x.id===profileId);
+    if(!p) throw new Error('Perfil não encontrado.');
+    let data = (S.currentProfile && S.currentProfile.id===profileId && S.data) ? S.data : getProfileData(profileId);
+    if(!data && typeof idbGetProfileData === 'function') data = await idbGetProfileData(profileId);
+    data = migrateData(data || emptyData());
+    const payload = {
+      type: 'multicap-profile-backup', version: 2, exportedAt: new Date().toISOString(),
+      profile: { id: p.id, name: p.name, email: p.email, passwordHash: p.passwordHash, salt: p.salt, avatarColor: p.avatarColor, avatarImage: p.avatarImage },
+      data
+    };
+    const folderId = await this.ensureBackupsFolder();
+    const safeName = (p.name || 'perfil').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const name = 'perfil-' + safeName + '-' + new Date().toISOString().slice(0, 10) + '.json';
+    const existing = await GoogleDriveFS.findChild(folderId, name);
+    const created = existing ? await GoogleDriveFS.updateFile(existing.id, payload) : await GoogleDriveFS.createFile(folderId, name, payload);
+    return { id: created.id, name };
+  },
+
   disconnect(){
     GoogleDriveAuth.signOut();
     this.folderId = null; this.currentFileId = null; this.currentFileMeta = null;
@@ -416,6 +457,7 @@ function renderGoogleDriveOnboarding(){
           <button class="btn btn-primary btn-block" id="gdrive_start_fresh">Começar do zero</button>
           <div style="text-align:center;margin-top:10px;"><button class="link-btn" id="gdrive_import_old">Importar um JSON antigo</button></div>
           <input type="file" id="gdrive_import_file" accept="application/json" style="display:none;">
+          <div style="text-align:center;margin-top:14px;"><button class="link-btn" id="gdrive_onboarding_back">Usar outra forma de entrar</button></div>
         </div>
       </div>
     </div>`;
@@ -439,6 +481,11 @@ function renderGoogleDriveOnboarding(){
       S.gate = { mode: 'list', error: '' };
       renderGate();
     }catch(e){ alert('Arquivo inválido: ' + (e.message || String(e))); }
+  };
+  document.getElementById('gdrive_onboarding_back').onclick = ()=>{
+    GoogleDriveProvider.disconnect();
+    CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info='';
+    CloudAuth.render();
   };
 }
 

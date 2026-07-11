@@ -1,3 +1,18 @@
+## V6.7.0 — Segurança contra pasta excluída + backup individual por perfil (10/07/2026)
+
+- **Corrigido bug real**: se a pasta do Google Drive salva neste navegador for excluída
+  (ex: você apagou uma pasta de teste), o app antes caía silenciosamente numa tela de
+  "pasta vazia" enganosa, tentando escrever num lugar que não existe mais. Agora
+  confere se a pasta ainda existe antes de pular o seletor — se não existir mais,
+  esquece o vínculo antigo e abre o seletor de novo.
+- **Botão de escape** na tela de "pasta vazia": "Usar outra forma de entrar", pra nunca
+  deixar ninguém preso lá.
+- **"Backup deste perfil"**: novo botão em cada perfil (Configurações → Perfis). Salva
+  o JSON só daquele perfil como arquivo separado dentro da pasta `backups` no Drive
+  (`perfil-nome-data.json`) — ou baixa localmente se não estiver conectado ao Drive.
+  Atende ao pedido de ter um arquivo por pessoa, redundante com o `current.json`
+  completo, além de mais fácil de identificar de quem é cada backup.
+
 ## V6.6.0 — Consolidar perfis por JSON, sem precisar logar cada pessoa no Google (10/07/2026)
 
 Mudança de plano (mais simples): em vez de cada pessoa logar com a própria conta Google

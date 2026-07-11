@@ -32,8 +32,8 @@ function renderSettings(){
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
   else if(S.settingsTab==='cloud') content = renderSettingsCloud();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.6.0 • Perfis mesclados sincronizam com Drive</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
-<div><strong>Versão:</strong> 6.6.0</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.7.0 • Pasta excluída e backup por perfil</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
+<div><strong>Versão:</strong> 6.7.0</div>
 <div><strong>Lançamento:</strong> 09/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -156,6 +156,7 @@ function renderSettingsProfiles(){
       ${profileAvatarHTML(pr)}
       <div class="info"><div class="n">${esc(pr.name)} ${pr.id===p.id?'(ativo)':''}</div><div class="e">Perfil financeiro ${isCloud?'na nuvem':'local'} · ${pr.passwordHash?'com senha':'sem senha'} · ID ${esc(String(pr.id).slice(0,8))}</div></div>
       ${pr.id!==p.id?`<button class="btn-outline btn-sm" onclick="Settings.switchFinancialProfile('${pr.id}')">Abrir</button>`:''}
+      <button class="btn-outline btn-sm" onclick="Settings.backupSingleProfile('${pr.id}')">Backup deste perfil</button>
       <button class="btn-outline btn-sm" onclick="Settings.deleteProfile('${pr.id}')">Excluir</button>
     </div>`).join('');
   return `
@@ -847,6 +848,23 @@ Settings.restoreDriveBackup = function(fileId){
       catch(e){ alert(e.message||String(e)); }
     }
   });
+};
+
+Settings.backupSingleProfile = async function(profileId){
+  const pr = (S.profiles||[]).find(x=>x.id===profileId);
+  if(!pr){ alert('Perfil não encontrado.'); return; }
+  try{
+    if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){
+      const r = await GoogleDriveProvider.exportSingleProfileToDrive(profileId);
+      toast('Backup de "'+pr.name+'" salvo no Drive ('+r.name+').');
+    } else {
+      let data = (S.currentProfile && S.currentProfile.id===profileId && S.data) ? S.data : getProfileData(profileId);
+      data = migrateData(data || emptyData());
+      const payload = {type:'multicap-profile-backup', version:2, exportedAt:new Date().toISOString(), profile:{id:pr.id,name:pr.name,email:pr.email,passwordHash:pr.passwordHash,salt:pr.salt,avatarColor:pr.avatarColor,avatarImage:pr.avatarImage}, data};
+      downloadJSON(payload, `perfil-${slug(pr.name)}-${dateSlug()}.json`);
+      toast('Backup de "'+pr.name+'" baixado.');
+    }
+  }catch(e){ alert(e.message||String(e)); }
 };
 
 Settings.viewCloudBackups = async function(){

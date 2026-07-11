@@ -3,7 +3,7 @@
 // Estratégia: stale-while-revalidate.
 //
 // Ao editar o app e quiser forçar atualização do cache, aumente o número abaixo.
-const CACHE_NAME = 'borion-finance-v6-6-0-merge-sync';
+const CACHE_NAME = 'borion-finance-v6-7-0-folder-safety';
 
 const ASSETS = [
   "./",

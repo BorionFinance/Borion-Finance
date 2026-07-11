@@ -24,6 +24,10 @@ const GOOGLE_CLIENT_ID = '946105310952-gp143h81mm3704lrq3877hsie49njgak.apps.goo
 const GOOGLE_API_KEY = 'AIzaSyAMm_8CtFg_YP2ssG4XaiBbOc7wuJFq7xs';
 const GOOGLE_PROJECT_NUMBER = '946105310952';
 const GOOGLE_DRIVE_SCOPES = 'openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/drive.file';
+/* V6.8.0 — teto de tamanho da pasta "backups" no Drive, combinado com você: 10GB.
+   Com arquivos de ~1MB cada, dá muito espaço de sobra; o histórico completo continua
+   no disco local de qualquer forma, então apagar os mais antigos do Drive é seguro. */
+const GOOGLE_DRIVE_BACKUP_MAX_BYTES = 10 * 1024 * 1024 * 1024;
 
 const LS_GDRIVE_FOLDER_PREFIX = 'borion_gdrive_folder_'; // + googleSub -> folderId
 const LS_GDRIVE_USER = 'borion_gdrive_user'; // cache do último usuário Google {sub,email,name,picture}
@@ -242,6 +246,7 @@ const GoogleDriveProvider = {
     await GoogleDriveAuth.login(interactive);
     const sub = GoogleDriveAuth.user.sub;
     let folderId = gdriveReadFolderId(sub);
+    let justPicked = false;
     if(folderId){
       // V6.7.0 — a pasta salva pode ter sido excluída/movida (ex: você apagou uma
       // pasta de teste no Drive). Sem essa checagem, o app tentava usar um ID que não
@@ -257,8 +262,18 @@ const GoogleDriveProvider = {
       const folder = await openDriveFolderPicker();
       folderId = folder.id;
       gdriveWriteFolderId(sub, folderId);
+      justPicked = true;
     }
     this.folderId = folderId;
+    // V6.8.0 — nome da pasta é buscado sempre fresco (não fica salvo), pra sempre
+    // bater com o nome atual no Drive mesmo se você renomear a pasta depois. É pra
+    // resolver a confusão de "não sei onde tá salvando" — agora aparece em
+    // Configurações → Nuvem, com link direto pra abrir a pasta.
+    try{ const meta = await GoogleDriveFS.getFileMeta(folderId); this.folderName = meta.name; }
+    catch(e){ this.folderName = null; }
+    if(justPicked){
+      toast('Conectado à pasta "' + (this.folderName||'') + '" — confira em Configurações → Nuvem.');
+    }
     setStorageMode('google_drive');
     const result = await this.loadFromDrive();
     if(result && result.empty){
@@ -373,7 +388,39 @@ const GoogleDriveProvider = {
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
     const name = 'backup_' + ts + '_v' + BORION_APP_VERSION + '_' + reason + '.json';
     const created = await GoogleDriveFS.createFile(folderId, name, payload);
+    this.pruneBackupsBySize().catch(e=>console.warn('[GoogleDriveProvider] limpeza automática de backups falhou (não crítico):', e));
     return { id: created.id, name, createdAt: Date.now(), reasonType: reason };
+  },
+
+  /* V6.8.0 — mantém a pasta "backups" do Drive dentro de um teto de tamanho (padrão
+     10GB, o que dá pra durar anos com arquivos de ~1MB cada). Como o histórico
+     completo também fica no disco local (pasta de backup automático + IndexedDB),
+     apagar os mais antigos do Drive quando passar do teto é seguro. Roda sozinho
+     depois de cada createBackup(); não bloqueia a criação do backup se falhar. */
+  async pruneBackupsBySize(maxBytes){
+    maxBytes = maxBytes || GOOGLE_DRIVE_BACKUP_MAX_BYTES;
+    const folderId = await this.ensureBackupsFolder();
+    const q = "'" + folderId + "' in parents and trashed=false";
+    const url = 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q)
+      + '&fields=' + encodeURIComponent('files(id,name,modifiedTime,size)')
+      + '&orderBy=' + encodeURIComponent('modifiedTime desc') + '&pageSize=1000';
+    const res = await fetch(url, { headers: await GoogleDriveFS.authHeaders() });
+    if(!res.ok) throw new Error('Falha ao conferir o tamanho da pasta de backups no Drive.');
+    const data = await res.json();
+    const files = data.files || [];
+    let cumulative = 0;
+    const toDelete = [];
+    files.forEach(f=>{
+      const size = Number(f.size || 0);
+      cumulative += size;
+      if(cumulative > maxBytes) toDelete.push(f.id);
+    });
+    for(const id of toDelete){
+      try{
+        await fetch('https://www.googleapis.com/drive/v3/files/' + id, { method: 'DELETE', headers: await GoogleDriveFS.authHeaders() });
+      }catch(e){ console.warn('[GoogleDriveProvider] falha ao apagar backup antigo (' + id + '):', e); }
+    }
+    return { deleted: toDelete.length, totalBytes: cumulative };
   },
 
   async listBackups(){
@@ -433,6 +480,8 @@ const GoogleDriveProvider = {
       connected: this.isConnected(),
       email: GoogleDriveAuth.user ? GoogleDriveAuth.user.email : null,
       folderId: this.folderId,
+      folderName: this.folderName || null,
+      folderLink: this.folderId ? ('https://drive.google.com/drive/folders/' + this.folderId) : null,
       pending: this.dirty,
       conflict: this.conflict
     };

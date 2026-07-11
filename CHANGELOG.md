@@ -1,3 +1,23 @@
+## V6.8.0 — Mostrar em qual pasta está salvando + limpeza automática por tamanho (10/07/2026)
+
+Resolve a confusão de "não sei onde tá salvando" que apareceu ao testar com uma segunda
+conta Google — o seletor do Google mostra as pastas de quem estiver logado no momento,
+então é fácil clicar em uma pasta errada sem perceber (ex: uma pasta "Backup" qualquer,
+sem relação com o Borion) e não saber depois onde os dados foram parar.
+
+- **Configurações → Nuvem** agora mostra o **nome da pasta conectada** e um link **"Abrir
+  no Google Drive ↗"** — clique e confirma na hora se é a pasta certa.
+- Ao conectar pela primeira vez, aparece um aviso confirmando o nome da pasta escolhida.
+- O selo no topo do app também mostra o nome da pasta ao passar o mouse.
+- **Limpeza automática por tamanho**: a pasta `backups` no Drive agora tem um teto de
+  **10GB** (combinado no chat) — ao ultrapassar, os arquivos mais antigos são apagados
+  sozinhos. Roda depois de cada backup criado, sem travar nada se falhar. Seguro porque
+  o histórico completo continua no disco local de qualquer forma.
+
+**Lembrete importante pra você**: só a SUA conta principal deveria usar "Entrar com
+Google (Drive)" a partir de agora — o Gustavo/Amanda/Marco não precisam mais disso,
+os perfis deles já vivem dentro da sua conta via importação de JSON.
+
 ## V6.7.0 — Segurança contra pasta excluída + backup individual por perfil (10/07/2026)
 
 - **Corrigido bug real**: se a pasta do Google Drive salva neste navegador for excluída

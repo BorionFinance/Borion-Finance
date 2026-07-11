@@ -32,8 +32,8 @@ function renderSettings(){
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
   else if(S.settingsTab==='cloud') content = renderSettingsCloud();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.7.0 • Pasta excluída e backup por perfil</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
-<div><strong>Versão:</strong> 6.7.0</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.8.0 • Pasta visível e limpeza automática</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
+<div><strong>Versão:</strong> 6.8.0</div>
 <div><strong>Lançamento:</strong> 09/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -186,10 +186,10 @@ function renderSettingsCloud(){
     return `
     <div class="settings-section settings-hero-section"><h3>Google Drive</h3><p class="desc">Seus dados ficam salvos na pasta compartilhada do Google Drive, sincronizados automaticamente.</p></div>
     ${conflictBanner}
-    <div class="settings-section"><h3>Status</h3><p class="desc"><strong>Conta:</strong> ${esc(gs.email||'')}<br><strong>Status:</strong> ${gs.conflict?'Conflito — veja acima':gs.pending?'Salvando alterações...':'Tudo sincronizado'}<br><strong>Perfil ativo:</strong> ${esc(S.currentProfile?S.currentProfile.name:'Nenhum')}</p>
+    <div class="settings-section"><h3>Status</h3><p class="desc"><strong>Conta:</strong> ${esc(gs.email||'')}<br><strong>Pasta conectada:</strong> ${esc(gs.folderName||'(não identificada)')} ${gs.folderLink?`<a href="${esc(gs.folderLink)}" target="_blank" rel="noopener">Abrir no Google Drive ↗</a>`:''}<br><strong>Status:</strong> ${gs.conflict?'Conflito — veja acima':gs.pending?'Salvando alterações...':'Tudo sincronizado'}<br><strong>Perfil ativo:</strong> ${esc(S.currentProfile?S.currentProfile.name:'Nenhum')}</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="GoogleDriveProvider.syncNow()">Sincronizar agora</button><button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button><button class="btn-outline btn-sm" onclick="GoogleDriveProvider.disconnect();S.currentProfile=null;S.data=null;CloudAuth.mode='login';CloudAuth.error='';CloudAuth.info='';CloudAuth.render();">Sair da conta Google</button></div>
     </div>
-    <div class="settings-section"><h3>Backups no Google Drive</h3><p class="desc">Histórico de backups guardado na pasta <b>backups</b> dentro da sua pasta do Drive.</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewDriveBackups()">Ver backups no Drive</button></div></div>
+    <div class="settings-section"><h3>Backups no Google Drive</h3><p class="desc">Histórico de backups guardado na pasta <b>backups</b> dentro da pasta acima. Limpeza automática mantém no máximo ~10GB (arquivos mais antigos são apagados — o histórico completo continua no disco local).</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewDriveBackups()">Ver backups no Drive</button></div></div>
     <div class="info-box">Se a internet cair, o Borion continua salvando neste dispositivo e envia pro Drive automaticamente quando a conexão voltar.</div>`;
   }
   if(!user){

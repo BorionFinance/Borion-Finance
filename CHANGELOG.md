@@ -1,3 +1,24 @@
+## V6.16.0 — Salvamento 100% silencioso + corrigido bug sério de reload voltando ao valor antigo (10/07/2026)
+
+**Pedido atendido**: removido o banner "Confirme o salvamento" e o diálogo nativo do
+navegador ("tem certeza que quer sair?"). O salvamento continua acontecendo sozinho
+nos mesmos gatilhos de sempre (mudar de aba, fechar, trocar de app) — só que agora sem
+pedir nada pra você. O indicador visual é só o selo pequeno no topo ("Google Drive —
+salvando...").
+
+**Bug sério corrigido**: se você editava algo e recarregava a página antes do envio pro
+Drive terminar (debounce de 800ms), a nova conexão buscava o `current.json` do Drive —
+que podia ainda estar com o valor antigo — e **sobrescrevia** o valor correto que
+estava salvo localmente. Por isso o primeiro reload voltava pro valor de antes, e só o
+segundo (depois de tempo suficiente passar) mostrava o certo.
+
+Corrigido com um marcador que sobrevive a reload: se existir uma alteração local ainda
+não confirmada no Drive na hora de reconectar, o dado local é tratado como o mais
+recente — o Drive recebe ele de novo, em vez do valor antigo sobrescrever o certo.
+
+Também: o salvamento automático ao trocar de aba/fechar agora também envia pro Google
+Drive (antes só tentava com o Supabase).
+
 ## V6.15.0 — Modal de confirmação bonito, no lugar do diálogo nativo do navegador (10/07/2026)
 
 O botão "Limpar dados deste navegador" (V6.9.0) usava `confirm()` nativo do navegador —

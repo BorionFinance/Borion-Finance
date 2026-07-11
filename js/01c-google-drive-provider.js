@@ -55,6 +55,11 @@ const LS_GDRIVE_AUTOSAVE_FILE_PREFIX = 'borion_gdrive_autosave_file_';
 function gdriveReadAutosaveFileId(folderId, slot){ return localStorage.getItem(LS_GDRIVE_AUTOSAVE_FILE_PREFIX + folderId + '_' + slot) || null; }
 function gdriveWriteAutosaveFileId(folderId, slot, id){ localStorage.setItem(LS_GDRIVE_AUTOSAVE_FILE_PREFIX + folderId + '_' + slot, id); }
 
+/* V6.16.0 — marcador "existe alteração local ainda não confirmada no Drive",
+   persistido (sobrevive a reload/fechar aba) — ver queueSave()/syncNow()/loadFromDrive(). */
+const LS_GDRIVE_PENDING_PREFIX = 'borion_gdrive_pending_';
+function gdrivePendingKey(folderId){ return LS_GDRIVE_PENDING_PREFIX + folderId; }
+
 /* ---------------- Autenticação (Google Identity Services) ---------------- */
 const GoogleDriveAuth = {
   tokenClient: null,
@@ -335,6 +340,19 @@ const GoogleDriveProvider = {
     const file = await GoogleDriveFS.findChild(this.folderId, 'current.json');
     if(!file) return { empty: true };
     this.currentFileId = file.id; this.currentFileMeta = file;
+    // V6.16.0 — bug real corrigido: se a página fechou/recarregou enquanto uma
+    // alteração ainda não tinha sido confirmada no Drive (o debounce de 800ms não
+    // teve tempo de terminar), essa conexão nova simplesmente buscava o current.json
+    // do Drive — que podia estar desatualizado — e SOBRESCREVIA o dado local correto
+    // com o valor antigo. Corrigido: se existe uma alteração local pendente de antes,
+    // ela é tratada como a mais recente, e o Drive recebe ela de novo, em vez do
+    // caminho inverso.
+    const pendingSince = localStorage.getItem(gdrivePendingKey(this.folderId));
+    if(pendingSince){
+      this.dirty = true;
+      await this.syncNow();
+      return { empty: false };
+    }
     const data = await GoogleDriveFS.readFile(file.id);
     const check = validateBorionJson(data);
     if(!check.valid) throw new Error('O current.json desta pasta parece corrompido: ' + check.errors.join(' '));
@@ -376,6 +394,12 @@ const GoogleDriveProvider = {
     if(!this.isConnected()) return;
     this.dirty = true;
     this.autosaveDirtySinceLast = true;
+    // V6.16.0 — grava um marcador PERSISTENTE (sobrevive a reload/fechar aba) de que
+    // existe uma alteração ainda não confirmada no Drive. Ver loadFromDrive(): se esse
+    // marcador ainda estiver presente na próxima conexão, o dado local é tratado como
+    // o mais recente, em vez de deixar a leitura do Drive (possivelmente desatualizada)
+    // sobrescrever uma alteração que nunca chegou a ser enviada.
+    try{ localStorage.setItem(gdrivePendingKey(this.folderId), String(Date.now())); }catch(e){}
     clearTimeout(this.syncTimer);
     this.syncTimer = setTimeout(()=>this.syncNow(), 800);
   },
@@ -450,6 +474,7 @@ const GoogleDriveProvider = {
       this.currentFileMeta = updated;
       this.conflict = false;
       this.lastKnownProfileCount = (payload.profiles || []).length;
+      try{ localStorage.removeItem(gdrivePendingKey(this.folderId)); }catch(e){}
     }catch(e){
       console.warn('[GoogleDriveProvider] falha ao sincronizar com o Drive (tenta de novo na próxima alteração):', e);
       this.dirty = true;

@@ -92,41 +92,20 @@ const ExitSaveGuard = {
   dismissed:false,
   saving:false,
   getEl(){ return document.getElementById('exit-save-banner'); },
-  shouldShow(){ return !!(S && S.currentProfile && S.data && hasExitSavePending(S.currentProfile.id) && !this.dismissed); },
+  /* V6.16.0 — o banner "Confirme o salvamento" foi removido a pedido: o salvamento já
+     é automático e silencioso (ver finalSaveSilently, chamado em beforeunload/
+     visibilitychange/pagehide) — não faz sentido também pedir confirmação manual. O
+     indicador visual agora é só o selo pequeno no topo do app ("salvando..."). */
+  shouldShow(){ return false; },
   refresh(){
     const old = this.getEl();
-    if(!this.shouldShow()){ if(old) old.remove(); return; }
-    if(old) return;
-    const b = document.createElement('div');
-    b.id = 'exit-save-banner';
-    b.className = 'exit-save-banner';
-    b.innerHTML = `
-      <div class="esb-icon">✓</div>
-      <div class="esb-body">
-        <div class="esb-title">Confirme o salvamento</div>
-        <div class="esb-text">Antes de fechar o Borion, salve pela última vez para confirmar os dados inseridos neste dispositivo.</div>
-        <div class="esb-actions">
-          <button type="button" class="esb-save">Salvar agora</button>
-          <button type="button" class="esb-close">Depois</button>
-        </div>
-      </div>`;
-    document.body.appendChild(b);
-    b.querySelector('.esb-save').onclick = async ()=>{
-      if(this.saving) return;
-      this.saving = true;
-      confirmFinalSave('banner');
-      if(window.CloudStorage && CloudStorage.user && navigator.onLine){
-        try{ await CloudStorage.syncNow(); }catch(e){}
-      }
-      this.saving = false;
-      this.dismissed = false;
-      this.refresh();
-      toast('Salvamento final confirmado.');
-    };
-    b.querySelector('.esb-close').onclick = ()=>{ this.dismissed = true; this.refresh(); };
+    if(old) old.remove();
   },
   finalSaveSilently(reason='exit'){
-    try{ if(S && S.currentProfile && S.data) confirmFinalSave(reason); }catch(e){ console.warn('[BORION_EXIT_SAVE][SILENT_WARN]', e); }
+    try{
+      if(S && S.currentProfile && S.data) confirmFinalSave(reason);
+      if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.syncNow();
+    }catch(e){ console.warn('[BORION_EXIT_SAVE][SILENT_WARN]', e); }
   }
 };
 window.ExitSaveGuard = ExitSaveGuard;
@@ -134,9 +113,9 @@ window.ExitSaveGuard = ExitSaveGuard;
 window.addEventListener('beforeunload', e=>{
   if(!(S && S.currentProfile && S.data && hasExitSavePending(S.currentProfile.id))) return;
   ExitSaveGuard.finalSaveSilently('beforeunload');
-  e.preventDefault();
-  e.returnValue = 'Antes de fechar o Borion, confirme o salvamento final dos dados inseridos.';
-  return e.returnValue;
+  // V6.16.0 — removido o e.preventDefault()/returnValue que mostrava o diálogo nativo
+  // "tem certeza que quer sair?" do navegador. O salvamento acima já é automático e
+  // silencioso; a confirmação manual não faz mais sentido.
 });
 window.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState==='visible') ExitSaveGuard.refresh();

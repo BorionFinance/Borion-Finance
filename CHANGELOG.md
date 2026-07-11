@@ -1,3 +1,14 @@
+## V6.9.0 — Tela de login mais clara + botão de reset pra dispositivos travados (10/07/2026)
+
+- **Legendas na tela de login**: agora explica que "Entrar com Google (Drive)" é só pra
+  quem administra a pasta compartilhada, e que "Usar sem conta" é o caminho certo pra
+  uso pessoal (com exportação de backup pra enviar pra quem for consolidar).
+- **"Problemas para entrar? Limpar dados deste navegador"**: novo link discreto no fim
+  da tela de login. Zera perfis/config/sessão salvos SÓ NESTE NAVEGADOR (localStorage,
+  IndexedDB, cache do PWA) sem precisar de DevTools — não afeta nada que já esteja no
+  Supabase ou no Google Drive. Pra quando alguém fica com o navegador "confuso" de
+  testes anteriores (ex: pasta do Drive apagada, sessão antiga).
+
 ## V6.8.0 — Mostrar em qual pasta está salvando + limpeza automática por tamanho (10/07/2026)
 
 Resolve a confusão de "não sei onde tá salvando" que apareceu ao testar com uma segunda

@@ -206,6 +206,43 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+/* V6.9.0 — "Limpar dados deste navegador": zera qualquer perfil/estado salvo só
+   neste dispositivo (perfis locais, conta Google/Supabase lembrada, cache do PWA) sem
+   precisar de DevTools. NÃO apaga nada que já esteja salvo na nuvem, no Supabase ou no
+   Google Drive — só o que está guardado neste navegador específico. Pensado pra
+   resolver telas presas (ex: pasta do Drive excluída, sessão antiga confusa) em
+   dispositivos de pessoas menos técnicas. */
+async function resetDeviceState(){
+  const sure = confirm('Isso apaga perfis e configurações salvos SÓ NESTE NAVEGADOR, e desconecta qualquer conta Google/Supabase lembrada aqui. Não afeta nada que já esteja salvo na nuvem, no Supabase ou no Google Drive — só o que está neste dispositivo. Deseja continuar?');
+  if(!sure) return;
+  try{
+    Object.keys(localStorage).forEach(k=>{
+      if(k.startsWith('mc_') || k.startsWith('borion_')) localStorage.removeItem(k);
+    });
+  }catch(e){ console.warn('[resetDeviceState] falha ao limpar localStorage:', e); }
+  try{
+    if(window.indexedDB && indexedDB.databases){
+      const dbs = await indexedDB.databases();
+      await Promise.all(dbs.map(db=> db.name ? new Promise(res=>{ const req=indexedDB.deleteDatabase(db.name); req.onsuccess=res; req.onerror=res; req.onblocked=res; }) : Promise.resolve()));
+    } else {
+      ['borion_findata_v1','borion_local_backups_v1','borion_handles'].forEach(name=>{
+        try{ indexedDB.deleteDatabase(name); }catch(e){}
+      });
+    }
+  }catch(e){ console.warn('[resetDeviceState] falha ao limpar IndexedDB:', e); }
+  try{
+    if('serviceWorker' in navigator){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for(const r of regs){ await r.unregister(); }
+    }
+    if(window.caches){
+      const keys = await caches.keys();
+      for(const k of keys){ await caches.delete(k); }
+    }
+  }catch(e){ console.warn('[resetDeviceState] falha ao limpar cache do PWA:', e); }
+  location.reload();
+}
+
 /* ---------- V5.34.1: banner de instalação por plataforma (Android/desktop/iPhone) ---------- */
 const PWA_INSTALL_DISMISS_KEY = 'borion_install_banner_dismissed_v1';
 function isStandalonePWA(){

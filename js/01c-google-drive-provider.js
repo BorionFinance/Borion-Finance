@@ -48,6 +48,13 @@ const LS_GDRIVE_BACKUPS_FOLDER_PREFIX = 'borion_gdrive_backups_folder_';
 function gdriveReadBackupsFolderId(mainFolderId){ return localStorage.getItem(LS_GDRIVE_BACKUPS_FOLDER_PREFIX + mainFolderId) || null; }
 function gdriveWriteBackupsFolderId(mainFolderId, id){ localStorage.setItem(LS_GDRIVE_BACKUPS_FOLDER_PREFIX + mainFolderId, id); }
 
+/* V6.12.0 — mesma ideia, agora pro arquivo de cada slot de autosave (evita duplicar
+   autosave-1.json/2.json/3.json quando duas abas ou sessões calculam o mesmo slot perto
+   uma da outra). Keyed por pasta de backups + número do slot. */
+const LS_GDRIVE_AUTOSAVE_FILE_PREFIX = 'borion_gdrive_autosave_file_';
+function gdriveReadAutosaveFileId(folderId, slot){ return localStorage.getItem(LS_GDRIVE_AUTOSAVE_FILE_PREFIX + folderId + '_' + slot) || null; }
+function gdriveWriteAutosaveFileId(folderId, slot, id){ localStorage.setItem(LS_GDRIVE_AUTOSAVE_FILE_PREFIX + folderId + '_' + slot, id); }
+
 /* ---------------- Autenticação (Google Identity Services) ---------------- */
 const GoogleDriveAuth = {
   tokenClient: null,
@@ -381,9 +388,20 @@ const GoogleDriveProvider = {
       const payload = await buildFullBackupPayload();
       const slot = (this.autosaveSlotIndex % GOOGLE_DRIVE_AUTOSAVE_SLOTS) + 1;
       const name = 'autosave-' + slot + '.json';
-      const existing = await GoogleDriveFS.findChild(folderId, name);
-      if(existing) await GoogleDriveFS.updateFile(existing.id, payload);
-      else await GoogleDriveFS.createFile(folderId, name, payload);
+      // V6.12.0 — mesma correção da pasta de backups: guarda o ID real do arquivo
+      // deste slot assim que descoberto, pra nunca mais precisar buscar por nome de
+      // novo (a busca por nome tem consistência eventual + risco de corrida entre
+      // abas/sessões, o que gerava "autosave-1.json" duplicado).
+      let fileId = gdriveReadAutosaveFileId(folderId, slot);
+      if(fileId && !(await this._folderStillExists(fileId))) fileId = null;
+      if(fileId){
+        await GoogleDriveFS.updateFile(fileId, payload);
+      } else {
+        const existing = await GoogleDriveFS.findChild(folderId, name);
+        if(existing){ fileId = existing.id; await GoogleDriveFS.updateFile(fileId, payload); }
+        else { fileId = (await GoogleDriveFS.createFile(folderId, name, payload)).id; }
+        gdriveWriteAutosaveFileId(folderId, slot, fileId);
+      }
       this.autosaveSlotIndex++;
       this.autosaveDirtySinceLast = false;
     }catch(e){

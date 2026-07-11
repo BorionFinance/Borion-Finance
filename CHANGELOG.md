@@ -1,3 +1,19 @@
+## V6.12.0 — Corrigido autosave duplicado (autosave-1/2/3.json aparecendo 2x) (10/07/2026)
+
+Mesma causa-raiz do bug da pasta de backups (V6.11.0), só que no autosave rotativo:
+cada tick checava "esse arquivo já existe?" buscando por nome — vulnerável a
+consistência eventual da Drive API e a corrida entre abas/sessões diferentes rodando o
+autosave ao mesmo tempo. Corrigido: agora guarda o ID real de cada slot
+(`autosave-1/2/3.json`) assim que descoberto, e só atualiza esse ID direto depois —
+nunca mais busca por nome de novo pro mesmo slot.
+
+**Limpeza manual necessária uma vez**: os `autosave-N.json` duplicados que já existem
+(vi na sua print) podem ser apagados com segurança — mantenha o mais recente de cada
+par, apague o mais antigo. Os `backup_..._manual.json` de versões antigas (v6.5.0,
+v6.6.0 etc.) não são bug — são backups manuais de verdade, acumulados dos seus próprios
+testes ao longo do desenvolvimento; a limpeza automática por tamanho (10GB) cuida deles
+com o tempo.
+
 ## V6.11.0 — Corrigida pasta de backup duplicada dentro da pasta da Amanda (10/07/2026)
 
 - **Bug real corrigido**: a Drive API busca arquivos por nome com "consistência

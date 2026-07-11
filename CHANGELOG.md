@@ -1,3 +1,10 @@
+## V6.9.1 — Correção de legenda: cada pessoa usa a própria conta Google (10/07/2026)
+
+Ajuste de plano: cada pessoa (Amanda, Marco...) vai logar com a PRÓPRIA conta Google,
+numa subpasta dedicada dentro da "Borion Finance WEB" que você compartilha com o
+e-mail de cada uma — exatamente o modelo já testado com sucesso lá no início. A legenda
+da tela de login que dizia "só pra quem administra" estava desatualizada — corrigida.
+
 ## V6.9.0 — Tela de login mais clara + botão de reset pra dispositivos travados (10/07/2026)
 
 - **Legendas na tela de login**: agora explica que "Entrar com Google (Drive)" é só pra

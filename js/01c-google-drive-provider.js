@@ -28,6 +28,11 @@ const GOOGLE_DRIVE_SCOPES = 'openid https://www.googleapis.com/auth/userinfo.ema
    Com arquivos de ~1MB cada, dá muito espaço de sobra; o histórico completo continua
    no disco local de qualquer forma, então apagar os mais antigos do Drive é seguro. */
 const GOOGLE_DRIVE_BACKUP_MAX_BYTES = 10 * 1024 * 1024 * 1024;
+/* V6.10.0 — intervalo do autosave rotativo e quantos slots ficam girando. 90 segundos
+   fica dentro do "1 a 2 minutos" combinado — frequente o suficiente pra proteger uma
+   sessão longa de lançamentos, sem gerar tráfego desnecessário na Drive API. */
+const GOOGLE_DRIVE_AUTOSAVE_INTERVAL_MS = 90 * 1000;
+const GOOGLE_DRIVE_AUTOSAVE_SLOTS = 3;
 
 const LS_GDRIVE_FOLDER_PREFIX = 'borion_gdrive_folder_'; // + googleSub -> folderId
 const LS_GDRIVE_USER = 'borion_gdrive_user'; // cache do último usuário Google {sub,email,name,picture}
@@ -35,6 +40,13 @@ const LS_GDRIVE_USER = 'borion_gdrive_user'; // cache do último usuário Google
 function gdriveReadFolderId(sub){ return localStorage.getItem(LS_GDRIVE_FOLDER_PREFIX + sub) || null; }
 function gdriveWriteFolderId(sub, id){ localStorage.setItem(LS_GDRIVE_FOLDER_PREFIX + sub, id); }
 function gdriveForgetFolderId(sub){ localStorage.removeItem(LS_GDRIVE_FOLDER_PREFIX + sub); }
+
+/* V6.11.0 — persiste o ID da subpasta "backups", keyed pela pasta principal (não pela
+   conta) — assim, qualquer sessão que conecte na mesma pasta principal reaproveita a
+   mesma subpasta de backups sem precisar buscar por nome de novo (ver ensureBackupsFolder). */
+const LS_GDRIVE_BACKUPS_FOLDER_PREFIX = 'borion_gdrive_backups_folder_';
+function gdriveReadBackupsFolderId(mainFolderId){ return localStorage.getItem(LS_GDRIVE_BACKUPS_FOLDER_PREFIX + mainFolderId) || null; }
+function gdriveWriteBackupsFolderId(mainFolderId, id){ localStorage.setItem(LS_GDRIVE_BACKUPS_FOLDER_PREFIX + mainFolderId, id); }
 
 /* ---------------- Autenticação (Google Identity Services) ---------------- */
 const GoogleDriveAuth = {
@@ -236,6 +248,9 @@ const GoogleDriveProvider = {
   currentFileMeta: null,
   dirty: false,
   syncTimer: null,
+  autosaveTimer: null,
+  autosaveSlotIndex: 0,
+  autosaveDirtySinceLast: false,
 
   isConnected(){ return !!(GoogleDriveAuth.user && this.folderId); },
 
@@ -276,6 +291,7 @@ const GoogleDriveProvider = {
     }
     setStorageMode('google_drive');
     const result = await this.loadFromDrive();
+    this.startAutosaveLoop();
     if(result && result.empty){
       renderGoogleDriveOnboarding();
     } else {
@@ -337,8 +353,42 @@ const GoogleDriveProvider = {
   queueSave(){
     if(!this.isConnected()) return;
     this.dirty = true;
+    this.autosaveDirtySinceLast = true;
     clearTimeout(this.syncTimer);
     this.syncTimer = setTimeout(()=>this.syncNow(), 800);
+  },
+
+  /* V6.10.0 — rede de segurança extra, além do current.json (que já salva ~800ms
+     depois de qualquer mudança): a cada GOOGLE_DRIVE_AUTOSAVE_INTERVAL_MS, se algo
+     mudou desde o último autosave, grava um snapshot completo num de 3 "slots" fixos
+     que giram (autosave-1 → autosave-2 → autosave-3 → autosave-1 de novo). Não cria
+     arquivo novo a cada vez — só revezam os mesmos 3, então não acumula. Protege
+     contra current.json corrompido, conflito mal resolvido, ou qualquer coisa que dê
+     errado bem no meio de uma sessão longa de lançamentos. */
+  startAutosaveLoop(){
+    this.stopAutosaveLoop();
+    this.autosaveTimer = setInterval(()=>{ this.runAutosaveTick(); }, GOOGLE_DRIVE_AUTOSAVE_INTERVAL_MS);
+  },
+
+  stopAutosaveLoop(){
+    if(this.autosaveTimer){ clearInterval(this.autosaveTimer); this.autosaveTimer = null; }
+  },
+
+  async runAutosaveTick(){
+    if(!this.isConnected() || !this.autosaveDirtySinceLast) return;
+    try{
+      const folderId = await this.ensureBackupsFolder();
+      const payload = await buildFullBackupPayload();
+      const slot = (this.autosaveSlotIndex % GOOGLE_DRIVE_AUTOSAVE_SLOTS) + 1;
+      const name = 'autosave-' + slot + '.json';
+      const existing = await GoogleDriveFS.findChild(folderId, name);
+      if(existing) await GoogleDriveFS.updateFile(existing.id, payload);
+      else await GoogleDriveFS.createFile(folderId, name, payload);
+      this.autosaveSlotIndex++;
+      this.autosaveDirtySinceLast = false;
+    }catch(e){
+      console.warn('[GoogleDriveProvider] autosave rotativo falhou (não crítico — o current.json continua sincronizando normalmente):', e);
+    }
   },
 
   async syncNow(){
@@ -374,11 +424,29 @@ const GoogleDriveProvider = {
   },
 
   /* ---------------- Histórico de backups (pasta "backups" dentro da pasta principal) ---------------- */
+  /* V6.11.0 — corrige um bug real: a busca por nome do Drive (`files.list`) tem
+     "consistência eventual" — uma pasta recém-criada pode não aparecer numa busca
+     feita logo em seguida, fazendo o código (sem saber) criar outra pasta "backups"
+     duplicada. Corrigido guardando o ID da pasta assim que ela é achada/criada — a
+     busca por nome só roda mesmo na primeira vez de cada pasta principal, nunca mais
+     depois disso. Também trava chamadas simultâneas (ex: autosave rodando junto com
+     um clique manual) pra não disparar duas criações ao mesmo tempo. */
   async ensureBackupsFolder(){
     if(this._backupsFolderId) return this._backupsFolderId;
-    const folder = await GoogleDriveFS.findOrCreateFolder(this.folderId, 'backups');
-    this._backupsFolderId = folder.id;
-    return folder.id;
+    if(this._backupsFolderPromise) return this._backupsFolderPromise;
+    this._backupsFolderPromise = (async ()=>{
+      const saved = gdriveReadBackupsFolderId(this.folderId);
+      if(saved){
+        const stillThere = await this._folderStillExists(saved);
+        if(stillThere){ this._backupsFolderId = saved; return saved; }
+      }
+      const folder = await GoogleDriveFS.findOrCreateFolder(this.folderId, 'backups');
+      this._backupsFolderId = folder.id;
+      gdriveWriteBackupsFolderId(this.folderId, folder.id);
+      return folder.id;
+    })();
+    try{ return await this._backupsFolderPromise; }
+    finally{ this._backupsFolderPromise = null; }
   },
 
   async createBackup(reason){
@@ -470,6 +538,7 @@ const GoogleDriveProvider = {
 
   disconnect(){
     GoogleDriveAuth.signOut();
+    this.stopAutosaveLoop();
     this.folderId = null; this.currentFileId = null; this.currentFileMeta = null;
     this._backupsFolderId = null; this.conflict = false; this.dirty = false;
     setStorageMode(null);

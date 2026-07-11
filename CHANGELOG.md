@@ -1,3 +1,35 @@
+## V6.11.0 — Corrigida pasta de backup duplicada dentro da pasta da Amanda (10/07/2026)
+
+- **Bug real corrigido**: a Drive API busca arquivos por nome com "consistência
+  eventual" — uma pasta `backups` recém-criada podia não aparecer numa busca feita
+  logo depois, e o app (sem saber disso) criava uma segunda pasta `backups` duplicada.
+  Corrigido guardando o ID da pasta assim que encontrada/criada — a busca por nome só
+  roda uma vez por pasta principal, nunca mais depois disso. Também travei chamadas
+  simultâneas (autosave rodando junto com um clique manual, por exemplo) pra nunca mais
+  disparar duas criações ao mesmo tempo.
+- **Limpeza manual necessária uma vez**: as pastas "backups" duplicadas que já foram
+  criadas (ex: na pasta da Amanda) continuam lá — dá pra abrir as duas, mover os
+  arquivos pra uma só e apagar a duplicada, ou simplesmente apagar a mais vazia/antiga.
+  Isso não vai mais acontecer de novo depois dessa versão.
+
+## V6.10.0 — Autosave rotativo no Drive, contra perda de dados em sessões longas (10/07/2026)
+
+Pedido direto: proteção extra pra quando você faz muitos lançamentos numa sentada só.
+
+- **Como já funcionava** (vale reforçar): toda mudança já salva **na hora** em
+  localStorage/IndexedDB deste dispositivo, antes de qualquer coisa relacionada a rede.
+  Internet cair ou recarregar a página sem querer **não apaga** o que já foi salvo —
+  isso sempre esteve seguro. O que faltava era uma rede de segurança pro que acontece
+  *lá no Drive*, caso algo dê errado especificamente com essa parte.
+- **Novo**: a cada 90 segundos (dentro do "1 a 2 minutos" combinado), se algo mudou
+  desde o último autosave, grava um snapshot completo num de 3 "slots" que giram
+  (`autosave-1.json` → `autosave-2.json` → `autosave-3.json` → `autosave-1.json` de
+  novo) dentro da pasta `backups`. Não acumula arquivo — sempre os mesmos 3, só o
+  conteúdo é atualizado. Já aparecem na tela "Ver backups no Drive".
+- Roda em paralelo ao sincronismo normal do `current.json` (que continua na hora, ~800ms
+  depois de parar de digitar) — o autosave rotativo é só uma camada extra, não substitui
+  nada.
+
 ## V6.9.1 — Correção de legenda: cada pessoa usa a própria conta Google (10/07/2026)
 
 Ajuste de plano: cada pessoa (Amanda, Marco...) vai logar com a PRÓPRIA conta Google,

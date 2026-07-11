@@ -1,3 +1,37 @@
+## V6.19.0 — Ctrl+S força salvar + corrigido conflito falso por corrida (10/07/2026)
+
+- **Ctrl+S** agora força um salvamento imediato. No Google Drive, ignora de propósito
+  a checagem de conflito — é o botão de escape explícito pra quando você sabe que a
+  sua versão é a certa. Também disponível como botão "Salvar minha versão agora" no
+  aviso de conflito (Configurações → Backups) e mencionado no selo do topo.
+- **Bug real corrigido**: `syncNow()` não tinha trava contra chamadas simultâneas —
+  edições rápidas ou rede lenta podiam disparar duas sincronizações ao mesmo tempo,
+  cada uma conferindo "mudou desde a última leitura?" separadamente, o que podia gerar
+  um **conflito falso contra a própria sessão** (sem ninguém mais mexendo em nada).
+  Corrigido com uma trava simples: se já tem uma sincronização rodando, a próxima só
+  é enfileirada, não roda em paralelo.
+
+## V6.18.0 — Pasta do projeto organizada (10/07/2026)
+
+Revisão pedida: limpar a pasta do projeto, tirar o que não é essencial da vista
+principal e esconder qualquer nome "Supabase" da raiz.
+
+- **Apagado**: `js/_synctest.txt` — arquivo de teste esquecido, sem uso nenhum.
+- **Novo:** `docs-tecnicos/` — recebeu os 4 SQLs do Supabase, os 4 documentos de
+  arquitetura antigos (`ARQUITETURA_BORION_CLOUD_FOUNDATION.md`,
+  `BACKUP_SECURITY_GUIDE.md`, `BORION_CLOUD_SUPABASE.md`,
+  `SUPABASE_EMAIL_CODIGO_OPCIONAL.md`) e o `MAPA_DO_APP.md`. Nada disso é lido pelo
+  app em tempo de execução — são só referência/histórico.
+- **Continuam na raiz** (o essencial): `index.html`, `manifest.json`, `sw.js`, `css/`,
+  `js/`, os ícones/imagens, `CHANGELOG.md` e `PROMPT_PADRAO_IA.md`.
+- **`INSTALAR_BORION.bat`/`REMOVER_ATALHO_BORION.bat`/`README_ATALHO.md` continuam na
+  raiz de propósito** — o instalador de atalho procura o `index.html` "ao lado" dele;
+  numa subpasta, o atalho pararia de funcionar. Testei e revertido antes de te mandar.
+- Atualizadas as 4 mensagens de erro que citam os arquivos SQL, pra apontarem pro
+  caminho novo (`docs-tecnicos/SUPABASE_...sql`).
+- Conferido: todo arquivo que o Service Worker precisa pra funcionar offline continua
+  exatamente onde estava — nada que o app carrega em tempo de execução foi movido.
+
 ## V6.17.0 — Corrigido popup do Google abrindo a cada Alt-Tab (10/07/2026)
 
 Efeito colateral direto da correção anterior (V6.16.0): o "salvamento final" no

@@ -88,6 +88,26 @@ function showSplash(next){
 }
 
 /* ---------------- Aviso de salvamento final ao sair ---------------- */
+/* V6.19.0 — Ctrl+S: força um salvamento imediato, adaptado ao modo de armazenamento
+   atual. No Google Drive, ignora de propósito a checagem de conflito (a pessoa está
+   dizendo explicitamente "quero que a minha versão valha"). */
+async function forceManualSave(){
+  try{
+    if(S && S.currentProfile && S.data){ saveCurrentData({finalConfirmation:true}); clearExitSavePending(S.currentProfile.id); }
+    if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){
+      await GoogleDriveProvider.forceSyncNow();
+      toast('Salvo — sua versão agora é a mais recente no Google Drive.');
+    } else if(window.CloudStorage && CloudStorage.user && navigator.onLine){
+      await CloudStorage.syncNow();
+      toast('Salvo no Supabase.');
+    } else {
+      toast('Salvo neste dispositivo.');
+    }
+  }catch(e){
+    toast('Falha ao salvar: '+(e&&e.message?e.message:String(e)));
+  }
+}
+
 const ExitSaveGuard = {
   dismissed:false,
   saving:false,
@@ -135,6 +155,12 @@ window.addEventListener('pagehide', ()=> ExitSaveGuard.finalSaveSilently('pagehi
   BankFilter.closePanelOnOutsideClick();
   document.addEventListener('click', GlobalSearch.outsideClickHandler);
   document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && window.MobileMenu) MobileMenu.close(); });
+  document.addEventListener('keydown', (e)=>{
+    if((e.ctrlKey||e.metaKey) && (e.key==='s'||e.key==='S')){
+      e.preventDefault();
+      forceManualSave();
+    }
+  });
   window.addEventListener('resize', ()=>{ if(window.innerWidth>980 && window.MobileMenu) MobileMenu.close(); });
   if(window.matchMedia){
     const mq = window.matchMedia('(prefers-color-scheme: light)');

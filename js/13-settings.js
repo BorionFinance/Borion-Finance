@@ -31,8 +31,8 @@ function renderSettings(){
   else if(S.settingsTab==='categories') content = renderSettingsCategories();
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.17.0 • Corrigido popup do Google no Alt-Tab</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
-<div><strong>Versão:</strong> 6.17.0</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.19.0 • Ctrl+S e corrigido conflito falso</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
+<div><strong>Versão:</strong> 6.19.0</div>
 <div><strong>Lançamento:</strong> 09/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -199,7 +199,7 @@ function renderSettingsBackup(){
 
   if(isDrive){
     const gs = GoogleDriveProvider.getStatus();
-    const conflictBanner = gs.conflict ? `<div class="info-box danger-box"><b>Atenção:</b> existe uma versão mais recente desta conta salva no Google Drive (provavelmente de outro dispositivo). <button class="btn-outline btn-sm" onclick="GoogleDriveProvider.reload()">Recarregar agora</button></div>` : '';
+    const conflictBanner = gs.conflict ? `<div class="info-box danger-box"><b>Atenção:</b> existe uma versão mais recente desta conta salva no Google Drive (provavelmente de outro dispositivo). Escolha uma: <button class="btn-outline btn-sm" onclick="GoogleDriveProvider.reload()">Recarregar (usar a versão do Drive)</button> <button class="btn-outline btn-sm" onclick="forceManualSave()">Salvar minha versão agora (Ctrl+S)</button></div>` : '';
     return `
     <div class="settings-section settings-hero-section"><h3>Backups e Google Drive</h3><p class="desc">Seus dados sincronizam automaticamente com a pasta compartilhada do Google Drive.</p></div>
     ${conflictBanner}
@@ -232,7 +232,7 @@ function renderSettingsBackup(){
   const status = cloud ? (cloud.statusLabel ? cloud.statusLabel() : (cloud.statusText || cloud.status || 'Indisponível')) : 'Módulo de nuvem não carregado';
   const pendingTxt = pending ? `Existe sincronização pendente desde ${new Date(pending.savedAt).toLocaleString('pt-BR')}. Motivo: ${esc(pending.reason||'pendente')}` : 'Nenhum dado pendente no cache local.';
   const profileName = S.currentProfile ? S.currentProfile.name : 'Nenhum perfil ativo';
-  const schema = cloud && cloud.schemaError ? `<div class="info-box danger-box"><b>Atenção:</b> ${esc(cloud.schemaError)}<br>Rode o arquivo <b>SUPABASE_V5.34_CLOUD_FOUNDATION.sql</b> no Supabase.</div>` : '';
+  const schema = cloud && cloud.schemaError ? `<div class="info-box danger-box"><b>Atenção:</b> ${esc(cloud.schemaError)}<br>Rode o arquivo <b>docs-tecnicos/SUPABASE_V5.34_CLOUD_FOUNDATION.sql</b> no Supabase.</div>` : '';
   const consent = window.BackupFS ? BackupFS.hasConsent() : null;
   const consentText = consent ? `Aceito em ${new Date(consent.acceptedAt).toLocaleString('pt-BR')} · modo: ${esc(consent.mode||'backup')}` : 'Ainda não configurado neste dispositivo.';
   return `
@@ -715,7 +715,7 @@ Settings.createCloudBackupNow = async function(type='manual', reason='backup man
     toast('Backup salvo no Supabase: borion_backups.');
     console.log('[BORION_BACKUP][MANUAL_UI][SUCCESS]', row);
   }catch(e){
-    alert((e&&e.message?e.message:String(e))+'\n\nSe aparecer erro de tabela/coluna, rode o SQL SUPABASE_V5.35_BACKUP_SECURITY.sql ou o SQL Cloud Foundation atualizado.');
+    alert((e&&e.message?e.message:String(e))+'\n\nSe aparecer erro de tabela/coluna, rode o SQL docs-tecnicos/SUPABASE_V5.35_BACKUP_SECURITY.sql ou o SQL Cloud Foundation atualizado.');
   }
 };
 /* V6.3.0 — mesma ideia do viewCloudBackups logo abaixo, só que lendo do histórico

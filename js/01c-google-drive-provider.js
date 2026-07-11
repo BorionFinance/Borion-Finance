@@ -453,14 +453,23 @@ const GoogleDriveProvider = {
 
   async syncNow(){
     if(!this.isConnected() || !this.dirty || !this.currentFileId) return;
+    // V6.19.0 — bug real corrigido: sem essa trava, edições rápidas (ou rede lenta)
+    // podiam disparar DUAS execuções de syncNow() ao mesmo tempo — cada uma conferindo
+    // "mudou desde a última leitura?" de forma independente, o que podia gerar um
+    // conflito falso contra a própria sessão, ou deixar uma gravação com dado
+    // desatualizado "vencer" por acaso. Agora, se já tem uma sincronização rodando,
+    // só marca pra rodar de novo assim que a atual terminar.
+    if(this._syncInFlight){ this._syncAgain = true; return; }
+    this._syncInFlight = true;
     try{
       // V6.5.0 — proteção contra conflito: se outro dispositivo (celular, outro PC)
       // salvou depois da última vez que ESTE dispositivo leu o arquivo, não escreve
-      // por cima — avisa e espera a pessoa decidir (botão "Recarregar" no selo do topo).
+      // por cima — avisa e espera a pessoa decidir (botão "Recarregar" no selo do topo,
+      // ou Ctrl+S pra forçar sua versão como a mais recente).
       const freshMeta = await GoogleDriveFS.getFileMeta(this.currentFileId);
       if(this.currentFileMeta && this.currentFileMeta.modifiedTime && freshMeta.modifiedTime && freshMeta.modifiedTime !== this.currentFileMeta.modifiedTime){
         this.conflict = true;
-        toast('Existe uma versão mais recente no Google Drive. Clique no selo "Conflito" no topo pra recarregar.');
+        toast('Existe uma versão mais recente no Google Drive. Ctrl+S força salvar a sua, ou clique no selo pra recarregar.');
         return;
       }
       const payload = await buildFullBackupPayload();
@@ -481,6 +490,35 @@ const GoogleDriveProvider = {
     }catch(e){
       console.warn('[GoogleDriveProvider] falha ao sincronizar com o Drive (tenta de novo na próxima alteração):', e);
       this.dirty = true;
+    }finally{
+      this._syncInFlight = false;
+      if(this._syncAgain){
+        this._syncAgain = false;
+        this.dirty = true;
+        this.syncNow();
+      }
+    }
+  },
+
+  /* V6.19.0 — "Ctrl+S": ignora a checagem de conflito de propósito e grava o estado
+     local por cima do que estiver no Drive agora — é o botão de escape explícito pra
+     quando a pessoa sabe que a versão dela é a certa e só quer resolver o conflito. */
+  async forceSyncNow(){
+    if(!this.isConnected() || !this.currentFileId) return false;
+    clearTimeout(this.syncTimer);
+    if(this._syncInFlight){ this._syncAgain = true; return false; }
+    this._syncInFlight = true;
+    try{
+      const payload = await buildFullBackupPayload();
+      const updated = await GoogleDriveFS.updateFile(this.currentFileId, payload);
+      this.currentFileMeta = updated;
+      this.conflict = false;
+      this.dirty = false;
+      this.lastKnownProfileCount = (payload.profiles || []).length;
+      try{ localStorage.removeItem(gdrivePendingKey(this.folderId)); }catch(e){}
+      return true;
+    }finally{
+      this._syncInFlight = false;
     }
   },
 

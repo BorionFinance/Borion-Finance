@@ -409,7 +409,7 @@ function renderView(){
         ${(window.CloudStorage && CloudStorage.user)
           ? `<button id="cloud_status_badge" class="cloud-status syncing" onclick="CloudStorage.syncNow()">Sincronizando...</button>`
           : (window.GoogleDriveProvider && GoogleDriveProvider.isConnected() && GoogleDriveProvider.conflict)
-          ? `<button id="cloud_status_badge" class="cloud-status offline" onclick="GoogleDriveProvider.reload()" title="Existe uma versão mais recente no Drive — clique pra recarregar">Conflito — recarregar</button>`
+          ? `<button id="cloud_status_badge" class="cloud-status offline" onclick="GoogleDriveProvider.reload()" title="Existe uma versão mais recente no Drive — clique pra recarregar, ou Ctrl+S pra salvar sua versão">Conflito — recarregar</button>`
           : (window.GoogleDriveProvider && GoogleDriveProvider.isConnected())
           ? `<button id="cloud_status_badge" class="cloud-status local" onclick="GoogleDriveProvider.syncNow()" title="Conectado ao Google Drive — ${esc(GoogleDriveAuth.user?GoogleDriveAuth.user.email:'')} — pasta: ${esc(GoogleDriveProvider.folderName||'?')}">Google Drive${GoogleDriveProvider.dirty?' — salvando...':''}</button>`
           : `<button id="cloud_status_badge" class="cloud-status local" onclick="Nav.go('settings')" title="Sem conta na nuvem — dados salvos só neste dispositivo">Modo local</button>`}

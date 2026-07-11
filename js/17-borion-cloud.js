@@ -1019,7 +1019,7 @@ const CloudAuth={
         alert(e.message||String(e));
       }
     };
-    const rd=document.getElementById('cloud_reset_device'); if(rd) rd.onclick=()=>{ if(window.resetDeviceState) resetDeviceState(); };
+    const rd=document.getElementById('cloud_reset_device'); if(rd) rd.onclick=()=>{ if(window.confirmResetDeviceState) confirmResetDeviceState(); };
     ['cloud_email','cloud_password','cloud_password2','cloud_name'].forEach(id=>{const el=document.getElementById(id); if(el) el.addEventListener('keydown',e=>{if(e.key==='Enter') this.submit();});});
   },
   async submit(){

@@ -1,3 +1,10 @@
+## V6.15.0 — Modal de confirmação bonito, no lugar do diálogo nativo do navegador (10/07/2026)
+
+O botão "Limpar dados deste navegador" (V6.9.0) usava `confirm()` nativo do navegador —
+quebrando o padrão que o app já seguia em todo o resto (modais próprios, sem diálogo
+feio do Chrome). Corrigido: agora usa o mesmo `openConfirmModal()` de sempre, com botões
+"Cancelar"/"Limpar e recarregar" no estilo do app.
+
 ## V6.14.0 — Nuvem e Backups unificados, sem menção ao Supabase pra quem usa Drive/local (10/07/2026)
 
 Resposta direta ao seu feedback: a tela estava confusa e cheia de referência ao

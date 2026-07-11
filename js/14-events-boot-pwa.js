@@ -213,8 +213,6 @@ if ('serviceWorker' in navigator) {
    resolver telas presas (ex: pasta do Drive excluída, sessão antiga confusa) em
    dispositivos de pessoas menos técnicas. */
 async function resetDeviceState(){
-  const sure = confirm('Isso apaga perfis e configurações salvos SÓ NESTE NAVEGADOR, e desconecta qualquer conta Google/Supabase lembrada aqui. Não afeta nada que já esteja salvo na nuvem, no Supabase ou no Google Drive — só o que está neste dispositivo. Deseja continuar?');
-  if(!sure) return;
   try{
     Object.keys(localStorage).forEach(k=>{
       if(k.startsWith('mc_') || k.startsWith('borion_')) localStorage.removeItem(k);
@@ -241,6 +239,17 @@ async function resetDeviceState(){
     }
   }catch(e){ console.warn('[resetDeviceState] falha ao limpar cache do PWA:', e); }
   location.reload();
+}
+
+function confirmResetDeviceState(){
+  openConfirmModal({
+    title: 'Limpar dados deste navegador',
+    text: 'Isso apaga perfis e configurações salvos SÓ NESTE NAVEGADOR, e desconecta qualquer conta Google/Supabase lembrada aqui. Não afeta nada que já esteja salvo na nuvem, no Supabase ou no Google Drive — só o que está neste dispositivo.',
+    confirmLabel: 'Limpar e recarregar',
+    cancelLabel: 'Cancelar',
+    variant: 'danger',
+    onConfirm: resetDeviceState
+  });
 }
 
 /* ---------- V5.34.1: banner de instalação por plataforma (Android/desktop/iPhone) ---------- */

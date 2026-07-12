@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-07-12T05:33:40.616Z",
-  "appVersion": "6.23.2",
-  "total": 23,
-  "passed": 23,
+  "generatedAt": "2026-07-12T14:28:51.640Z",
+  "appVersion": "6.23.4",
+  "total": 32,
+  "passed": 32,
   "failed": 0,
   "results": [
     {
@@ -86,7 +86,43 @@
       "status": "PASS"
     },
     {
+      "name": "18 — Modal do histórico sobrescreve o limite global de 400px e usa rolagem interna",
+      "status": "PASS"
+    },
+    {
+      "name": "19 — Acesso ao histórico ficou discreto e integrado à barra dos Cofrinhos",
+      "status": "PASS"
+    },
+    {
       "name": "Backup Drive&Local — snapshot possui mesmo ID, data-base, versão e checksum",
+      "status": "PASS"
+    },
+    {
+      "name": "20 — Organizar módulos e itens aparece em Personalização, não em Módulos",
+      "status": "PASS"
+    },
+    {
+      "name": "21 — Menu de ordem inicia em ORDEM e só revela Organizar ordem após escolher personalizada",
+      "status": "PASS"
+    },
+    {
+      "name": "22 — Salvar organização faz o botão sumir e o menu voltar para ORDEM",
+      "status": "PASS"
+    },
+    {
+      "name": "23 — Autosave do Google Drive constrói snapshot válido e grava autosave-N.json",
+      "status": "PASS"
+    },
+    {
+      "name": "24 — Um único Ctrl+S aguarda sincronização em andamento e cria forcesave",
+      "status": "PASS"
+    },
+    {
+      "name": "25 — Criar backup local grava um arquivo JSON real na pasta autorizada",
+      "status": "PASS"
+    },
+    {
+      "name": "26 — Backup rápido local e Drive&Local usam a pasta e o mesmo snapshot",
       "status": "PASS"
     },
     {

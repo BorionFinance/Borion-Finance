@@ -32,9 +32,9 @@ function renderSettings(){
   else if(S.settingsTab==='categories') content = renderSettingsCategories();
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.23.2 • Histórico mensal dos Cofrinhos</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
-<div><strong>Versão:</strong> 6.23.2</div>
-<div><strong>Lançamento:</strong> 09/07/2026</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.23.4 • Organização e backups refinados</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
+<div><strong>Versão:</strong> 6.23.4</div>
+<div><strong>Lançamento:</strong> 12/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
 </div></div>`;
@@ -64,8 +64,7 @@ function renderSettingsModules(){
         <div class="module-toggle-status">${popupEnabled?'Ativo':'Desativado'} — os lembretes continuam no sino; isto controla só o popup flutuante.</div>
         <div class="field" style="margin:12px 0 0;"><label>Tempo do popup</label><select id="cfg_popup_duration"><option value="30000" ${dur===30000?'selected':''}>30 segundos</option><option value="40000" ${dur===40000?'selected':''}>40 segundos</option><option value="50000" ${dur===50000?'selected':''}>50 segundos</option></select></div>
       </div>
-    </div>
-    ${window.OrderPreferences ? OrderPreferences.renderModulesOrganizePanel() : ''}`;
+    </div>`;
 }
 function renderSettingsDashboard(){
   const cards = DEFAULT_DASHBOARD_WIDGETS.map(k=>{
@@ -105,6 +104,7 @@ function renderSettingsPersonalization(){
     <div class="settings-section settings-hero-section"><h3>Personalização</h3><p class="desc">Ajustes visuais seguros, sem mexer na identidade do Borion nem transformar o app em carnaval.</p></div>
     <div class="settings-section"><h3>Tema</h3><p class="desc">Use o tema private banking escuro, o tema claro ou siga o tema do sistema.</p><div class="field" style="max-width:320px;"><select id="cfg_theme"><option value="dark" ${theme==='dark'?'selected':''}>Escuro / Private banking</option><option value="light" ${theme==='light'?'selected':''}>Claro / Branco</option><option value="system" ${theme==='system'?'selected':''}>Tema do sistema</option></select></div></div>
     <div class="settings-section"><h3>Fonte do app</h3><p class="desc">Escolha a fonte usada em todo o app.</p><div class="field" style="max-width:320px;"><select id="cfg_font">${fontOptions}</select></div></div>
+    ${window.OrderPreferences ? OrderPreferences.renderModulesOrganizePanel() : ''}
     <div class="info-box">A personalização de cores dos ícones continua fora da tela para manter o visual premium e consistente.</div>`;
 }
 
@@ -150,6 +150,34 @@ const Settings = {
     try{ await task(); }
     finally{ if(btn){ btn.disabled = false; btn.textContent = defaultLabel; } }
   },
+  async _prepareLocalFolderAccess(){
+    if(!window.BackupFS) return false;
+    /* Solicita/revalida a permissão logo no começo do clique, antes de montar o JSON.
+       Navegadores exigem gesto do usuário para requestPermission; deixar isso para depois
+       de vários awaits fazia o clique parecer funcionar, mas o arquivo não era criado. */
+    if(BackupFS.needsReconnect && BackupFS.pendingHandle){
+      const reconnected=await BackupFS.reconnect();
+      if(!reconnected) throw new Error('a pasta local precisa ser reconectada para gravar o arquivo JSON');
+      return true;
+    }
+    if(BackupFS.dirHandle){
+      const allowed=await BackupFS.ensureWritePermission(true);
+      if(!allowed) throw new Error('permissão de gravação da pasta local não foi concedida');
+      return true;
+    }
+    return false;
+  },
+  async _saveSnapshotLocally(snapshot, reason='manual_quick'){
+    const entry = await storageProvider.createBackup(reason,{payload:snapshot});
+    let folderFile = null;
+    if(window.BackupFS && BackupFS.dirHandle){
+      folderFile = await BackupFS.writeToFolder(snapshot,'borion-backup-local',{interactive:false});
+      if(!folderFile) throw new Error('não foi possível gravar o arquivo JSON na pasta local autorizada');
+      BackupFS.lastAutoBackupAt=Date.now();
+      BackupFS.dirty=false;
+    }
+    return {entry,folderFile};
+  },
   quickBackupDrive(){
     Settings._runQuickBackup('qb_drive', 'Criar backup agora', 'Criando...', async ()=>{
       if(!(window.GoogleDriveProvider && GoogleDriveProvider.isConnected())){ toast('Google Drive: nenhuma conta conectada — conecte o Drive acima para criar backup lá.'); return; }
@@ -159,8 +187,13 @@ const Settings = {
   },
   quickBackupLocal(){
     Settings._runQuickBackup('qb_local', 'Criar backup agora', 'Criando...', async ()=>{
-      try{ await storageProvider.createBackup('manual_quick'); toast('Este dispositivo: backup criado com sucesso.'); }
-      catch(e){ toast('Este dispositivo: falha ao criar backup — '+(e&&e.message?e.message:String(e))); }
+      try{
+        await Settings._prepareLocalFolderAccess();
+        const snapshot=await buildSharedBackupSnapshot('manual_quick','backup manual rápido neste dispositivo');
+        const saved=await Settings._saveSnapshotLocally(snapshot,'manual_quick');
+        const fileMsg=saved.folderFile?' Arquivo JSON salvo em '+saved.folderFile.filename+'.':' Histórico local salvo no navegador.';
+        toast('Este dispositivo: backup criado com sucesso.'+fileMsg);
+      }catch(e){ toast('Este dispositivo: falha ao criar backup — '+(e&&e.message?e.message:String(e))); }
     });
   },
   quickBackupBoth(){
@@ -169,14 +202,18 @@ const Settings = {
       // depois do outro: cada destino usa seu próprio mecanismo já existente, mas os dois
       // partem do mesmo S.data, no mesmo clique — nunca dois snapshots de momentos diferentes.
       const hasDrive=!!(window.GoogleDriveProvider&&GoogleDriveProvider.isConnected());
+      let localAccessError=null;
+      try{ await Settings._prepareLocalFolderAccess(); }catch(e){ localAccessError=e; }
       // Um único objeto imutável é gerado uma vez e entregue aos dois destinos.
       const sharedSnapshot=await buildSharedBackupSnapshot('manual_drive_local','backup manual conjunto Drive e dispositivo');
       const [driveRes,localRes]=await Promise.allSettled([
         hasDrive?GoogleDriveProvider.createBackup('manual_drive_local',{payload:sharedSnapshot}):Promise.reject(new Error('nenhuma conta do Google Drive conectada')),
-        storageProvider.createBackup('manual_drive_local',{payload:sharedSnapshot})
+        localAccessError?Promise.reject(localAccessError):Settings._saveSnapshotLocally(sharedSnapshot,'manual_drive_local')
       ]);
       const driveMsg = driveRes.status==='fulfilled' ? 'Google Drive: backup criado com sucesso.' : 'Google Drive: falha ao criar backup — '+((driveRes.reason&&driveRes.reason.message)||'erro desconhecido')+'.';
-      const localMsg = localRes.status==='fulfilled' ? 'Este dispositivo: backup criado com sucesso.' : 'Este dispositivo: falha ao criar backup — '+((localRes.reason&&localRes.reason.message)||'erro desconhecido')+'.';
+      const localMsg = localRes.status==='fulfilled'
+        ? ('Este dispositivo: backup criado com sucesso.'+(localRes.value&&localRes.value.folderFile?' JSON: '+localRes.value.folderFile.filename+'.':''))
+        : 'Este dispositivo: falha ao criar backup — '+((localRes.reason&&localRes.reason.message)||'erro desconhecido')+'.';
       toast(driveMsg+' · '+localMsg);
     });
   },
@@ -231,7 +268,7 @@ function renderSettingsBackup(){
   const isLocal = !user && !isDrive;
 
   const localBackupsBlock = `
-    <div class="settings-section"><h3>Backups neste dispositivo</h3><p class="desc">Histórico guardado só no navegador (IndexedDB) — funciona mesmo sem conta na nuvem, e mesmo sem internet.</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewLocalBackups()">Ver backups deste dispositivo</button><button id="qb_local" class="btn btn-primary btn-sm" onclick="Settings.quickBackupLocal()">Criar backup agora</button></div></div>`;
+    <div class="settings-section"><h3>Backups neste dispositivo</h3><p class="desc">Histórico guardado no navegador (IndexedDB). Quando uma pasta local está configurada, o mesmo clique também grava um arquivo JSON dentro de Backups_Borion.</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewLocalBackups()">Ver backups deste dispositivo</button><button id="qb_local" class="btn btn-primary btn-sm" onclick="Settings.quickBackupLocal()">Criar backup agora</button></div></div>`;
 
   let backupFolderBlock;
   if(!FS_ACCESS_SUPPORTED) backupFolderBlock = `<p class="desc">Este navegador não permite escolher uma pasta fixa pra backup automático.</p>`;

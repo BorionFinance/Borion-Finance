@@ -228,7 +228,7 @@ function renderReservasResumoPanel(total, collapsed){
   </div>`;
 }
 
-/* ---------------- V6.23.2 — Relatórios mensais dos Cofrinhos ----------------
+/* ---------------- V6.23.3 — Refinamento dos relatórios mensais dos Cofrinhos ----------------
    Um fechamento é uma fotografia imutável do mês. Ele guarda valores, metas, status e
    movimentações daquele momento dentro do próprio perfil. Nada daqui participa dos
    cálculos atuais das Reservas/Cofrinhos; a camada é exclusivamente de leitura. */
@@ -362,14 +362,27 @@ function renderReservaMonthlyReport(report){
 function openReservaReportsModal(preferredKey){
   const reports=reservaMonthlyReports().slice().sort((a,b)=>String(b.monthKey).localeCompare(String(a.monthKey)));
   if(!reports.length){
-    const box=el(`<div class="modal-overlay"><div class="modal-box reserve-report-modal"><div class="modal-head"><h2>Relatórios anteriores dos Cofrinhos</h2><button id="rr_close">&times;</button></div><p class="modal-sub">Quando você fechar um mês, a fotografia dos Cofrinhos aparecerá aqui para comparação futura.</p><div class="empty-note">Ainda não há nenhum mês fechado.</div><div class="row-btns" style="margin-top:12px;"><button class="btn btn-primary btn-block" id="rr_close2">Entendi</button></div></div></div>`);
+    const box=el(`<div class="modal-overlay reserve-report-overlay"><div class="modal-box reserve-report-modal is-empty">
+      <div class="reserve-report-modal-header">
+        <div class="modal-head"><div><h2>Histórico dos Cofrinhos</h2><p class="modal-sub">Os meses fechados aparecerão aqui como fotografias permanentes.</p></div><button id="rr_close" aria-label="Fechar">&times;</button></div>
+      </div>
+      <div class="reserve-report-empty-body"><div class="empty-note">Ainda não há nenhum mês fechado.</div></div>
+      <div class="reserve-report-modal-footer"><button class="btn btn-secondary" id="rr_close2">Fechar</button></div>
+    </div></div>`);
     $('#modal-root').innerHTML=''; $('#modal-root').appendChild(box); attachModalGuard(box);
     $('#rr_close').onclick=closeModal; $('#rr_close2').onclick=closeModal;
     return;
   }
   const selected=reports.some(r=>r.monthKey===preferredKey)?preferredKey:reports[0].monthKey;
   const options=reports.map(r=>`<option value="${esc(r.monthKey)}" ${r.monthKey===selected?'selected':''}>${esc(r.monthLabel||reservaReportMonthLabel(r.monthKey))}</option>`).join('');
-  const box=el(`<div class="modal-overlay"><div class="modal-box reserve-report-modal"><div class="modal-head"><div><h2>Relatórios anteriores dos Cofrinhos</h2><p class="modal-sub" style="margin:3px 0 0;">Veja quanto havia em cada mês fechado e compare com os valores de hoje.</p></div><button id="rr_close">&times;</button></div><div class="reserve-report-picker"><label for="rr_month">Mês fechado</label><select id="rr_month">${options}</select></div><div id="rr_content"></div><div class="row-btns" style="margin-top:14px;"><button class="btn btn-secondary btn-block" id="rr_close2">Fechar</button></div></div></div>`);
+  const box=el(`<div class="modal-overlay reserve-report-overlay"><div class="modal-box reserve-report-modal">
+    <div class="reserve-report-modal-header">
+      <div class="modal-head"><div><h2>Histórico dos Cofrinhos</h2><p class="modal-sub">Compare um mês fechado com os valores de hoje.</p></div><button id="rr_close" aria-label="Fechar">&times;</button></div>
+      <div class="reserve-report-picker"><label for="rr_month">Mês fechado</label><select id="rr_month">${options}</select></div>
+    </div>
+    <div id="rr_content" class="reserve-report-scroll"></div>
+    <div class="reserve-report-modal-footer"><span>Somente visualização · o fechamento original não pode ser alterado</span><button class="btn btn-secondary" id="rr_close2">Fechar</button></div>
+  </div></div>`);
   $('#modal-root').innerHTML=''; $('#modal-root').appendChild(box); attachModalGuard(box);
   const render=()=>{ const r=reports.find(x=>x.monthKey===$('#rr_month').value)||reports[0]; $('#rr_content').innerHTML=renderReservaMonthlyReport(r); };
   $('#rr_month').onchange=render; $('#rr_close').onclick=closeModal; $('#rr_close2').onclick=closeModal; render();
@@ -403,14 +416,20 @@ function closeCurrentReservaMonth(){
     }
   });
 }
-function renderReservaReportsBanner(){
+function renderReservaReportsControls(){
   const reports=reservaMonthlyReports().slice().sort((a,b)=>String(b.monthKey).localeCompare(String(a.monthKey)));
   const currentKey=monthKey(todayYM().y,todayYM().m);
   const currentClosed=reports.some(r=>r.monthKey===currentKey);
   const latest=reports[0];
-  return `<div class="panel-box reserve-history-banner">
-    <div class="reserve-history-copy"><span class="reserve-history-icon">◷</span><div><h3>Histórico mensal dos Cofrinhos</h3><p>${latest?`Último fechamento: ${esc(latest.monthLabel||reservaReportMonthLabel(latest.monthKey))}, com ${brl(latest.total)}.`:'Feche cada mês para guardar uma fotografia dos Cofrinhos e acompanhar sua evolução com o passar do tempo.'}</p></div></div>
-    <div class="reserve-history-actions"><button class="btn-outline" onclick="openReservaReportsModal()">Ver relatórios anteriores</button><button class="btn btn-primary" onclick="closeCurrentReservaMonth()" ${currentClosed?'title="Este mês já foi fechado"':''}>${currentClosed?esc(reservaReportMonthLabel(currentKey))+' fechado':'Fechar '+esc(reservaReportMonthLabel(currentKey))}</button></div>
+  const historyTitle=latest
+    ? `Último fechamento: ${latest.monthLabel||reservaReportMonthLabel(latest.monthKey)}, com ${brl(latest.total)}.`
+    : 'Ainda não há meses fechados.';
+  return `<div class="reserve-history-compact">
+    <button type="button" class="reserve-history-link" onclick="openReservaReportsModal()" title="${esc(historyTitle)}" aria-label="Abrir histórico mensal dos Cofrinhos"><span aria-hidden="true">◷</span> Histórico</button>
+    <span class="reserve-history-divider" aria-hidden="true"></span>
+    ${currentClosed
+      ? `<span class="reserve-month-closed" title="O fechamento original deste mês está preservado."><span aria-hidden="true">✓</span> ${esc(reservaReportMonthLabel(currentKey))} fechado</span>`
+      : `<button type="button" class="reserve-close-month-link" onclick="closeCurrentReservaMonth()" title="Salvar uma fotografia permanente dos Cofrinhos deste mês">Fechar ${esc(reservaReportMonthLabel(currentKey))}</button>`}
   </div>`;
 }
 
@@ -425,7 +444,6 @@ function renderReservasPage(){
   const ativas = boxes.filter(r=>(r.status||'Ativa')==='Ativa').length;
   const ultimo = moves[0];
   return `
-    ${renderReservaReportsBanner()}
     <div class="cards-row">
       <div class="card hero-gold"><div class="clabel">Reservado</div><div class="cval">${brl(total)}</div></div>
       <div class="card"><div class="clabel">Reservas ativas</div><div class="cval">${ativas}</div></div>
@@ -475,7 +493,7 @@ function renderReservasPanel(){
     return `<tr><td>${reservaFmtDate(m.data)}</td><td>${esc(box?box.nome:'Reserva removida')}</td><td>${esc(m.tipo)}</td><td>${esc(m.banco||'')}</td><td class="${positive||isAdjust?'val-pos':negative?'val-neg':''}">${positive?'+ ':negative?'- ':''}${brl(m.valor)}</td><td>${esc(m.descricao||'')}${linked}</td><td style="text-align:right;white-space:nowrap;"><button class="ledit" onclick="Reservas.editMove('${m.id}')">✎</button><button class="ledit danger-mini" onclick="Reservas.deleteMove('${m.id}')">×</button></td></tr>`;
   }).join('');
   return `<div class="panel-box reservas-panel">
-    <div class="toolbar"><div class="toolbar-left">◈ <span class="lmeta">Reservado: ${brl(total)}</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">${window.OrderPreferences?OrderPreferences.sortSelectHTML('reservas'):''}<button class="btn-outline" onclick="Reservas.add()">+ Nova reserva</button><button class="btn-outline" onclick="Reservas.move()">+ Movimentação</button></div></div>
+    <div class="toolbar"><div class="toolbar-left">◈ <span class="lmeta">Reservado: ${brl(total)}</span></div><div class="reserva-toolbar-actions">${renderReservaReportsControls()}${window.OrderPreferences?OrderPreferences.sortSelectHTML('reservas'):''}<button class="btn-outline" onclick="Reservas.add()">+ Nova reserva</button><button class="btn-outline" onclick="Reservas.move()">+ Movimentação</button></div></div>
     ${orgFilterNotice}
     ${boxes.length?`<div class="reserva-grid" data-order-list="reservas">${boxCards}</div>`:'<div class="empty-note">Nenhuma reserva cadastrada ainda. Use para separar reserva de emergência, viagem, manutenção, impostos e objetivos.</div>'}
     <div class="reserva-extrato-title">Extrato recente das reservas</div>

@@ -225,16 +225,114 @@ async function testAsync(name, fn){
     assert.ok(!/<input\b/i.test(html)); assert.ok(!/contenteditable/i.test(html)); assert.ok(!/onclick=/i.test(html)); assert.ok(!/Reservas\.(edit|move|delete)/.test(html));
   });
 
+
+  test('18 — Modal do histórico sobrescreve o limite global de 400px e usa rolagem interna',()=>{
+    const css=fs.readFileSync(path.join(ROOT,'css/styles.css'),'utf8');
+    const src=fs.readFileSync(path.join(ROOT,'js/09-patrimony-goals.js'),'utf8');
+    assert.match(css,/\.reserve-report-modal\s*\{[\s\S]*?max-width:1180px!important/);
+    assert.match(css,/\.reserve-report-modal\s*\{[\s\S]*?height:min\(900px,calc\(100vh - 36px\)\)/);
+    assert.match(css,/\.reserve-report-scroll\s*\{[\s\S]*?overflow:auto/);
+    assert.match(css,/\.reserve-report-summary strong\s*\{[\s\S]*?white-space:nowrap/);
+    assert.match(src,/modal-overlay reserve-report-overlay/);
+    assert.match(src,/id="rr_content" class="reserve-report-scroll"/);
+  });
+
+  test('19 — Acesso ao histórico ficou discreto e integrado à barra dos Cofrinhos',()=>{
+    const css=fs.readFileSync(path.join(ROOT,'css/styles.css'),'utf8');
+    const src=fs.readFileSync(path.join(ROOT,'js/09-patrimony-goals.js'),'utf8');
+    assert.ok(!/function renderReservaReportsBanner\(/.test(src));
+    assert.ok(!/reserve-history-banner/.test(src));
+    assert.match(src,/function renderReservaReportsControls\(/);
+    assert.match(src,/class="reserve-history-link"/);
+    assert.match(src,/class="reserva-toolbar-actions"/);
+    assert.match(css,/\.reserve-history-link,\.reserve-close-month-link\s*\{[\s\S]*?background:transparent/);
+    assert.match(css,/\.reserve-history-link\s*\{[\s\S]*?opacity:\.72/);
+  });
+
   load(ctx,'js/02-backup-local.js');
   await testAsync('Backup Drive&Local — snapshot possui mesmo ID, data-base, versão e checksum',async()=>{
-    const snap=await run(ctx,`finalizeBackupSnapshot({type:'borion-account-backup',appVersion:'6.23.2',exportedAt:'2026-07-12T12:00:00.000Z',profiles:[],dataByProfile:{},integrity:{}},'manual_drive_local','backup manual conjunto Drive e dispositivo')`);
-    assert.ok(snap.snapshotId); assert.strictEqual(snap.snapshotBaseDate,'2026-07-12T12:00:00.000Z'); assert.strictEqual(snap.appVersion,'6.23.2'); assert.strictEqual(snap.snapshotChecksum,snap.integrity.snapshotSha256); assert.strictEqual(snap.snapshotChecksum.length,64);
+    const snap=await run(ctx,`finalizeBackupSnapshot({type:'borion-account-backup',appVersion:'6.23.4',exportedAt:'2026-07-12T12:00:00.000Z',profiles:[],dataByProfile:{},integrity:{}},'manual_drive_local','backup manual conjunto Drive e dispositivo')`);
+    assert.ok(snap.snapshotId); assert.strictEqual(snap.snapshotBaseDate,'2026-07-12T12:00:00.000Z'); assert.strictEqual(snap.appVersion,'6.23.4'); assert.strictEqual(snap.snapshotChecksum,snap.integrity.snapshotSha256); assert.strictEqual(snap.snapshotChecksum.length,64);
     const local=JSON.stringify(snap),drive=JSON.stringify(snap); assert.strictEqual(local,drive);
     const settings=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
     assert.match(settings,/GoogleDriveProvider\.createBackup\('manual_drive_local',\{payload:sharedSnapshot\}\)/);
-    assert.match(settings,/storageProvider\.createBackup\('manual_drive_local',\{payload:sharedSnapshot\}\)/);
+    assert.match(settings,/Settings\._saveSnapshotLocally\(sharedSnapshot,'manual_drive_local'\)/);
     const driveSource=fs.readFileSync(path.join(ROOT,'js/01c-google-drive-provider.js'),'utf8');
     assert.match(driveSource,/options\.payload \? options\.payload : await buildSharedBackupSnapshot/);
+  });
+
+  test('20 — Organizar módulos e itens aparece em Personalização, não em Módulos',()=>{
+    const src=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
+    const modules=src.slice(src.indexOf('function renderSettingsModules()'),src.indexOf('function renderSettingsDashboard()'));
+    const personalization=src.slice(src.indexOf('function renderSettingsPersonalization()'),src.indexOf('const Settings ='));
+    assert.ok(!/renderModulesOrganizePanel/.test(modules));
+    assert.match(personalization,/OrderPreferences\.renderModulesOrganizePanel\(\)/);
+  });
+
+  test('21 — Menu de ordem inicia em ORDEM e só revela Organizar ordem após escolher personalizada',()=>{
+    if(!run(ctx,"typeof OrderPreferences!=='undefined'")) load(ctx,'js/18-order-preferences.js');
+    const initial=run(ctx,"OrderPreferences.controlSelection={}; OrderPreferences.sortSelectHTML('reservas')");
+    assert.match(initial,/<option value="" selected disabled>ORDEM<\/option>/);
+    assert.match(initial,/>A a Z<\/option>/);
+    assert.match(initial,/>Z a A<\/option>/);
+    assert.match(initial,/>Mais recente primeiro<\/option>/);
+    assert.match(initial,/>Mais antigo primeiro<\/option>/);
+    assert.match(initial,/>Ordem personalizada<\/option>/);
+    assert.ok(!/data-order-organize-type="reservas"/.test(initial));
+    const custom=run(ctx,"OrderPreferences.controlSelection.reservas='manual'; OrderPreferences.sortSelectHTML('reservas')");
+    assert.match(custom,/data-order-organize-type="reservas"/);
+  });
+
+  test('22 — Salvar organização faz o botão sumir e o menu voltar para ORDEM',()=>{
+    const out=run(ctx,`(()=>{OrderPreferences.active=true;OrderPreferences.activeType='reservas';OrderPreferences.controlSelection={reservas:'manual'};OrderPreferences.pending={reservas:['c2','c1']};OrderPreferences.saveAll();return {active:OrderPreferences.active,selection:OrderPreferences.controlSelection,html:OrderPreferences.sortSelectHTML('reservas'),saved:OrderPreferences.getSavedOrder('reservas')};})()`);
+    assert.strictEqual(out.active,false);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out.selection)),{});
+    assert.match(out.html,/>ORDEM<\/option>/);
+    assert.ok(!/data-order-organize-type="reservas"/.test(out.html));
+    assert.deepStrictEqual(Array.from(out.saved),['c2','c1']);
+  });
+
+  await testAsync('23 — Autosave do Google Drive constrói snapshot válido e grava autosave-N.json',async()=>{
+    const driveCtx=createContext();
+    run(driveCtx,"const BORION_APP_VERSION='6.23.4'; async function buildSharedBackupSnapshot(type,reason){return {type,reason,profiles:[],snapshotId:'auto-test'};} async function buildFullBackupPayload(){return {profiles:[],snapshotId:'force-test'};} function validateBorionJson(){return {valid:true,errors:[]};} function applyAccountPayloadSilently(){} function setStorageMode(){} function setProfiles(){} function emptyData(){return {};} function migrateData(x){return x;} function getProfileData(){return null;} function idbGetProfileData(){return null;} function renderGoogleDriveOnboarding(){} function renderGoogleDriveReconnect(){} function renderGate(){} function toast(){};");
+    load(driveCtx,'js/01c-google-drive-provider.js');
+    run(driveCtx,`GoogleDriveAuth.user={sub:'u',email:'u@x.com'};GoogleDriveProvider.folderId='folder';GoogleDriveProvider.autosaveDirtySinceLast=true;GoogleDriveProvider._autosaveRevision=1;window.__driveWrites=[];GoogleDriveProvider.writeRotatingSnapshot=async(kind,slots,payload)=>{window.__driveWrites.push({kind,slots,payload});};`);
+    const ok=await run(driveCtx,'GoogleDriveProvider.runAutosaveTick()');
+    const writes=run(driveCtx,'window.__driveWrites');
+    assert.strictEqual(ok,true); assert.strictEqual(writes.length,1); assert.strictEqual(writes[0].kind,'autosave'); assert.strictEqual(writes[0].slots,20); assert.strictEqual(writes[0].payload.snapshotId,'auto-test');
+    assert.strictEqual(run(driveCtx,'GoogleDriveProvider.autosaveDirtySinceLast'),false);
+    const src=fs.readFileSync(path.join(ROOT,'js/01c-google-drive-provider.js'),'utf8');
+    const fn=src.slice(src.indexOf('async runAutosaveTick()'),src.indexOf('async syncNow()'));
+    assert.ok(!/options\.payload/.test(fn)); assert.ok(!/document\.visibilityState===['"]hidden['"]/.test(fn));
+  });
+
+  await testAsync('24 — Um único Ctrl+S aguarda sincronização em andamento e cria forcesave',async()=>{
+    const driveCtx=createContext();
+    run(driveCtx,"const BORION_APP_VERSION='6.23.4'; async function buildSharedBackupSnapshot(){return {profiles:[]};} async function buildFullBackupPayload(){return {profiles:[{id:'p1'}],snapshotId:'force-one'};} function validateBorionJson(){return {valid:true,errors:[]};} function applyAccountPayloadSilently(){} function setStorageMode(){} function setProfiles(){} function toast(){};");
+    load(driveCtx,'js/01c-google-drive-provider.js');
+    run(driveCtx,`GoogleDriveAuth.user={sub:'u',email:'u@x.com'};GoogleDriveProvider.folderId='folder';GoogleDriveProvider.currentFileId='current';GoogleDriveProvider._syncInFlight=true;window.__forceWrites=[];GoogleDriveFS.updateFile=async(id,payload)=>({id,modifiedTime:String(Date.now()),payload});GoogleDriveProvider.writeRotatingSnapshot=async(kind,slots,payload)=>{window.__forceWrites.push({kind,slots,payload});};`);
+    const promise=run(driveCtx,'GoogleDriveProvider.forceSyncNow()');
+    setTimeout(()=>run(driveCtx,'GoogleDriveProvider._syncInFlight=false'),120);
+    const ok=await promise;
+    const writes=run(driveCtx,'window.__forceWrites');
+    assert.strictEqual(ok,true); assert.strictEqual(writes.length,1); assert.strictEqual(writes[0].kind,'forcesave'); assert.strictEqual(writes[0].slots,40); assert.strictEqual(writes[0].payload.snapshotId,'force-one');
+  });
+
+  await testAsync('25 — Criar backup local grava um arquivo JSON real na pasta autorizada',async()=>{
+    run(ctx,`window.__folderText='';window.__folderName='';BackupFS.dirHandle={queryPermission:async()=> 'granted',getFileHandle:async(name)=>{window.__folderName=name;return {createWritable:async()=>({write:async text=>{window.__folderText=text;},close:async()=>{}})};}};`);
+    const result=await run(ctx,`BackupFS.writeToFolder({snapshotId:'local-json',profiles:[{id:'p'}]},'borion-backup-local',{interactive:true})`);
+    assert.ok(result); assert.match(result.filename,/^borion-backup-local-.*\.json$/); assert.strictEqual(result.filename,run(ctx,'window.__folderName'));
+    const written=JSON.parse(run(ctx,'window.__folderText')); assert.strictEqual(written.snapshotId,'local-json'); assert.strictEqual(written.profiles[0].id,'p');
+  });
+
+  test('26 — Backup rápido local e Drive&Local usam a pasta e o mesmo snapshot',()=>{
+    const src=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
+    assert.match(src,/BackupFS\.writeToFolder\(snapshot,'borion-backup-local',\{interactive:false\}\)/);
+    assert.match(src,/Settings\._prepareLocalFolderAccess\(\)/);
+    assert.match(src,/Settings\._saveSnapshotLocally\(sharedSnapshot,'manual_drive_local'\)/);
+    assert.match(src,/GoogleDriveProvider\.createBackup\('manual_drive_local',\{payload:sharedSnapshot\}\)/);
+    const local=fs.readFileSync(path.join(ROOT,'js/02-backup-local.js'),'utf8');
+    assert.match(local,/scheduleAutoBackup\(\)/); assert.match(local,/getFileHandle\(filename, \{create:true\}\)/); assert.match(local,/m\$\{pad\(d\.getSeconds\(\)\)\}s\$\{ms\}/);
   });
 
   test('Código completo — todos os JavaScript passam na validação sintática',()=>{
@@ -253,7 +351,7 @@ async function testAsync(name, fn){
   });
 
   const failures=results.filter(r=>r.status==='FAIL');
-  const report={generatedAt:new Date().toISOString(),appVersion:'6.23.2',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
+  const report={generatedAt:new Date().toISOString(),appVersion:'6.23.4',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
   fs.writeFileSync(path.join(__dirname,'regression-results.json'),JSON.stringify(report,null,2));
   for(const r of results){
     console.log(`${r.status==='PASS'?'✓':'✗'} ${r.name}`);

@@ -1,3 +1,28 @@
+## V6.23.4 — Ordem de Cofrinhos e backups confiáveis (12/07/2026)
+
+- **Organizar módulos e itens** foi movido de Configurações → Módulos para **Configurações → Personalização**, sem alterar as preferências já salvas de cada perfil.
+- Na aba Reserva, o seletor passa a abrir em **ORDEM** e oferece: A a Z, Z a A, Mais recente primeiro, Mais antigo primeiro e Ordem personalizada.
+- O botão **Organizar ordem** só aparece depois de escolher Ordem personalizada; ao concluir em **OK** ou cancelar, ele some e o seletor volta ao estado neutro ORDEM.
+- Corrigido o autosave do Google Drive: o ciclo automático não depende mais de variáveis inexistentes, agenda o primeiro envio após ocioso, mantém repetição a cada minuto quando há mudanças e tenta novamente após falha.
+- `Ctrl+S` agora aguarda uma sincronização já em andamento em vez de ignorar o comando, e cria apenas um forcesave por ação.
+- **Criar backup agora** do dispositivo passou a escrever de fato um arquivo `.json` na pasta `Backups_Borion`, além de registrar o backup interno.
+- A permissão da pasta é solicitada/revalidada no clique do usuário; nomes de arquivo incluem segundos e milissegundos para evitar sobrescritas aparentes.
+- **SALVAR DRIVE&LOCAL** continua usando um único snapshot para os dois destinos, mas uma falha local não impede a tentativa no Drive e vice-versa.
+- Cache do PWA e identificadores de versão atualizados para 6.23.4.
+- Regressão automatizada: **32/32 cenários aprovados**.
+
+## V6.23.3 — Refinamento visual do histórico dos Cofrinhos (12/07/2026)
+
+- A tela de histórico agora abre em uma **modal ampla de até 1180 px**, ocupando melhor a área disponível no desktop.
+- Corrigido o limite global de `max-width: 400px` que ainda mantinha o relatório estreito apesar da largura configurada.
+- Cabeçalho, seletor de mês e rodapé ficam fixos; somente o conteúdo central possui rolagem.
+- Valores monetários não quebram mais em várias linhas nos cards e nas comparações.
+- Cards de resumo, indicadores e linhas dos Cofrinhos foram redistribuídos para desktop, tablet e celular.
+- O grande módulo de histórico foi removido da página. O acesso agora aparece como o link discreto **Histórico** na barra dos Cofrinhos.
+- O comando de fechamento do mês também ficou compacto e, quando o mês já está fechado, vira apenas um status sutil.
+- Nenhuma regra de fechamento, snapshot, saldo, Reserva ou Cofrinho foi alterada.
+- Cache do PWA e identificadores de versão atualizados para forçar o carregamento do refinamento.
+
 ## V6.23.2 — Relatórios mensais dos Cofrinhos (12/07/2026)
 
 - Adicionado botão **Fechar mês atual** na guia Reserva.

@@ -32,6 +32,8 @@ const GOOGLE_DRIVE_BACKUP_MAX_BYTES = 10 * 1024 * 1024 * 1024;
    bem mais fina — 1 save por minuto, girando entre 20 slots (autosave-1.json ...
    autosave-20.json). Dá ~20 minutos de histórico curto granular, minuto a minuto. */
 const GOOGLE_DRIVE_AUTOSAVE_INTERVAL_MS = 60 * 1000;
+const GOOGLE_DRIVE_AUTOSAVE_IDLE_KICK_MS = 3 * 1000;
+const GOOGLE_DRIVE_AUTOSAVE_RETRY_MS = 15 * 1000;
 const GOOGLE_DRIVE_AUTOSAVE_SLOTS = 20;
 /* V6.20.0 — novo: além do autosave automático acima, cada Ctrl+S (forceSyncNow)
    agora também grava num rodízio PRÓPRIO de até 40 slots (forcesave-1.json ...
@@ -295,9 +297,17 @@ const GoogleDriveProvider = {
   dirty: false,
   syncTimer: null,
   autosaveTimer: null,
+  autosaveKickTimer: null,
   autosaveSlotIndex: 0,
   forcesaveSlotIndex: 0,
   autosaveDirtySinceLast: false,
+  lastAutosaveAt: 0,
+  _autosaveRevision: 0,
+  _autosaveInFlight: false,
+  _syncInFlight: false,
+  _syncAgain: false,
+  _forceRequested: false,
+  _forceSavePromise: null,
 
   isConnected(){ return !!(GoogleDriveAuth.user && this.folderId); },
 
@@ -429,6 +439,7 @@ const GoogleDriveProvider = {
     if(!this.isConnected()) return;
     this.dirty = true;
     this.autosaveDirtySinceLast = true;
+    this._autosaveRevision++;
     // V6.16.0 — grava um marcador PERSISTENTE (sobrevive a reload/fechar aba) de que
     // existe uma alteração ainda não confirmada no Drive. Ver loadFromDrive(): se esse
     // marcador ainda estiver presente na próxima conexão, o dado local é tratado como
@@ -437,6 +448,7 @@ const GoogleDriveProvider = {
     try{ localStorage.setItem(gdrivePendingKey(this.folderId), String(Date.now())); }catch(e){}
     clearTimeout(this.syncTimer);
     this.syncTimer = setTimeout(()=>this.syncNow(), 800);
+    this.scheduleAutosaveSoon();
   },
 
   /* V6.10.0 — rede de segurança extra, além do current.json (que já salva ~800ms
@@ -450,10 +462,22 @@ const GoogleDriveProvider = {
   startAutosaveLoop(){
     this.stopAutosaveLoop();
     this.autosaveTimer = setInterval(()=>{ this.runAutosaveTick(); }, GOOGLE_DRIVE_AUTOSAVE_INTERVAL_MS);
+    if(this.autosaveDirtySinceLast) this.scheduleAutosaveSoon();
+  },
+
+  scheduleAutosaveSoon(delayOverride){
+    if(!this.isConnected() || !this.autosaveDirtySinceLast) return;
+    clearTimeout(this.autosaveKickTimer);
+    const elapsed = this.lastAutosaveAt ? (Date.now() - this.lastAutosaveAt) : GOOGLE_DRIVE_AUTOSAVE_INTERVAL_MS;
+    const delay = Number.isFinite(delayOverride)
+      ? Math.max(GOOGLE_DRIVE_AUTOSAVE_IDLE_KICK_MS, delayOverride)
+      : Math.max(GOOGLE_DRIVE_AUTOSAVE_IDLE_KICK_MS, GOOGLE_DRIVE_AUTOSAVE_INTERVAL_MS - elapsed);
+    this.autosaveKickTimer = setTimeout(()=>{ this.autosaveKickTimer=null; this.runAutosaveTick(); }, delay);
   },
 
   stopAutosaveLoop(){
     if(this.autosaveTimer){ clearInterval(this.autosaveTimer); this.autosaveTimer = null; }
+    if(this.autosaveKickTimer){ clearTimeout(this.autosaveKickTimer); this.autosaveKickTimer = null; }
   },
 
   /* V6.20.0 — lógica de rodízio compartilhada entre o autosave automático
@@ -485,16 +509,26 @@ const GoogleDriveProvider = {
   },
 
   async runAutosaveTick(){
-    if(!this.isConnected() || !this.autosaveDirtySinceLast) return;
-    // V6.17.0 — extra segurança: não tenta nada enquanto a aba está em segundo plano
-    // (Alt-Tab). Evita checagem de token do Google acontecendo sem a pessoa por perto.
-    if(typeof document!=='undefined' && document.visibilityState==='hidden') return;
+    if(!this.isConnected() || !this.autosaveDirtySinceLast) return false;
+    if(this._autosaveInFlight) return false;
+    this._autosaveInFlight = true;
+    const revision = this._autosaveRevision;
     try{
-      const payload = options.payload ? options.payload : await buildSharedBackupSnapshot(reason, reason);
+      /* V6.23.4 — corrigido o erro que referenciava `options` e `reason` inexistentes.
+         O snapshot agora é construído explicitamente e também pode rodar com a aba em
+         segundo plano, evitando que Alt+Tab impeça o arquivo autosave-N.json de nascer. */
+      const payload = await buildSharedBackupSnapshot('auto', 'autosave automático do Google Drive');
       await this.writeRotatingSnapshot('autosave', GOOGLE_DRIVE_AUTOSAVE_SLOTS, payload);
-      this.autosaveDirtySinceLast = false;
+      this.lastAutosaveAt = Date.now();
+      if(revision===this._autosaveRevision) this.autosaveDirtySinceLast = false;
+      return true;
     }catch(e){
-      console.warn('[GoogleDriveProvider] autosave rotativo falhou (não crítico — o current.json continua sincronizando normalmente):', e);
+      console.warn('[GoogleDriveProvider] autosave rotativo falhou (será tentado novamente):', e);
+      this.scheduleAutosaveSoon(GOOGLE_DRIVE_AUTOSAVE_RETRY_MS);
+      return false;
+    }finally{
+      this._autosaveInFlight = false;
+      if(this.autosaveDirtySinceLast && !this.autosaveKickTimer) this.scheduleAutosaveSoon();
     }
   },
 
@@ -539,7 +573,7 @@ const GoogleDriveProvider = {
       this.dirty = true;
     }finally{
       this._syncInFlight = false;
-      if(this._syncAgain){
+      if(this._syncAgain && !this._forceRequested){
         this._syncAgain = false;
         this.dirty = true;
         this.syncNow();
@@ -557,22 +591,51 @@ const GoogleDriveProvider = {
      terminou com sucesso no current.json. */
   async forceSyncNow(){
     if(!this.isConnected() || !this.currentFileId) return false;
-    clearTimeout(this.syncTimer);
-    if(this._syncInFlight){ this._syncAgain = true; return false; }
-    this._syncInFlight = true;
-    try{
-      const payload = await buildFullBackupPayload();
-      const updated = await GoogleDriveFS.updateFile(this.currentFileId, payload);
-      this.currentFileMeta = updated;
-      this.conflict = false;
-      this.dirty = false;
-      this.lastKnownProfileCount = (payload.profiles || []).length;
-      try{ localStorage.removeItem(gdrivePendingKey(this.folderId)); }catch(e){}
-      try{ await this.writeRotatingSnapshot('forcesave', GOOGLE_DRIVE_FORCESAVE_SLOTS, payload); }
-      catch(e){ console.warn('[GoogleDriveProvider] forcesave rotativo falhou (não crítico — o Ctrl+S em current.json já foi salvo):', e); }
-      return true;
-    }finally{
-      this._syncInFlight = false;
+    if(this._forceSavePromise) return this._forceSavePromise;
+    this._forceRequested = true;
+    this._forceSavePromise = (async()=>{
+      clearTimeout(this.syncTimer);
+      const waitStarted = Date.now();
+      while(this._syncInFlight){
+        if(Date.now()-waitStarted > 15000) throw new Error('A sincronização anterior demorou demais. Tente novamente.');
+        await new Promise(resolve=>setTimeout(resolve, 60));
+      }
+      this._syncAgain = false;
+      this._syncInFlight = true;
+      try{
+        let payload = null;
+        let updated = null;
+        /* Se uma alteração entrar enquanto o Ctrl+S está enviando, repete a leitura até
+           três vezes. Assim um único Ctrl+S realmente gera o forcesave, em vez de ser
+           ignorado só porque o autosave/current.json já estava em andamento. */
+        for(let attempt=0; attempt<3; attempt++){
+          this.dirty = false;
+          this._syncAgain = false;
+          payload = await buildFullBackupPayload();
+          updated = await GoogleDriveFS.updateFile(this.currentFileId, payload);
+          if(!this.dirty && !this._syncAgain) break;
+        }
+        this.currentFileMeta = updated;
+        this.conflict = false;
+        this.dirty = false;
+        this._syncAgain = false;
+        this.lastKnownProfileCount = (payload.profiles || []).length;
+        try{ localStorage.removeItem(gdrivePendingKey(this.folderId)); }catch(e){}
+        await this.writeRotatingSnapshot('forcesave', GOOGLE_DRIVE_FORCESAVE_SLOTS, payload);
+        return true;
+      }finally{
+        this._syncInFlight = false;
+      }
+    })();
+    try{ return await this._forceSavePromise; }
+    finally{
+      this._forceRequested = false;
+      this._forceSavePromise = null;
+      if(this._syncAgain || this.dirty){
+        this._syncAgain = false;
+        this.dirty = true;
+        this.syncNow();
+      }
     }
   },
 
@@ -695,6 +758,7 @@ const GoogleDriveProvider = {
     this.stopAutosaveLoop();
     this.folderId = null; this.currentFileId = null; this.currentFileMeta = null;
     this._backupsFolderId = null; this.conflict = false; this.dirty = false;
+    this.autosaveDirtySinceLast = false; this._forceRequested = false; this._forceSavePromise = null;
     setStorageMode(null);
   },
 

@@ -9,7 +9,7 @@
 /* ---------------- Backup em pasta local (File System Access API — Chrome/Edge) ---------------- */
 const FS_ACCESS_SUPPORTED = typeof window!=='undefined' && 'showDirectoryPicker' in window;
 const IDB_NAME = 'borion_handles', IDB_STORE = 'handles';
-const BORION_APP_VERSION = '6.23.2';
+const BORION_APP_VERSION = '6.23.4';
 const BORION_BACKUP_CONSENT_PREFIX = 'borion_backup_consent_v2_';
 const BORION_BACKUP_LAST_CLOUD_PREFIX = 'borion_backup_last_cloud_v1_';
 const BORION_BACKUP_SNOOZE_PREFIX = 'borion_backup_consent_snooze_v1_';
@@ -53,7 +53,8 @@ async function idbDel(key){
 function backupDateSlug(){
   const d = new Date();
   const pad = n=>String(n).padStart(2,'0');
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}-${pad(d.getHours())}h${pad(d.getMinutes())}`;
+  const ms = String(d.getMilliseconds()).padStart(3,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}-${pad(d.getHours())}h${pad(d.getMinutes())}m${pad(d.getSeconds())}s${ms}`;
 }
 function backupFilename(prefix='borion-backup-conta'){
   return `${prefix}-${backupDateSlug()}.json`;
@@ -205,6 +206,10 @@ const BackupFS = {
   needsReconnect: false,
   dirty: false,
   lastAutoBackupAt: 0,
+  autoBackupTimer: null,
+  autoBackupInFlight: false,
+  dirtyRevision: 0,
+  lastFolderWrite: null,
 
   safeRefreshUI(){
     // V5.36.0 — a tela de aceite de backup pode aparecer antes de um perfil
@@ -216,7 +221,18 @@ const BackupFS = {
     }catch(e){ console.warn('[BORION_BACKUP][SAFE_REFRESH_UI][SKIP]', e); }
   },
 
-  markDirty(){ this.dirty = true; },
+  markDirty(){
+    this.dirty = true;
+    this.dirtyRevision++;
+    this.scheduleAutoBackup();
+  },
+  scheduleAutoBackup(delayOverride){
+    if(!this.dirHandle || this.needsReconnect) return;
+    clearTimeout(this.autoBackupTimer);
+    const elapsed = this.lastAutoBackupAt ? Date.now()-this.lastAutoBackupAt : 60*1000;
+    const delay = Number.isFinite(delayOverride) ? Math.max(2000,delayOverride) : Math.max(2000,60*1000-elapsed);
+    this.autoBackupTimer = setTimeout(()=>{ this.autoBackupTimer=null; this.maybeAutoBackup(); }, delay);
+  },
   consentKey(){ return BORION_BACKUP_CONSENT_PREFIX+backupUserKey(); },
   snoozeKey(){ return BORION_BACKUP_SNOOZE_PREFIX+backupUserKey(); },
   lastCloudKey(){ return BORION_BACKUP_LAST_CLOUD_PREFIX+backupUserKey(); },
@@ -241,6 +257,25 @@ const BackupFS = {
     }catch(e){ console.warn('Não foi possível restaurar a pasta de backups', e); }
   },
 
+  async ensureWritePermission(interactive=false){
+    if(!this.dirHandle) return false;
+    try{
+      let perm = await this.dirHandle.queryPermission({mode:'readwrite'});
+      if(perm!=='granted' && interactive && this.dirHandle.requestPermission){
+        perm = await this.dirHandle.requestPermission({mode:'readwrite'});
+      }
+      if(perm==='granted') return true;
+      this.pendingHandle = this.dirHandle;
+      this.dirHandle = null;
+      this.needsReconnect = true;
+      this.safeRefreshUI();
+      return false;
+    }catch(e){
+      console.warn('[BORION_BACKUP][FOLDER_PERMISSION]',e);
+      return false;
+    }
+  },
+
   async choose(){
     if(!FS_ACCESS_SUPPORTED){
       alert('Escolher uma pasta de backups funciona no Chrome ou Edge. Você ainda pode baixar backups manuais em JSON.');
@@ -254,6 +289,7 @@ const BackupFS = {
       this.pendingHandle = null;
       this.needsReconnect = false;
       this.setConsent('folder');
+      if(this.dirty) this.scheduleAutoBackup(2000);
       toast('Pasta de backups configurada: '+rootHandle.name+'/Backups_Borion');
       this.safeRefreshUI();
       return true;
@@ -269,50 +305,81 @@ const BackupFS = {
       const perm = await this.pendingHandle.requestPermission({mode:'readwrite'});
       if(perm==='granted'){
         this.dirHandle = this.pendingHandle;
+        this.pendingHandle = null;
         this.needsReconnect = false;
         this.setConsent('folder');
+        if(this.dirty) this.scheduleAutoBackup(2000);
         toast('Pasta de backups reconectada.');
         this.safeRefreshUI();
+        return true;
       } else {
         toast('Permissão não concedida.');
+        return false;
       }
     }catch(e){ alert('Não foi possível reconectar: '+e.message); }
   },
 
   async disconnect(){
     this.dirHandle = null; this.pendingHandle = null; this.needsReconnect = false;
+    clearTimeout(this.autoBackupTimer); this.autoBackupTimer=null;
     await idbDel('backupDir');
     toast('Pasta de backups desconectada.');
     this.safeRefreshUI();
   },
 
-  async writeToFolder(payload, prefix='borion-backup-conta'){
+  async writeToFolder(payload, prefix='borion-backup-conta', options={}){
     if(!this.dirHandle) return false;
     try{
-      const fh = await this.dirHandle.getFileHandle(backupFilename(prefix), {create:true});
+      const allowed = await this.ensureWritePermission(options.interactive===true);
+      if(!allowed) return false;
+      const filename = options.filename || backupFilename(prefix);
+      const fh = await this.dirHandle.getFileHandle(filename, {create:true});
       const w = await fh.createWritable();
       await w.write(JSON.stringify(payload, null, 2));
       await w.close();
-      return true;
-    }catch(e){ console.warn('Falha ao gravar backup na pasta', e); return false; }
+      this.lastFolderWrite = {filename, at:Date.now(), snapshotId:payload&&payload.snapshotId||null};
+      return this.lastFolderWrite;
+    }catch(e){
+      console.warn('Falha ao gravar backup na pasta', e);
+      if(e && (e.name==='NotAllowedError' || e.name==='SecurityError')){
+        this.pendingHandle=this.dirHandle; this.dirHandle=null; this.needsReconnect=true; this.safeRefreshUI();
+      }
+      return false;
+    }
   },
 
   async manualBackupNow(){
-    const payload = await buildCloudAccountBackupPayload('manual','backup manual baixado/salvo pelo usuário');
-    const wroteFolder = this.dirHandle ? await this.writeToFolder(payload) : false;
-    if(wroteFolder){ this.dirty=false; this.lastAutoBackupAt=Date.now(); toast('Backup completo salvo na pasta configurada.'); return payload; }
+    const payload = await buildSharedBackupSnapshot('manual','backup manual baixado/salvo pelo usuário');
+    const wroteFolder = this.dirHandle ? await this.writeToFolder(payload, 'borion-backup-conta', {interactive:true}) : false;
+    if(wroteFolder){ this.dirty=false; this.lastAutoBackupAt=Date.now(); toast('Backup completo salvo em '+wroteFolder.filename+'.'); return payload; }
     downloadJSON(payload, backupFilename());
-    toast('Backup completo baixado em JSON. Configure uma pasta para salvar automaticamente.');
+    toast('Backup completo baixado em JSON. Configure ou reconecte uma pasta para salvar automaticamente.');
     return payload;
   },
 
-  async maybeAutoBackup(){
-    if(!this.dirHandle || !this.dirty) return;
+  async maybeAutoBackup(options={}){
+    if(!this.dirHandle || (!this.dirty && !options.force)) return false;
+    if(this.autoBackupInFlight) return false;
     const now = Date.now();
-    if(now - this.lastAutoBackupAt < 3*60*1000) return;
-    const payload = await buildCloudAccountBackupPayload('auto_local','backup automático local por alteração');
-    const ok = await this.writeToFolder(payload, 'borion-auto');
-    if(ok){ this.lastAutoBackupAt = now; this.dirty = false; }
+    if(!options.force && now-this.lastAutoBackupAt < 60*1000){
+      this.scheduleAutoBackup(60*1000-(now-this.lastAutoBackupAt));
+      return false;
+    }
+    this.autoBackupInFlight = true;
+    const revision = this.dirtyRevision;
+    try{
+      const payload = options.payload || await buildSharedBackupSnapshot('auto_local','backup automático local por alteração');
+      const result = await this.writeToFolder(payload, options.prefix||'borion-auto', {interactive:options.interactive===true});
+      if(result){
+        this.lastAutoBackupAt=Date.now();
+        if(revision===this.dirtyRevision) this.dirty=false;
+        return result;
+      }
+      return false;
+    }finally{
+      this.autoBackupInFlight=false;
+      if(this.dirty && this.dirHandle && !this.autoBackupTimer) this.scheduleAutoBackup();
+    }
   },
 
   async maybeDailyCloudBackup(){

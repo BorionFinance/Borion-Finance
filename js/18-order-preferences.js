@@ -22,6 +22,8 @@ const ORDER_TYPES = {
 
 const OrderPreferences = {
   active: false,      // modo Organizar ligado/desligado — só em memória (sessão atual)
+  activeType: null,    // lista que abriu o modo por seu botão local; null quando ativado por Configurações
+  controlSelection: {},// seleção visual temporária dos menus; vazia = mostra sempre o rótulo neutro ORDEM
   pending: {},         // {tipo: [ids...]} — mudanças feitas desde que o modo foi ligado, ainda não salvas
   _hydrated: {},        // {escopoDoPerfil: true} — evita buscar na nuvem mais de uma vez por perfil
 
@@ -128,9 +130,11 @@ const OrderPreferences = {
   },
 
   /* ---------------- Modo Organizar: ligar/desligar/salvar/cancelar/restaurar ---------------- */
-  setActive(val){
+  setActive(val, type=null){
     this.active = !!val;
+    this.activeType = this.active ? (type || null) : null;
     this.pending = {};
+    if(!this.active) this.controlSelection = {};
     this.notify();
   },
   toggleActive(){ this.setActive(!this.active); },
@@ -143,12 +147,16 @@ const OrderPreferences = {
     });
     this.pending = {};
     this.active = false;
+    this.activeType = null;
+    this.controlSelection = {};
     this.notify();
     if(typeof toast==='function') toast('Organização salva com sucesso.');
   },
   cancelAll(){
     this.pending = {};
     this.active = false;
+    this.activeType = null;
+    this.controlSelection = {};
     this.notify();
     if(typeof toast==='function') toast('Alterações de organização descartadas.');
   },
@@ -251,14 +259,14 @@ const OrderPreferences = {
       <div class="omb-actions">
         <button class="btn-outline btn-sm" id="omb_reset" type="button">Restaurar ordem padrão</button>
         <button class="btn-outline btn-sm" id="omb_cancel" type="button">Cancelar alterações</button>
-        <button class="btn btn-primary btn-sm" id="omb_save" type="button">Salvar organização</button>
+        <button class="btn btn-primary btn-sm" id="omb_save" type="button" title="Salvar organização" aria-label="Salvar organização">OK</button>
       </div>`;
     bar.classList.add('show');
     const resetBtn = document.getElementById('omb_reset');
     const cancelBtn = document.getElementById('omb_cancel');
     const saveBtn = document.getElementById('omb_save');
     if(resetBtn) resetBtn.onclick = ()=>{
-      const doReset = ()=>{ OrderPreferences.resetAllVisible(Object.keys(ORDER_TYPES)); OrderPreferences.active=false; OrderPreferences.notify(); };
+      const doReset = ()=>{ OrderPreferences.resetAllVisible(Object.keys(ORDER_TYPES)); OrderPreferences.active=false; OrderPreferences.activeType=null; OrderPreferences.controlSelection={}; OrderPreferences.notify(); };
       if(typeof openConfirmModal==='function'){
         openConfirmModal({
           title:'Restaurar ordem padrão',
@@ -293,20 +301,23 @@ const OrderPreferences = {
     </div>`;
   },
   sortSelectHTML(type){
-    const mode = this.getSortMode(type);
     const label = (ORDER_TYPES[type] && ORDER_TYPES[type].label) || 'lista';
+    const selected = this.controlSelection[type] || '';
     const opts = [
-      ['manual','Ordem personalizada'],
       ['az','A a Z'],
       ['za','Z a A'],
-      ['recent','Mais recentes primeiro'],
-      ['old','Mais antigos primeiro']
+      ['recent','Mais recente primeiro'],
+      ['old','Mais antigo primeiro'],
+      ['manual','Ordem personalizada']
     ];
-    const select = `<select class="order-sort-select" data-order-sort-type="${esc(type)}" title="Ordenar ${esc(label)}" aria-label="Ordenar ${esc(label)}">${opts.map(([v,l])=>`<option value="${v}" ${mode===v?'selected':''}>${l}</option>`).join('')}</select>`;
-    /* Botão sempre clicável (independente do <select> já estar em "Ordem personalizada" ou
-       não — um <select> não dispara evento quando a opção clicada já é a selecionada) que
-       liga o modo Organizar direto nesta lista, abrindo alça de arrastar + setas ali mesmo. */
-    const organizeBtn = `<button type="button" class="btn-outline btn-sm order-organize-btn" data-order-organize-type="${esc(type)}" title="Organizar ordem personalizada de ${esc(label)}" aria-label="Organizar ordem personalizada de ${esc(label)}">${this.handleSVG()} Organizar ordem</button>`;
+    /* O menu abre sempre com o rótulo neutro ORDEM. A ordenação aplicada continua salva
+       separadamente, mas o controle não fica parecendo permanentemente um botão de edição. */
+    const select = `<select class="order-sort-select" data-order-sort-type="${esc(type)}" title="Ordenar ${esc(label)}" aria-label="Ordenar ${esc(label)}"><option value="" ${selected===''?'selected':''} disabled>ORDEM</option>${opts.map(([v,l])=>`<option value="${v}" ${selected===v?'selected':''}>${l}</option>`).join('')}</select>`;
+    /* O botão só existe depois de a pessoa escolher explicitamente "Ordem personalizada".
+       Ao salvar/cancelar, controlSelection é limpo, o menu volta para ORDEM e o botão some. */
+    const organizeBtn = selected==='manual'
+      ? `<button type="button" class="btn-outline btn-sm order-organize-btn" data-order-organize-type="${esc(type)}" title="Organizar ordem personalizada de ${esc(label)}" aria-label="Organizar ordem personalizada de ${esc(label)}">${this.handleSVG()} Organizar ordem</button>`
+      : '';
     return `<span class="order-sort-wrap" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;">${select}${organizeBtn}</span>`;
   },
   /* Mensagem exibida no lugar dos controles quando um filtro de banco está ativo — reordenar
@@ -317,7 +328,7 @@ const OrderPreferences = {
   },
   canReorderNow(){ return !(typeof S!=='undefined' && S.bankFilter && S.bankFilter.size>0); },
 
-  /* ---------------- Painel "Organizar módulos e itens" (Configurações → Módulos) ---------------- */
+  /* ---------------- Painel "Organizar módulos e itens" (Configurações → Personalização) ---------------- */
   renderModulesOrganizePanel(){
     const active = this.active;
     const navList = (typeof NAV!=='undefined') ? NAV : [];
@@ -374,21 +385,30 @@ document.addEventListener('change', function(e){
   if(!sel) return;
   const type = sel.getAttribute('data-order-sort-type');
   const mode = sel.value;
+  if(!mode) return;
+  OrderPreferences.controlSelection[type] = mode;
+  if(mode!=='manual'){
+    delete OrderPreferences.pending[type];
+    if(OrderPreferences.active && (!OrderPreferences.activeType || OrderPreferences.activeType===type)){
+      OrderPreferences.active = false;
+      OrderPreferences.activeType = null;
+      OrderPreferences.pending = {};
+    }
+  }
   OrderPreferences.setSortMode(type, mode);
-  /* Escolher "Ordem personalizada" no seletor já liga o modo Organizar nessa lista, para o
-     usuário poder arrastar/usar as setas na hora, sem precisar ir em Configurações. */
-  if(mode==='manual' && !OrderPreferences.active) OrderPreferences.setActive(true);
+  /* Ordem personalizada apenas revela o botão ao lado. O modo de edição só começa quando
+     a pessoa clicar em "Organizar ordem", evitando ativação acidental ao abrir o menu. */
 });
-/* Botão "Organizar ordem": sempre liga o modo Organizar (mesmo se "Ordem personalizada" já
-   estava selecionada) e leva a visão até a lista para o usuário reordenar na hora — é a forma
-   de abrir a reorganização por um clique direto, sem depender do evento "change" do <select>. */
+/* Botão "Organizar ordem": aparece somente após selecionar "Ordem personalizada" e então
+   liga o modo de arrastar/setas para aquela lista. */
 document.addEventListener('click', function(e){
   const btn = e.target.closest('[data-order-organize-type]');
   if(!btn) return;
   e.preventDefault();
   const type = btn.getAttribute('data-order-organize-type');
+  OrderPreferences.controlSelection[type] = 'manual';
   if(OrderPreferences.getSortMode(type)!=='manual') OrderPreferences.setSortMode(type, 'manual');
-  OrderPreferences.setActive(true);
+  OrderPreferences.setActive(true, type);
   if(typeof toast==='function') toast('Modo de organização ativado. Arraste os itens ou use as setas para definir a ordem.');
   setTimeout(function(){
     const list = document.querySelector('[data-order-list="'+type+'"]');

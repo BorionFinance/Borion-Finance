@@ -1,4 +1,4 @@
-# Testes de regressão — Borion V6.23.4
+# Testes de regressão — Borion V6.23.5
 
 Execute na raiz do projeto:
 
@@ -6,8 +6,11 @@ Execute na raiz do projeto:
 node tests/borion-regression-tests.js
 ```
 
-A suíte cobre os 12 cenários financeiros obrigatórios da V6.23.1, migração por `accountId`, separação entre conta e cartão, backups Drive&Local e os relatórios mensais somente leitura dos Cofrinhos.
+A suíte cobre os 12 cenários financeiros obrigatórios da V6.23.1, migração por `accountId`, separação entre conta e cartão, backups Drive&Local, relatórios mensais dos Cofrinhos, conversão segura de Metas em Reservas e o Smartphone Mode.
 
-Resultado atual: **25/25 testes aprovados**.
+Resultado atual: **38/38 testes aprovados**.
 
 - Interface do histórico dos Cofrinhos: modal ampla, rolagem interna, valores sem quebra e acesso discreto na barra do módulo.
+- Reserva desligada: metas independentes podem ser adicionadas, editadas e excluídas; metas ligadas aos Cofrinhos ficam ocultas.
+- Reserva reativada: metas independentes viram Cofrinhos uma única vez, sem apagar os já existentes.
+- Smartphone Mode: detecção automática no celular, início simplificado, lançamento rápido e navegação inferior.

@@ -14,6 +14,55 @@ function patrimonioComposicaoSegments(){
   S.data.bens.filter(b=>bankMatches(b.banco,b.accountId)).forEach(b=> segs.push({label:b.nome, value:b.valor, color:catColor(b.nome)}));
   return segs;
 }
+/* V6.23.5 — Metas e Reservas usam a mesma ideia de objetivo, mas com comportamentos
+   diferentes conforme o módulo. Com Reserva desligada, somente metas independentes ficam
+   visíveis e editáveis. Ao religar, elas são convertidas uma única vez em Cofrinhos. */
+function metaReservaId(mt){
+  if(!mt) return null;
+  if(mt.reservaId && ((S.data.reservas&&S.data.reservas.boxes)||[]).some(r=>r.id===mt.reservaId)) return mt.reservaId;
+  const box=((S.data.reservas&&S.data.reservas.boxes)||[]).find(r=>r.metaId===mt.id);
+  return box ? box.id : null;
+}
+function isMetaLinkedToReserva(mt){ return !!metaReservaId(mt); }
+function metasPatrimonioVisible(){
+  const all=(S.data.metas||[]).filter(mt=>bankMatches(mt.banco,mt.accountId));
+  return reservasEnabled() ? all : all.filter(mt=>!isMetaLinkedToReserva(mt));
+}
+function convertStandaloneMetasToReservas(){
+  if(!S.data.reservas) S.data.reservas={enabled:true,boxes:[],moves:[],monthlyReports:[]};
+  if(!Array.isArray(S.data.reservas.boxes)) S.data.reservas.boxes=[];
+  const converted=[];
+  (S.data.metas||[]).forEach(mt=>{
+    if(isMetaLinkedToReserva(mt)) return;
+    const existing=S.data.reservas.boxes.find(r=>r.convertedFromMetaId===mt.id);
+    if(existing){ mt.reservaId=existing.id; existing.metaId=mt.id; return; }
+    const now=Date.now();
+    const box={
+      id:uid(),
+      nome:mt.nome||'Meta de patrimônio',
+      accountId:mt.accountId||null,
+      banco:accountNameSnapshot(mt.accountId,mt.banco||''),
+      valorAtual:Number(mt.valorAtual)||0,
+      valorMeta:Number(mt.valorMeta)||0,
+      prazo:mt.prazo||'',
+      categoria:'Meta de patrimônio',
+      status:Number(mt.valorMeta)>0 && Number(mt.valorAtual)>=Number(mt.valorMeta) ? 'Concluída' : 'Ativa',
+      cor:mt.cor||'#c9a45c',
+      corValor:'#e8c98a',
+      obs:'Criada automaticamente a partir de uma Meta de Patrimônio quando o módulo Reserva foi ativado.',
+      metaId:mt.id,
+      convertedFromMetaId:mt.id,
+      createdAt:Number(mt.createdAt)||now
+    };
+    mt.reservaId=box.id;
+    mt.valorAtual=box.valorAtual;
+    mt.banco=box.banco;
+    S.data.reservas.boxes.push(box);
+    converted.push(box);
+  });
+  return converted;
+}
+
 function renderPatrimony(){
   const liq = liquidezTotal(), bens = bensTotal(), invest = investAtualTotal(), reservas = reservasTotal(), divDebt = computeCardsDebt(), div = divDebt.total;
   const total = liq+reservas+bens+invest-div;
@@ -82,8 +131,10 @@ function renderPatrimony(){
         </div>
       </div>
       <div class="panel-box">
-        <div class="toolbar"><div class="toolbar-left">◇ Metas de patrimônio</div>${reservasEnabled()?`<button class="btn-outline btn-sm" onclick="Nav.go('reservas')">Criar em uma reserva</button>`:''}</div>
-        <p style="font-size:11px;color:var(--muted-2);margin:-6px 0 10px;">A Meta de Patrimônio agora é criada e editada dentro de "Editar reserva" (Reserva), logo abaixo da Meta da Reserva.</p>
+        <div class="toolbar"><div class="toolbar-left">◇ Metas de patrimônio</div>${reservasEnabled()?`<button class="btn-outline btn-sm" onclick="Nav.go('reservas')">Criar em uma reserva</button>`:`<button class="btn-outline btn-sm" onclick="Metas.add()">+ Adicionar meta</button>`}</div>
+        <p style="font-size:11px;color:var(--muted-2);margin:-6px 0 10px;">${reservasEnabled()
+          ? 'Com Reserva ativa, as metas ficam vinculadas aos Cofrinhos e são editadas dentro de cada reserva.'
+          : 'Com Reserva desativada, estas metas são independentes: você pode adicionar, editar e excluir. Ao ativar Reserva novamente, cada meta será convertida em um Cofrinho sem apagar os Cofrinhos antigos.'}</p>
         ${renderMetasList()}
       </div>
     </div>
@@ -91,8 +142,8 @@ function renderPatrimony(){
 }
 
 function renderMetasList(){
-  const metas = (S.data.metas||[]).filter(mt=>bankMatches(mt.banco,mt.accountId));
-  if(!metas.length) return '<div class="empty-note">Nenhuma meta cadastrada ainda'+(S.bankFilter?' para o filtro de banco atual':'')+'.</div>';
+  const metas = metasPatrimonioVisible();
+  if(!metas.length) return '<div class="empty-note">'+(reservasEnabled()?'Nenhuma meta vinculada a uma reserva ainda.':'Nenhuma meta cadastrada ainda')+(S.bankFilter?' para o filtro de banco atual':'')+'.</div>';
   return metas.map(mt=>{
     const pct = mt.valorMeta>0 ? Math.min(100, Math.round(mt.valorAtual/mt.valorMeta*100)) : 0;
     const done = pct>=100;
@@ -842,7 +893,7 @@ function openMetaModal(existing){
       Object.assign(existing, {nome, emoji:selectedEmoji, valorMeta, valorAtual, prazo, accountId, banco});
       toast('Meta atualizada.');
     } else {
-      S.data.metas.push({id:uid(), nome, emoji:selectedEmoji, valorMeta, valorAtual, prazo, accountId, banco});
+      S.data.metas.push({id:uid(), nome, emoji:selectedEmoji, valorMeta, valorAtual, prazo, accountId, banco, createdAt:Date.now()});
       toast('Meta criada.');
     }
     saveCurrentData(); closeModal(); renderView();
@@ -858,12 +909,21 @@ function openMetaModal(existing){
   }
 }
 const Metas = {
-  add(){ openMetaModal(null); },
+  add(){
+    if(reservasEnabled()){
+      S.view='reservas'; renderApp();
+      setTimeout(()=>Reservas.add(),60);
+      return;
+    }
+    openMetaModal(null);
+  },
   edit(id){
     const mt = S.data.metas.find(x=>x.id===id);
     if(!mt) return;
-    // Metas vinculadas a uma reserva agora são editadas dentro da própria reserva (Meta de Patrimônio).
-    if(mt.reservaId && (S.data.reservas.boxes||[]).some(r=>r.id===mt.reservaId)){ Reservas.edit(mt.reservaId); return; }
+    const reservaId=metaReservaId(mt);
+    // Quando Reserva está ativa, uma meta vinculada é editada no Cofrinho. Com o módulo
+    // desligado ela nem aparece na lista, portanto metas independentes usam o modal normal.
+    if(reservasEnabled() && reservaId){ Reservas.edit(reservaId); return; }
     openMetaModal(mt);
   }
 };

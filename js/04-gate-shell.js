@@ -316,6 +316,7 @@ function getNavItems(){
 }
 
 function renderApp(){
+  applyInterfaceMode();
   if(!S.currentProfile || !S.data){
     console.warn('[BORION_UI][RENDER_APP][NO_ACTIVE_PROFILE]', {hasProfile:!!S.currentProfile, hasData:!!S.data});
     renderGate();
@@ -349,6 +350,7 @@ function renderApp(){
         </div>
       </div>
       <div class="main" id="view-root"></div>
+      ${window.SmartphoneMode ? SmartphoneMode.renderBottomNav() : ''}
     </div>
   `;
   renderView();
@@ -429,7 +431,7 @@ function renderView(){
     <div id="view-body"></div>
   `;
   const body = $('#view-body');
-  if(S.view==='overview') body.innerHTML = renderOverview();
+  if(S.view==='overview') body.innerHTML = (isSmartphoneMode() && window.SmartphoneMode ? renderSmartphoneOverview() : renderOverview());
   else if(S.view==='budget') body.innerHTML = renderBudget();
   else if(S.view==='investments') body.innerHTML = renderInvestments();
   else if(S.view==='patrimony') body.innerHTML = renderPatrimony();

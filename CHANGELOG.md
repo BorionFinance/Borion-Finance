@@ -1,3 +1,17 @@
+## V6.23.5 — Metas flexíveis e Smartphone Mode (12/07/2026)
+
+- Com Reserva desligada, Metas de Patrimônio podem ser adicionadas, editadas e excluídas normalmente.
+- Metas vinculadas aos Cofrinhos ficam ocultas enquanto o módulo Reserva está desativado, sem apagar dados.
+- Ao reativar Reserva, metas independentes são convertidas uma única vez em Cofrinhos e entram junto dos Cofrinhos existentes.
+- Criado Smartphone Mode automático para telas de até 820 px, mantendo o Modo Pro em computadores.
+- Adicionada seleção Automático / Smartphone / Pro em Configurações → Personalização.
+- Nova tela inicial móvel com saldo, resumo mensal, últimos lançamentos e ações rápidas.
+- Nova navegação inferior com Início, Lançamentos, Lançar, Reservas/Metas e Mais.
+- O botão Lançar abre Receita, Despesa, Despesa fixa, Reserva/Meta, Transferência e Contas.
+- O Smartphone Mode reutiliza os formulários e cálculos existentes, sem criar uma lógica financeira paralela.
+- Cache do PWA e identificadores de versão atualizados para 6.23.5.
+- Testes automatizados: 38/38 aprovados.
+
 ## V6.23.4 — Ordem de Cofrinhos e backups confiáveis (12/07/2026)
 
 - **Organizar módulos e itens** foi movido de Configurações → Módulos para **Configurações → Personalização**, sem alterar as preferências já salvas de cada perfil.

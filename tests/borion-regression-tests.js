@@ -18,7 +18,7 @@ function createContext(){
     querySelectorAll(){ return []; },
     getElementById(){ return null; },
     addEventListener(){},
-    body:{style:{},appendChild(){},removeChild(){}},
+    body:{style:{},appendChild(){},removeChild(){},classList:{add(){},remove(){},toggle(){}}},
     documentElement:{setAttribute(){}},
     createElement(tag){
       return {
@@ -251,8 +251,8 @@ async function testAsync(name, fn){
 
   load(ctx,'js/02-backup-local.js');
   await testAsync('Backup Drive&Local — snapshot possui mesmo ID, data-base, versão e checksum',async()=>{
-    const snap=await run(ctx,`finalizeBackupSnapshot({type:'borion-account-backup',appVersion:'6.23.4',exportedAt:'2026-07-12T12:00:00.000Z',profiles:[],dataByProfile:{},integrity:{}},'manual_drive_local','backup manual conjunto Drive e dispositivo')`);
-    assert.ok(snap.snapshotId); assert.strictEqual(snap.snapshotBaseDate,'2026-07-12T12:00:00.000Z'); assert.strictEqual(snap.appVersion,'6.23.4'); assert.strictEqual(snap.snapshotChecksum,snap.integrity.snapshotSha256); assert.strictEqual(snap.snapshotChecksum.length,64);
+    const snap=await run(ctx,`finalizeBackupSnapshot({type:'borion-account-backup',appVersion:'6.23.5',exportedAt:'2026-07-12T12:00:00.000Z',profiles:[],dataByProfile:{},integrity:{}},'manual_drive_local','backup manual conjunto Drive e dispositivo')`);
+    assert.ok(snap.snapshotId); assert.strictEqual(snap.snapshotBaseDate,'2026-07-12T12:00:00.000Z'); assert.strictEqual(snap.appVersion,'6.23.5'); assert.strictEqual(snap.snapshotChecksum,snap.integrity.snapshotSha256); assert.strictEqual(snap.snapshotChecksum.length,64);
     const local=JSON.stringify(snap),drive=JSON.stringify(snap); assert.strictEqual(local,drive);
     const settings=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
     assert.match(settings,/GoogleDriveProvider\.createBackup\('manual_drive_local',\{payload:sharedSnapshot\}\)/);
@@ -294,7 +294,7 @@ async function testAsync(name, fn){
 
   await testAsync('23 — Autosave do Google Drive constrói snapshot válido e grava autosave-N.json',async()=>{
     const driveCtx=createContext();
-    run(driveCtx,"const BORION_APP_VERSION='6.23.4'; async function buildSharedBackupSnapshot(type,reason){return {type,reason,profiles:[],snapshotId:'auto-test'};} async function buildFullBackupPayload(){return {profiles:[],snapshotId:'force-test'};} function validateBorionJson(){return {valid:true,errors:[]};} function applyAccountPayloadSilently(){} function setStorageMode(){} function setProfiles(){} function emptyData(){return {};} function migrateData(x){return x;} function getProfileData(){return null;} function idbGetProfileData(){return null;} function renderGoogleDriveOnboarding(){} function renderGoogleDriveReconnect(){} function renderGate(){} function toast(){};");
+    run(driveCtx,"const BORION_APP_VERSION='6.23.5'; async function buildSharedBackupSnapshot(type,reason){return {type,reason,profiles:[],snapshotId:'auto-test'};} async function buildFullBackupPayload(){return {profiles:[],snapshotId:'force-test'};} function validateBorionJson(){return {valid:true,errors:[]};} function applyAccountPayloadSilently(){} function setStorageMode(){} function setProfiles(){} function emptyData(){return {};} function migrateData(x){return x;} function getProfileData(){return null;} function idbGetProfileData(){return null;} function renderGoogleDriveOnboarding(){} function renderGoogleDriveReconnect(){} function renderGate(){} function toast(){};");
     load(driveCtx,'js/01c-google-drive-provider.js');
     run(driveCtx,`GoogleDriveAuth.user={sub:'u',email:'u@x.com'};GoogleDriveProvider.folderId='folder';GoogleDriveProvider.autosaveDirtySinceLast=true;GoogleDriveProvider._autosaveRevision=1;window.__driveWrites=[];GoogleDriveProvider.writeRotatingSnapshot=async(kind,slots,payload)=>{window.__driveWrites.push({kind,slots,payload});};`);
     const ok=await run(driveCtx,'GoogleDriveProvider.runAutosaveTick()');
@@ -308,7 +308,7 @@ async function testAsync(name, fn){
 
   await testAsync('24 — Um único Ctrl+S aguarda sincronização em andamento e cria forcesave',async()=>{
     const driveCtx=createContext();
-    run(driveCtx,"const BORION_APP_VERSION='6.23.4'; async function buildSharedBackupSnapshot(){return {profiles:[]};} async function buildFullBackupPayload(){return {profiles:[{id:'p1'}],snapshotId:'force-one'};} function validateBorionJson(){return {valid:true,errors:[]};} function applyAccountPayloadSilently(){} function setStorageMode(){} function setProfiles(){} function toast(){};");
+    run(driveCtx,"const BORION_APP_VERSION='6.23.5'; async function buildSharedBackupSnapshot(){return {profiles:[]};} async function buildFullBackupPayload(){return {profiles:[{id:'p1'}],snapshotId:'force-one'};} function validateBorionJson(){return {valid:true,errors:[]};} function applyAccountPayloadSilently(){} function setStorageMode(){} function setProfiles(){} function toast(){};");
     load(driveCtx,'js/01c-google-drive-provider.js');
     run(driveCtx,`GoogleDriveAuth.user={sub:'u',email:'u@x.com'};GoogleDriveProvider.folderId='folder';GoogleDriveProvider.currentFileId='current';GoogleDriveProvider._syncInFlight=true;window.__forceWrites=[];GoogleDriveFS.updateFile=async(id,payload)=>({id,modifiedTime:String(Date.now()),payload});GoogleDriveProvider.writeRotatingSnapshot=async(kind,slots,payload)=>{window.__forceWrites.push({kind,slots,payload});};`);
     const promise=run(driveCtx,'GoogleDriveProvider.forceSyncNow()');
@@ -335,6 +335,105 @@ async function testAsync(name, fn){
     assert.match(local,/scheduleAutoBackup\(\)/); assert.match(local,/getFileHandle\(filename, \{create:true\}\)/); assert.match(local,/m\$\{pad\(d\.getSeconds\(\)\)\}s\$\{ms\}/);
   });
 
+  test('27 — Reserva desligada oculta metas ligadas aos Cofrinhos e mantém metas independentes editáveis',()=>{
+    const out=run(ctx,`(()=>{
+      S.data=migrateData(emptyData());
+      S.data.modules.reserves=false; S.data.reservas.enabled=false;
+      S.data.reservas.boxes=[{id:'cofre-antigo',nome:'Emergência',valorAtual:5000,valorMeta:10000,metaId:'meta-ligada'}];
+      S.data.metas=[
+        {id:'meta-ligada',nome:'Emergência',valorAtual:5000,valorMeta:10000,reservaId:'cofre-antigo'},
+        {id:'meta-livre',nome:'Casa',valorAtual:2000,valorMeta:80000}
+      ];
+      const visible=metasPatrimonioVisible().map(m=>m.id);
+      const html=renderMetasList();
+      const page=renderPatrimony();
+      return {visible,html,page};
+    })()`);
+    assert.deepStrictEqual(Array.from(out.visible),['meta-livre']);
+    assert.match(out.html,/Casa/); assert.ok(!/Emergência/.test(out.html));
+    assert.match(out.page,/\+ Adicionar meta/); assert.match(out.page,/adicionar, editar e excluir/);
+  });
+
+  test('28 — Metas independentes viram Cofrinhos uma única vez e Cofrinhos antigos são preservados',()=>{
+    const out=run(ctx,`(()=>{
+      S.data=migrateData(emptyData());
+      S.data.modules.reserves=false; S.data.reservas.enabled=false;
+      S.data.contas.push({id:'acc1',nome:'Nubank',accountKind:'bank',active:true,saldoInicial:0});
+      S.data.reservas.boxes=[{id:'antigo',nome:'Reserva antiga',valorAtual:700,valorMeta:1000,metaId:'meta-antiga'}];
+      S.data.metas=[
+        {id:'meta-antiga',nome:'Reserva antiga',valorAtual:700,valorMeta:1000,reservaId:'antigo'},
+        {id:'meta-nova',nome:'Casa',emoji:'🏠',valorAtual:2500,valorMeta:90000,accountId:'acc1',banco:'Nubank',prazo:'2028-01-01',createdAt:10}
+      ];
+      const first=convertStandaloneMetasToReservas();
+      const second=convertStandaloneMetasToReservas();
+      const box=S.data.reservas.boxes.find(b=>b.convertedFromMetaId==='meta-nova');
+      const meta=S.data.metas.find(m=>m.id==='meta-nova');
+      return {first:first.length,second:second.length,count:S.data.reservas.boxes.length,oldStill:!!S.data.reservas.boxes.find(b=>b.id==='antigo'),box,meta};
+    })()`);
+    assert.strictEqual(out.first,1); assert.strictEqual(out.second,0); assert.strictEqual(out.count,2); assert.strictEqual(out.oldStill,true);
+    assert.strictEqual(out.box.nome,'Casa'); assert.strictEqual(out.box.valorAtual,2500); assert.strictEqual(out.box.valorMeta,90000);
+    assert.strictEqual(out.box.accountId,'acc1'); assert.strictEqual(out.meta.reservaId,out.box.id); assert.strictEqual(out.box.metaId,'meta-nova');
+  });
+
+  test('29 — Ligar Reserva em Configurações converte metas e mantém a conversão após desligar/ligar novamente',()=>{
+    if(!run(ctx,"typeof Settings!=='undefined'")) load(ctx,'js/13-settings.js');
+    const out=run(ctx,`(()=>{
+      S.data=migrateData(emptyData());
+      S.data.modules.reserves=false; S.data.reservas.enabled=false;
+      S.data.reservas.boxes=[{id:'existente',nome:'Existente',valorAtual:100,valorMeta:500}];
+      S.data.metas=[{id:'m1',nome:'Viagem',valorAtual:300,valorMeta:5000,createdAt:1}];
+      Settings.toggleReservas();
+      const afterFirst={enabled:reservasEnabled(),boxes:S.data.reservas.boxes.length,converted:S.data.reservas.boxes.filter(b=>b.convertedFromMetaId==='m1').length};
+      Settings.toggleReservas();
+      const hidden=metasPatrimonioVisible().map(m=>m.id);
+      Settings.toggleReservas();
+      const afterSecond={enabled:reservasEnabled(),boxes:S.data.reservas.boxes.length,converted:S.data.reservas.boxes.filter(b=>b.convertedFromMetaId==='m1').length};
+      return {afterFirst,hidden,afterSecond};
+    })()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out.afterFirst)),{enabled:true,boxes:2,converted:1});
+    assert.deepStrictEqual(Array.from(out.hidden),[]);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out.afterSecond)),{enabled:true,boxes:2,converted:1});
+  });
+
+  test('30 — Modo automático usa Smartphone no celular e Pro no computador, com opção de forçar',()=>{
+    const out=run(ctx,`(()=>{
+      const original=window.matchMedia;
+      S.config.uiMode='auto'; window.matchMedia=q=>({matches:q.includes('max-width'),addEventListener(){}}); const autoPhone=resolvedInterfaceMode();
+      window.matchMedia=q=>({matches:false,addEventListener(){}}); const autoDesktop=resolvedInterfaceMode();
+      S.config.uiMode='smartphone'; const forcedPhone=resolvedInterfaceMode();
+      S.config.uiMode='pro'; const forcedPro=resolvedInterfaceMode();
+      window.matchMedia=original;
+      return {autoPhone,autoDesktop,forcedPhone,forcedPro};
+    })()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{autoPhone:'smartphone',autoDesktop:'pro',forcedPhone:'smartphone',forcedPro:'pro'});
+  });
+
+  test('31 — Smartphone Mode oferece início simples, ações rápidas e navegação inferior sem remover o menu completo',()=>{
+    if(!run(ctx,"typeof SmartphoneMode!=='undefined'")) load(ctx,'js/20-smartphone-mode.js');
+    const out=run(ctx,`(()=>{
+      S.config.uiMode='smartphone';
+      S.data=migrateData(emptyData());
+      S.data.modules.reserves=true; S.data.reservas.enabled=true;
+      S.data.contas.push({id:'acc',nome:'Nubank',accountKind:'bank',active:true,saldoInicial:1000});
+      S.data.transacoes.push({id:'t1',tipo:'variavel',nome:'Mercado',data:'2026-07-12',categoria:'Mercado',valor:50,accountId:'acc',banco:'Nubank'});
+      S.view='overview';
+      return {home:renderSmartphoneOverview(),nav:SmartphoneMode.renderBottomNav()};
+    })()`);
+    assert.match(out.home,/Saldo em contas/); assert.match(out.home,/Entrada rápida/); assert.match(out.home,/Saída rápida/);
+    assert.match(out.home,/Movimentar cofrinho/); assert.match(out.home,/Transferir/); assert.match(out.home,/Mercado/);
+    assert.match(out.nav,/smart-bottom-nav/); assert.match(out.nav,/Lançar/); assert.match(out.nav,/Reservas/); assert.match(out.nav,/MobileMenu\.open/);
+  });
+
+  test('32 — Smartphone Mode está no HTML, no cache offline e possui estilos próprios',()=>{
+    const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
+    const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
+    const css=fs.readFileSync(path.join(ROOT,'css/styles.css'),'utf8');
+    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.23\.5/);
+    assert.match(sw,/js\/20-smartphone-mode\.js/);
+    assert.match(css,/html\[data-interface-mode="smartphone"\] \.smart-bottom-nav/);
+    assert.match(css,/\.smart-quick-grid/); assert.match(css,/\.smart-launch-modal/);
+  });
+
   test('Código completo — todos os JavaScript passam na validação sintática',()=>{
     const files=fs.readdirSync(path.join(ROOT,'js')).filter(f=>f.endsWith('.js'));
     files.forEach(f=>execFileSync(process.execPath,['--check',path.join(ROOT,'js',f)],{stdio:'pipe'}));
@@ -351,7 +450,7 @@ async function testAsync(name, fn){
   });
 
   const failures=results.filter(r=>r.status==='FAIL');
-  const report={generatedAt:new Date().toISOString(),appVersion:'6.23.4',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
+  const report={generatedAt:new Date().toISOString(),appVersion:'6.23.5',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
   fs.writeFileSync(path.join(__dirname,'regression-results.json'),JSON.stringify(report,null,2));
   for(const r of results){
     console.log(`${r.status==='PASS'?'✓':'✗'} ${r.name}`);

@@ -16,6 +16,14 @@ function wireViewEvents(){
     applyTheme();
     toast('Tema atualizado.');
   };
+  const uiModeSel = $('#cfg_ui_mode');
+  if(uiModeSel) uiModeSel.onchange = ()=>{
+    S.config.uiMode = uiModeSel.value;
+    setConfig(S.config);
+    applyInterfaceMode();
+    renderApp();
+    toast(resolvedInterfaceMode()==='smartphone'?'Smartphone Mode ativado.':'Modo Pro ativado.');
+  };
   const popupDur = $('#cfg_popup_duration');
   if(popupDur) popupDur.onchange = ()=>{
     if(!S.config.popupNotifs) S.config.popupNotifs={enabled:true,durationMs:40000};
@@ -58,6 +66,7 @@ function wireViewEvents(){
 function showSplash(next){
   applyFont();
   applyTheme();
+  applyInterfaceMode();
   const root = $('#root');
   root.innerHTML = `
     <div id="splash">

@@ -32,8 +32,8 @@ function renderSettings(){
   else if(S.settingsTab==='categories') content = renderSettingsCategories();
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.23.4 • Organização e backups refinados</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
-<div><strong>Versão:</strong> 6.23.4</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.23.5 • Metas flexíveis e Smartphone Mode</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
+<div><strong>Versão:</strong> 6.23.5</div>
 <div><strong>Lançamento:</strong> 12/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -100,8 +100,10 @@ function renderSettingsCategories(){
 function renderSettingsPersonalization(){
   const fontOptions = Object.keys(FONT_LABELS).map(k=>`<option value="${k}" ${S.config.font===k?'selected':''}>${esc(FONT_LABELS[k])}</option>`).join('');
   const theme = S.config.theme || 'dark';
+  const uiMode = S.config.uiMode || 'auto';
   return `
     <div class="settings-section settings-hero-section"><h3>Personalização</h3><p class="desc">Ajustes visuais seguros, sem mexer na identidade do Borion nem transformar o app em carnaval.</p></div>
+    <div class="settings-section interface-mode-card"><h3>Modo de interface</h3><p class="desc">No Automático, celulares usam o Smartphone Mode para lançamentos rápidos e computadores continuam no Modo Pro completo. Nenhuma função ou dado é removido.</p><div class="field" style="max-width:360px;"><select id="cfg_ui_mode"><option value="auto" ${uiMode==='auto'?'selected':''}>Automático — Smartphone no celular / Pro no PC</option><option value="smartphone" ${uiMode==='smartphone'?'selected':''}>Forçar Smartphone Mode</option><option value="pro" ${uiMode==='pro'?'selected':''}>Forçar Modo Pro</option></select></div><div class="interface-mode-preview"><span class="${resolvedInterfaceMode()==='smartphone'?'active':''}">Smartphone</span><span class="${resolvedInterfaceMode()==='pro'?'active':''}">Pro</span></div></div>
     <div class="settings-section"><h3>Tema</h3><p class="desc">Use o tema private banking escuro, o tema claro ou siga o tema do sistema.</p><div class="field" style="max-width:320px;"><select id="cfg_theme"><option value="dark" ${theme==='dark'?'selected':''}>Escuro / Private banking</option><option value="light" ${theme==='light'?'selected':''}>Claro / Branco</option><option value="system" ${theme==='system'?'selected':''}>Tema do sistema</option></select></div></div>
     <div class="settings-section"><h3>Fonte do app</h3><p class="desc">Escolha a fonte usada em todo o app.</p><div class="field" style="max-width:320px;"><select id="cfg_font">${fontOptions}</select></div></div>
     ${window.OrderPreferences ? OrderPreferences.renderModulesOrganizePanel() : ''}
@@ -218,7 +220,21 @@ const Settings = {
     });
   },
   toggleCheques(){ if(!S.data.cheques) S.data.cheques={enabled:false,items:[]}; S.data.cheques.enabled=!S.data.cheques.enabled; if(!Array.isArray(S.data.cheques.items)) S.data.cheques.items=[]; saveCurrentData(); if(!S.data.cheques.enabled && S.view==='cheques') S.view='settings'; renderApp(); toast(S.data.cheques.enabled?'Módulo de cheques ativado.':'Módulo de cheques desativado.'); },
-  toggleReservas(){ if(!S.data.modules) S.data.modules=Object.assign({},DEFAULT_MODULES); if(!S.data.reservas) S.data.reservas={enabled:true,boxes:[],moves:[]}; const next = !(S.data.modules.reserves !== false && S.data.reservas.enabled !== false); S.data.modules.reserves=next; S.data.reservas.enabled=next; saveCurrentData(); if(!next && S.view==='reservas') S.view='settings'; renderApp(); toast(next?'Reserva ativada.':'Reserva desativada.'); },
+  toggleReservas(){
+    if(!S.data.modules) S.data.modules=Object.assign({},DEFAULT_MODULES);
+    if(!S.data.reservas) S.data.reservas={enabled:true,boxes:[],moves:[],monthlyReports:[]};
+    const wasEnabled=(S.data.modules.reserves !== false && S.data.reservas.enabled !== false);
+    const next=!wasEnabled;
+    let converted=[];
+    if(next && typeof convertStandaloneMetasToReservas==='function') converted=convertStandaloneMetasToReservas();
+    S.data.modules.reserves=next;
+    S.data.reservas.enabled=next;
+    saveCurrentData();
+    if(!next && S.view==='reservas') S.view='settings';
+    renderApp();
+    if(next && converted.length) toast('Reserva ativada. '+converted.length+' meta'+(converted.length===1?' foi convertida':'s foram convertidas')+' em Cofrinho'+(converted.length===1?'':'s')+'.');
+    else toast(next?'Reserva ativada.':'Reserva desativada. As metas ligadas aos Cofrinhos ficaram ocultas, sem apagar os dados.');
+  },
   toggleImports(){ if(!S.data.modules) S.data.modules=Object.assign({},DEFAULT_MODULES); S.data.modules.imports = !(S.data.modules.imports !== false); saveCurrentData(); if(S.data.modules.imports===false && S.view==='imports') S.view='settings'; renderApp(); toast(S.data.modules.imports!==false?'Importador de extratos ativado.':'Importador de extratos desativado.'); },
   toggleInvestments(){ if(!S.data.modules) S.data.modules=Object.assign({},DEFAULT_MODULES); S.data.modules.investments = !(S.data.modules.investments !== false); saveCurrentData(); if(S.data.modules.investments===false && S.view==='investments') S.view='settings'; renderApp(); toast(S.data.modules.investments!==false?'Investimentos ativado.':'Investimentos desativado — os dados continuam salvos.'); },
   toggleAgenda(){ if(!S.data.modules) S.data.modules=Object.assign({},DEFAULT_MODULES); S.data.modules.agenda = !(S.data.modules.agenda !== false); saveCurrentData(); if(S.data.modules.agenda===false && S.view==='agenda') S.view='settings'; renderApp(); toast(S.data.modules.agenda!==false?'Agenda Financeira ativada.':'Agenda Financeira desativada — os dados continuam salvos.'); },

@@ -72,11 +72,30 @@ function getConfig(){
     iconColors: Object.assign({}, DEFAULT_ICON_COLORS, stored.iconColors||{}),
     font: stored.font || 'default',
     theme: stored.theme || 'dark',
+    /* V6.23.5 — interface adaptativa. "auto" usa Smartphone Mode até 820 px e
+       mantém o Modo Pro em telas maiores. O usuário também pode forçar um dos modos. */
+    uiMode: ['auto','pro','smartphone'].includes(stored.uiMode) ? stored.uiMode : 'auto',
     popupNotifs: Object.assign({enabled:true, durationMs:40000}, stored.popupNotifs||{})
   };
 }
 function setConfig(cfg){ writeJSON(LS_CONFIG, cfg); }
 function applyFont(){ document.body.style.fontFamily = FONT_STACKS[S.config.font] || FONT_STACKS.default; }
+function resolvedInterfaceMode(){
+  const pref=(S&&S.config&&S.config.uiMode)||'auto';
+  if(pref==='smartphone') return 'smartphone';
+  if(pref==='pro') return 'pro';
+  return (window.matchMedia && window.matchMedia('(max-width: 820px)').matches) ? 'smartphone' : 'pro';
+}
+function isSmartphoneMode(){ return resolvedInterfaceMode()==='smartphone'; }
+function applyInterfaceMode(){
+  const mode=resolvedInterfaceMode();
+  document.documentElement.setAttribute('data-interface-mode',mode);
+  if(document.body){
+    document.body.classList.toggle('smartphone-mode',mode==='smartphone');
+    document.body.classList.toggle('pro-mode',mode==='pro');
+  }
+  return mode;
+}
 function applyTheme(){
   const choice = (S && S.config && S.config.theme) || 'dark';
   const resolved = choice==='system'

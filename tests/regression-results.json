@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-07-12T14:28:51.640Z",
-  "appVersion": "6.23.4",
-  "total": 32,
-  "passed": 32,
+  "generatedAt": "2026-07-12T15:12:28.012Z",
+  "appVersion": "6.23.5",
+  "total": 38,
+  "passed": 38,
   "failed": 0,
   "results": [
     {
@@ -123,6 +123,30 @@
     },
     {
       "name": "26 — Backup rápido local e Drive&Local usam a pasta e o mesmo snapshot",
+      "status": "PASS"
+    },
+    {
+      "name": "27 — Reserva desligada oculta metas ligadas aos Cofrinhos e mantém metas independentes editáveis",
+      "status": "PASS"
+    },
+    {
+      "name": "28 — Metas independentes viram Cofrinhos uma única vez e Cofrinhos antigos são preservados",
+      "status": "PASS"
+    },
+    {
+      "name": "29 — Ligar Reserva em Configurações converte metas e mantém a conversão após desligar/ligar novamente",
+      "status": "PASS"
+    },
+    {
+      "name": "30 — Modo automático usa Smartphone no celular e Pro no computador, com opção de forçar",
+      "status": "PASS"
+    },
+    {
+      "name": "31 — Smartphone Mode oferece início simples, ações rápidas e navegação inferior sem remover o menu completo",
+      "status": "PASS"
+    },
+    {
+      "name": "32 — Smartphone Mode está no HTML, no cache offline e possui estilos próprios",
       "status": "PASS"
     },
     {

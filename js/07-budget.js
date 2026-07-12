@@ -132,7 +132,7 @@ function renderBudget(){
       <div class="panel-box">
         <div class="toolbar">
           <div class="toolbar-left">${tab==='receita'?'Receita':tab==='fixa'?'Despesas fixas':'Despesas variáveis'}</div>
-          <div class="toolbar-right">
+          <div class="toolbar-right central-toolbar-actions">
             <button class="btn-outline ${filterCount?'filter-active':''}" onclick="Budget.openFilter()">⌕ Filtro${filterCount?' ('+filterCount+')':''}</button>
             <button class="btn-outline" onclick="Budget.add()">+ Adicionar</button>
           </div>
@@ -279,16 +279,38 @@ function renderCentralLancamentos(){
     const positive = e.sinal>0, negative = e.sinal<0;
     const statusCls = e.status==='Pago'?'ok':e.status==='Vencido'?'bad':e.status==='Estornado'?'warn':'neutral';
     const origemPill = e.origem ? ` <span class="cat-pill" style="opacity:.85;"><span class="dot" style="background:var(--gold-bright)"></span>${e.origem==='reserva'?'◈ Reserva'+(e.reservaNome?': '+esc(e.reservaNome):''):'Conta'}</span>` : '';
+    const contaLabel = accountNameSnapshot(e.conta, e.conta||'') || '—';
     return `<tr>
       <td>${e.data?reservaFmtDate(e.data):'—'}</td>
       <td>${CENTRAL_TIPO_LABELS[e.tipo]||e.tipo}</td>
       <td>${esc(e.nome)}${origemPill}</td>
       <td>${e.categoria?esc(e.categoria):''}</td>
       <td class="${positive?'val-pos':negative?'val-neg':''}">${positive?'+ ':negative?'- ':''}${brl(e.valor)}</td>
-      <td>${esc(e.conta||'')}</td>
+      <td>${esc(contaLabel)}</td>
       <td><span class="cheque-status ${statusCls}">${e.status}</span></td>
       <td class="tbl-actions">${centralOpenButtonHTML(e)}</td>
     </tr>`;
+  }).join('');
+  const mobileRows = list.map(e=>{
+    const positive = e.sinal>0, negative = e.sinal<0;
+    const statusCls = e.status==='Pago'?'ok':e.status==='Vencido'?'bad':e.status==='Estornado'?'warn':'neutral';
+    const contaLabel = accountNameSnapshot(e.conta, e.conta||'') || '—';
+    const categoria = e.categoria ? `<span class="cat-pill"><span class="dot" style="background:${catColor(e.categoria)}"></span>${esc(e.categoria)}</span>` : `<span class="cat-pill"><span class="dot" style="background:rgba(148,163,184,.65)"></span>Sem categoria</span>`;
+    const origem = e.origem ? `<span class="cat-pill" style="opacity:.85;"><span class="dot" style="background:var(--gold-bright)"></span>${e.origem==='reserva' ? '◈ Reserva'+(e.reservaNome?': '+esc(e.reservaNome):'') : 'Conta'}</span>` : '';
+    return `<div class="central-mobile-row">
+      <div class="central-mobile-head">
+        <span class="central-mobile-type">${CENTRAL_TIPO_LABELS[e.tipo]||e.tipo}</span>
+        <span class="cheque-status ${statusCls}">${e.status}</span>
+      </div>
+      <div class="central-mobile-title">${esc(e.nome||'Movimentação')}</div>
+      <div class="central-mobile-tags">${categoria}${origem}</div>
+      <div class="central-mobile-grid">
+        <div><small>Data</small><strong>${e.data?reservaFmtDate(e.data):'—'}</strong></div>
+        <div><small>Valor</small><strong class="${positive?'val-pos':negative?'val-neg':''}">${positive?'+ ':negative?'- ':''}${brl(e.valor)}</strong></div>
+        <div><small>Conta/Banco</small><strong>${esc(contaLabel)}</strong></div>
+      </div>
+      <div class="central-mobile-actions">${centralOpenButtonHTML(e)}</div>
+    </div>`;
   }).join('');
   return `
     <div class="cards-row">
@@ -307,7 +329,7 @@ function renderCentralLancamentos(){
     <div class="panel-box">
       <div class="toolbar">
         <div class="toolbar-left">Central de lançamentos${chips.length?' — '+chips.length+' filtro'+(chips.length>1?'s':'')+' ativo'+(chips.length>1?'s':''):''}</div>
-        <div class="toolbar-right">
+        <div class="toolbar-right central-toolbar-actions">
           <button class="btn-outline ${chips.length?'filter-active':''}" onclick="Budget.centralOpenFilters()">⌕ Filtros${chips.length?' ('+chips.length+')':''}</button>
           <select id="cnt_sort" class="btn-outline" style="padding:9px 10px;" onchange="Budget.centralSetSort(this.value)">
             ${[['data_desc','Data mais recente'],['data_asc','Data mais antiga'],['valor_desc','Maior valor'],['valor_asc','Menor valor'],['alfa','Ordem alfabética']].map(([v,l])=>`<option value="${v}" ${S.filters.central.sort===v?'selected':''}>${l}</option>`).join('')}
@@ -317,10 +339,12 @@ function renderCentralLancamentos(){
       </div>
       ${chips.length?`<div class="active-filter-chips">${chips.map(c=>`<span class="active-filter-chip">${esc(c.label)}<button onclick="Budget.centralRemoveChip('${c.key}')">&times;</button></span>`).join('')}</div>`:''}
       ${list.length?`
-      <div class="table-scroll"><table>
-        <thead><tr><th>Data</th><th>Tipo</th><th>Nome</th><th>Categoria</th><th>Valor</th><th>Conta/Banco</th><th>Status</th><th></th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div>
+      ${isSmartphoneMode()
+        ? `<div class="central-mobile-list">${mobileRows}</div>`
+        : `<div class="table-scroll"><table>
+            <thead><tr><th>Data</th><th>Tipo</th><th>Nome</th><th>Categoria</th><th>Valor</th><th>Conta/Banco</th><th>Status</th><th></th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table></div>`}
       <div class="tbl-foot"><span>Mostrando ${list.length} de ${all.length}</span>${all.length>list.length?`<button class="link-btn" onclick="Budget.centralLoadMore()">Carregar mais</button>`:''}</div>
       ` : `<div class="empty-note">Nenhuma movimentação encontrada com esse filtro.</div>`}
     </div>

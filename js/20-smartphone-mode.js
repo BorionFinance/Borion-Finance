@@ -9,6 +9,16 @@ function smartphoneQuickActionHTML(action, icon, label, sub){
   </button>`;
 }
 
+function smartNavIconHTML(kind){
+  if(kind==='launch'){
+    return `<span class="smart-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg></span>`;
+  }
+  if(kind==='more'){
+    return `<span class="smart-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14"/><path d="M5 12h14"/><path d="M5 17h14"/></svg></span>`;
+  }
+  return `<span class="smart-nav-icon" aria-hidden="true">${navIconSVG(kind)}</span>`;
+}
+
 function renderSmartphoneOverview(){
   const receitas=receitaMes();
   const despesas=despesasMes();
@@ -67,11 +77,11 @@ const SmartphoneMode={
     const reserves=reservasEnabled();
     const reserveKey=reserves?'reservas':'patrimony';
     return `<nav class="smart-bottom-nav" aria-label="Navegação do Smartphone Mode">
-      <button class="${S.view==='overview'?'active':''}" onclick="Nav.go('overview')"><span>⌂</span><small>Início</small></button>
-      <button class="${S.view==='budget'?'active':''}" onclick="SmartphoneMode.goBudget('central')"><span>▤</span><small>Lançamentos</small></button>
-      <button class="smart-bottom-launch" onclick="SmartphoneMode.openQuickLaunch()" aria-label="Novo lançamento"><span>＋</span><small>Lançar</small></button>
-      <button class="${S.view===reserveKey?'active':''}" onclick="Nav.go('${reserveKey}')"><span>◇</span><small>${reserves?'Reservas':'Metas'}</small></button>
-      <button onclick="MobileMenu.open()"><span>☰</span><small>Mais</small></button>
+      <button class="${S.view==='overview'?'active':''}" onclick="Nav.go('overview')">${smartNavIconHTML('overview')}<small>Início</small></button>
+      <button class="${S.view==='budget'?'active':''}" onclick="SmartphoneMode.goBudget('central')">${smartNavIconHTML('budget')}<small>Lançamentos</small></button>
+      <button class="smart-bottom-launch" onclick="SmartphoneMode.openQuickLaunch()" aria-label="Novo lançamento">${smartNavIconHTML('launch')}<small>Lançar</small></button>
+      <button class="${S.view===reserveKey?'active':''}" onclick="Nav.go('${reserveKey}')">${smartNavIconHTML(reserves?'reservas':'patrimony')}<small>${reserves?'Reservas':'Metas'}</small></button>
+      <button onclick="MobileMenu.open()">${smartNavIconHTML('more')}<small>Mais</small></button>
     </nav>`;
   },
   openQuickLaunch(){

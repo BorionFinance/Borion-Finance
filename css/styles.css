@@ -1706,7 +1706,37 @@ html[data-theme="light"][data-interface-mode="smartphone"] .smart-quick-action{b
 html[data-theme="light"][data-interface-mode="smartphone"] .smart-summary-strip button,
 html[data-theme="light"][data-interface-mode="smartphone"] .smart-bottom-nav{background:rgba(255,252,246,.94);border-color:rgba(122,85,29,.15);}
 
+html[data-interface-mode="smartphone"] .sidebar{display:flex!important;flex-direction:column!important;overflow:hidden!important;}
+html[data-interface-mode="smartphone"] .sb-nav{flex:1 1 auto;overflow-y:auto;min-height:0;padding-bottom:12px;}
+html[data-interface-mode="smartphone"] .sb-footer{margin-top:auto!important;flex:0 0 auto;background:inherit;}
+html[data-interface-mode="smartphone"] .smart-bottom-nav button{padding:0 2px;gap:4px;}
+html[data-interface-mode="smartphone"] .smart-bottom-nav button>.smart-nav-icon{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;line-height:1;}
+html[data-interface-mode="smartphone"] .smart-bottom-nav button>.smart-nav-icon svg{width:20px;height:20px;display:block;}
+html[data-interface-mode="smartphone"] .smart-bottom-nav .smart-bottom-launch>.smart-nav-icon{width:26px;height:26px;}
+html[data-interface-mode="smartphone"] .smart-bottom-nav .smart-bottom-launch>.smart-nav-icon svg{width:24px;height:24px;}
+html[data-interface-mode="smartphone"] .tabs{width:100%;scrollbar-width:none;}
+html[data-interface-mode="smartphone"] .tabs::-webkit-scrollbar{display:none;}
+html[data-interface-mode="smartphone"] .tab-btn{padding:12px 14px;}
+html[data-interface-mode="smartphone"] .central-toolbar-actions{width:100%;display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.25fr) minmax(0,1fr);gap:8px;}
+html[data-interface-mode="smartphone"] .central-toolbar-actions>*{width:100%;min-width:0;}
+html[data-interface-mode="smartphone"] .central-toolbar-actions select{max-width:100%;text-overflow:ellipsis;}
+html[data-interface-mode="smartphone"] .central-mobile-list{display:flex;flex-direction:column;gap:10px;}
+html[data-interface-mode="smartphone"] .central-mobile-row{padding:14px;border:1px solid rgba(255,255,255,.07);border-radius:16px;background:rgba(255,255,255,.025);box-shadow:0 8px 20px rgba(0,0,0,.12);}
+html[data-interface-mode="smartphone"] .central-mobile-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;}
+html[data-interface-mode="smartphone"] .central-mobile-type{font-size:11px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);}
+html[data-interface-mode="smartphone"] .central-mobile-title{font-size:14px;font-weight:800;line-height:1.3;margin-bottom:8px;word-break:break-word;}
+html[data-interface-mode="smartphone"] .central-mobile-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+html[data-interface-mode="smartphone"] .central-mobile-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
+html[data-interface-mode="smartphone"] .central-mobile-grid small{display:block;font-size:9.5px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;}
+html[data-interface-mode="smartphone"] .central-mobile-grid strong{display:block;font-size:12.5px;line-height:1.3;word-break:break-word;font-variant-numeric:tabular-nums;}
+html[data-interface-mode="smartphone"] .central-mobile-actions{display:flex;justify-content:flex-end;margin-top:10px;}
+html[data-interface-mode="smartphone"] .central-mobile-actions .tbl-actions{display:flex;justify-content:flex-end;width:100%;}
+html[data-interface-mode="smartphone"] .central-mobile-actions .tbl-actions button{min-width:42px;min-height:38px;}
+
 @media(max-width:430px){
+  html[data-interface-mode="smartphone"] .central-toolbar-actions{grid-template-columns:1fr;}
+  html[data-interface-mode="smartphone"] .central-mobile-grid{grid-template-columns:1fr;}
+  html[data-interface-mode="smartphone"] .smart-bottom-nav button>small{font-size:8px;}
   .smart-balance-hero{padding:18px;}
   .smart-quick-grid{grid-template-columns:1fr 1fr;gap:8px;}
   .smart-quick-action{padding:11px 9px;gap:8px;}

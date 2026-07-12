@@ -1,4 +1,10 @@
-# Borion Finance — Changelog
+# Changelog — Borion Finance
+
+## V6.24.2 — Grade personalizada das Reservas no Modo Pro
+- A Ordem personalizada das Reservas agora permite escolher 2, 3 ou 4 colunas.
+- Cofrinhos podem ser arrastados entre slots fixos, com alvo visual e animação de encaixe.
+- Ordem e quantidade de colunas ficam salvas por conta/perfil e podem sincronizar com as preferências visuais na nuvem.
+- O Smartphone Mode continua usando uma coluna e não recebe o organizador de grade do PC.
 
 ## V6.24.1 — Atalho de backup no Modo Pro (12/07/2026)
 - **SALVAR DRIVE & LOCAL** removido do Smartphone Mode e mantido somente no menu lateral do Modo Pro/PC.
@@ -24,8 +30,6 @@
 - O botão Voltar ganhou 8 camadas sentinela e debounce contra gestos rápidos/repetidos.
 - Um aviso nativo do navegador permanece como última barreira caso o histórico seja atravessado de uma vez.
 - O app instalado verifica novas versões ao abrir e periodicamente quando volta ao primeiro plano.
-
-# Borion Finance — Changelog
 
 ## V6.23.7 — Botão Voltar inteligente no Smartphone Mode
 - Voltar fecha primeiro modais, formulários e painéis flutuantes.

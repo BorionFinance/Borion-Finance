@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-07-12T17:33:35.440Z",
-  "appVersion": "6.24.1",
-  "total": 51,
-  "passed": 51,
+  "generatedAt": "2026-07-12T21:00:12.345Z",
+  "appVersion": "6.24.2",
+  "total": 53,
+  "passed": 53,
   "failed": 0,
   "results": [
     {
@@ -199,6 +199,14 @@
     },
     {
       "name": "45 — Rodapé técnico preserva lançamento original e autoria, atualizando apenas a versão",
+      "status": "PASS"
+    },
+    {
+      "name": "46 — Reservas no Modo Pro oferecem grade de 2, 3 ou 4 colunas com slots arrastáveis",
+      "status": "PASS"
+    },
+    {
+      "name": "47 — Quantidade de colunas é confirmada no OK e cancelamento preserva a configuração anterior",
       "status": "PASS"
     },
     {

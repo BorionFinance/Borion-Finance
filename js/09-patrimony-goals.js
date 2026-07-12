@@ -516,14 +516,16 @@ function renderReservasPanel(){
   const orgActive = !!(window.OrderPreferences && OrderPreferences.active);
   const canReorderNow = !!(window.OrderPreferences && OrderPreferences.canReorderNow());
   const showReorder = orgActive && canReorderNow;
+  const reservaGridOrganizer = showReorder && OrderPreferences.activeType==='reservas' && !(typeof isSmartphoneMode==='function' && isSmartphoneMode());
+  const reservaColumns = window.OrderPreferences ? OrderPreferences.workingReservaColumns() : 3;
   const boxNaturalIds = boxes.map(r=>r.id);
-  const boxCards = boxes.map(r=>{
+  const boxCards = boxes.map((r,boxIndex)=>{
     const temMeta = Number(r.valorMeta)>0;
     const pct = temMeta ? Math.min(100, Math.round(Number(r.valorAtual||0)/Number(r.valorMeta||0)*100)) : 0;
     const mt = r.metaId ? (S.data.metas||[]).find(x=>x.id===r.metaId) : null;
     const metaPct = mt && Number(mt.valorMeta)>0 ? Math.min(100, Math.round(Number(mt.valorAtual||0)/Number(mt.valorMeta||0)*100)) : 0;
     const metaHTML = mt ? `<div class="reserva-foot" style="margin-top:4px;"><span>${esc(mt.emoji||'◇')} Meta de patrimônio: ${brl(mt.valorAtual||0)} de ${brl(mt.valorMeta||0)}</span><span style="font-weight:800;color:${metaPct>=100?'#22c55e':'var(--gold-bright)'}">${metaPct}%</span></div>` : '';
-    return `<div class="reserva-card" data-order-id="${esc(r.id)}">
+    const card=`<div class="reserva-card${reservaGridOrganizer?' reserva-card-organizer':''}">
       <div class="reserva-head"><div><div class="reserva-title"><span class="dot" style="background:${esc(r.cor||'var(--gold)')}"></span>${esc(r.nome)}</div><div class="reserva-meta">${esc(r.banco||'Sem banco')} ${r.categoria?'· '+esc(r.categoria):''}</div></div>${reservaStatusPill(r.status)}</div>
       <div class="reserva-value" style="color:${esc(r.corValor||'var(--gold-bright)')};">${brl(Number(r.valorAtual)||0)}</div>
       ${temMeta?`
@@ -531,8 +533,11 @@ function renderReservasPanel(){
       <div class="reserva-foot"><span>Meta: ${brl(r.valorMeta)}</span><span>${pct}%</span></div>` : `
       <div class="reserva-foot"><span>Sem meta definida</span><span></span></div>`}
       ${metaHTML}
-      ${showReorder ? OrderPreferences.reorderRowControlsHTML('reservas', r.id, r.nome, boxNaturalIds) : `<div class="reserva-actions"><button onclick="Reservas.move('${r.id}')">Movimentar</button><button onclick="Reservas.viewExtrato('${r.id}')">Ver extrato</button><button onclick="Reservas.edit('${r.id}')">Editar</button></div>`}
+      ${reservaGridOrganizer ? OrderPreferences.reservaSlotHandleHTML(boxIndex+1,r.nome) : (showReorder ? OrderPreferences.reorderRowControlsHTML('reservas', r.id, r.nome, boxNaturalIds) : `<div class="reserva-actions"><button onclick="Reservas.move('${r.id}')">Movimentar</button><button onclick="Reservas.viewExtrato('${r.id}')">Ver extrato</button><button onclick="Reservas.edit('${r.id}')">Editar</button></div>`)}
     </div>`;
+    return reservaGridOrganizer
+      ? `<div class="reserva-slot" data-order-id="${esc(r.id)}" data-reserva-slot="${boxIndex+1}">${card}</div>`
+      : `<div data-order-id="${esc(r.id)}">${card}</div>`;
   }).join('');
   const orgFilterNotice = orgActive && !canReorderNow ? OrderPreferences.filterBlockedNoticeHTML() : '';
   const moveRows = moves.map(m=>{
@@ -546,7 +551,8 @@ function renderReservasPanel(){
   return `<div class="panel-box reservas-panel">
     <div class="toolbar"><div class="toolbar-left">◈ <span class="lmeta">Reservado: ${brl(total)}</span></div><div class="reserva-toolbar-actions">${renderReservaReportsControls()}${window.OrderPreferences?OrderPreferences.sortSelectHTML('reservas'):''}<button class="btn-outline" onclick="Reservas.add()">+ Nova reserva</button><button class="btn-outline" onclick="Reservas.move()">+ Movimentação</button></div></div>
     ${orgFilterNotice}
-    ${boxes.length?`<div class="reserva-grid" data-order-list="reservas">${boxCards}</div>`:'<div class="empty-note">Nenhuma reserva cadastrada ainda. Use para separar reserva de emergência, viagem, manutenção, impostos e objetivos.</div>'}
+    ${reservaGridOrganizer ? OrderPreferences.reservaLayoutControlsHTML() : ''}
+    ${boxes.length?`<div class="reserva-grid reserva-layout-custom ${reservaGridOrganizer?'reserva-grid-organizer':''}" style="--reserva-cols:${reservaColumns};--reserva-card-min:${reservaColumns===4?'205px':reservaColumns===3?'230px':'280px'};" data-order-list="reservas">${boxCards}</div>`:'<div class="empty-note">Nenhuma reserva cadastrada ainda. Use para separar reserva de emergência, viagem, manutenção, impostos e objetivos.</div>'}
     <div class="reserva-extrato-title">Extrato recente das reservas</div>
     ${moveRows?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Reserva</th><th>Tipo</th><th>Banco</th><th>Valor</th><th>Descrição</th><th></th></tr></thead><tbody>${moveRows}</tbody></table></div>`:'<div class="empty-note">Nenhuma movimentação registrada ainda.</div>'}
   </div>`;

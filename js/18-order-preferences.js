@@ -25,6 +25,7 @@ const OrderPreferences = {
   activeType: null,    // lista que abriu o modo por seu botão local; null quando ativado por Configurações
   controlSelection: {},// seleção visual temporária dos menus; vazia = mostra sempre o rótulo neutro ORDEM
   pending: {},         // {tipo: [ids...]} — mudanças feitas desde que o modo foi ligado, ainda não salvas
+  pendingReservaColumns: null, // 2, 3 ou 4 — só é confirmado ao clicar em OK
   _hydrated: {},        // {escopoDoPerfil: true} — evita buscar na nuvem mais de uma vez por perfil
 
   /* ---------------- Escopo: conta + perfil ---------------- */
@@ -33,6 +34,7 @@ const OrderPreferences = {
   profileScopeKey(){ return this.effectiveUserId() + '_' + this.effectiveProfileId(); },
   storageKey(type){ return 'borion_order_' + this.effectiveUserId() + '_' + this.effectiveProfileId() + '_' + type; },
   modeStorageKey(type){ return 'borion_ordermode_' + this.effectiveUserId() + '_' + this.effectiveProfileId() + '_' + type; },
+  reservaColumnsStorageKey(){ return 'borion_reserva_columns_' + this.effectiveUserId() + '_' + this.effectiveProfileId(); },
   pendingCloudKey(type){ return 'borion_orderpending_' + this.profileScopeKey() + '_' + type; },
 
   /* ---------------- Leitura/gravação local ---------------- */
@@ -41,6 +43,15 @@ const OrderPreferences = {
     return Array.isArray(v) ? v : [];
   },
   saveOrderLocal(type, ids){ writeJSON(this.storageKey(type), Array.isArray(ids) ? ids : []); },
+  clampReservaColumns(value){ const n=Number(value); return [2,3,4].includes(n) ? n : 3; },
+  getReservaColumns(){ return this.clampReservaColumns(readJSON(this.reservaColumnsStorageKey(), 3)); },
+  workingReservaColumns(){ return (this.active && this.activeType==='reservas' && this.pendingReservaColumns!=null) ? this.clampReservaColumns(this.pendingReservaColumns) : this.getReservaColumns(); },
+  saveReservaColumnsLocal(value){ writeJSON(this.reservaColumnsStorageKey(), this.clampReservaColumns(value)); },
+  setReservaColumns(value){
+    if(!(this.active && this.activeType==='reservas')) return;
+    this.pendingReservaColumns=this.clampReservaColumns(value);
+    this.notify();
+  },
   getSortMode(type){
     const v = readJSON(this.modeStorageKey(type), 'manual');
     return ['manual','az','za','recent','old'].includes(v) ? v : 'manual';
@@ -134,6 +145,7 @@ const OrderPreferences = {
     this.active = !!val;
     this.activeType = this.active ? (type || null) : null;
     this.pending = {};
+    this.pendingReservaColumns = null;
     if(!this.active) this.controlSelection = {};
     this.notify();
   },
@@ -145,7 +157,13 @@ const OrderPreferences = {
       this.saveOrderLocal(type, ids);
       this.syncToCloud(type, ids);
     });
+    if(this.pendingReservaColumns!=null){
+      const cols=this.clampReservaColumns(this.pendingReservaColumns);
+      this.saveReservaColumnsLocal(cols);
+      this.syncPreferenceToCloud('reservas_columns', cols);
+    }
     this.pending = {};
+    this.pendingReservaColumns = null;
     this.active = false;
     this.activeType = null;
     this.controlSelection = {};
@@ -154,6 +172,7 @@ const OrderPreferences = {
   },
   cancelAll(){
     this.pending = {};
+    this.pendingReservaColumns = null;
     this.active = false;
     this.activeType = null;
     this.controlSelection = {};
@@ -165,6 +184,11 @@ const OrderPreferences = {
     delete this.pending[type];
     writeJSON(this.modeStorageKey(type), 'manual');
     this.syncToCloud(type, []);
+    if(type==='reservas'){
+      localStorage.removeItem(this.reservaColumnsStorageKey());
+      this.pendingReservaColumns=null;
+      this.syncPreferenceToCloud('reservas_columns', 3);
+    }
   },
   resetAllVisible(types){
     (types || Object.keys(ORDER_TYPES)).forEach(t=>this.resetType(t));
@@ -176,34 +200,37 @@ const OrderPreferences = {
      Usa o client já criado por CloudStorage.init() — não cria outro client nem outra tabela
      financeira. Escreve/lê só em borion_ui_preferences. Se estiver offline ou a tabela ainda
      não existir (SQL não rodado), a organização continua funcionando 100% localmente. */
-  async syncToCloud(type, ids){
+  async syncPreferenceToCloud(type, value){
     try{
       if(!(window.CloudStorage && CloudStorage.user && CloudStorage.client)){ return; }
-      if(!navigator.onLine){ this.markPendingCloud(type, ids); return; }
+      if(!navigator.onLine){ this.markPendingCloud(type, value); return; }
       const payload = {
         user_id: CloudStorage.user.id,
         profile_id: this.effectiveProfileId(),
         preference_key: type,
-        preference_value: ids || [],
+        preference_value: value,
         updated_at: new Date().toISOString()
       };
       const { error } = await CloudStorage.client
         .from(ORDER_PREF_TABLE)
         .upsert(payload, { onConflict: 'user_id,profile_id,preference_key' });
-      if(error){ this.markPendingCloud(type, ids); console.warn('[BORION_ORDER][SYNC_WARN]', error); }
+      if(error){ this.markPendingCloud(type, value); console.warn('[BORION_ORDER][SYNC_WARN]', error); }
       else { this.clearPendingCloud(type); }
     }catch(e){
-      this.markPendingCloud(type, ids);
+      this.markPendingCloud(type, value);
       console.warn('[BORION_ORDER][SYNC_ERROR]', e);
     }
   },
-  markPendingCloud(type, ids){ writeJSON(this.pendingCloudKey(type), { ids: ids||[], savedAt: Date.now() }); },
+  syncToCloud(type, ids){ return this.syncPreferenceToCloud(type, Array.isArray(ids)?ids:[]); },
+  markPendingCloud(type, value){ writeJSON(this.pendingCloudKey(type), { value, savedAt: Date.now() }); },
   clearPendingCloud(type){ try{ localStorage.removeItem(this.pendingCloudKey(type)); }catch(e){} },
   retryPendingCloudSync(){
     if(!(window.CloudStorage && CloudStorage.user && navigator.onLine)) return;
-    Object.keys(ORDER_TYPES).forEach(type=>{
+    [...Object.keys(ORDER_TYPES),'reservas_columns'].forEach(type=>{
       const pend = readJSON(this.pendingCloudKey(type), null);
-      if(pend && Array.isArray(pend.ids)) this.syncToCloud(type, pend.ids);
+      if(!pend) return;
+      if(Object.prototype.hasOwnProperty.call(pend,'value')) this.syncPreferenceToCloud(type, pend.value);
+      else if(Array.isArray(pend.ids)) this.syncPreferenceToCloud(type, pend.ids); // compatibilidade com versões antigas
     });
   },
   /* Busca a organização salva na nuvem uma única vez por perfil (não faz polling nem chamada
@@ -223,7 +250,13 @@ const OrderPreferences = {
       if(error || !Array.isArray(data)) return;
       let changed = false;
       data.forEach(row=>{
-        if(!row || !row.preference_key || !Array.isArray(row.preference_value)) return;
+        if(!row || !row.preference_key) return;
+        if(row.preference_key==='reservas_columns'){
+          const localKey=this.reservaColumnsStorageKey();
+          if(localStorage.getItem(localKey)==null){ this.saveReservaColumnsLocal(row.preference_value); changed=true; }
+          return;
+        }
+        if(!Array.isArray(row.preference_value)) return;
         const localKey = this.storageKey(row.preference_key);
         if(localStorage.getItem(localKey)==null){ this.saveOrderLocal(row.preference_key, row.preference_value); changed = true; }
       });
@@ -251,10 +284,11 @@ const OrderPreferences = {
       bar.className = 'order-mode-banner';
       document.body.appendChild(bar);
     }
+    const isReservaGrid=this.activeType==='reservas' && !(typeof isSmartphoneMode==='function' && isSmartphoneMode());
     bar.innerHTML = `
       <div class="omb-text">
-        <strong>Modo de organização ativo.</strong>
-        <span>Arraste os itens ou use as setas para definir a ordem desejada.</span>
+        <strong>${isReservaGrid?'Organização visual das Reservas ativa.':'Modo de organização ativo.'}</strong>
+        <span>${isReservaGrid?'Escolha 2, 3 ou 4 colunas e arraste os Cofrinhos entre os slots.':'Arraste os itens ou use as setas para definir a ordem desejada.'}</span>
       </div>
       <div class="omb-actions">
         <button class="btn-outline btn-sm" id="omb_reset" type="button">Restaurar ordem padrão</button>
@@ -300,6 +334,18 @@ const OrderPreferences = {
       </span>
     </div>`;
   },
+  reservaLayoutControlsHTML(){
+    if(!(this.active && this.activeType==='reservas')) return '';
+    if(typeof isSmartphoneMode==='function' && isSmartphoneMode()) return '';
+    const current=this.workingReservaColumns();
+    return `<div class="reserva-layout-organizer" role="group" aria-label="Quantidade de colunas das Reservas">
+      <div class="reserva-layout-copy"><strong>Grade personalizada</strong><span>Arraste cada Cofrinho para o slot desejado.</span></div>
+      <div class="reserva-column-picker"><span>COLUNAS</span>${[2,3,4].map(n=>`<button type="button" class="reserva-column-btn ${current===n?'active':''}" data-reserva-columns="${n}" aria-pressed="${current===n?'true':'false'}" title="Usar ${n} colunas">${n}</button>`).join('')}</div>
+    </div>`;
+  },
+  reservaSlotHandleHTML(slotNumber, label){
+    return `<div class="reserva-slot-toolbar"><span class="reserva-slot-label">SLOT ${String(slotNumber).padStart(2,'0')}</span><span class="reserva-slot-help">Arraste para mover</span><button type="button" class="order-handle reserva-slot-handle" title="Arrastar ${esc(label||'Cofrinho')} para outro slot" aria-label="Arrastar ${esc(label||'Cofrinho')} para outro slot">${this.handleSVG()}</button></div>`;
+  },
   sortSelectHTML(type){
     const label = (ORDER_TYPES[type] && ORDER_TYPES[type].label) || 'lista';
     const selected = this.controlSelection[type] || '';
@@ -315,7 +361,7 @@ const OrderPreferences = {
     const select = `<select class="order-sort-select" data-order-sort-type="${esc(type)}" title="Ordenar ${esc(label)}" aria-label="Ordenar ${esc(label)}"><option value="" ${selected===''?'selected':''} disabled>ORDEM</option>${opts.map(([v,l])=>`<option value="${v}" ${selected===v?'selected':''}>${l}</option>`).join('')}</select>`;
     /* O botão só existe depois de a pessoa escolher explicitamente "Ordem personalizada".
        Ao salvar/cancelar, controlSelection é limpo, o menu volta para ORDEM e o botão some. */
-    const organizeBtn = selected==='manual'
+    const organizeBtn = selected==='manual' && !(this.active && this.activeType===type)
       ? `<button type="button" class="btn-outline btn-sm order-organize-btn" data-order-organize-type="${esc(type)}" title="Organizar ordem personalizada de ${esc(label)}" aria-label="Organizar ordem personalizada de ${esc(label)}">${this.handleSVG()} Organizar ordem</button>`
       : '';
     return `<span class="order-sort-wrap" style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;">${select}${organizeBtn}</span>`;
@@ -393,6 +439,7 @@ document.addEventListener('change', function(e){
       OrderPreferences.active = false;
       OrderPreferences.activeType = null;
       OrderPreferences.pending = {};
+      OrderPreferences.pendingReservaColumns = null;
     }
   }
   OrderPreferences.setSortMode(type, mode);
@@ -415,20 +462,103 @@ document.addEventListener('click', function(e){
     if(list && typeof list.scrollIntoView==='function') list.scrollIntoView({behavior:'smooth', block:'center'});
   }, 60);
 });
+document.addEventListener('click', function(e){
+  const btn=e.target.closest('[data-reserva-columns]');
+  if(!btn) return;
+  e.preventDefault();
+  OrderPreferences.setReservaColumns(Number(btn.getAttribute('data-reserva-columns')));
+});
 window.addEventListener('online', function(){ try{ OrderPreferences.retryPendingCloudSync(); }catch(e){} });
 
 /* ---------------- Arrastar (Pointer Events nativos — sem biblioteca) ----------------
    Os listeners de pointermove/pointerup só existem durante um arraste ativo e são sempre
    removidos ao soltar, então não há acúmulo de listeners entre uma reorganização e outra. */
 document.addEventListener('pointerdown', function(e){
+  const organizerSlot=e.target.closest('.reserva-grid-organizer > .reserva-slot[data-order-id]');
+  const organizerContainer=organizerSlot && organizerSlot.closest('[data-order-list="reservas"]');
+  if(organizerSlot && organizerContainer && !e.target.closest('button:not(.order-handle),a,input,select,textarea')){
+    e.preventDefault();
+    borionStartReservaSlotDrag(organizerSlot, organizerContainer, e);
+    return;
+  }
   const handle = e.target.closest('.order-handle');
   if(!handle) return;
   const row = handle.closest('[data-order-id]');
   const container = handle.closest('[data-order-list]');
   if(!row || !container) return;
   e.preventDefault();
-  borionStartOrderDrag(handle, row, container, e);
+  if(container.classList.contains('reserva-grid-organizer')) borionStartReservaSlotDrag(row, container, e);
+  else borionStartOrderDrag(handle, row, container, e);
 });
+function borionStartReservaSlotDrag(slot, container, startEvent){
+  if(!(OrderPreferences.active && OrderPreferences.activeType==='reservas')) return;
+  const pointerId=startEvent.pointerId;
+  const card=slot.querySelector('.reserva-card');
+  if(!card) return;
+  const rect=card.getBoundingClientRect();
+  const offsetX=startEvent.clientX-rect.left;
+  const offsetY=startEvent.clientY-rect.top;
+  const ghost=card.cloneNode(true);
+  ghost.className='reserva-card reserva-drag-ghost';
+  ghost.removeAttribute('data-order-id');
+  ghost.querySelectorAll('button').forEach(b=>b.setAttribute('tabindex','-1'));
+  Object.assign(ghost.style,{width:rect.width+'px',height:rect.height+'px',left:rect.left+'px',top:rect.top+'px'});
+  document.body.appendChild(ghost);
+  slot.classList.add('reserva-slot-dragging');
+  container.classList.add('reserva-grid-dragging-active');
+  document.body.classList.add('reserva-layout-dragging');
+  let targetSlot=null;
+  function moveGhost(ev){
+    ghost.style.transform=`translate3d(${ev.clientX-offsetX-rect.left}px,${ev.clientY-offsetY-rect.top}px,0) rotate(.45deg) scale(1.025)`;
+  }
+  function clearTarget(){ if(targetSlot) targetSlot.classList.remove('reserva-slot-target'); targetSlot=null; }
+  function onMove(ev){
+    if(ev.pointerId!==pointerId) return;
+    moveGhost(ev);
+    const hit=document.elementFromPoint(ev.clientX,ev.clientY);
+    const next=hit && hit.closest ? hit.closest('.reserva-grid-organizer > .reserva-slot[data-order-id]') : null;
+    if(next && next.closest('[data-order-list="reservas"]')===container && next!==slot){
+      if(targetSlot!==next){ clearTarget(); targetSlot=next; targetSlot.classList.add('reserva-slot-target'); }
+    }else clearTarget();
+  }
+  function finish(ev){
+    if(ev.pointerId!==pointerId) return;
+    document.removeEventListener('pointermove',onMove);
+    document.removeEventListener('pointerup',finish);
+    document.removeEventListener('pointercancel',cancel);
+    if(targetSlot){
+      const marker=document.createComment('reserva-slot-swap');
+      slot.parentNode.insertBefore(marker,slot);
+      targetSlot.parentNode.insertBefore(slot,targetSlot);
+      marker.parentNode.insertBefore(targetSlot,marker);
+      marker.remove();
+      const ids=Array.from(container.querySelectorAll(':scope > .reserva-slot[data-order-id]')).map(x=>x.getAttribute('data-order-id'));
+      OrderPreferences.pending.reservas=ids;
+      writeJSON(OrderPreferences.modeStorageKey('reservas'),'manual');
+    }
+    cleanup();
+    OrderPreferences.notify();
+  }
+  function cancel(ev){
+    if(ev.pointerId!==pointerId) return;
+    document.removeEventListener('pointermove',onMove);
+    document.removeEventListener('pointerup',finish);
+    document.removeEventListener('pointercancel',cancel);
+    cleanup();
+  }
+  function cleanup(){
+    clearTarget();
+    slot.classList.remove('reserva-slot-dragging');
+    container.classList.remove('reserva-grid-dragging-active');
+    document.body.classList.remove('reserva-layout-dragging');
+    ghost.classList.add('reserva-drag-ghost-out');
+    setTimeout(()=>ghost.remove(),120);
+  }
+  moveGhost(startEvent);
+  document.addEventListener('pointermove',onMove,{passive:false});
+  document.addEventListener('pointerup',finish);
+  document.addEventListener('pointercancel',cancel);
+}
 function borionStartOrderDrag(handle, row, container, startEvent){
   const type = container.getAttribute('data-order-list');
   const pointerId = startEvent.pointerId;

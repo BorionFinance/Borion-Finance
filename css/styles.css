@@ -2147,3 +2147,108 @@ html[data-theme="light"][data-interface-mode="smartphone"] .notif-panel-handle::
 .floating-notif .fn-copy span{font-size:12.5px;line-height:1.4;}
 .floating-notif .fn-copy small{font-size:9.5px;color:var(--muted-2);margin-top:2px;}
 body.notif-panel-open{overflow:hidden;}
+
+/* =====================================================================================
+   V6.24.2 — GRADE PERSONALIZÁVEL DAS RESERVAS (MODO PRO)
+   A quantidade de colunas e a posição dos Cofrinhos são apenas preferências visuais.
+===================================================================================== */
+html[data-interface-mode="pro"] .reserva-grid.reserva-layout-custom{
+  grid-template-columns:repeat(var(--reserva-cols,3),minmax(var(--reserva-card-min,230px),1fr));
+  align-items:stretch;
+  overflow-x:auto;
+  overflow-y:visible;
+  padding:2px 2px 8px;
+  scroll-padding-inline:12px;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(201,164,92,.34) transparent;
+}
+html[data-interface-mode="pro"] .reserva-grid.reserva-layout-custom::-webkit-scrollbar{height:7px;}
+html[data-interface-mode="pro"] .reserva-grid.reserva-layout-custom::-webkit-scrollbar-thumb{background:rgba(201,164,92,.34);border-radius:999px;}
+.reserva-grid.reserva-layout-custom>[data-order-id]{min-width:0;height:100%;}
+.reserva-grid.reserva-layout-custom>[data-order-id]>.reserva-card{height:100%;}
+
+.reserva-layout-organizer{
+  display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;
+  margin:10px 0 14px;padding:14px 16px;border-radius:16px;
+  border:1px solid rgba(217,180,107,.24);
+  background:linear-gradient(135deg,rgba(217,180,107,.105),rgba(255,255,255,.025));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 12px 26px rgba(0,0,0,.14);
+}
+.reserva-layout-copy{display:flex;flex-direction:column;gap:3px;min-width:220px;}
+.reserva-layout-copy strong{font-size:13px;color:var(--gold-bright);letter-spacing:.01em;}
+.reserva-layout-copy span{font-size:11px;color:var(--muted);}
+.reserva-column-picker{display:inline-flex;align-items:center;gap:6px;padding:4px;border-radius:12px;background:rgba(8,14,21,.42);border:1px solid rgba(255,255,255,.06);}
+.reserva-column-picker>span{font-size:9px;font-weight:900;letter-spacing:.12em;color:var(--muted-2);padding:0 7px;}
+.reserva-column-btn{
+  width:36px;height:34px;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--muted);
+  font-size:12px;font-weight:900;transition:transform .16s ease,background-color .18s ease,border-color .18s ease,color .18s ease,box-shadow .18s ease;
+}
+.reserva-column-btn:hover{color:var(--gold-bright);background:rgba(217,180,107,.08);transform:translateY(-1px);}
+.reserva-column-btn.active{color:#151005;background:linear-gradient(180deg,var(--gold-bright),var(--gold));border-color:rgba(255,255,255,.16);box-shadow:0 8px 18px rgba(201,164,92,.24);}
+
+.reserva-grid-organizer{gap:14px!important;user-select:none;}
+.reserva-slot{
+  position:relative;min-width:0;height:100%;padding:28px 7px 7px;border-radius:20px;
+  border:1px dashed rgba(217,180,107,.28);background:rgba(217,180,107,.025);
+  transition:border-color .16s ease,background-color .16s ease,box-shadow .18s ease,transform .18s ease;
+  cursor:grab;touch-action:none;
+}
+.reserva-slot:hover{border-color:rgba(217,180,107,.48);background:rgba(217,180,107,.045);}
+.reserva-slot:active{cursor:grabbing;}
+.reserva-slot::before{
+  content:"POSIÇÃO " attr(data-reserva-slot);position:absolute;top:8px;left:12px;
+  font-size:8.5px;font-weight:900;letter-spacing:.12em;color:rgba(217,180,107,.68);
+}
+.reserva-slot .reserva-card-organizer{
+  position:relative;border-color:rgba(217,180,107,.16);box-shadow:0 12px 28px rgba(0,0,0,.20);
+  transition:box-shadow .18s ease,border-color .18s ease,transform .18s ease,opacity .18s ease;
+}
+.reserva-slot-toolbar{
+  display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,.06);
+}
+.reserva-slot-label{font-size:9px;font-weight:900;letter-spacing:.10em;color:var(--gold-bright);}
+.reserva-slot-help{font-size:9px;color:var(--muted);margin-left:auto;}
+.reserva-slot-handle{width:34px;height:34px;}
+.reserva-grid-dragging-active .reserva-slot:not(.reserva-slot-dragging):not(.reserva-slot-target){opacity:.82;}
+.reserva-slot-dragging{border-color:rgba(217,180,107,.54);background:rgba(217,180,107,.06);}
+.reserva-slot-dragging .reserva-card{opacity:.18;transform:scale(.985);}
+.reserva-slot-target{
+  border-style:solid;border-color:rgba(217,180,107,.90)!important;background:rgba(217,180,107,.11)!important;
+  box-shadow:0 0 0 3px rgba(217,180,107,.10),0 18px 34px rgba(0,0,0,.24);
+  transform:translateY(-2px);
+}
+.reserva-slot-target::after{
+  content:"SOLTE AQUI";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:4;
+  border-radius:20px;background:rgba(8,14,21,.58);backdrop-filter:blur(3px);
+  color:var(--gold-bright);font-size:11px;font-weight:950;letter-spacing:.12em;pointer-events:none;
+}
+.reserva-drag-ghost{
+  position:fixed!important;z-index:1000!important;pointer-events:none!important;margin:0!important;
+  opacity:.96;transform-origin:center;box-shadow:0 28px 70px rgba(0,0,0,.48),0 0 0 1px rgba(217,180,107,.38)!important;
+  transition:opacity .12s ease!important;will-change:transform,left,top;
+}
+.reserva-drag-ghost .reserva-slot-toolbar{display:none;}
+.reserva-drag-ghost-out{opacity:0!important;}
+body.reserva-layout-dragging{cursor:grabbing!important;}
+body.reserva-layout-dragging *{cursor:grabbing!important;}
+
+html[data-theme="light"] .reserva-layout-organizer{
+  border-color:rgba(122,85,29,.18);background:linear-gradient(135deg,rgba(184,137,55,.13),rgba(255,255,255,.55));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.7),0 12px 26px rgba(90,70,34,.07);
+}
+html[data-theme="light"] .reserva-column-picker{background:rgba(255,255,255,.62);border-color:rgba(122,85,29,.12);}
+html[data-theme="light"] .reserva-slot{border-color:rgba(122,85,29,.26);background:rgba(184,137,55,.035);}
+html[data-theme="light"] .reserva-slot:hover{border-color:rgba(184,137,55,.50);background:rgba(184,137,55,.07);}
+html[data-theme="light"] .reserva-slot-target::after{background:rgba(255,250,242,.74);color:#7a551d;}
+html[data-theme="light"] .reserva-slot-toolbar{border-color:rgba(122,85,29,.10);}
+
+html[data-interface-mode="smartphone"] .reserva-grid.reserva-layout-custom{
+  grid-template-columns:1fr!important;overflow:visible;padding:0;
+}
+@media(max-width:900px){
+  .reserva-layout-organizer{align-items:stretch;}
+  .reserva-column-picker{width:100%;justify-content:flex-end;}
+}
+@media(prefers-reduced-motion:reduce){
+  .reserva-slot,.reserva-card-organizer,.reserva-column-btn,.reserva-drag-ghost{transition:none!important;animation:none!important;}
+}

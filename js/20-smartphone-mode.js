@@ -1,4 +1,4 @@
-/* Borion Finance V6.24.4 — Smartphone Mode
+/* Borion Finance V6.24.5 — Smartphone Mode
    Interface compacta para o uso diário. Reaproveita exatamente os mesmos dados,
    formulários e cálculos do Modo Pro; muda apenas a navegação e a apresentação. */
 
@@ -115,7 +115,7 @@ const SmartphoneMode={
     return `<div class="pro-sidebar-actions">
       <button type="button" class="pro-sidebar-save-drive-local" id="pro_sidebar_quick_save" onclick="SmartphoneMode.quickSaveBoth()">
         <span class="pro-sidebar-save-icon">${smartQuickSaveIconHTML()}</span>
-        <span><strong>SALVAR DRIVE & LOCAL</strong><small>Backup manual rápido</small></span>
+        <span><strong>FORCE SAVE</strong><small>Mesmo salvamento do Ctrl+S</small></span>
       </button>
     </div>`;
   },
@@ -131,27 +131,28 @@ const SmartphoneMode={
       if(btn){ btn.disabled=true; btn.classList.add('is-saving'); }
       if(strong) strong.textContent='Salvando...';
       if(small) small.textContent='Drive + dispositivo';
-      if(window.Settings && typeof Settings.manualBackup==='function'){
-        const result=await Settings.manualBackup({targets:'both',reason:'manual_drive_local',interactive:true});
-        if(!result || (!result.driveOk && !result.localOk)){
-          throw new Error('Não foi possível salvar no Drive nem no dispositivo.');
-        }
-        if(result.driveOk && result.localOk){
-          if(strong) strong.textContent='Salvo com sucesso';
-          if(small) small.textContent='Drive + local atualizados';
-        }else{
-          if(strong) strong.textContent='Salvo parcialmente';
-          if(small) small.textContent=result.driveOk?'Drive salvo · local falhou':'Local salvo · Drive falhou';
-        }
+      if(typeof forceManualSave!=='function'){
+        throw new Error('A rotina de force save não foi carregada.');
+      }
+      /* O botão fixo é literalmente o mesmo comando do Ctrl+S. Não existe uma segunda
+         implementação nem uma lógica de backup paralela. */
+      const result=await forceManualSave();
+      if(!result || (!result.driveOk && !result.localOk)){
+        throw new Error('Não foi possível confirmar o force save.');
+      }
+      if(result.driveOk && result.localOk){
+        if(strong) strong.textContent='Force save concluído';
+        if(small) small.textContent='Drive + local atualizados';
       }else{
-        throw new Error('Função de backup rápido não está disponível.');
+        if(strong) strong.textContent='Salvo parcialmente';
+        if(small) small.textContent=result.driveOk?'Drive salvo · local falhou':'Local salvo · Drive falhou';
       }
       setTimeout(()=>{
         const b=document.getElementById('pro_sidebar_quick_save');
         if(!b) return;
         const s1=b.querySelector('strong'); const s2=b.querySelector('small');
-        if(s1) s1.textContent='SALVAR DRIVE & LOCAL';
-        if(s2) s2.textContent='Backup manual rápido';
+        if(s1) s1.textContent='FORCE SAVE';
+        if(s2) s2.textContent='Mesmo salvamento do Ctrl+S';
       },1800);
     }catch(e){
       if(strong) strong.textContent='Falha ao salvar';
@@ -161,8 +162,8 @@ const SmartphoneMode={
         const b=document.getElementById('pro_sidebar_quick_save');
         if(b){ b.disabled=false; b.classList.remove('is-saving'); }
         const s1=b?b.querySelector('strong'):null; const s2=b?b.querySelector('small'):null;
-        if(s1 && s1.textContent!=='Falha ao salvar') s1.textContent='SALVAR DRIVE & LOCAL';
-        if(s2 && s2.textContent!=='Backup manual rápido' && s1 && s1.textContent==='SALVAR DRIVE & LOCAL') s2.textContent='Backup manual rápido';
+        if(s1 && s1.textContent!=='Falha ao salvar') s1.textContent='FORCE SAVE';
+        if(s2 && s2.textContent!=='Mesmo salvamento do Ctrl+S' && s1 && s1.textContent==='FORCE SAVE') s2.textContent='Mesmo salvamento do Ctrl+S';
         this.quickSaving=false;
       }, 1900);
       if(btn && !btn.isConnected) this.quickSaving=false;

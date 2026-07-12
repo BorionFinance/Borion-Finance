@@ -1,3 +1,9 @@
+## V6.24.5 — Force save unificado
+- Corrige o falso aviso “Função de backup rápido não está disponível”.
+- Exporta o módulo central de backup para uso seguro entre os scripts.
+- O botão fixo do Modo Pro agora chama exatamente a mesma função do Ctrl+S.
+- Mantém Drive, forcesave rotativo, backup manual e JSON local no mesmo fluxo.
+
 ## V6.24.4 — Salvamento manual unificado
 
 - Ctrl+S, botões de Configurações e atalho fixo do Modo Pro usam a mesma rotina manual.

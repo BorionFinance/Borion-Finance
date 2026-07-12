@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-07-12T21:49:26.688Z",
-  "appVersion": "6.24.4",
-  "total": 59,
-  "passed": 59,
+  "generatedAt": "2026-07-12T22:19:24.663Z",
+  "appVersion": "6.24.5",
+  "total": 61,
+  "passed": 61,
   "failed": 0,
   "results": [
     {
@@ -222,7 +222,7 @@
       "status": "PASS"
     },
     {
-      "name": "49 — Atalho fixo do Modo Pro chama diretamente o backup manual",
+      "name": "49 — Atalho fixo do Modo Pro chama exatamente o mesmo force save do Ctrl+S",
       "status": "PASS"
     },
     {
@@ -231,6 +231,14 @@
     },
     {
       "name": "51 — Force save aceita e reutiliza o snapshot manual compartilhado",
+      "status": "PASS"
+    },
+    {
+      "name": "V6.24.5 — Settings é exportado globalmente para Ctrl+S e botão fixo",
+      "status": "PASS"
+    },
+    {
+      "name": "V6.24.5 — botão fixo do Modo Pro usa exatamente forceManualSave",
       "status": "PASS"
     },
     {

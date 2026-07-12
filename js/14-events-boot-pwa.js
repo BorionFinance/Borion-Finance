@@ -105,9 +105,10 @@ async function forceManualSave(){
   if(forceManualSaveInFlight) return forceManualSaveInFlight;
   forceManualSaveInFlight=(async()=>{
     try{
-      if(window.Settings && typeof Settings.manualBackup==='function'){
-        const result=await Settings.manualBackup({targets:'both',reason:'manual_drive_local',interactive:true});
-        if(!result.driveOk && !result.localOk) throw new Error('nenhum destino confirmou o backup');
+      const backupModule = window.Settings || (typeof Settings!=='undefined' ? Settings : null);
+      if(backupModule && typeof backupModule.manualBackup==='function'){
+        const result=await backupModule.manualBackup({targets:'both',reason:'manual_drive_local',interactive:true});
+        if(!result || (!result.driveOk && !result.localOk)) throw new Error('nenhum destino confirmou o backup');
         return result;
       }
       throw new Error('o módulo de backup manual não foi carregado');

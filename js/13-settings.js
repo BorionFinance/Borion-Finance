@@ -32,8 +32,8 @@ function renderSettings(){
   else if(S.settingsTab==='categories') content = renderSettingsCategories();
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.24.4 • Salvamento manual unificado</div><footer class="app-release-footer" aria-label="Informações do Borion">
-<div><strong>Versão:</strong> 6.24.4</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.24.5 • Force save unificado</div><footer class="app-release-footer" aria-label="Informações do Borion">
+<div><strong>Versão:</strong> 6.24.5</div>
 <div><strong>Lançamento:</strong> 07/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -142,7 +142,7 @@ const Settings = {
   exportProfile(){ const p=S.currentProfile; const payload={type:'multicap-profile-backup',version:2,exportedAt:new Date().toISOString(),profile:{id:p.id,name:p.name,email:p.email,passwordHash:p.passwordHash,salt:p.salt,avatarColor:p.avatarColor,avatarImage:p.avatarImage},data:S.data}; downloadJSON(payload, `backup-${slug(p.name)}-${dateSlug()}.json`); toast('Backup exportado.'); },
   emailBackup(){ BackupFS.manualBackupNow(); const p=S.currentProfile; const subject=encodeURIComponent('Backup - '+APP_NAME); const body=encodeURIComponent('Olá,\n\nSegue em anexo o backup do '+APP_NAME+' (perfil atual: "'+p.name+'").\nO arquivo foi baixado/salvo agora — anexe-o a este e-mail antes de enviar.\n\n'); setTimeout(()=>{ window.location.href=`mailto:${p.email||''}?subject=${subject}&body=${body}`; },400); },
   resetColors(){ S.config.iconColors=Object.assign({},DEFAULT_ICON_COLORS); setConfig(S.config); renderView(); toast('Cores restauradas.'); },
-  /* ---------------- V6.24.4 — salvamento manual unificado ----------------
+  /* ---------------- V6.24.5 — force save manual unificado ----------------
      Ctrl+S, os botões de Configurações e o atalho fixo do Modo Pro passam todos por
      manualBackup(). O backup rápido não tem uma lógica própria: ele é somente um atalho
      visual para o mesmo backup manual, usando um único snapshot nos destinos escolhidos. */
@@ -970,3 +970,8 @@ Settings.viewCloudBackups = async function(){
     $('#bv_new').onclick=async()=>{ try{ await BackupFS.createCloudBackup('manual','backup criado pela lista de backups'); closeModal(); Settings.viewCloudBackups(); }catch(e){ alert(e.message||String(e)); } };
   }catch(e){ alert(e.message||String(e)); }
 };
+
+
+/* V6.24.5 — expõe a rotina central de backup para Ctrl+S e o atalho fixo do Modo Pro.
+   O objeto era declarado com const e, por isso, não existia em window.Settings. */
+window.Settings = Settings;

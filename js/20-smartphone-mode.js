@@ -1,4 +1,4 @@
-/* Borion Finance V6.24.3 — Smartphone Mode
+/* Borion Finance V6.24.4 — Smartphone Mode
    Interface compacta para o uso diário. Reaproveita exatamente os mesmos dados,
    formulários e cálculos do Modo Pro; muda apenas a navegação e a apresentação. */
 
@@ -131,8 +131,8 @@ const SmartphoneMode={
       if(btn){ btn.disabled=true; btn.classList.add('is-saving'); }
       if(strong) strong.textContent='Salvando...';
       if(small) small.textContent='Drive + dispositivo';
-      if(window.Settings && typeof Settings.quickBackupBoth==='function'){
-        const result=await Settings.quickBackupBoth();
+      if(window.Settings && typeof Settings.manualBackup==='function'){
+        const result=await Settings.manualBackup({targets:'both',reason:'manual_drive_local',interactive:true});
         if(!result || (!result.driveOk && !result.localOk)){
           throw new Error('Não foi possível salvar no Drive nem no dispositivo.');
         }

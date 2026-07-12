@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-07-12T21:26:04.759Z",
-  "appVersion": "6.24.3",
-  "total": 55,
-  "passed": 55,
+  "generatedAt": "2026-07-12T21:49:26.688Z",
+  "appVersion": "6.24.4",
+  "total": 59,
+  "passed": 59,
   "failed": 0,
   "results": [
     {
@@ -122,7 +122,7 @@
       "status": "PASS"
     },
     {
-      "name": "26 — Backup rápido local e Drive&Local usam a pasta e o mesmo snapshot",
+      "name": "26 — Backup rápido é atalho do manual e o local sempre produz JSON",
       "status": "PASS"
     },
     {
@@ -218,11 +218,27 @@
       "status": "PASS"
     },
     {
-      "name": "V6.24.3 — importação completa usa tela de revisão e não mesclagem silenciosa",
+      "name": "48 — Ctrl+S usa a mesma rotina manual dos botões",
       "status": "PASS"
     },
     {
-      "name": "V6.24.3 — service worker inclui módulo de revisão de perfis",
+      "name": "49 — Atalho fixo do Modo Pro chama diretamente o backup manual",
+      "status": "PASS"
+    },
+    {
+      "name": "50 — Pasta local é verificada ao abrir e avisa quando precisa reconectar",
+      "status": "PASS"
+    },
+    {
+      "name": "51 — Force save aceita e reutiliza o snapshot manual compartilhado",
+      "status": "PASS"
+    },
+    {
+      "name": "V6.24.4 — importação completa usa tela de revisão e não mesclagem silenciosa",
+      "status": "PASS"
+    },
+    {
+      "name": "V6.24.4 — service worker inclui módulo de revisão de perfis",
       "status": "PASS"
     }
   ]

@@ -1,3 +1,10 @@
+## V6.24.4 — Salvamento manual unificado
+
+- Ctrl+S, botões de Configurações e atalho fixo do Modo Pro usam a mesma rotina manual.
+- Backup manual atualiza current.json, cria forcesave e backup do Drive com o mesmo snapshot.
+- O backup local sempre cria histórico interno e um arquivo JSON: na pasta conectada ou por download do navegador.
+- A pasta local é verificada ao abrir o Borion e o usuário é avisado quando precisa reconectar.
+
 ## V6.24.3 — Importação revisada de perfis
 - Corrige backup com 1 perfil e mesmo ID sendo ignorado como "já existente".
 - Adiciona tela para escolher criar, substituir, ignorar e excluir perfis antes da importação.

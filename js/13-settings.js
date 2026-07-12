@@ -32,8 +32,8 @@ function renderSettings(){
   else if(S.settingsTab==='categories') content = renderSettingsCategories();
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.24.3 • Importação revisada de perfis</div><footer class="app-release-footer" aria-label="Informações do Borion">
-<div><strong>Versão:</strong> 6.24.3</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.24.4 • Salvamento manual unificado</div><footer class="app-release-footer" aria-label="Informações do Borion">
+<div><strong>Versão:</strong> 6.24.4</div>
 <div><strong>Lançamento:</strong> 07/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -142,88 +142,99 @@ const Settings = {
   exportProfile(){ const p=S.currentProfile; const payload={type:'multicap-profile-backup',version:2,exportedAt:new Date().toISOString(),profile:{id:p.id,name:p.name,email:p.email,passwordHash:p.passwordHash,salt:p.salt,avatarColor:p.avatarColor,avatarImage:p.avatarImage},data:S.data}; downloadJSON(payload, `backup-${slug(p.name)}-${dateSlug()}.json`); toast('Backup exportado.'); },
   emailBackup(){ BackupFS.manualBackupNow(); const p=S.currentProfile; const subject=encodeURIComponent('Backup - '+APP_NAME); const body=encodeURIComponent('Olá,\n\nSegue em anexo o backup do '+APP_NAME+' (perfil atual: "'+p.name+'").\nO arquivo foi baixado/salvo agora — anexe-o a este e-mail antes de enviar.\n\n'); setTimeout(()=>{ window.location.href=`mailto:${p.email||''}?subject=${subject}&body=${body}`; },400); },
   resetColors(){ S.config.iconColors=Object.assign({},DEFAULT_ICON_COLORS); setConfig(S.config); renderView(); toast('Cores restauradas.'); },
-  /* ---------------- V6.22 — 3 botões novos de backup rápido (seções 11-13 do pedido) ----------------
-     Reaproveita o mecanismo já existente de cada destino (storageProvider.createBackup para
-     este dispositivo, GoogleDriveProvider.createBackup para o Drive) — nenhum formato novo de
-     backup foi criado. Cada função trava o próprio botão contra duplo clique enquanto roda. */
+  /* ---------------- V6.24.4 — salvamento manual unificado ----------------
+     Ctrl+S, os botões de Configurações e o atalho fixo do Modo Pro passam todos por
+     manualBackup(). O backup rápido não tem uma lógica própria: ele é somente um atalho
+     visual para o mesmo backup manual, usando um único snapshot nos destinos escolhidos. */
   async _runQuickBackup(btnId, defaultLabel, busyLabel, task){
     const btn = document.getElementById(btnId);
-    if(btn){ if(btn.disabled) return; btn.disabled = true; btn.textContent = busyLabel; }
+    if(btn){ if(btn.disabled) return null; btn.disabled = true; btn.textContent = busyLabel; }
     try{ return await task(); }
-    finally{ if(btn){ btn.disabled = false; btn.textContent = defaultLabel; } }
+    finally{ if(btn && btn.isConnected){ btn.disabled = false; btn.textContent = defaultLabel; } }
   },
-  async _prepareLocalFolderAccess(){
+  async _prepareLocalFolderAccess(interactive=true){
     if(!window.BackupFS) return false;
-    /* Solicita/revalida a permissão logo no começo do clique, antes de montar o JSON.
-       Navegadores exigem gesto do usuário para requestPermission; deixar isso para depois
-       de vários awaits fazia o clique parecer funcionar, mas o arquivo não era criado. */
-    if(BackupFS.needsReconnect && BackupFS.pendingHandle){
-      const reconnected=await BackupFS.reconnect();
-      if(!reconnected) throw new Error('a pasta local precisa ser reconectada para gravar o arquivo JSON');
-      return true;
-    }
-    if(BackupFS.dirHandle){
-      const allowed=await BackupFS.ensureWritePermission(true);
-      if(!allowed) throw new Error('permissão de gravação da pasta local não foi concedida');
-      return true;
-    }
-    return false;
+    try{ return await BackupFS.verifyFolderConnection(interactive); }
+    catch(e){ console.warn('[BORION_BACKUP][VERIFY_FOLDER]',e); return false; }
   },
-  async _saveSnapshotLocally(snapshot, reason='manual_quick'){
+  async _saveSnapshotLocally(snapshot, reason='manual', options={}){
+    if(!window.storageProvider) throw new Error('Armazenamento local do Borion não está disponível.');
     const entry = await storageProvider.createBackup(reason,{payload:snapshot});
     let folderFile = null;
-    if(window.BackupFS && BackupFS.dirHandle){
+    let downloaded = false;
+    let folderError = '';
+    const connected = await Settings._prepareLocalFolderAccess(options.interactive!==false);
+    if(connected && window.BackupFS && BackupFS.dirHandle){
       folderFile = await BackupFS.writeToFolder(snapshot,'borion-backup-local',{interactive:false});
-      if(!folderFile) throw new Error('não foi possível gravar o arquivo JSON na pasta local autorizada');
-      BackupFS.lastAutoBackupAt=Date.now();
-      BackupFS.dirty=false;
+      if(folderFile){
+        BackupFS.lastAutoBackupAt=Date.now();
+        BackupFS.dirty=false;
+      }else{
+        folderError='A pasta estava conectada, mas a gravação do JSON falhou.';
+      }
     }
-    return {entry,folderFile};
+    /* Backup manual nunca termina sem um arquivo JSON visível. Se a pasta não estiver
+       autorizada (ou a escrita falhar), faz download pelo navegador como fallback. */
+    if(!folderFile){
+      const filename=backupFilename('borion-backup-manual');
+      downloadJSON(snapshot,filename);
+      downloaded=true;
+    }
+    return {entry,folderFile,downloaded,folderError};
+  },
+  async manualBackup(options={}){
+    if(!(S&&S.currentProfile&&S.data)) throw new Error('Abra um perfil financeiro antes de salvar.');
+    const targets=options.targets||'both';
+    const wantDrive=targets==='both'||targets==='drive';
+    const wantLocal=targets==='both'||targets==='local';
+    const reason=options.reason||'manual_drive_local';
+    saveCurrentData({finalConfirmation:true});
+    if(typeof clearExitSavePending==='function') clearExitSavePending(S.currentProfile.id);
+
+    const sharedSnapshot=await buildSharedBackupSnapshot(reason,'backup manual do usuário');
+    const result={driveOk:false,localOk:false,driveError:'',localError:'',folderFile:null,downloaded:false,snapshotId:sharedSnapshot.snapshotId};
+
+    const jobs=[];
+    if(wantDrive){
+      jobs.push((async()=>{
+        if(!(window.GoogleDriveProvider&&GoogleDriveProvider.isConnected())) throw new Error('nenhuma conta do Google Drive conectada');
+        /* Atualiza current.json, cria forcesave e também registra o backup manual.
+           Todos recebem exatamente o mesmo snapshot. */
+        const forced=await GoogleDriveProvider.forceSyncNow({payload:sharedSnapshot});
+        if(!forced) throw new Error('o Google Drive não confirmou o salvamento');
+        await GoogleDriveProvider.createBackup(reason,{payload:sharedSnapshot});
+        result.driveOk=true;
+      })().catch(e=>{ result.driveError=(e&&e.message)||String(e); }));
+    }
+    if(wantLocal){
+      jobs.push((async()=>{
+        const local=await Settings._saveSnapshotLocally(sharedSnapshot,reason,{interactive:options.interactive!==false});
+        result.localOk=true;
+        result.folderFile=local.folderFile;
+        result.downloaded=local.downloaded;
+        if(local.folderError) result.localError=local.folderError;
+      })().catch(e=>{ result.localError=(e&&e.message)||String(e); }));
+    }
+    await Promise.all(jobs);
+
+    const parts=[];
+    if(wantDrive) parts.push(result.driveOk?'Drive salvo':'Drive falhou: '+result.driveError);
+    if(wantLocal){
+      if(result.folderFile) parts.push('JSON salvo em '+result.folderFile.filename);
+      else if(result.downloaded) parts.push('JSON baixado pelo navegador');
+      else parts.push('Local falhou: '+result.localError);
+    }
+    toast(parts.join(' · '));
+    return result;
   },
   quickBackupDrive(){
-    return Settings._runQuickBackup('qb_drive', 'Criar backup agora', 'Criando...', async ()=>{
-      if(!(window.GoogleDriveProvider && GoogleDriveProvider.isConnected())){ toast('Google Drive: nenhuma conta conectada — conecte o Drive acima para criar backup lá.'); return; }
-      try{ await GoogleDriveProvider.createBackup('manual_quick'); toast('Google Drive: backup criado com sucesso.'); }
-      catch(e){ toast('Google Drive: falha ao criar backup — '+(e&&e.message?e.message:String(e))); }
-    });
+    return Settings._runQuickBackup('qb_drive','Criar backup agora','Criando...',()=>Settings.manualBackup({targets:'drive',reason:'manual'}));
   },
   quickBackupLocal(){
-    return Settings._runQuickBackup('qb_local', 'Criar backup agora', 'Criando...', async ()=>{
-      try{
-        await Settings._prepareLocalFolderAccess();
-        const snapshot=await buildSharedBackupSnapshot('manual_quick','backup manual rápido neste dispositivo');
-        const saved=await Settings._saveSnapshotLocally(snapshot,'manual_quick');
-        const fileMsg=saved.folderFile?' Arquivo JSON salvo em '+saved.folderFile.filename+'.':' Histórico local salvo no navegador.';
-        toast('Este dispositivo: backup criado com sucesso.'+fileMsg);
-      }catch(e){ toast('Este dispositivo: falha ao criar backup — '+(e&&e.message?e.message:String(e))); }
-    });
+    return Settings._runQuickBackup('qb_local','Criar backup agora','Criando...',()=>Settings.manualBackup({targets:'local',reason:'manual'}));
   },
   quickBackupBoth(){
-    return Settings._runQuickBackup('qb_both', 'SALVAR DRIVE&LOCAL', 'Salvando...', async ()=>{
-      // V6.22 — dispara os dois ao mesmo tempo (mesmo instante/estado dos dados), nunca um
-      // depois do outro: cada destino usa seu próprio mecanismo já existente, mas os dois
-      // partem do mesmo S.data, no mesmo clique — nunca dois snapshots de momentos diferentes.
-      const hasDrive=!!(window.GoogleDriveProvider&&GoogleDriveProvider.isConnected());
-      let localAccessError=null;
-      try{ await Settings._prepareLocalFolderAccess(); }catch(e){ localAccessError=e; }
-      // Um único objeto imutável é gerado uma vez e entregue aos dois destinos.
-      const sharedSnapshot=await buildSharedBackupSnapshot('manual_drive_local','backup manual conjunto Drive e dispositivo');
-      const [driveRes,localRes]=await Promise.allSettled([
-        hasDrive?GoogleDriveProvider.createBackup('manual_drive_local',{payload:sharedSnapshot}):Promise.reject(new Error('nenhuma conta do Google Drive conectada')),
-        localAccessError?Promise.reject(localAccessError):Settings._saveSnapshotLocally(sharedSnapshot,'manual_drive_local')
-      ]);
-      const driveMsg = driveRes.status==='fulfilled' ? 'Google Drive: backup criado com sucesso.' : 'Google Drive: falha ao criar backup — '+((driveRes.reason&&driveRes.reason.message)||'erro desconhecido')+'.';
-      const localMsg = localRes.status==='fulfilled'
-        ? ('Este dispositivo: backup criado com sucesso.'+(localRes.value&&localRes.value.folderFile?' JSON: '+localRes.value.folderFile.filename+'.':''))
-        : 'Este dispositivo: falha ao criar backup — '+((localRes.reason&&localRes.reason.message)||'erro desconhecido')+'.';
-      toast(driveMsg+' · '+localMsg);
-      return {
-        driveOk:driveRes.status==='fulfilled',
-        localOk:localRes.status==='fulfilled',
-        driveError:driveRes.status==='rejected'?((driveRes.reason&&driveRes.reason.message)||'erro desconhecido'):'',
-        localError:localRes.status==='rejected'?((localRes.reason&&localRes.reason.message)||'erro desconhecido'):''
-      };
-    });
+    return Settings._runQuickBackup('qb_both','SALVAR DRIVE&LOCAL','Salvando...',()=>Settings.manualBackup({targets:'both',reason:'manual_drive_local'}));
   },
   toggleCheques(){ if(!S.data.cheques) S.data.cheques={enabled:false,items:[]}; S.data.cheques.enabled=!S.data.cheques.enabled; if(!Array.isArray(S.data.cheques.items)) S.data.cheques.items=[]; saveCurrentData(); if(!S.data.cheques.enabled && S.view==='cheques') S.view='settings'; renderApp(); toast(S.data.cheques.enabled?'Módulo de cheques ativado.':'Módulo de cheques desativado.'); },
   toggleReservas(){

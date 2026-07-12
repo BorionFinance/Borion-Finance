@@ -100,21 +100,25 @@ function showSplash(next){
 /* V6.19.0 — Ctrl+S: força um salvamento imediato, adaptado ao modo de armazenamento
    atual. No Google Drive, ignora de propósito a checagem de conflito (a pessoa está
    dizendo explicitamente "quero que a minha versão valha"). */
+let forceManualSaveInFlight=null;
 async function forceManualSave(){
-  try{
-    if(S && S.currentProfile && S.data){ saveCurrentData({finalConfirmation:true}); clearExitSavePending(S.currentProfile.id); }
-    if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){
-      await GoogleDriveProvider.forceSyncNow();
-      toast('Salvo — sua versão agora é a mais recente no Google Drive.');
-    } else if(window.CloudStorage && CloudStorage.user && navigator.onLine){
-      await CloudStorage.syncNow();
-      toast('Salvo no Supabase.');
-    } else {
-      toast('Salvo neste dispositivo.');
+  if(forceManualSaveInFlight) return forceManualSaveInFlight;
+  forceManualSaveInFlight=(async()=>{
+    try{
+      if(window.Settings && typeof Settings.manualBackup==='function'){
+        const result=await Settings.manualBackup({targets:'both',reason:'manual_drive_local',interactive:true});
+        if(!result.driveOk && !result.localOk) throw new Error('nenhum destino confirmou o backup');
+        return result;
+      }
+      throw new Error('o módulo de backup manual não foi carregado');
+    }catch(e){
+      toast('Falha ao salvar: '+(e&&e.message?e.message:String(e)));
+      return null;
+    }finally{
+      forceManualSaveInFlight=null;
     }
-  }catch(e){
-    toast('Falha ao salvar: '+(e&&e.message?e.message:String(e)));
-  }
+  })();
+  return forceManualSaveInFlight;
 }
 
 const ExitSaveGuard = {
@@ -174,7 +178,7 @@ window.addEventListener('pageshow', (e)=>{
 
 /* ---------------- BOOT ---------------- */
 (function boot(){
-  BackupFS.init();
+  const backupFolderInit=BackupFS.init();
   Notifs.closePanelOnOutsideClick();
   BankFilter.closePanelOnOutsideClick();
   document.addEventListener('click', GlobalSearch.outsideClickHandler);
@@ -193,6 +197,7 @@ window.addEventListener('pageshow', (e)=>{
     else if(mq.addListener) mq.addListener(handler);
   }
   showSplash(async ()=>{
+    await backupFolderInit;
     await CloudStorage.init();
     if(CloudStorage.user && CloudStorage.recoveryMode){
       CloudAuth.mode='changePassword';

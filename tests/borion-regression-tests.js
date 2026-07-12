@@ -251,12 +251,12 @@ async function testAsync(name, fn){
 
   load(ctx,'js/02-backup-local.js');
   await testAsync('Backup Drive&Local — snapshot possui mesmo ID, data-base, versão e checksum',async()=>{
-    const snap=await run(ctx,`finalizeBackupSnapshot({type:'borion-account-backup',appVersion:'6.24.3',exportedAt:'2026-07-12T12:00:00.000Z',profiles:[],dataByProfile:{},integrity:{}},'manual_drive_local','backup manual conjunto Drive e dispositivo')`);
-    assert.ok(snap.snapshotId); assert.strictEqual(snap.snapshotBaseDate,'2026-07-12T12:00:00.000Z'); assert.strictEqual(snap.appVersion,'6.24.3'); assert.strictEqual(snap.snapshotChecksum,snap.integrity.snapshotSha256); assert.strictEqual(snap.snapshotChecksum.length,64);
+    const snap=await run(ctx,`finalizeBackupSnapshot({type:'borion-account-backup',appVersion:'6.24.4',exportedAt:'2026-07-12T12:00:00.000Z',profiles:[],dataByProfile:{},integrity:{}},'manual_drive_local','backup manual conjunto Drive e dispositivo')`);
+    assert.ok(snap.snapshotId); assert.strictEqual(snap.snapshotBaseDate,'2026-07-12T12:00:00.000Z'); assert.strictEqual(snap.appVersion,'6.24.4'); assert.strictEqual(snap.snapshotChecksum,snap.integrity.snapshotSha256); assert.strictEqual(snap.snapshotChecksum.length,64);
     const local=JSON.stringify(snap),drive=JSON.stringify(snap); assert.strictEqual(local,drive);
     const settings=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
-    assert.match(settings,/GoogleDriveProvider\.createBackup\('manual_drive_local',\{payload:sharedSnapshot\}\)/);
-    assert.match(settings,/Settings\._saveSnapshotLocally\(sharedSnapshot,'manual_drive_local'\)/);
+    assert.match(settings,/GoogleDriveProvider\.createBackup\(reason,\{payload:sharedSnapshot\}\)/);
+    assert.match(settings,/Settings\._saveSnapshotLocally\(sharedSnapshot,reason,\{interactive:options\.interactive!==false\}\)/);
     const driveSource=fs.readFileSync(path.join(ROOT,'js/01c-google-drive-provider.js'),'utf8');
     assert.match(driveSource,/options\.payload \? options\.payload : await buildSharedBackupSnapshot/);
   });
@@ -325,14 +325,19 @@ async function testAsync(name, fn){
     const written=JSON.parse(run(ctx,'window.__folderText')); assert.strictEqual(written.snapshotId,'local-json'); assert.strictEqual(written.profiles[0].id,'p');
   });
 
-  test('26 — Backup rápido local e Drive&Local usam a pasta e o mesmo snapshot',()=>{
+  test('26 — Backup rápido é atalho do manual e o local sempre produz JSON',()=>{
     const src=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
+    assert.match(src,/async manualBackup\(options=\{\}\)/);
+    assert.match(src,/quickBackupBoth\(\)[\s\S]*?Settings\.manualBackup\(\{targets:'both',reason:'manual_drive_local'\}\)/);
+    assert.match(src,/BackupFS\.verifyFolderConnection\(interactive\)/);
     assert.match(src,/BackupFS\.writeToFolder\(snapshot,'borion-backup-local',\{interactive:false\}\)/);
-    assert.match(src,/Settings\._prepareLocalFolderAccess\(\)/);
-    assert.match(src,/Settings\._saveSnapshotLocally\(sharedSnapshot,'manual_drive_local'\)/);
-    assert.match(src,/GoogleDriveProvider\.createBackup\('manual_drive_local',\{payload:sharedSnapshot\}\)/);
+    assert.match(src,/downloadJSON\(snapshot,filename\)/);
+    assert.match(src,/GoogleDriveProvider\.forceSyncNow\(\{payload:sharedSnapshot\}\)/);
+    assert.match(src,/GoogleDriveProvider\.createBackup\(reason,\{payload:sharedSnapshot\}\)/);
     const local=fs.readFileSync(path.join(ROOT,'js/02-backup-local.js'),'utf8');
-    assert.match(local,/scheduleAutoBackup\(\)/); assert.match(local,/getFileHandle\(filename, \{create:true\}\)/); assert.match(local,/m\$\{pad\(d\.getSeconds\(\)\)\}s\$\{ms\}/);
+    assert.match(local,/async verifyFolderConnection\(interactive=false\)/);
+    assert.match(local,/startupFolderStatus='connected'/);
+    assert.match(local,/getFileHandle\(filename, \{create:true\}\)/);
   });
 
   test('27 — Reserva desligada oculta metas ligadas aos Cofrinhos e mantém metas independentes editáveis',()=>{
@@ -428,7 +433,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const css=fs.readFileSync(path.join(ROOT,'css/styles.css'),'utf8');
-    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.24\.3/);
+    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.24\.4/);
     assert.match(sw,/js\/20-smartphone-mode\.js/);
     assert.match(css,/html\[data-interface-mode="smartphone"\] \.smart-bottom-nav/);
     assert.match(css,/\.smart-quick-grid/); assert.match(css,/\.smart-launch-modal/);
@@ -492,7 +497,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const src=fs.readFileSync(path.join(ROOT,'js/21-smartphone-history.js'),'utf8');
-    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.24\.3/);
+    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.24\.4/);
     assert.match(sw,/js\/21-smartphone-history\.js/);
     assert.match(src,/GUARD_DEPTH:8/);
     assert.match(src,/BACK_BURST_MS:650/);
@@ -556,7 +561,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const src=fs.readFileSync(path.join(ROOT,'js/22-mobile-experience.js'),'utf8');
-    assert.match(index,/js\/22-mobile-experience\.js\?v=6\.24\.3/);
+    assert.match(index,/js\/22-mobile-experience\.js\?v=6\.24\.4/);
     assert.match(sw,/js\/22-mobile-experience\.js/);
     assert.match(src,/visualViewport/);
     assert.match(src,/navigator\.vibrate/);
@@ -600,11 +605,11 @@ async function testAsync(name, fn){
   test('45 — Rodapé técnico preserva lançamento original e autoria, atualizando apenas a versão',()=>{
     const src=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
     const backup=fs.readFileSync(path.join(ROOT,'js/02-backup-local.js'),'utf8');
-    assert.match(src,/<strong>Versão:<\/strong> 6\.24\.3/);
+    assert.match(src,/<strong>Versão:<\/strong> 6\.24\.4/);
     assert.match(src,/<strong>Lançamento:<\/strong> 07\/07\/2026/);
     assert.match(src,/Desenvolvido por <strong>Pedro Bardella<\/strong>/);
     assert.match(src,/© 2026 Pedro Bardella\. Todos os direitos reservados\./);
-    assert.match(backup,/BORION_APP_VERSION = '6\.24\.3'/);
+    assert.match(backup,/BORION_APP_VERSION = '6\.24\.4'/);
   });
 
 
@@ -650,8 +655,44 @@ async function testAsync(name, fn){
     assert.ok(!/allBankNames\(\)/.test(fs.readFileSync(path.join(ROOT,'js/16-import-statement.js'),'utf8')));
   });
 
+  test('48 — Ctrl+S usa a mesma rotina manual dos botões',()=>{
+    const boot=fs.readFileSync(path.join(ROOT,'js/14-events-boot-pwa.js'),'utf8');
+    assert.match(boot,/Settings\.manualBackup\(\{targets:'both',reason:'manual_drive_local',interactive:true\}\)/);
+    assert.match(boot,/if\(forceManualSaveInFlight\) return forceManualSaveInFlight/);
+    assert.match(boot,/e\.preventDefault\(\);\s*forceManualSave\(\)/);
+  });
+
+  test('49 — Atalho fixo do Modo Pro chama diretamente o backup manual',()=>{
+    const src=fs.readFileSync(path.join(ROOT,'js/20-smartphone-mode.js'),'utf8');
+    const fn=src.slice(src.indexOf('async quickSaveBoth()'),src.indexOf('async saveAndReload()'));
+    assert.match(fn,/Settings\.manualBackup\(\{targets:'both',reason:'manual_drive_local',interactive:true\}\)/);
+    assert.ok(!/Settings\.quickBackupBoth\(/.test(fn));
+  });
+
+  test('50 — Pasta local é verificada ao abrir e avisa quando precisa reconectar',()=>{
+    const local=fs.readFileSync(path.join(ROOT,'js/02-backup-local.js'),'utf8');
+    const boot=fs.readFileSync(path.join(ROOT,'js/14-events-boot-pwa.js'),'utf8');
+    const shell=fs.readFileSync(path.join(ROOT,'js/04-gate-shell.js'),'utf8');
+    assert.match(local,/const handle = await idbGet\('backupDir'\)/);
+    assert.match(local,/handle\.queryPermission\(\{mode:'readwrite'\}\)/);
+    assert.match(local,/notifyStartupFolderStatus\(\)/);
+    assert.match(boot,/const backupFolderInit=BackupFS\.init\(\)/);
+    assert.match(boot,/await backupFolderInit/);
+    assert.match(shell,/BackupFS\.notifyStartupFolderStatus\(\)/);
+  });
+
+  await testAsync('51 — Force save aceita e reutiliza o snapshot manual compartilhado',async()=>{
+    const driveCtx=createContext();
+    run(driveCtx,"const BORION_APP_VERSION='6.24.4'; async function buildSharedBackupSnapshot(){return {profiles:[]};} async function buildFullBackupPayload(){throw new Error('não deve reconstruir');} function validateBorionJson(){return {valid:true,errors:[]};} function applyAccountPayloadSilently(){} function setStorageMode(){} function setProfiles(){} function toast(){};");
+    load(driveCtx,'js/01c-google-drive-provider.js');
+    run(driveCtx,`GoogleDriveAuth.user={sub:'u',email:'u@x.com'};GoogleDriveProvider.folderId='folder';GoogleDriveProvider.currentFileId='current';window.__payloads=[];GoogleDriveFS.updateFile=async(id,payload)=>{window.__payloads.push(payload);return {id};};GoogleDriveProvider.writeRotatingSnapshot=async(kind,slots,payload)=>{window.__payloads.push(payload);};`);
+    const ok=await run(driveCtx,"GoogleDriveProvider.forceSyncNow({payload:{profiles:[{id:'p'}],snapshotId:'shared-manual'}})");
+    const payloads=run(driveCtx,'window.__payloads');
+    assert.strictEqual(ok,true); assert.strictEqual(payloads.length,2); assert.strictEqual(payloads[0].snapshotId,'shared-manual'); assert.strictEqual(payloads[1].snapshotId,'shared-manual');
+  });
+
   const failures=results.filter(r=>r.status==='FAIL');
-  test('V6.24.3 — importação completa usa tela de revisão e não mesclagem silenciosa',()=>{
+  test('V6.24.4 — importação completa usa tela de revisão e não mesclagem silenciosa',()=>{
     const fs=require('fs');
     const boot=fs.readFileSync(path.join(ROOT,'js/14-events-boot-pwa.js'),'utf8');
     const review=fs.readFileSync(path.join(ROOT,'js/23-profile-import-review.js'),'utf8');
@@ -663,14 +704,14 @@ async function testAsync(name, fn){
     assert.match(review,/before_import/);
   });
 
-  test('V6.24.3 — service worker inclui módulo de revisão de perfis',()=>{
+  test('V6.24.4 — service worker inclui módulo de revisão de perfis',()=>{
     const fs=require('fs');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     assert.match(sw,/23-profile-import-review\.js/);
-    assert.match(sw,/v6-24-3-profile-import-review/);
+    assert.match(sw,/v6-24-4-manual-backup-unified/);
   });
 
-  const report={generatedAt:new Date().toISOString(),appVersion:'6.24.3',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
+  const report={generatedAt:new Date().toISOString(),appVersion:'6.24.4',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
   fs.writeFileSync(path.join(__dirname,'regression-results.json'),JSON.stringify(report,null,2));
   for(const r of results){
     console.log(`${r.status==='PASS'?'✓':'✗'} ${r.name}`);

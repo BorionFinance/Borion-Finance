@@ -589,7 +589,7 @@ const GoogleDriveProvider = {
      momentos em que você mesmo pediu pra salvar — ver writeRotatingSnapshot(). Isso é
      redundância de segurança; se falhar (rede, etc.) não desfaz o Ctrl+S em si, que já
      terminou com sucesso no current.json. */
-  async forceSyncNow(){
+  async forceSyncNow(options={}){
     if(!this.isConnected() || !this.currentFileId) return false;
     if(this._forceSavePromise) return this._forceSavePromise;
     this._forceRequested = true;
@@ -608,12 +608,19 @@ const GoogleDriveProvider = {
         /* Se uma alteração entrar enquanto o Ctrl+S está enviando, repete a leitura até
            três vezes. Assim um único Ctrl+S realmente gera o forcesave, em vez de ser
            ignorado só porque o autosave/current.json já estava em andamento. */
-        for(let attempt=0; attempt<3; attempt++){
+        if(options && options.payload){
+          payload = options.payload;
           this.dirty = false;
           this._syncAgain = false;
-          payload = await buildFullBackupPayload();
           updated = await GoogleDriveFS.updateFile(this.currentFileId, payload);
-          if(!this.dirty && !this._syncAgain) break;
+        }else{
+          for(let attempt=0; attempt<3; attempt++){
+            this.dirty = false;
+            this._syncAgain = false;
+            payload = await buildFullBackupPayload();
+            updated = await GoogleDriveFS.updateFile(this.currentFileId, payload);
+            if(!this.dirty && !this._syncAgain) break;
+          }
         }
         this.currentFileMeta = updated;
         this.conflict = false;

@@ -357,6 +357,7 @@ function renderApp(){
   `;
   renderView();
   if(window.ExitSaveGuard) ExitSaveGuard.refresh();
+  if(window.BackupFS) setTimeout(()=>BackupFS.notifyStartupFolderStatus(),180);
 }
 
 const MobileMenu = {

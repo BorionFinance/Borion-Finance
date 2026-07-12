@@ -9,7 +9,7 @@
 /* ---------------- Backup em pasta local (File System Access API — Chrome/Edge) ---------------- */
 const FS_ACCESS_SUPPORTED = typeof window!=='undefined' && 'showDirectoryPicker' in window;
 const IDB_NAME = 'borion_handles', IDB_STORE = 'handles';
-const BORION_APP_VERSION = '6.24.3';
+const BORION_APP_VERSION = '6.24.4';
 const BORION_BACKUP_CONSENT_PREFIX = 'borion_backup_consent_v2_';
 const BORION_BACKUP_LAST_CLOUD_PREFIX = 'borion_backup_last_cloud_v1_';
 const BORION_BACKUP_SNOOZE_PREFIX = 'borion_backup_consent_snooze_v1_';
@@ -210,6 +210,10 @@ const BackupFS = {
   autoBackupInFlight: false,
   dirtyRevision: 0,
   lastFolderWrite: null,
+  startupFolderStatus: 'unchecked',
+  startupFolderName: '',
+  startupNoticeShown: false,
+  initPromise: null,
 
   safeRefreshUI(){
     // V5.36.0 — a tela de aceite de backup pode aparecer antes de um perfil
@@ -247,14 +251,61 @@ const BackupFS = {
   },
 
   async init(){
-    if(!FS_ACCESS_SUPPORTED) return;
-    try{
-      const handle = await idbGet('backupDir');
-      if(!handle) return;
-      const perm = await handle.queryPermission({mode:'readwrite'});
-      if(perm === 'granted'){ this.dirHandle = handle; }
-      else { this.pendingHandle = handle; this.needsReconnect = true; }
-    }catch(e){ console.warn('Não foi possível restaurar a pasta de backups', e); }
+    if(this.initPromise) return this.initPromise;
+    this.initPromise=(async()=>{
+      if(!FS_ACCESS_SUPPORTED){ this.startupFolderStatus='unsupported'; return false; }
+      try{
+        const handle = await idbGet('backupDir');
+        if(!handle){ this.startupFolderStatus='not_configured'; return false; }
+        this.startupFolderName=handle.name||'Backups_Borion';
+        const perm = await handle.queryPermission({mode:'readwrite'});
+        if(perm === 'granted'){
+          this.dirHandle = handle;
+          this.pendingHandle = null;
+          this.needsReconnect = false;
+          this.startupFolderStatus='connected';
+          if(this.dirty) this.scheduleAutoBackup(2500);
+          return true;
+        }
+        this.pendingHandle = handle;
+        this.dirHandle = null;
+        this.needsReconnect = true;
+        this.startupFolderStatus='reconnect';
+        return false;
+      }catch(e){
+        this.startupFolderStatus='error';
+        console.warn('Não foi possível restaurar a pasta de backups', e);
+        return false;
+      }
+    })();
+    return this.initPromise;
+  },
+
+  async verifyFolderConnection(interactive=false){
+    await this.init();
+    if(this.dirHandle){
+      const ok=await this.ensureWritePermission(interactive);
+      this.startupFolderStatus=ok?'connected':'reconnect';
+      return ok;
+    }
+    if(this.needsReconnect && this.pendingHandle && interactive){
+      const ok=await this.reconnect();
+      this.startupFolderStatus=ok?'connected':'reconnect';
+      return ok;
+    }
+    return false;
+  },
+
+  notifyStartupFolderStatus(){
+    if(this.startupNoticeShown) return;
+    this.startupNoticeShown=true;
+    if(this.startupFolderStatus==='connected'){
+      toast('Pasta local verificada e conectada para os backups JSON.');
+    }else if(this.startupFolderStatus==='reconnect'){
+      toast('A pasta local foi encontrada, mas precisa ser reconectada em Configurações → Backups. Até lá, o backup manual baixará o JSON pelo navegador.');
+    }else if(this.startupFolderStatus==='error'){
+      toast('Não foi possível verificar a pasta local. O backup manual continuará baixando o JSON pelo navegador.');
+    }
   },
 
   async ensureWritePermission(interactive=false){
@@ -268,6 +319,7 @@ const BackupFS = {
       this.pendingHandle = this.dirHandle;
       this.dirHandle = null;
       this.needsReconnect = true;
+      this.startupFolderStatus='reconnect';
       this.safeRefreshUI();
       return false;
     }catch(e){
@@ -288,6 +340,8 @@ const BackupFS = {
       this.dirHandle = backupsHandle;
       this.pendingHandle = null;
       this.needsReconnect = false;
+      this.startupFolderStatus = 'connected';
+      this.startupFolderName = backupsHandle.name||'Backups_Borion';
       this.setConsent('folder');
       if(this.dirty) this.scheduleAutoBackup(2000);
       toast('Pasta de backups configurada: '+rootHandle.name+'/Backups_Borion');
@@ -307,6 +361,8 @@ const BackupFS = {
         this.dirHandle = this.pendingHandle;
         this.pendingHandle = null;
         this.needsReconnect = false;
+        this.startupFolderStatus = 'connected';
+        this.startupFolderName = this.dirHandle.name||'Backups_Borion';
         this.setConsent('folder');
         if(this.dirty) this.scheduleAutoBackup(2000);
         toast('Pasta de backups reconectada.');
@@ -320,7 +376,7 @@ const BackupFS = {
   },
 
   async disconnect(){
-    this.dirHandle = null; this.pendingHandle = null; this.needsReconnect = false;
+    this.dirHandle = null; this.pendingHandle = null; this.needsReconnect = false; this.startupFolderStatus='not_configured';
     clearTimeout(this.autoBackupTimer); this.autoBackupTimer=null;
     await idbDel('backupDir');
     toast('Pasta de backups desconectada.');
@@ -342,7 +398,7 @@ const BackupFS = {
     }catch(e){
       console.warn('Falha ao gravar backup na pasta', e);
       if(e && (e.name==='NotAllowedError' || e.name==='SecurityError')){
-        this.pendingHandle=this.dirHandle; this.dirHandle=null; this.needsReconnect=true; this.safeRefreshUI();
+        this.pendingHandle=this.dirHandle; this.dirHandle=null; this.needsReconnect=true; this.startupFolderStatus='reconnect'; this.safeRefreshUI();
       }
       return false;
     }

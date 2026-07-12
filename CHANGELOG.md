@@ -1,3 +1,9 @@
+## V6.24.6 — Exclusão limpa de assinaturas
+- Excluir remove o cadastro da assinatura em vez de deixá-la como “Excluída”.
+- Previsões, falhas e ocorrências não consolidadas são apagadas junto.
+- Pagamentos já efetivados permanecem apenas como registros financeiros, sem assinatura fantasma.
+- Registros excluídos de versões anteriores são limpos automaticamente ao abrir/sincronizar.
+
 ## V6.24.5 — Force save unificado
 - Corrige o falso aviso “Função de backup rápido não está disponível”.
 - Exporta o módulo central de backup para uso seguro entre os scripts.

@@ -1,4 +1,4 @@
-/* Borion Finance — V6.23.1 — Assinaturas versionadas e ocorrências independentes.
+/* Borion Finance — V6.24.6 — Assinaturas versionadas e ocorrências independentes.
    Cadastro recorrente, previsão e movimento financeiro são camadas diferentes:
    - assinaturas: regra + versões + períodos ativos/pausados;
    - assinaturaCobrancas: uma ocorrência imutável por assinatura/período;
@@ -91,10 +91,36 @@ function assinaturaProximaCobranca(a){
 function assinaturaOccurrenceStatusLabel(status){ return ({prevista:'Prevista',vencida:'Vencida',paga:'Paga',cobrada:'Cobrada',pausada:'Pausada',falhou:'Falhou'})[status]||status||'Prevista'; }
 
 const Assinaturas={
+  cleanupDeletedGhosts(){
+    if(!S.data||!Array.isArray(S.data.assinaturas)) return false;
+    const deletedIds=new Set(S.data.assinaturas.filter(a=>a&&(a.status==='excluida'||a.deletedFromKey)).map(a=>a.id));
+    if(!deletedIds.size) return false;
+
+    S.data.assinaturas=S.data.assinaturas.filter(a=>!deletedIds.has(a.id));
+    if(!Array.isArray(S.data.assinaturaCobrancas)) S.data.assinaturaCobrancas=[];
+    S.data.assinaturaCobrancas=S.data.assinaturaCobrancas.filter(rec=>{
+      if(!rec||!deletedIds.has(rec.assinaturaId)) return true;
+      if(['paga','cobrada'].includes(rec.status)){
+        rec.formerAssinaturaId=rec.assinaturaId;
+        rec.assinaturaId=null;
+        rec.subscriptionDeleted=true;
+        rec.subscriptionNameSnapshot=rec.nome||((rec.snapshot&&rec.snapshot.nome)||'Assinatura');
+        return true;
+      }
+      return false;
+    });
+    (S.data.cartoes||[]).forEach(card=>(card.parcelas||[]).forEach(parcela=>{
+      if(parcela&&deletedIds.has(parcela.viaAssinaturaId)){
+        parcela.formerAssinaturaId=parcela.viaAssinaturaId;
+        delete parcela.viaAssinaturaId;
+      }
+    }));
+    return true;
+  },
   sync(){
     if(!S.data||!Array.isArray(S.data.assinaturas))return;
     if(!Array.isArray(S.data.assinaturaCobrancas))S.data.assinaturaCobrancas=[];
-    let changed=false;
+    let changed=this.cleanupDeletedGhosts();
     S.data.assinaturas.forEach(a=>{
       assinaturaEnsureModel(a);
       assinaturaPeriodsUntilCurrent(a).forEach(period=>{
@@ -191,25 +217,46 @@ const Assinaturas={
   },
   remove(id){
     const a=(S.data.assinaturas||[]).find(x=>x.id===id);if(!a)return;
-    openConfirmModal({title:'Excluir assinatura?',text:'As previsões futuras serão interrompidas. Cobranças, pagamentos e lançamentos anteriores continuarão preservados como registros próprios.',confirmLabel:'Excluir assinatura',variant:'danger',onConfirm:()=>{
-      assinaturaEnsureModel(a);const key=monthKey(S.month.y,S.month.m);a.status='excluida';a.deletedAt=Date.now();a.deletedFromKey=key;const open=(a.activityPeriods||[]).find(p=>!p.to);if(open)open.to=shiftYM(key,-1);
-      S.data.assinaturaCobrancas=(S.data.assinaturaCobrancas||[]).filter(r=>r.assinaturaId!==id||r.period<key||['paga','cobrada'].includes(r.status));
-      saveCurrentData();renderView();toast('Assinatura encerrada. Histórico preservado.');
+    const occurrences=(S.data.assinaturaCobrancas||[]).filter(r=>r&&r.assinaturaId===id);
+    const consolidated=occurrences.filter(r=>['paga','cobrada'].includes(r.status));
+    const text=consolidated.length
+      ? 'O cadastro da assinatura será removido completamente e não aparecerá mais como “Excluída”. As cobranças que já aconteceram continuarão somente como registros financeiros normais.'
+      : 'A assinatura e todas as previsões ligadas a ela serão removidas completamente. Ela não aparecerá no histórico como assinatura excluída.';
+    openConfirmModal({title:'Excluir assinatura definitivamente?',text,confirmLabel:'Excluir definitivamente',variant:'danger',onConfirm:()=>{
+      S.data.assinaturas=(S.data.assinaturas||[]).filter(x=>x&&x.id!==id);
+      S.data.assinaturaCobrancas=(S.data.assinaturaCobrancas||[]).filter(rec=>{
+        if(!rec||rec.assinaturaId!==id) return true;
+        if(['paga','cobrada'].includes(rec.status)){
+          rec.formerAssinaturaId=id;
+          rec.assinaturaId=null;
+          rec.subscriptionDeleted=true;
+          rec.subscriptionNameSnapshot=rec.nome||((rec.snapshot&&rec.snapshot.nome)||a.nome||'Assinatura');
+          return true;
+        }
+        return false;
+      });
+      (S.data.cartoes||[]).forEach(card=>(card.parcelas||[]).forEach(parcela=>{
+        if(parcela&&parcela.viaAssinaturaId===id){
+          parcela.formerAssinaturaId=id;
+          delete parcela.viaAssinaturaId;
+        }
+      }));
+      saveCurrentData();renderView();toast(consolidated.length?'Assinatura removida. Pagamentos anteriores permanecem apenas como lançamentos financeiros.':'Assinatura removida definitivamente.');
     }});
   }
 };
 window.Assinaturas=Assinaturas;
 
 function renderAssinaturas(){
-  const list=(S.data.assinaturas||[]).filter(a=>{assinaturaEnsureModel(a);const rule=assinaturaVersionFor(a,monthKey(S.month.y,S.month.m))||a;return bankMatches(rule.formaPagamento==='Crédito'?(((S.data.cartoes||[]).find(c=>c.id===rule.cartaoId)||{}).banco):rule.banco,rule.accountId);});
+  const list=(S.data.assinaturas||[]).filter(a=>a&&a.status!=='excluida'&&!a.deletedFromKey).filter(a=>{assinaturaEnsureModel(a);const rule=assinaturaVersionFor(a,monthKey(S.month.y,S.month.m))||a;return bankMatches(rule.formaPagamento==='Crédito'?(((S.data.cartoes||[]).find(c=>c.id===rule.cartaoId)||{}).banco):rule.banco,rule.accountId);});
   const active=list.filter(a=>a.status==='ativa'&&!a.deletedFromKey), total=active.filter(a=>(assinaturaVersionFor(a,monthKey(S.month.y,S.month.m))||a).tipo==='mensal').reduce((s,a)=>s+Number((assinaturaVersionFor(a,monthKey(S.month.y,S.month.m))||a).valor||0),0);
   const rows=list.slice().sort((a,b)=>(a.nome||'').localeCompare(b.nome||'','pt-BR')).map(a=>{
-    const key=monthKey(S.month.y,S.month.m),r=assinaturaVersionFor(a,key)||a,paused=a.status==='pausada',deleted=a.status==='excluida';
+    const key=monthKey(S.month.y,S.month.m),r=assinaturaVersionFor(a,key)||a,paused=a.status==='pausada';
     const card=r.formaPagamento==='Crédito'?(S.data.cartoes||[]).find(c=>c.id===r.cartaoId):null,account=r.accountId?accountById(r.accountId,{includeArchived:true}):null;
     const source=r.formaPagamento==='Crédito'?('Cartão: '+(card?card.banco:'cartão removido')):(r.formaPagamento+' · '+(account?account.nome:(r.banco||'conta removida')));
-    const next=assinaturaProximaCobranca(a), occ=assinaturaCobrancaFor(a.id,key), status=deleted?'Excluída':paused?'Pausada':occ?assinaturaOccurrenceStatusLabel(occ.status):'Ativa';
+    const next=assinaturaProximaCobranca(a), occ=assinaturaCobrancaFor(a.id,key), status=paused?'Pausada':occ?assinaturaOccurrenceStatusLabel(occ.status):'Ativa';
     const retry=occ&&occ.status==='falhou'?`<button class="btn-outline btn-sm" onclick="Assinaturas.retry('${occ.id}')">Tentar novamente</button>`:'';
-    return `<div class="card-entity" style="${paused||deleted?'opacity:.65;':''}"><div class="card-entity-head"><div class="cehl"><div class="bank-badge" style="background:${catColor(r.nome)}">${esc((r.nome||'?')[0])}</div><div class="info"><div>${esc(r.nome)} <span class="cat-pill"><span class="dot" style="background:${catColor(r.categoria)}"></span>${esc(r.categoria)}</span> <span class="cat-pill">${status}</span></div><div>${brl(r.valor)}${r.tipo==='mensal'?'/mês':'/ano'} · ${r.tipo==='mensal'?'dia '+r.diaVencimento:'dia '+r.diaVencimento+' de '+MONTHS[r.mesVencimento||0]} · ${esc(source)}${next?' · Próxima: '+next.slice(8,10)+'/'+next.slice(5,7)+'/'+next.slice(0,4):''}${occ&&occ.lastError?' · '+esc(occ.lastError):''}</div></div></div><div style="display:flex;gap:8px;flex-wrap:wrap;">${retry}${!deleted?`<button class="btn-outline btn-sm" onclick="${paused?`Assinaturas.resume('${a.id}')`:`Assinaturas.pause('${a.id}')`}">${paused?'Ativar':'Pausar'}</button><button class="btn-outline btn-sm" onclick="Assinaturas.edit('${a.id}')">✎ Editar</button><button class="btn-outline btn-sm" onclick="Assinaturas.remove('${a.id}')">Excluir</button>`:''}</div></div></div>`;
+    return `<div class="card-entity" style="${paused?'opacity:.65;':''}"><div class="card-entity-head"><div class="cehl"><div class="bank-badge" style="background:${catColor(r.nome)}">${esc((r.nome||'?')[0])}</div><div class="info"><div>${esc(r.nome)} <span class="cat-pill"><span class="dot" style="background:${catColor(r.categoria)}"></span>${esc(r.categoria)}</span> <span class="cat-pill">${status}</span></div><div>${brl(r.valor)}${r.tipo==='mensal'?'/mês':'/ano'} · ${r.tipo==='mensal'?'dia '+r.diaVencimento:'dia '+r.diaVencimento+' de '+MONTHS[r.mesVencimento||0]} · ${esc(source)}${next?' · Próxima: '+next.slice(8,10)+'/'+next.slice(5,7)+'/'+next.slice(0,4):''}${occ&&occ.lastError?' · '+esc(occ.lastError):''}</div></div></div><div style="display:flex;gap:8px;flex-wrap:wrap;">${retry}<button class="btn-outline btn-sm" onclick="${paused?`Assinaturas.resume('${a.id}')`:`Assinaturas.pause('${a.id}')`}">${paused?'Ativar':'Pausar'}</button><button class="btn-outline btn-sm" onclick="Assinaturas.edit('${a.id}')">✎ Editar</button><button class="btn-outline btn-sm" onclick="Assinaturas.remove('${a.id}')">Excluir</button></div></div></div>`;
   }).join('');
-  return `<div class="cards-row"><div class="card"><div class="clabel">${tagBadgeHTML('despesas','ASSINATURAS ATIVAS (MENSAL)')}</div><div class="cval">${brl(total)}</div></div></div><div class="tabs"><button class="tab-btn" onclick="Budget.tab('receita')">Receita</button><button class="tab-btn" onclick="Budget.tab('fixa')">Despesa fixa</button><button class="tab-btn" onclick="Budget.tab('variavel')">Despesa variável</button><button class="tab-btn active" onclick="Assinaturas.tab()">Assinaturas</button><button class="tab-btn" onclick="Budget.tab('central')">⌕ Central</button></div><div class="panel-box"><div class="toolbar"><div class="toolbar-left">Assinaturas</div><button class="btn-outline" onclick="Assinaturas.add()">+ Adicionar</button></div>${rows||'<div class="empty-note">Nenhuma assinatura cadastrada ainda.</div>'}<p style="font-size:11px;color:var(--muted-2);margin-top:10px;">Previsões futuras aparecem no mês, mas somente ocorrências cobradas/pagas alteram saldo. Pausas, versões e exclusões preservam o histórico.</p></div>`;
+  return `<div class="cards-row"><div class="card"><div class="clabel">${tagBadgeHTML('despesas','ASSINATURAS ATIVAS (MENSAL)')}</div><div class="cval">${brl(total)}</div></div></div><div class="tabs"><button class="tab-btn" onclick="Budget.tab('receita')">Receita</button><button class="tab-btn" onclick="Budget.tab('fixa')">Despesa fixa</button><button class="tab-btn" onclick="Budget.tab('variavel')">Despesa variável</button><button class="tab-btn active" onclick="Assinaturas.tab()">Assinaturas</button><button class="tab-btn" onclick="Budget.tab('central')">⌕ Central</button></div><div class="panel-box"><div class="toolbar"><div class="toolbar-left">Assinaturas</div><button class="btn-outline" onclick="Assinaturas.add()">+ Adicionar</button></div>${rows||'<div class="empty-note">Nenhuma assinatura cadastrada ainda.</div>'}<p style="font-size:11px;color:var(--muted-2);margin-top:10px;">Previsões futuras aparecem no mês, mas somente ocorrências cobradas/pagas alteram saldo. Excluir remove o cadastro completamente; pagamentos já realizados permanecem apenas como registros financeiros.</p></div>`;
 }

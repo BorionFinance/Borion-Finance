@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-07-12T22:19:24.663Z",
-  "appVersion": "6.24.5",
-  "total": 61,
-  "passed": 61,
+  "generatedAt": "2026-07-12T22:39:57.760Z",
+  "appVersion": "6.24.6",
+  "total": 63,
+  "passed": 63,
   "failed": 0,
   "results": [
     {
@@ -38,7 +38,15 @@
       "status": "PASS"
     },
     {
-      "name": "9 — Excluir assinatura interrompe futuro e preserva ocorrência histórica",
+      "name": "9 — Excluir assinatura remove o cadastro e não deixa card fantasma",
+      "status": "PASS"
+    },
+    {
+      "name": "9B — Assinatura sem cobrança é apagada junto com todas as previsões",
+      "status": "PASS"
+    },
+    {
+      "name": "9C — Ghosts de versões antigas são limpos automaticamente ao sincronizar",
       "status": "PASS"
     },
     {
@@ -234,11 +242,11 @@
       "status": "PASS"
     },
     {
-      "name": "V6.24.5 — Settings é exportado globalmente para Ctrl+S e botão fixo",
+      "name": "V6.24.6 — Settings é exportado globalmente para Ctrl+S e botão fixo",
       "status": "PASS"
     },
     {
-      "name": "V6.24.5 — botão fixo do Modo Pro usa exatamente forceManualSave",
+      "name": "V6.24.6 — botão fixo do Modo Pro usa exatamente forceManualSave",
       "status": "PASS"
     },
     {

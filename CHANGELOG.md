@@ -1,3 +1,8 @@
+## V6.24.3 — Importação revisada de perfis
+- Corrige backup com 1 perfil e mesmo ID sendo ignorado como "já existente".
+- Adiciona tela para escolher criar, substituir, ignorar e excluir perfis antes da importação.
+- Mostra resumo final e cria backup de segurança antes de aplicar mudanças.
+
 # Changelog — Borion Finance
 
 ## V6.24.2 — Grade personalizada das Reservas no Modo Pro

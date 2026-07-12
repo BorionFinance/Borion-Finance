@@ -364,38 +364,7 @@ function handleImport(obj){
   if(isCloud){
     if(!S.currentProfile){ alert('Entre em um perfil antes de importar.'); return; }
     if((obj.type==='borion-account-backup' || obj.type==='multicap-full-backup') && obj.profiles && obj.dataByProfile){
-      const count=(obj.profiles||[]).length;
-      const importAllAsNew = async ()=>{
-        try{
-          const incomingProfiles=(obj.profiles||[]).slice(0,5);
-          const slots=5-(S.profiles||[]).length;
-          if(incomingProfiles.length>slots) throw new Error(`Este backup tem ${incomingProfiles.length} perfil(is), mas só há ${slots} vaga(s) nesta conta. Exclua perfis ou restaure a conta inteira.`);
-          let firstCreated=null;
-          for(const ip of incomingProfiles){
-            const importedName=(ip.name||ip.nome||'Perfil importado');
-            const sourceId=ip.id;
-            const data=migrateData((obj.dataByProfile||{})[sourceId] || emptyData());
-            const options={
-              avatarColor: ip.avatarColor || ip.avatar_color || avatarColor(importedName),
-              avatarImage: ip.avatarImage || ip.avatar_image || '',
-              passwordHash: ip.passwordHash || ip.password_hash || null,
-              passwordSalt: ip.salt || ip.password_salt || null
-            };
-            const created=await CloudStorage.createProfile(importedName+' (backup)', !firstCreated, data, options);
-            if(!firstCreated) firstCreated=created;
-          }
-          closeModal(); renderApp(); toast('Todos os perfis do backup foram importados como novos perfis.');
-        }catch(e){ alert(e.message||String(e)); }
-      };
-      openChoiceModal({
-        title:'Backup completo detectado',
-        sub:'Este JSON contém '+count+' perfil(is). Você pode restaurar a conta inteira ou importar todos os perfis como novos.',
-        choices:[
-          {label:'Restaurar conta inteira', desc:'Substitui todos os perfis desta conta pelo backup. Antes disso, o Borion cria um backup de segurança.', variant:'danger', onClick:()=>BackupFS.restoreAccountPayloadFromFile(obj)},
-          {label:'Importar todos como novos', desc:'Não mexe nos perfis atuais. Cria todos os perfis do JSON dentro desta conta, até o limite de 5.', onClick:importAllAsNew},
-          {label:'Cancelar', onClick:closeModal}
-        ]
-      });
+      openAccountImportReview(obj,{cloud:true});
       return;
     }
     let incomingData = null;
@@ -477,48 +446,6 @@ function handleImport(obj){
       ]});
     }else doImportAsNew();
   } else if(obj.type==='multicap-full-backup' || obj.type==='borion-account-backup'){
-    // Backup completo (vários perfis) sem estar logado na nuvem: exige confirmação
-    // explícita, nunca substitui nada sozinho. "Substituir tudo" só troca os perfis
-    // locais deste navegador — a conta/login da nuvem, quando existir, não é afetada.
-    const doReplaceAll = ()=>{
-      S.config = obj.config || S.config;
-      S.profiles = (obj.profiles||[]).slice(0,5);
-      setConfig(S.config); setProfiles(S.profiles);
-      Object.keys(obj.dataByProfile||{}).forEach(pid=>{
-        const d = migrateData(obj.dataByProfile[pid] || emptyData());
-        setProfileData(pid, d);
-      });
-      S.currentProfile=null; S.data=null;
-      notifyGoogleDriveAfterImport();
-      closeModal();
-      toast('Backup completo restaurado (perfis locais substituídos).');
-      renderGate();
-    };
-    const doMergeAll = ()=>{
-      const incomingProfiles = obj.profiles || [];
-      let added = 0, skipped = 0;
-      incomingProfiles.forEach(ip=>{
-        if(S.profiles.length>=5){ skipped++; return; }
-        if(S.profiles.some(p=>p.id===ip.id)){ skipped++; return; }
-        S.profiles.push(ip);
-        const d = migrateData((obj.dataByProfile||{})[ip.id] || emptyData());
-        setProfileData(ip.id, d);
-        added++;
-      });
-      setProfiles(S.profiles);
-      notifyGoogleDriveAfterImport();
-      closeModal();
-      toast(`Mesclado: ${added} perfil(is) adicionado(s)${skipped?', '+skipped+' ignorado(s) (já existiam ou limite de 5 atingido)':''}.`);
-      if(S.currentProfile) renderView(); else renderGate();
-    };
-    openChoiceModal({
-      title:'Restaurar backup completo',
-      sub:'Este arquivo contém '+((obj.profiles||[]).length)+' perfil(is). O que você quer fazer?',
-      choices:[
-        {label:'Substituir tudo', desc:'Apaga os perfis e dados locais atuais deste navegador e coloca no lugar o conteúdo do backup.', variant:'danger', onClick:doReplaceAll},
-        {label:'Mesclar/importar todos os perfis', desc:'Mantém os perfis atuais e adiciona todos os perfis do backup que ainda não existem aqui (até o limite de 5).', onClick:doMergeAll},
-        {label:'Cancelar', onClick:closeModal},
-      ]
-    });
+    openAccountImportReview(obj,{cloud:false});
   } else alert('Formato de backup não reconhecido.');
 }

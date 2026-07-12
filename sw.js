@@ -3,7 +3,7 @@
 // Estratégia: stale-while-revalidate.
 //
 // Ao editar o app e quiser forçar atualização do cache, aumente o número abaixo.
-const CACHE_NAME = 'borion-finance-v6-24-2-reserva-grid-layout';
+const CACHE_NAME = 'borion-finance-v6-24-3-profile-import-review';
 
 const ASSETS = [
   "./",
@@ -35,6 +35,7 @@ const ASSETS = [
   "./js/20-smartphone-mode.js",
   "./js/21-smartphone-history.js",
   "./js/22-mobile-experience.js",
+  "./js/23-profile-import-review.js",
   "./FUNDO.png",
   "./borion-emblem.png",
   "./borion-full.png",

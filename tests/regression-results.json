@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-07-12T21:00:12.345Z",
-  "appVersion": "6.24.2",
-  "total": 53,
-  "passed": 53,
+  "generatedAt": "2026-07-12T21:26:04.759Z",
+  "appVersion": "6.24.3",
+  "total": 55,
+  "passed": 55,
   "failed": 0,
   "results": [
     {
@@ -215,6 +215,14 @@
     },
     {
       "name": "Cobertura estática — formulários Banco/Conta não usam allBankNames nem key banco",
+      "status": "PASS"
+    },
+    {
+      "name": "V6.24.3 — importação completa usa tela de revisão e não mesclagem silenciosa",
+      "status": "PASS"
+    },
+    {
+      "name": "V6.24.3 — service worker inclui módulo de revisão de perfis",
       "status": "PASS"
     }
   ]

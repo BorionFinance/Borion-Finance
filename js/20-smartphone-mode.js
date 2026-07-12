@@ -1,4 +1,4 @@
-/* Borion Finance V6.24.2 — Smartphone Mode
+/* Borion Finance V6.24.3 — Smartphone Mode
    Interface compacta para o uso diário. Reaproveita exatamente os mesmos dados,
    formulários e cálculos do Modo Pro; muda apenas a navegação e a apresentação. */
 

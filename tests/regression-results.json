@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-07-12T04:46:34.878Z",
-  "appVersion": "6.23.1",
-  "total": 18,
-  "passed": 18,
+  "generatedAt": "2026-07-12T05:33:40.616Z",
+  "appVersion": "6.23.2",
+  "total": 23,
+  "passed": 23,
   "failed": 0,
   "results": [
     {
@@ -63,6 +63,26 @@
     },
     {
       "name": "Cartões e seletores — crédito não recebe accountId e Banco/Conta exclui cartão/arquivada",
+      "status": "PASS"
+    },
+    {
+      "name": "13 — Migração cria o histórico mensal e elimina duplicatas preservando o primeiro fechamento",
+      "status": "PASS"
+    },
+    {
+      "name": "14 — Fechamento dos Cofrinhos congela valores e somente movimentações da competência",
+      "status": "PASS"
+    },
+    {
+      "name": "15 — Mesmo mês fecha uma única vez e o snapshot sobrevive à serialização",
+      "status": "PASS"
+    },
+    {
+      "name": "16 — Comparação histórica usa ID, separa nomes iguais e identifica criado/removido",
+      "status": "PASS"
+    },
+    {
+      "name": "17 — Conteúdo do relatório é somente leitura e não oferece ações de edição",
       "status": "PASS"
     },
     {

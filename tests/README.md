@@ -1,4 +1,4 @@
-# Testes de regressão — Borion V6.23.1
+# Testes de regressão — Borion V6.23.2
 
 Execute na raiz do projeto:
 
@@ -6,4 +6,6 @@ Execute na raiz do projeto:
 node tests/borion-regression-tests.js
 ```
 
-O comando carrega as funções reais do Borion em uma VM isolada, executa os cenários financeiros e grava o resultado em `tests/regression-results.json`.
+A suíte cobre os 12 cenários financeiros obrigatórios da V6.23.1, migração por `accountId`, separação entre conta e cartão, backups Drive&Local e os relatórios mensais somente leitura dos Cofrinhos.
+
+Resultado atual: **23/23 testes aprovados**.

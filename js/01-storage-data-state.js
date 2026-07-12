@@ -266,7 +266,7 @@ function emptyData(){
     cheques: { enabled:false, items:[] },
     modules: Object.assign({}, DEFAULT_MODULES),
     dashboard: { widgets: DEFAULT_DASHBOARD_WIDGETS.slice() },
-    reservas: { enabled:true, boxes:[], moves:[] },
+    reservas: { enabled:true, boxes:[], moves:[], monthlyReports:[] },
     /* V6.22 — Assinaturas (seção 9 do pedido): despesas recorrentes mensais ou anuais, com
        pausar/retomar. assinaturas = o cadastro; assinaturaCobrancas = idempotência + histórico
        de cada período já efetivamente cobrado (nunca cobra o mesmo período duas vezes). */
@@ -309,11 +309,23 @@ function migrateData(d){
   if(!d.dashboard) d.dashboard={widgets:DEFAULT_DASHBOARD_WIDGETS.slice()};
   if(!Array.isArray(d.dashboard.widgets)) d.dashboard.widgets=DEFAULT_DASHBOARD_WIDGETS.slice();
   d.dashboard.widgets = d.dashboard.widgets.filter(k=>DEFAULT_DASHBOARD_WIDGETS.includes(k));
-  if(!d.reservas) d.reservas={enabled:d.modules.reserves!==false, boxes:[], moves:[]};
-  if(Array.isArray(d.reservas)) d.reservas={enabled:d.modules.reserves!==false, boxes:d.reservas, moves:[]};
+  if(!d.reservas) d.reservas={enabled:d.modules.reserves!==false, boxes:[], moves:[], monthlyReports:[]};
+  if(Array.isArray(d.reservas)) d.reservas={enabled:d.modules.reserves!==false, boxes:d.reservas, moves:[], monthlyReports:[]};
   if(d.reservas.enabled==null) d.reservas.enabled = d.modules.reserves!==false;
   if(!Array.isArray(d.reservas.boxes)) d.reservas.boxes=[];
   if(!Array.isArray(d.reservas.moves)) d.reservas.moves=[];
+  /* V6.23.2 — snapshots mensais imutáveis dos Cofrinhos/Reservas. Cada relatório pertence
+     ao perfil atual porque fica dentro de S.data. Não participa de nenhum cálculo e não
+     altera valores atuais; serve somente para consulta e comparação histórica. */
+  if(!Array.isArray(d.reservas.monthlyReports)) d.reservas.monthlyReports=[];
+  /* Mantém apenas o primeiro fechamento válido de cada competência. Isso protege o relatório
+     original inclusive após importações/mesclagens antigas que possam ter duplicado arrays. */
+  const _reportMonths=new Set();
+  d.reservas.monthlyReports = d.reservas.monthlyReports
+    .filter(r=>r && /^\d{4}-(0[1-9]|1[0-2])$/.test(r.monthKey||''))
+    .sort((a,b)=>String(a.closedAt||'').localeCompare(String(b.closedAt||'')))
+    .filter(r=>{ if(_reportMonths.has(r.monthKey)) return false; _reportMonths.add(r.monthKey); return true; })
+    .map(r=>Object.assign({id:uid(),monthLabel:'',closedAt:null,total:0,metaTotal:0,activeCount:0,boxCount:0,summary:{entradas:0,saidas:0,rendimentos:0,movimentacoes:0},boxes:[],moves:[]},r,{boxes:Array.isArray(r.boxes)?r.boxes:[],moves:Array.isArray(r.moves)?r.moves:[],summary:Object.assign({entradas:0,saidas:0,rendimentos:0,movimentacoes:0},r.summary||{})}));
   d.modules.reserves = d.reservas.enabled!==false;
   if(!d.contas) d.contas=[];
   if(!Array.isArray(d.contas)) d.contas=[];

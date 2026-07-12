@@ -1,3 +1,12 @@
+## V6.23.2 — Relatórios mensais dos Cofrinhos (12/07/2026)
+
+- Adicionado botão **Fechar mês atual** na guia Reserva.
+- O fechamento grava um snapshot imutável, por perfil, com cada Cofrinho, valores, metas, status e movimentações do mês.
+- Adicionada tela suspensa **Relatórios anteriores dos Cofrinhos**, somente leitura, com comparação entre o mês fechado e os valores atuais.
+- Cofrinhos criados depois ou removidos após o fechamento aparecem identificados sem alterar o relatório original.
+- O histórico entra normalmente em backups, Google Drive e restauração porque fica dentro dos dados do perfil.
+- Nenhum cálculo, movimentação, transferência, Reserva ou Cofrinho existente foi alterado.
+
 ## V6.23.1 — Integridade financeira por accountId, assinaturas históricas e snapshot único (12/07/2026)
 
 Correção de integridade sobre a V6.23.0, sem reestruturar o projeto e sem alterar o comportamento de Reservas/Cofrinhos.

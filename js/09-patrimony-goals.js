@@ -227,6 +227,193 @@ function renderReservasResumoPanel(total, collapsed){
     ${collapsed ? '<p style="font-size:11.5px;color:var(--muted);margin:8px 0 0;">Total incluído no patrimônio. Abra a seta para ver as reservas cadastradas.</p>' : (rows || '<div class="empty-note">Nenhuma reserva cadastrada ainda.</div>')}
   </div>`;
 }
+
+/* ---------------- V6.23.2 — Relatórios mensais dos Cofrinhos ----------------
+   Um fechamento é uma fotografia imutável do mês. Ele guarda valores, metas, status e
+   movimentações daquele momento dentro do próprio perfil. Nada daqui participa dos
+   cálculos atuais das Reservas/Cofrinhos; a camada é exclusivamente de leitura. */
+function reservaMonthlyReports(){
+  if(!S.data.reservas) S.data.reservas={enabled:true,boxes:[],moves:[],monthlyReports:[]};
+  if(!Array.isArray(S.data.reservas.monthlyReports)) S.data.reservas.monthlyReports=[];
+  return S.data.reservas.monthlyReports;
+}
+function reservaReportMonthLabel(key){
+  const parts=String(key||'').split('-').map(Number);
+  return parts.length===2 && parts[0] && parts[1]>=1 && parts[1]<=12 ? monthLabel(parts[0],parts[1]-1) : String(key||'');
+}
+function reservaReportSigned(value){
+  const n=Number(value)||0;
+  const cls=n>0?'val-pos':(n<0?'val-neg':'');
+  const sign=n>0?'+ ':'';
+  return `<span class="${cls}">${sign}${brl(n)}</span>`;
+}
+function buildReservaMonthlyReport(key){
+  const month = key || monthKey(todayYM().y,todayYM().m);
+  const boxes=(S.data.reservas.boxes||[]).map(r=>({
+    id:r.id,
+    nome:r.nome||'Cofrinho',
+    accountId:r.accountId||null,
+    banco:r.banco||'',
+    categoria:r.categoria||'',
+    status:r.status||'Ativa',
+    valorAtual:Number(r.valorAtual)||0,
+    valorMeta:Number(r.valorMeta)||0,
+    prazo:r.prazo||'',
+    cor:r.cor||'#c9a45c',
+    corValor:r.corValor||'#e8c98a',
+    createdAt:r.createdAt||null
+  }));
+  const moves=(S.data.reservas.moves||[]).filter(m=>m.data && m.data.slice(0,7)===month).map(m=>({
+    id:m.id,
+    boxId:m.boxId,
+    tipo:m.tipo||'',
+    data:m.data||'',
+    valor:Number(m.valor)||0,
+    banco:m.banco||'',
+    descricao:m.descricao||'',
+    saldoAntes:m.saldoAntes==null?null:Number(m.saldoAntes)||0,
+    saldoDepois:m.saldoDepois==null?null:Number(m.saldoDepois)||0,
+    createdAt:m.createdAt||null
+  }));
+  const pos=['Reservar','Rendimento','Receita direta','Transferência recebida'];
+  const neg=['Resgatar','Pagamento direto','Pagamento de despesa fixa','Transferência enviada'];
+  const entradas=moves.filter(m=>pos.includes(m.tipo)).reduce((a,m)=>a+(Number(m.valor)||0),0);
+  const saidas=moves.filter(m=>neg.includes(m.tipo)).reduce((a,m)=>a+(Number(m.valor)||0),0);
+  const rendimentos=moves.filter(m=>m.tipo==='Rendimento').reduce((a,m)=>a+(Number(m.valor)||0),0);
+  return {
+    id:uid(),
+    monthKey:month,
+    monthLabel:reservaReportMonthLabel(month),
+    closedAt:new Date().toISOString(),
+    total:boxes.reduce((a,r)=>a+(Number(r.valorAtual)||0),0),
+    metaTotal:boxes.reduce((a,r)=>a+(Number(r.valorMeta)||0),0),
+    activeCount:boxes.filter(r=>(r.status||'Ativa')==='Ativa').length,
+    boxCount:boxes.length,
+    summary:{entradas,saidas,rendimentos,movimentacoes:moves.length},
+    boxes,
+    moves
+  };
+}
+function reservaReportComparison(report){
+  const current=(S.data.reservas.boxes||[]);
+  const byId=new Map(current.map(r=>[r.id,r]));
+  const seen=new Set();
+  const rows=[];
+  (report.boxes||[]).forEach(old=>{
+    seen.add(old.id);
+    const now=byId.get(old.id)||null;
+    rows.push({old,now,createdAfter:false,removed:!now});
+  });
+  current.forEach(now=>{
+    if(seen.has(now.id)) return;
+    rows.push({old:{id:now.id,nome:now.nome||'Cofrinho',banco:now.banco||'',categoria:now.categoria||'',status:'Ainda não existia',valorAtual:0,valorMeta:0,cor:now.cor||'#c9a45c',corValor:now.corValor||'#e8c98a'},now,createdAfter:true,removed:false});
+  });
+  return rows;
+}
+function renderReservaMonthlyReport(report){
+  if(!report) return '<div class="empty-note">Relatório não encontrado.</div>';
+  const currentTotal=(S.data.reservas.boxes||[]).reduce((a,r)=>a+(Number(r.valorAtual)||0),0);
+  const delta=currentTotal-(Number(report.total)||0);
+  const rows=reservaReportComparison(report).map(item=>{
+    const old=item.old, now=item.now;
+    const oldVal=Number(old.valorAtual)||0;
+    const nowVal=now?(Number(now.valorAtual)||0):0;
+    const diff=nowVal-oldVal;
+    const pct=Number(old.valorMeta)>0?Math.min(100,Math.round(oldVal/Number(old.valorMeta)*100)):0;
+    const state=item.createdAfter?'<span class="report-state new">Criado depois</span>':(item.removed?'<span class="report-state removed">Não existe mais</span>':'<span class="report-state kept">Atual</span>');
+    return `<div class="reserve-report-row">
+      <div class="reserve-report-name">
+        <span class="dot" style="background:${esc(old.cor||'#c9a45c')}"></span>
+        <div><strong>${esc(old.nome||'Cofrinho')}</strong><span>${esc(old.banco||'Sem banco')}${old.categoria?' · '+esc(old.categoria):''}</span></div>
+      </div>
+      <div class="reserve-report-cell"><small>No fechamento</small><b>${brl(oldVal)}</b>${Number(old.valorMeta)>0?`<em>Meta ${brl(old.valorMeta)} · ${pct}%</em>`:''}</div>
+      <div class="reserve-report-cell"><small>Hoje</small><b>${now?brl(nowVal):'—'}</b>${state}</div>
+      <div class="reserve-report-cell reserve-report-delta"><small>Evolução</small><b>${item.removed?'—':reservaReportSigned(diff)}</b></div>
+    </div>`;
+  }).join('');
+  const closedAt=report.closedAt?new Date(report.closedAt).toLocaleString('pt-BR'):'—';
+  const moves=(report.moves||[]).slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))).map(m=>{
+    const box=(report.boxes||[]).find(r=>r.id===m.boxId);
+    const positive=['Reservar','Rendimento','Receita direta','Transferência recebida'].includes(m.tipo);
+    const negative=['Resgatar','Pagamento direto','Pagamento de despesa fixa','Transferência enviada'].includes(m.tipo);
+    return `<tr><td>${reservaFmtDate(m.data)}</td><td>${esc(box?box.nome:'Cofrinho removido')}</td><td>${esc(m.tipo)}</td><td class="${positive?'val-pos':negative?'val-neg':''}">${positive?'+ ':negative?'- ':''}${brl(m.valor)}</td><td>${esc(m.descricao||'')}</td></tr>`;
+  }).join('');
+  return `<div class="reserve-report-readonly">
+    <div class="reserve-report-lock">🔒 Relatório fechado e somente para visualização</div>
+    <div class="reserve-report-summary">
+      <div><small>Total em ${esc(report.monthLabel||reservaReportMonthLabel(report.monthKey))}</small><strong>${brl(report.total)}</strong></div>
+      <div><small>Total hoje</small><strong>${brl(currentTotal)}</strong></div>
+      <div><small>Evolução desde o fechamento</small><strong>${reservaReportSigned(delta)}</strong></div>
+      <div><small>Cofrinhos no fechamento</small><strong>${Number(report.boxCount)||0}</strong></div>
+    </div>
+    <div class="reserve-report-meta">Fechado em ${esc(closedAt)} · ${Number(report.activeCount)||0} ativo(s) · Meta total ${brl(report.metaTotal||0)}</div>
+    <div class="reserve-report-flow">
+      <div><small>Entradas no mês</small><b class="val-pos">${brl(report.summary&&report.summary.entradas||0)}</b></div>
+      <div><small>Saídas no mês</small><b class="val-neg">${brl(report.summary&&report.summary.saidas||0)}</b></div>
+      <div><small>Rendimentos</small><b class="val-pos">${brl(report.summary&&report.summary.rendimentos||0)}</b></div>
+      <div><small>Movimentações</small><b>${Number(report.summary&&report.summary.movimentacoes)||0}</b></div>
+    </div>
+    <h3 class="reserve-report-section-title">Comparação dos Cofrinhos</h3>
+    <div class="reserve-report-list">${rows||'<div class="empty-note">Nenhum Cofrinho existia neste fechamento.</div>'}</div>
+    <h3 class="reserve-report-section-title">Movimentações congeladas do mês</h3>
+    ${moves?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Cofrinho</th><th>Tipo</th><th>Valor</th><th>Descrição</th></tr></thead><tbody>${moves}</tbody></table></div>`:'<div class="empty-note">Nenhuma movimentação registrada neste mês.</div>'}
+  </div>`;
+}
+function openReservaReportsModal(preferredKey){
+  const reports=reservaMonthlyReports().slice().sort((a,b)=>String(b.monthKey).localeCompare(String(a.monthKey)));
+  if(!reports.length){
+    const box=el(`<div class="modal-overlay"><div class="modal-box reserve-report-modal"><div class="modal-head"><h2>Relatórios anteriores dos Cofrinhos</h2><button id="rr_close">&times;</button></div><p class="modal-sub">Quando você fechar um mês, a fotografia dos Cofrinhos aparecerá aqui para comparação futura.</p><div class="empty-note">Ainda não há nenhum mês fechado.</div><div class="row-btns" style="margin-top:12px;"><button class="btn btn-primary btn-block" id="rr_close2">Entendi</button></div></div></div>`);
+    $('#modal-root').innerHTML=''; $('#modal-root').appendChild(box); attachModalGuard(box);
+    $('#rr_close').onclick=closeModal; $('#rr_close2').onclick=closeModal;
+    return;
+  }
+  const selected=reports.some(r=>r.monthKey===preferredKey)?preferredKey:reports[0].monthKey;
+  const options=reports.map(r=>`<option value="${esc(r.monthKey)}" ${r.monthKey===selected?'selected':''}>${esc(r.monthLabel||reservaReportMonthLabel(r.monthKey))}</option>`).join('');
+  const box=el(`<div class="modal-overlay"><div class="modal-box reserve-report-modal"><div class="modal-head"><div><h2>Relatórios anteriores dos Cofrinhos</h2><p class="modal-sub" style="margin:3px 0 0;">Veja quanto havia em cada mês fechado e compare com os valores de hoje.</p></div><button id="rr_close">&times;</button></div><div class="reserve-report-picker"><label for="rr_month">Mês fechado</label><select id="rr_month">${options}</select></div><div id="rr_content"></div><div class="row-btns" style="margin-top:14px;"><button class="btn btn-secondary btn-block" id="rr_close2">Fechar</button></div></div></div>`);
+  $('#modal-root').innerHTML=''; $('#modal-root').appendChild(box); attachModalGuard(box);
+  const render=()=>{ const r=reports.find(x=>x.monthKey===$('#rr_month').value)||reports[0]; $('#rr_content').innerHTML=renderReservaMonthlyReport(r); };
+  $('#rr_month').onchange=render; $('#rr_close').onclick=closeModal; $('#rr_close2').onclick=closeModal; render();
+}
+function saveReservaMonthlyReport(key){
+  const month=key||monthKey(todayYM().y,todayYM().m);
+  const reports=reservaMonthlyReports();
+  const existing=reports.find(r=>r.monthKey===month);
+  if(existing) return {created:false,report:existing};
+  /* Guarda uma cópia desconectada dos objetos vivos. Assim, editar um Cofrinho ou uma
+     movimentação depois do fechamento nunca altera a fotografia histórica. */
+  const report=JSON.parse(JSON.stringify(buildReservaMonthlyReport(month)));
+  reports.push(report);
+  saveCurrentData();
+  return {created:true,report};
+}
+function closeCurrentReservaMonth(){
+  const key=monthKey(todayYM().y,todayYM().m);
+  const existing=reservaMonthlyReports().find(r=>r.monthKey===key);
+  if(existing){ toast(reservaReportMonthLabel(key)+' já está fechado. O relatório original foi preservado.'); openReservaReportsModal(key); return; }
+  openConfirmModal({
+    title:'Fechar '+reservaReportMonthLabel(key)+'?',
+    text:'O Borion salvará uma fotografia permanente dos Cofrinhos deste perfil: valores, metas, status e movimentações do mês. O relatório será somente para visualização e não alterará nenhum saldo.',
+    confirmLabel:'Fechar mês', cancelLabel:'Cancelar', variant:'gold',
+    onConfirm(){
+      const result=saveReservaMonthlyReport(key);
+      closeModal(); renderView();
+      if(!result.created){ toast(reservaReportMonthLabel(key)+' já estava fechado. O relatório original foi preservado.'); openReservaReportsModal(key); return; }
+      toast(reservaReportMonthLabel(key)+' fechado. Relatório salvo.');
+      setTimeout(()=>openReservaReportsModal(key),80);
+    }
+  });
+}
+function renderReservaReportsBanner(){
+  const reports=reservaMonthlyReports().slice().sort((a,b)=>String(b.monthKey).localeCompare(String(a.monthKey)));
+  const currentKey=monthKey(todayYM().y,todayYM().m);
+  const currentClosed=reports.some(r=>r.monthKey===currentKey);
+  const latest=reports[0];
+  return `<div class="panel-box reserve-history-banner">
+    <div class="reserve-history-copy"><span class="reserve-history-icon">◷</span><div><h3>Histórico mensal dos Cofrinhos</h3><p>${latest?`Último fechamento: ${esc(latest.monthLabel||reservaReportMonthLabel(latest.monthKey))}, com ${brl(latest.total)}.`:'Feche cada mês para guardar uma fotografia dos Cofrinhos e acompanhar sua evolução com o passar do tempo.'}</p></div></div>
+    <div class="reserve-history-actions"><button class="btn-outline" onclick="openReservaReportsModal()">Ver relatórios anteriores</button><button class="btn btn-primary" onclick="closeCurrentReservaMonth()" ${currentClosed?'title="Este mês já foi fechado"':''}>${currentClosed?esc(reservaReportMonthLabel(currentKey))+' fechado':'Fechar '+esc(reservaReportMonthLabel(currentKey))}</button></div>
+  </div>`;
+}
+
 function renderReservasPage(){
   if(!reservasEnabled()){
     return `<div class="panel-box"><h3 class="panel-title">Reserva</h3><p class="empty-note">O módulo de Reserva está desativado. Ative em Configurações para usar esta guia.</p><button class="btn btn-primary btn-sm" onclick="Nav.go('settings')">Abrir Configurações</button></div>`;
@@ -238,6 +425,7 @@ function renderReservasPage(){
   const ativas = boxes.filter(r=>(r.status||'Ativa')==='Ativa').length;
   const ultimo = moves[0];
   return `
+    ${renderReservaReportsBanner()}
     <div class="cards-row">
       <div class="card hero-gold"><div class="clabel">Reservado</div><div class="cval">${brl(total)}</div></div>
       <div class="card"><div class="clabel">Reservas ativas</div><div class="cval">${ativas}</div></div>

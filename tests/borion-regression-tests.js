@@ -83,6 +83,7 @@ async function testAsync(name, fn){
   load(ctx,'js/00-utils.js');
   load(ctx,'js/01-storage-data-state.js');
   load(ctx,'js/05-calculations-charts.js');
+  load(ctx,'js/09-patrimony-goals.js');
   load(ctx,'js/19-subscriptions.js');
   run(ctx,"todayISO=()=> '2026-07-12'; todayYM=()=>({y:2026,m:6}); toast=()=>{}; S.month={y:2026,m:6};");
 
@@ -179,10 +180,55 @@ async function testAsync(name, fn){
     assert.strictEqual(out.txAccountId,null); assert.deepStrictEqual(Array.from(out.accountOptions),['carteira-fixa','active']); assert.deepStrictEqual(Array.from(out.cardOptions),['card']);
   });
 
+
+  test('13 — Migração cria o histórico mensal e elimina duplicatas preservando o primeiro fechamento',()=>{
+    const out=run(ctx,`(()=>{let d=emptyData();d.reservas.monthlyReports=[
+      {id:'old',monthKey:'2026-03',closedAt:'2026-04-01T00:00:00.000Z',total:100,boxes:[],moves:[]},
+      {id:'new',monthKey:'2026-03',closedAt:'2026-04-02T00:00:00.000Z',total:999,boxes:[],moves:[]},
+      {id:'invalid',monthKey:'2026-13',total:1}
+    ];d=migrateData(d);return {count:d.reservas.monthlyReports.length,id:d.reservas.monthlyReports[0].id,total:d.reservas.monthlyReports[0].total,summary:d.reservas.monthlyReports[0].summary};})()`);
+    assert.strictEqual(out.count,1); assert.strictEqual(out.id,'old'); assert.strictEqual(out.total,100);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out.summary)),{entradas:0,saidas:0,rendimentos:0,movimentacoes:0});
+  });
+
+  test('14 — Fechamento dos Cofrinhos congela valores e somente movimentações da competência',()=>{
+    const out=run(ctx,`(()=>{S.data=migrateData(emptyData());S.data.reservas.boxes=[
+      {id:'box-a',nome:'Emergência',banco:'Nubank',valorAtual:3000,valorMeta:10000,status:'Ativa',cor:'#111111'},
+      {id:'box-b',nome:'Viagem',banco:'Inter',valorAtual:1200,valorMeta:5000,status:'Pausada',cor:'#222222'}
+    ];S.data.reservas.moves=[
+      {id:'m1',boxId:'box-a',tipo:'Reservar',data:'2026-03-02',valor:500,descricao:'Aporte'},
+      {id:'m2',boxId:'box-a',tipo:'Rendimento',data:'2026-03-31',valor:20,descricao:'Rendimento'},
+      {id:'m3',boxId:'box-b',tipo:'Resgatar',data:'2026-04-01',valor:100,descricao:'Outro mês'}
+    ];const saved=saveReservaMonthlyReport('2026-03');S.data.reservas.boxes[0].valorAtual=9000;S.data.reservas.boxes[0].nome='Emergência atualizada';S.data.reservas.moves[0].valor=999;const r=saved.report;return {created:saved.created,total:r.total,boxValue:r.boxes[0].valorAtual,boxName:r.boxes[0].nome,moves:r.moves.map(m=>m.id),moveValue:r.moves[0].valor,summary:r.summary};})()`);
+    assert.strictEqual(out.created,true); assert.strictEqual(out.total,4200); assert.strictEqual(out.boxValue,3000); assert.strictEqual(out.boxName,'Emergência');
+    assert.deepStrictEqual(Array.from(out.moves),['m1','m2']); assert.strictEqual(out.moveValue,500);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out.summary)),{entradas:520,saidas:0,rendimentos:20,movimentacoes:2});
+  });
+
+  test('15 — Mesmo mês fecha uma única vez e o snapshot sobrevive à serialização',()=>{
+    const out=run(ctx,`(()=>{S.data=migrateData(emptyData());S.data.reservas.boxes=[{id:'b1',nome:'Casa',valorAtual:1000,valorMeta:50000,status:'Ativa'}];const a=saveReservaMonthlyReport('2026-05');S.data.reservas.boxes[0].valorAtual=2000;const b=saveReservaMonthlyReport('2026-05');const json=JSON.stringify(S.data);S.data=migrateData(JSON.parse(json));const r=S.data.reservas.monthlyReports[0];return {firstCreated:a.created,secondCreated:b.created,sameId:a.report.id===b.report.id,count:S.data.reservas.monthlyReports.length,total:r.total,boxValue:r.boxes[0].valorAtual};})()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{firstCreated:true,secondCreated:false,sameId:true,count:1,total:1000,boxValue:1000});
+  });
+
+  test('16 — Comparação histórica usa ID, separa nomes iguais e identifica criado/removido',()=>{
+    const out=run(ctx,`(()=>{S.data=migrateData(emptyData());const report={monthKey:'2026-06',total:300,boxes:[{id:'a',nome:'Reserva',valorAtual:100},{id:'b',nome:'Reserva',valorAtual:200}],moves:[],summary:{}};S.data.reservas.boxes=[{id:'a',nome:'Reserva',valorAtual:150},{id:'c',nome:'Reserva',valorAtual:50}];return reservaReportComparison(report).map(x=>({id:x.old.id,now:x.now&&x.now.id,createdAfter:x.createdAfter,removed:x.removed,old:x.old.valorAtual,current:x.now&&x.now.valorAtual}));})()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),[
+      {id:'a',now:'a',createdAfter:false,removed:false,old:100,current:150},
+      {id:'b',now:null,createdAfter:false,removed:true,old:200,current:null},
+      {id:'c',now:'c',createdAfter:true,removed:false,old:0,current:50}
+    ]);
+  });
+
+  test('17 — Conteúdo do relatório é somente leitura e não oferece ações de edição',()=>{
+    const html=run(ctx,`(()=>{S.data=migrateData(emptyData());S.data.reservas.boxes=[{id:'b1',nome:'Reserva',valorAtual:100}];const r=buildReservaMonthlyReport('2026-07');return renderReservaMonthlyReport(r);})()`);
+    assert.match(html,/somente para visualização/);
+    assert.ok(!/<input\b/i.test(html)); assert.ok(!/contenteditable/i.test(html)); assert.ok(!/onclick=/i.test(html)); assert.ok(!/Reservas\.(edit|move|delete)/.test(html));
+  });
+
   load(ctx,'js/02-backup-local.js');
   await testAsync('Backup Drive&Local — snapshot possui mesmo ID, data-base, versão e checksum',async()=>{
-    const snap=await run(ctx,`finalizeBackupSnapshot({type:'borion-account-backup',appVersion:'6.23.1',exportedAt:'2026-07-12T12:00:00.000Z',profiles:[],dataByProfile:{},integrity:{}},'manual_drive_local','backup manual conjunto Drive e dispositivo')`);
-    assert.ok(snap.snapshotId); assert.strictEqual(snap.snapshotBaseDate,'2026-07-12T12:00:00.000Z'); assert.strictEqual(snap.appVersion,'6.23.1'); assert.strictEqual(snap.snapshotChecksum,snap.integrity.snapshotSha256); assert.strictEqual(snap.snapshotChecksum.length,64);
+    const snap=await run(ctx,`finalizeBackupSnapshot({type:'borion-account-backup',appVersion:'6.23.2',exportedAt:'2026-07-12T12:00:00.000Z',profiles:[],dataByProfile:{},integrity:{}},'manual_drive_local','backup manual conjunto Drive e dispositivo')`);
+    assert.ok(snap.snapshotId); assert.strictEqual(snap.snapshotBaseDate,'2026-07-12T12:00:00.000Z'); assert.strictEqual(snap.appVersion,'6.23.2'); assert.strictEqual(snap.snapshotChecksum,snap.integrity.snapshotSha256); assert.strictEqual(snap.snapshotChecksum.length,64);
     const local=JSON.stringify(snap),drive=JSON.stringify(snap); assert.strictEqual(local,drive);
     const settings=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
     assert.match(settings,/GoogleDriveProvider\.createBackup\('manual_drive_local',\{payload:sharedSnapshot\}\)/);
@@ -207,7 +253,7 @@ async function testAsync(name, fn){
   });
 
   const failures=results.filter(r=>r.status==='FAIL');
-  const report={generatedAt:new Date().toISOString(),appVersion:'6.23.1',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
+  const report={generatedAt:new Date().toISOString(),appVersion:'6.23.2',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
   fs.writeFileSync(path.join(__dirname,'regression-results.json'),JSON.stringify(report,null,2));
   for(const r of results){
     console.log(`${r.status==='PASS'?'✓':'✗'} ${r.name}`);

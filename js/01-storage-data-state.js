@@ -271,7 +271,10 @@ function emptyData(){
        pausar/retomar. assinaturas = o cadastro; assinaturaCobrancas = idempotência + histórico
        de cada período já efetivamente cobrado (nunca cobra o mesmo período duas vezes). */
     assinaturas: [],
-    assinaturaCobrancas: []
+    assinaturaCobrancas: [],
+    /* V6.23.1 — auditoria defensiva da migração para accountId. Não participa de cálculos. */
+    accountMigrationReview: [],
+    migrationBackups: []
   };
 }
 function migrateData(d){
@@ -333,6 +336,17 @@ function migrateData(d){
     if(t.origemBanco==null) t.origemBanco = t.origemTipo==='conta' ? (t.origemId||'') : '';
     if(t.destinoBanco==null) t.destinoBanco = t.destinoTipo==='conta' ? (t.destinoId||'') : '';
   });
+  /* O backup defensivo precisa existir antes de criar IDs, Carteira ou qualquer vínculo.
+     Ele fica dentro do próprio perfil e não participa de nenhum cálculo financeiro. */
+  if(!Array.isArray(d.accountMigrationReview)) d.accountMigrationReview=[];
+  if(!Array.isArray(d.migrationBackups)) d.migrationBackups=[];
+  const _legacyArrays=[d.liquidez,d.transacoes,d.fixas,d.fixaPagamentos,d.bens,d.metas,d.agenda,(d.cheques&&d.cheques.items),d.boletos,(d.investimentos&&d.investimentos.ativos),(d.investimentos&&d.investimentos.emCaixa),d.transferencias,d.assinaturas,d.assinaturaCobrancas];
+  const _legacyRefsPresent=_legacyArrays.some(arr=>Array.isArray(arr)&&arr.some(x=>x&&(!x.accountId||!x.id)&&(x.banco||x.account||x.accountName||x.bank||x.bankName||x.conta||x.origemId||x.destinoId)));
+  if(_legacyRefsPresent&&!d.migrationBackups.some(b=>b&&b.kind==='before_account_id_v6231')){
+    const snapshot={};
+    ['contas','liquidez','transacoes','fixas','fixaPagamentos','bens','metas','agenda','boletos','transferencias','assinaturas','assinaturaCobrancas','cartoes'].forEach(k=>{try{snapshot[k]=JSON.parse(JSON.stringify(d[k]));}catch(_){}});
+    d.migrationBackups.push({id:uid(),kind:'before_account_id_v6231',createdAt:Date.now(),snapshot});
+  }
   // V5.36.0 — "Carteira" (dinheiro físico) é uma conta fixa que sempre precisa existir,
   // não pode ser excluída e nunca pode ser confundida com cartão de crédito. Migração
   // defensiva: cria a Carteira se ainda não existir (dado antigo) e garante a flag
@@ -349,7 +363,10 @@ function migrateData(d){
     }
   })();
   // upgrade contas registry with the new bank/account fields
+  const usedAccountIds = new Set();
   d.contas.forEach(c=>{
+    if(!c.id || usedAccountIds.has(String(c.id))) c.id = uid();
+    usedAccountIds.add(String(c.id));
     if(c.nome==null) c.nome = c.banco || 'Conta';
     if(c.tipo==null) c.tipo = 'Conta corrente';
     if(c.saldoInicial==null) c.saldoInicial = 0;
@@ -357,6 +374,71 @@ function migrateData(d){
     if(c.percentualRendimento==null) c.percentualRendimento = 0;
     if(c.cor==null) c.cor = bankColor(c.nome);
     if(c.icone==null) c.icone = c.isCarteira ? '💵' : '◈';
+    if(c.accountKind==null) c.accountKind = c.isCarteira ? 'wallet' : 'bank';
+    if(c.active==null) c.active = !c.archivedAt;
+    if(c.createdAt==null) c.createdAt = 0; // legado: desconhecido, nunca inventa uma data financeira
+  });
+
+  /* V6.23.1 — migração defensiva de vínculos textuais para accountId.
+     - nome/banco continua só como fotografia para exibição;
+     - somente uma correspondência exata é migrada;
+     - duplicidade ou ausência vira revisão, sem alterar valor/saldo;
+     - contas arquivadas continuam no registro para impedir que uma conta nova homônima
+       herde o histórico da excluída. */
+  const normalizeAccountName = v=>String(v||'').trim().toLocaleLowerCase('pt-BR');
+  const accountByIdLocal = id=>d.contas.find(c=>c && String(c.id)===String(id));
+  const accountCandidatesLocal = name=>{
+    const n=normalizeAccountName(name);
+    return n ? d.contas.filter(c=>c && normalizeAccountName(c.nome)===n) : [];
+  };
+  function recordAccountReview(entityType, entity, field, legacyValue, candidates){
+    if(!entity) return;
+    const rid=entity.id||entity.fixaId||entity.assinaturaId||uid();
+    const key=[entityType,rid,field,String(legacyValue||'')].join('|');
+    if(!d.accountMigrationReview.some(r=>r&&r.key===key)){
+      d.accountMigrationReview.push({key,entityType,entityId:rid,field,legacyValue:legacyValue||'',candidateAccountIds:(candidates||[]).map(c=>c.id),status:(candidates||[]).length>1?'ambiguous':'unresolved',createdAt:Date.now()});
+    }
+    entity.accountMigrationStatus=(candidates||[]).length>1?'ambiguous':'unresolved';
+  }
+  function migrateAccountRef(entity, entityType, idField='accountId', textFields=['banco','account','accountName','bank','bankName','conta']){
+    if(!entity) return null;
+    const existing=entity[idField];
+    if(existing && accountByIdLocal(existing)){ entity.accountMigrationStatus='resolved'; return existing; }
+    let legacy='';
+    for(const f of textFields){ if(entity[f]){ legacy=entity[f]; break; } }
+    if(!legacy) return null;
+    if(accountByIdLocal(legacy)){ entity[idField]=String(legacy); entity.accountMigrationStatus='resolved'; return entity[idField]; }
+    const candidates=accountCandidatesLocal(legacy);
+    if(candidates.length===1){ entity[idField]=candidates[0].id; entity.accountMigrationStatus='resolved'; return entity[idField]; }
+    recordAccountReview(entityType,entity,idField,legacy,candidates);
+    return null;
+  }
+  (d.liquidez||[]).forEach(l=>{
+    if(l && (l.ledgerType==='account_delta' || (l.nome && l.banco && normalizeAccountName(l.nome)===normalizeAccountName(l.banco)))){
+      l.ledgerType='account_delta'; migrateAccountRef(l,'liquidez');
+    }
+  });
+  (d.transacoes||[]).forEach(x=>{
+    if(x.formaPagamento==='Crédito'||x.viaCartaoId){x.accountId=null;return;}
+    migrateAccountRef(x,'transacoes');
+  });
+  (d.fixas||[]).forEach(x=>{if(x.viaCartaoId){x.accountId=null;return;}migrateAccountRef(x,'fixas');});
+  [['fixaPagamentos',d.fixaPagamentos],['bens',d.bens],['metas',d.metas],['agenda',d.agenda],['cheques',d.cheques&&d.cheques.items],['boletos',d.boletos],['investimentosAtivos',d.investimentos&&d.investimentos.ativos],['investimentosCaixa',d.investimentos&&d.investimentos.emCaixa]].forEach(([type,arr])=>{
+    (arr||[]).forEach(x=>migrateAccountRef(x,type));
+  });
+  (d.assinaturas||[]).forEach(x=>{if(x.formaPagamento==='Crédito'){x.accountId=null;return;}migrateAccountRef(x,'assinaturas');});
+  (d.assinaturaCobrancas||[]).forEach(x=>{if(x.formaPagamento==='Crédito'){x.accountId=null;return;}migrateAccountRef(x,'assinaturaCobrancas');});
+  (d.cartoes||[]).forEach(c=>(c.faturasPagas||[]).forEach(pg=>migrateAccountRef(pg,'faturaPagamento')));
+  (d.boletos||[]).forEach(b=>(b.pagamentos||[]).forEach(pg=>migrateAccountRef(pg,'boletoPagamento')));
+  (d.transferencias||[]).forEach(t=>{
+    if(t.origemTipo==='conta'){
+      const id=migrateAccountRef(t,'transferencia-origem','origemAccountId',['origemId','contaOrigem','origemNome','origemBanco']);
+      if(id){ t.origemAccountId=id; t.origemId=id; const c=accountByIdLocal(id); if(c){t.origemNome=c.nome;t.origemBanco=c.nome;t.contaOrigem=c.nome;} }
+    }
+    if(t.destinoTipo==='conta'){
+      const id=migrateAccountRef(t,'transferencia-destino','destinoAccountId',['destinoId','contaDestino','destinoNome','destinoBanco']);
+      if(id){ t.destinoAccountId=id; t.destinoId=id; const c=accountByIdLocal(id); if(c){t.destinoNome=c.nome;t.destinoBanco=c.nome;t.contaDestino=c.nome;} }
+    }
   });
   // ensure banco tag field exists on every entity that can be filtered by bank
   (d.transacoes||[]).forEach(t=>{
@@ -592,54 +674,76 @@ function validateBorionJson(obj){
   return {valid: errors.length===0, errors};
 }
 
+function normalizeAccountName(v){ return String(v||'').trim().toLocaleLowerCase('pt-BR'); }
+function activeAccounts(data){
+  const d=data || (S&&S.data);
+  return d&&Array.isArray(d.contas) ? d.contas.filter(c=>c && c.active!==false && !c.archivedAt && (c.accountKind==='bank'||c.accountKind==='wallet'||c.isCarteira)) : [];
+}
+function accountById(id, opts={}){
+  if(!id || !S.data) return null;
+  const c=(S.data.contas||[]).find(x=>x&&String(x.id)===String(id));
+  if(!c) return null;
+  if(!opts.includeArchived && (c.active===false||c.archivedAt)) return null;
+  return c;
+}
+function resolveAccountId(ref, opts={}){
+  if(!ref || !S.data) return null;
+  const direct=accountById(ref,{includeArchived:!!opts.includeArchived});
+  if(direct) return direct.id;
+  const list=(opts.includeArchived?(S.data.contas||[]):activeAccounts()).filter(c=>normalizeAccountName(c.nome)===normalizeAccountName(ref));
+  return list.length===1 ? list[0].id : null;
+}
+function accountNameSnapshot(accountId, fallback=''){ const c=accountById(accountId,{includeArchived:true}); return c?c.nome:(fallback||''); }
+function accountLinkedRecordCount(accountId){
+  if(!S.data||!accountId) return 0;
+  let n=0; const arrays=[S.data.transacoes,S.data.fixas,S.data.fixaPagamentos,S.data.bens,S.data.metas,S.data.agenda,S.data.boletos,S.data.assinaturas,S.data.assinaturaCobrancas];
+  arrays.forEach(arr=>(arr||[]).forEach(x=>{if(x&&x.accountId===accountId)n++;}));
+  (S.data.transferencias||[]).forEach(t=>{if(t&&(t.origemAccountId===accountId||t.destinoAccountId===accountId||t.origemId===accountId||t.destinoId===accountId))n++;});
+  (S.data.liquidez||[]).forEach(l=>{if(l&&l.accountId===accountId)n++;});
+  (S.data.cartoes||[]).forEach(c=>(c.faturasPagas||[]).forEach(pg=>{if(pg&&pg.accountId===accountId)n++;}));
+  (S.data.boletos||[]).forEach(b=>(b.pagamentos||[]).forEach(pg=>{if(pg&&pg.accountId===accountId)n++;}));
+  return n;
+}
+function accountSelectOptions(opts={}){
+  let list=activeAccounts();
+  if(opts.excludeCarteira) list=list.filter(c=>!c.isCarteira);
+  if(opts.excludeId) list=list.filter(c=>c.id!==opts.excludeId);
+  const counts={}; list.forEach(c=>{const k=normalizeAccountName(c.nome);counts[k]=(counts[k]||0)+1;});
+  const out=list.map(c=>({value:c.id,label:counts[normalizeAccountName(c.nome)]>1?`${c.nome} · ${String(c.id).slice(0,8)}`:c.nome}));
+  return opts.includeNone ? [{value:'',label:'— Nenhum —'},...out] : out;
+}
 function allBankNames(){
-  const names = new Set();
-  (S.data.contas||[]).forEach(c=>{ if(c.nome) names.add(c.nome); });
+  const names = new Set(); activeAccounts().forEach(c=>{if(c.nome)names.add(c.nome);});
   (S.data.cartoes||[]).forEach(c=>{ if(c.banco) names.add(c.banco); });
-  (S.data.boletos||[]).forEach(b=>{ if(b.banco) names.add(b.banco); });
-  if(S.data.reservas){
-    (S.data.reservas.boxes||[]).forEach(r=>{ if(r.banco) names.add(r.banco); });
-    (S.data.reservas.moves||[]).forEach(m=>{ if(m.banco) names.add(m.banco); });
-  }
   return Array.from(names).sort((a,b)=>a.localeCompare(b,'pt-BR'));
 }
-function bankMatches(itemBanco){
-  if(!S.bankFilter || S.bankFilter.size===0) return true; // "Todos"
-  return !!itemBanco && S.bankFilter.has(itemBanco);
+function bankMatches(itemBanco, itemAccountId){
+  if(!S.bankFilter || S.bankFilter.size===0) return true;
+  const name=itemAccountId?accountNameSnapshot(itemAccountId,itemBanco):itemBanco;
+  return !!name && S.bankFilter.has(name);
 }
-function bankSelectField(idPrefix, selected){
-  return {key:'banco', label:'Banco/Conta', type:'select', options:['— Nenhum —',...allBankNames()], default: selected||'— Nenhum —'};
+function bankSelectField(idPrefix, selected, opts={}){
+  const selectedId=resolveAccountId(selected)||selected||'';
+  return {key:opts.key||'accountId', label:opts.label||'Banco/Conta', type:'select', options:accountSelectOptions({includeNone:true}), default:selectedId};
 }
 
-/* ---------------- V5.36.0 — separação Banco/Conta vs Carteira vs Cartão de crédito ----------------
-   Regra de negócio: cartão de crédito NUNCA aparece como banco/conta de origem, e banco/conta/
-   carteira NUNCA aparecem como cartão. A Carteira é uma conta fixa (não pode ser excluída) que
-   representa dinheiro físico e sempre existe (ver ensureCarteira em migrateData). */
-function getCarteiraConta(){
-  return (S.data && Array.isArray(S.data.contas)) ? (S.data.contas.find(c=>c && c.isCarteira) || null) : null;
+/* Banco/Conta e Cartão são registros distintos. Nomes são apenas rótulos. */
+function getCarteiraConta(){ return activeAccounts().find(c=>c&&c.isCarteira)||null; }
+function accountSelectNames(){ return activeAccounts().map(c=>c.nome); } // compatibilidade de exibição
+function accountSelectField(idPrefix, selected, opts={}){
+  const selectedId=resolveAccountId(selected)||selected||'';
+  return {key:opts.key||'accountId', label:opts.label||'Banco/Conta', type:'select', options:accountSelectOptions(), default:selectedId||((accountSelectOptions()[0]||{}).value||'')};
 }
-/* Nomes de bancos/contas + Carteira, para lançamentos de despesa/receita, despesas fixas,
-   pagamento de fatura/boleto e transferências. NUNCA inclui cartões de crédito. */
-function accountSelectNames(){
-  const carteira = getCarteiraConta();
-  const rest = (S.data.contas||[]).filter(c=>c && !c.isCarteira && c.nome).map(c=>c.nome);
-  return carteira ? [carteira.nome, ...rest] : rest;
-}
-function accountSelectField(idPrefix, selected){
-  const names = accountSelectNames();
-  return {key:'banco', label:'Banco/Conta', type:'select', options:names, default: selected && names.includes(selected) ? selected : (names[0]||'')};
-}
-/* Nomes dos bancos/contas reais, sem a Carteira — usado quando a forma de pagamento
-   exige banco (Pix/Débito), já que a Carteira só serve para dinheiro físico. */
-function nonCarteiraAccountNames(){
-  return (S.data.contas||[]).filter(c=>c && !c.isCarteira && c.nome).map(c=>c.nome);
-}
-function allCardNames(){
-  return (S.data.cartoes||[]).filter(c=>c && c.banco).map(c=>c.banco);
+function nonCarteiraAccountNames(){ return activeAccounts().filter(c=>!c.isCarteira).map(c=>c.nome); }
+function allCardNames(){ return (S.data.cartoes||[]).filter(c=>c&&c.banco).map(c=>c.banco); }
+function cardSelectOptions(){
+  const cards=(S.data.cartoes||[]).filter(c=>c&&c.id&&c.banco); const counts={};cards.forEach(c=>counts[normalizeAccountName(c.banco)]=(counts[normalizeAccountName(c.banco)]||0)+1);
+  return cards.map(c=>({value:c.id,label:counts[normalizeAccountName(c.banco)]>1?`${c.banco} · ${String(c.id).slice(0,8)}`:c.banco}));
 }
 function cardSelectField(idPrefix, selected){
-  const names = allCardNames();
-  return {key:'cartao', label:'Cartão de crédito', type:'select', options:names, default: selected && names.includes(selected) ? selected : (names[0]||'')};
+  const byName=(S.data.cartoes||[]).filter(c=>normalizeAccountName(c.banco)===normalizeAccountName(selected));
+  const selectedId=(S.data.cartoes||[]).some(c=>c.id===selected)?selected:(byName.length===1?byName[0].id:'');
+  return {key:'cartaoId',label:'Cartão de crédito',type:'select',options:cardSelectOptions(),default:selectedId||((cardSelectOptions()[0]||{}).value||'')};
 }
 function showBankRequiredModal(msg){
   const text = msg || 'Todo lançamento precisa de um banco/conta vinculado.';
@@ -668,6 +772,11 @@ function requireBanco(bancoVal, msg){
   const banco = bancoVal==='— Nenhum —' ? '' : (bancoVal||'');
   if(!banco){ showBankRequiredModal(msg||'Escolha um banco/conta/cartão para este lançamento.'); return null; }
   return banco;
+}
+function requireAccountId(accountRef, msg){
+  const id=resolveAccountId(accountRef);
+  if(!id){ showBankRequiredModal(msg||'Escolha uma conta bancária ativa.'); return null; }
+  return id;
 }
 
 /* ---------------- V6.0 — proteção: reserva nunca pode ficar negativa ----------------
@@ -704,73 +813,63 @@ function showReservaInsuficienteModal(box, valorNecessario){
    acumulador com um "ativo de liquidez" antigo que o usuário tenha criado à mão com outro nome
    (ex.: "Dinheiro guardado em casa"), o match exige nome===banco — só a própria entrada da
    conta é reaproveitada; entradas manuais antigas nunca são tocadas por adjustLiquidez. */
-function findLiquidezEntry(banco, createIfMissing){
-  if(!banco) return null;
+function findLiquidezEntry(accountRef, createIfMissing){
+  const accountId=resolveAccountId(accountRef,{includeArchived:true});
+  if(!accountId) return null;
   if(!Array.isArray(S.data.liquidez)) S.data.liquidez=[];
-  let l = S.data.liquidez.find(x=>x.banco===banco && x.nome===banco);
+  let l=S.data.liquidez.find(x=>x&&x.ledgerType==='account_delta'&&x.accountId===accountId);
   if(!l && createIfMissing){
-    l = {id:uid(), nome:banco, valor:0, banco};
+    const c=accountById(accountId,{includeArchived:true});
+    l={id:uid(),accountId,ledgerType:'account_delta',nome:c?c.nome:'Conta',banco:c?c.nome:'',valor:0,createdAt:Date.now()};
     S.data.liquidez.push(l);
   }
   return l;
 }
-function adjustLiquidez(banco, delta){
-  if(!banco || !delta) return;
-  const l = findLiquidezEntry(banco, true);
-  if(l) l.valor = Math.round(((Number(l.valor)||0) + delta) * 100) / 100;
+function adjustLiquidez(accountRef, delta){
+  const amount=Number(delta)||0; if(!accountRef||!amount) return false;
+  const l=findLiquidezEntry(accountRef,true);
+  if(!l) return false;
+  l.valor=Math.round(((Number(l.valor)||0)+amount)*100)/100; return true;
 }
-
-/* ---------------- V6.22 — Saldo em Contas (fonte única, derivada) ----------------
-   saldo de uma conta = saldo inicial (definido no cadastro da conta) + acumulador de ajustes
-   (transferências, fatura/boleto pagos, receitas e despesas ligadas a essa conta). Nunca é
-   digitado diretamente aqui — é sempre a soma dessas duas fontes. */
 function contaSaldoAtual(conta){
   if(!conta) return 0;
-  const ledger = (S.data.liquidez||[]).find(l=>l.banco===conta.nome && l.nome===conta.nome);
-  return Math.round(((Number(conta.saldoInicial)||0) + (ledger?Number(ledger.valor)||0:0)) * 100) / 100;
+  const ledger=(S.data.liquidez||[]).find(l=>l&&l.ledgerType==='account_delta'&&l.accountId===conta.id);
+  return Math.round(((Number(conta.saldoInicial)||0)+(ledger?Number(ledger.valor)||0:0))*100)/100;
 }
-/* Linhas para exibir em "Saldo em contas": uma por conta cadastrada (derivada), mais
-   qualquer "ativo de liquidez" antigo criado à mão antes desta versão que não corresponda a
-   nenhuma conta real — preservado por compatibilidade com backups antigos, ainda editável. */
 function saldoContasDetalhe(){
-  const contas = (S.data.contas||[]);
-  const contaNomes = new Set(contas.map(c=>c.nome));
-  const rows = contas.filter(c=>bankMatches(c.nome)).map(c=>({
-    id:'conta:'+c.id, contaId:c.id, tipo:'conta', nome:c.nome, valor:contaSaldoAtual(c), isCarteira:!!c.isCarteira
-  }));
+  const rows=activeAccounts().filter(c=>bankMatches(c.nome,c.id)).map(c=>({id:'conta:'+c.id,contaId:c.id,tipo:'conta',nome:c.nome,valor:contaSaldoAtual(c),isCarteira:!!c.isCarteira}));
   (S.data.liquidez||[]).forEach(l=>{
-    const isLedgerEntry = l.nome===l.banco && contaNomes.has(l.banco);
-    if(!isLedgerEntry && bankMatches(l.banco)) rows.push({id:l.id, tipo:'manual', nome:l.nome, valor:Number(l.valor)||0});
+    const isLedger=l&&l.ledgerType==='account_delta'&&!!l.accountId;
+    if(!isLedger&&bankMatches(l.banco,l.accountId)) rows.push({id:l.id,tipo:'manual',nome:l.nome,valor:Number(l.valor)||0});
   });
   return rows;
 }
-function saldoEmContasTotal(){
-  return Math.round(saldoContasDetalhe().reduce((s,r)=>s+(Number(r.valor)||0),0) * 100) / 100;
-}
-/* Saldo (conta real + eventuais ativos manuais legados) de um único banco pelo nome — usado
-   nos resumos por banco da Visão Geral, que antes somavam só o ajuste (sem o saldo inicial). */
+function saldoEmContasTotal(){ return Math.round(saldoContasDetalhe().reduce((s,r)=>s+(Number(r.valor)||0),0)*100)/100; }
 function saldoBancoNome(bn){
-  if(!bn) return 0;
-  const contas = (S.data.contas||[]);
-  const conta = contas.find(c=>c.nome===bn);
-  let total = conta ? contaSaldoAtual(conta) : 0;
-  (S.data.liquidez||[]).forEach(l=>{
-    const isLedger = l.nome===l.banco && contas.some(c=>c.nome===l.banco);
-    if(!isLedger && l.banco===bn) total += Number(l.valor)||0;
-  });
+  if(!bn) return 0; let total=0;
+  activeAccounts().filter(c=>normalizeAccountName(c.nome)===normalizeAccountName(bn)).forEach(c=>{total+=contaSaldoAtual(c);});
+  (S.data.liquidez||[]).forEach(l=>{if(l&&l.ledgerType!=='account_delta'&&normalizeAccountName(l.banco)===normalizeAccountName(bn))total+=Number(l.valor)||0;});
   return Math.round(total*100)/100;
 }
-/* ---------------- V6.22 — receitas/despesas ligadas a uma conta afetam o saldo real dela.
-   Nunca mexe quando a origem é reserva (Reservas.applyMoveEffect já cuida disso) nem quando é
-   compra no cartão de crédito (isso só afeta a fatura, não o banco, até a fatura ser paga). */
 function txContaDelta(tx){
-  if(!tx || !tx.banco) return 0;
-  if(tx.tipo==='receita') return (Number(tx.valor)||0) - (Number(tx.reservaValor)||0);
-  if(tx.tipo==='variavel' && tx.origemPagamento!=='reserva') return -(Number(tx.valor)||0);
+  if(!tx||!tx.accountId) return 0;
+  if(tx.tipo==='receita') return (Number(tx.valor)||0)-(Number(tx.reservaValor)||0);
+  if(tx.tipo==='variavel'&&tx.origemPagamento!=='reserva'&&tx.formaPagamento!=='Crédito') return -(Number(tx.valor)||0);
   return 0;
 }
-function applyTxSaldoEffect(tx){ const d=txContaDelta(tx); if(d) adjustLiquidez(tx.banco, d); }
-function reverseTxSaldoEffect(tx){ const d=txContaDelta(tx); if(d) adjustLiquidez(tx.banco, -d); }
+function applyTxSaldoEffect(tx){const d=txContaDelta(tx);if(d)return adjustLiquidez(tx.accountId,d);return true;}
+function reverseTxSaldoEffect(tx){const d=txContaDelta(tx);if(d)return adjustLiquidez(tx.accountId,-d);return true;}
+function runAtomicFinancialMutation(mutator,onError){
+  const before=JSON.parse(JSON.stringify(S.data));
+  try{ mutator(); return true; }
+  catch(err){
+    S.data=before;
+    try{ if(typeof saveCurrentData==='function') saveCurrentData(); }catch(_){}
+    console.error('[BORION][FINANCIAL_ROLLBACK]',err);
+    if(typeof onError==='function') onError(err);
+    return false;
+  }
+}
 
 /* ---------------- Global App State ---------------- */
 const S = {

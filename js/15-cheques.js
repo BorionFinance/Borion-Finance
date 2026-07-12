@@ -42,7 +42,7 @@ function chequeDueClass(ch){
 function chequeFilteredItems(){
   ensureChequesData();
   return (S.data.cheques.items||[])
-    .filter(ch=>bankMatches(ch.banco))
+    .filter(ch=>bankMatches(ch.banco,ch.accountId))
     .sort((a,b)=>(a.dataBom||'9999-12-31').localeCompare(b.dataBom||'9999-12-31'));
 }
 function chequeCategoryOptions(tipo){
@@ -55,10 +55,8 @@ function chequeCategoryOptions(tipo){
   }
   return Array.from(cats);
 }
-function chequeBankOptions(selected){
-  const banks = allBankNames();
-  if(selected && !banks.includes(selected)) banks.push(selected);
-  return ['— Nenhum —', ...banks.sort((a,b)=>a.localeCompare(b,'pt-BR'))];
+function chequeBankOptions(){
+  return accountSelectOptions({includeNone:true});
 }
 
 function renderCheques(){
@@ -174,11 +172,11 @@ const Cheques = {
   openChequeModal(tipo, id){
     ensureChequesData();
     const existing = id ? S.data.cheques.items.find(ch=>ch.id===id) : null;
-    const ch = existing || {tipo, status:chequeStatuses(tipo)[0], dataBase:todayISO(), dataBom:todayISO(), valor:0, banco:'— Nenhum —'};
+    const ch = existing || {tipo, status:chequeStatuses(tipo)[0], dataBase:todayISO(), dataBom:todayISO(), valor:0, accountId:'', banco:''};
     const fields = [
       {key:'tipo',label:'Tipo',type:'select',options:['recebido','emitido'],default:ch.tipo||tipo},
       {key:'status',label:'Status',type:'select',options:Array.from(new Set([...chequeStatuses('recebido'),...chequeStatuses('emitido')])),default:ch.status||chequeStatuses(tipo)[0]},
-      {key:'banco',label:'Banco/Conta',type:'select',options:chequeBankOptions(ch.banco),default:ch.banco||'— Nenhum —'},
+      {key:'accountId',label:'Banco/Conta',type:'select',options:chequeBankOptions(),default:ch.accountId||resolveAccountId(ch.banco)||''},
       {key:'numero',label:'Número do cheque',type:'text',default:ch.numero||''},
       {key:'valor',label:'Valor',type:'money',default:ch.valor||0},
       {key:'dataBase',label:(ch.tipo||tipo)==='emitido'?'Data de emissão':'Data de recebimento',type:'date',default:ch.dataBase||todayISO()},
@@ -196,7 +194,8 @@ const Cheques = {
       const item = Object.assign({}, ch, v);
       item.id = existing ? existing.id : uid();
       item.tipo = item.tipo==='emitido' ? 'emitido' : 'recebido';
-      if(item.banco==='— Nenhum —') item.banco='';
+      item.accountId = item.accountId || null;
+      item.banco = accountNameSnapshot(item.accountId, item.banco||'');
       item.valor = Number(item.valor)||0;
       item.criadoEm = item.criadoEm || new Date().toISOString();
       if(existing) Object.assign(existing, item); else S.data.cheques.items.push(item);
@@ -209,7 +208,7 @@ const Cheques = {
   openLoteModal(tipoDefault){
     const fields = [
       {key:'tipo',label:'Tipo',type:'select',options:['recebido','emitido'],default:tipoDefault||'recebido'},
-      {key:'banco',label:'Banco/Conta',type:'select',options:chequeBankOptions(),default:'— Nenhum —'},
+      {key:'accountId',label:'Banco/Conta',type:'select',options:chequeBankOptions(),default:''},
       {key:'quantidade',label:'Quantidade de cheques',type:'number',default:3},
       {key:'valor',label:'Valor',type:'money',default:0},
       {key:'modoValor',label:'Esse valor é',type:'select',options:['Valor de cada cheque','Valor total do lote'],default:'Valor de cada cheque'},
@@ -231,7 +230,7 @@ const Cheques = {
       const numBase = /^\d+$/.test(numStart) ? parseInt(numStart,10) : null;
       for(let i=0;i<qtd;i++){
         S.data.cheques.items.push({
-          id:uid(), tipo, status:chequeStatuses(tipo)[0], banco:v.banco==='— Nenhum —'?'':v.banco,
+          id:uid(), tipo, status:chequeStatuses(tipo)[0], accountId:v.accountId||null, banco:accountNameSnapshot(v.accountId||null),
           numero:numBase!=null ? String(numBase+i) : (i===0?numStart:''),
           valor:valorUnit, dataBase:todayISO(), dataBom:chequeAddDays(v.primeiraData, i*(Number(v.intervaloDias)||0)),
           pessoa:v.pessoa||'', cpfCnpj:'', contato:'', categoria:v.categoria||'Outro', lote:loteName, obs:v.obs||'', dataBaixa:'', motivoDevolucao:'', criadoEm:new Date().toISOString()

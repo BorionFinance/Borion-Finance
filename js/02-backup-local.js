@@ -9,7 +9,7 @@
 /* ---------------- Backup em pasta local (File System Access API — Chrome/Edge) ---------------- */
 const FS_ACCESS_SUPPORTED = typeof window!=='undefined' && 'showDirectoryPicker' in window;
 const IDB_NAME = 'borion_handles', IDB_STORE = 'handles';
-const BORION_APP_VERSION = '6.23.0';
+const BORION_APP_VERSION = '6.23.1';
 const BORION_BACKUP_CONSENT_PREFIX = 'borion_backup_consent_v2_';
 const BORION_BACKUP_LAST_CLOUD_PREFIX = 'borion_backup_last_cloud_v1_';
 const BORION_BACKUP_SNOOZE_PREFIX = 'borion_backup_consent_snooze_v1_';
@@ -176,7 +176,28 @@ async function buildCloudAccountBackupPayload(backupType='manual', reason=''){
     return fallback;
   }
 }
-async function buildFullBackupPayload(){ return await buildCloudAccountBackupPayload('manual','backup manual completo'); }
+
+async function finalizeBackupSnapshot(payload, backupType='manual', reason=''){
+  const out=backupSafeClone(payload||{});
+  const baseDate=out.exportedAt||new Date().toISOString();
+  out.exportedAt=baseDate;
+  out.backupType=backupType||out.backupType||'manual';
+  out.reason=reason||out.reason||'';
+  out.snapshotId=out.snapshotId||('snapshot_'+baseDate.replace(/[^0-9]/g,'')+'_'+Math.random().toString(36).slice(2,10));
+  out.snapshotBaseDate=baseDate;
+  const canonical=backupSafeClone(out); delete canonical.snapshotChecksum;
+  if(canonical.integrity) delete canonical.integrity.snapshotSha256;
+  const checksum=typeof sha256Hex==='function'?await sha256Hex(JSON.stringify(canonical)):((out.integrity&&out.integrity.sha256)||'');
+  out.snapshotChecksum=checksum;
+  out.integrity=Object.assign({},out.integrity||{},{snapshotSha256:checksum});
+  return out;
+}
+async function buildSharedBackupSnapshot(backupType='manual',reason=''){
+  const payload=await buildCloudAccountBackupPayload(backupType,reason);
+  return await finalizeBackupSnapshot(payload,backupType,reason);
+}
+
+async function buildFullBackupPayload(){ return await buildSharedBackupSnapshot('manual','backup manual completo'); }
 
 const BackupFS = {
   dirHandle: null,

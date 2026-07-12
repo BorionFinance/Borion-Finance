@@ -20,7 +20,7 @@ const BORION_LOCAL_BACKUPS_STORE = 'backups';
 /* Motivos que nunca são apagados automaticamente (mesmo espírito das regras de retenção
    já combinadas para o futuro backup no Google Drive). Só backups "auto" acima do limite
    entram na poda. */
-const BORION_LOCAL_BACKUPS_KEEP_REASONS = ['manual', 'before_import', 'before_restore', 'before_schema_migration'];
+const BORION_LOCAL_BACKUPS_KEEP_REASONS = ['manual', 'manual_quick', 'manual_drive_local', 'before_import', 'before_restore', 'before_schema_migration'];
 const BORION_LOCAL_BACKUPS_MAX_AUTO = 50;
 
 function localBackupsIdbOpen(){
@@ -143,20 +143,24 @@ const storageProvider = {
 
   /* Gera o JSON completo e guarda uma cópia no histórico local (IndexedDB), pra
      listBackups()/restoreBackup() funcionarem sem depender do Supabase. */
-  async createBackup(reason='manual'){
+  async createBackup(reason='manual', options={}){
     const reasonText = {
       manual: 'backup manual (storageProvider)',
       before_import: 'backup automático antes de importar JSON',
       before_restore: 'backup automático antes de restaurar backup local',
+      manual_quick: 'backup manual rápido neste dispositivo',
+      manual_drive_local: 'backup manual conjunto Drive e dispositivo',
       auto: 'backup automático'
     }[reason] || reason;
-    const payload = await buildCloudAccountBackupPayload(reason, reasonText);
+    const payload = options.payload ? options.payload : await buildSharedBackupSnapshot(reason, reasonText);
     const entry = {
-      id: 'bk_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+      id: payload.snapshotId || ('bk_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)),
       createdAt: Date.now(),
       reasonType: reason,
       appVersion: payload.appVersion || '',
       profileCount: payload.profileCount || 0,
+      snapshotId: payload.snapshotId||null,
+      snapshotChecksum: payload.snapshotChecksum||'',
       payload
     };
     await localBackupsPut(entry);

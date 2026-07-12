@@ -36,7 +36,7 @@ function renderCards(){
   const orgActive = !!(window.OrderPreferences && OrderPreferences.active);
   const canReorderNow = !!(window.OrderPreferences && OrderPreferences.canReorderNow());
   const showReorderContas = orgActive && canReorderNow;
-  const contasBase = S.data.contas.filter(a=>bankMatches(a.nome));
+  const contasBase = activeAccounts().filter(a=>bankMatches(a.nome,a.id));
   const contasOrdered = window.OrderPreferences ? OrderPreferences.applyOrder('contas', contasBase, {idKey:'id', labelKey:'nome'}) : contasBase;
   const contasNaturalIds = contasOrdered.map(a=>a.id);
   const accRows = contasOrdered.map(a=>`
@@ -113,7 +113,7 @@ function renderCards(){
     </div>`;
   }).join('');
 
-  const boletoBlocks = (S.data.boletos||[]).filter(b=>bankMatches(b.banco)).map(b=>{
+  const boletoBlocks = (S.data.boletos||[]).filter(b=>bankMatches(b.banco,b.accountId)).map(b=>{
     const st = boletoRestanteValor(b, S.month.y, S.month.m);
     const fim = shiftYM(b.dataInicio || monthKey(S.month.y,S.month.m), Number(b.parcelaTotal||1)-1);
     const statusColor = (b.status||'Ativo')==='Quitado' ? '#22c55e' : ((b.status||'Ativo')==='Cancelado' ? '#ef4444' : 'var(--gold-bright)');
@@ -140,7 +140,7 @@ function renderCards(){
      conta → conta). origemNome/destinoNome já vêm resolvidos e prontos para exibir; um
      ícone ◈ marca quando a ponta é uma reserva, para diferenciar de banco/conta. */
   const transfLegLabel = (tipo, nome)=> tipo==='reserva' ? `◈ ${esc(nome||'Reserva')}` : esc(nome||'');
-  const transfRows = (S.data.transferencias||[]).filter(t=>bankMatches(t.origemBanco||t.origemId)||bankMatches(t.destinoBanco||t.destinoId)).sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))).slice(0,15).map(t=>`
+  const transfRows = (S.data.transferencias||[]).filter(t=>bankMatches(t.origemBanco||t.origemId,t.origemAccountId)||bankMatches(t.destinoBanco||t.destinoId,t.destinoAccountId)).sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))).slice(0,15).map(t=>`
     <div class="installment-row">
       <span>${transfLegLabel(t.origemTipo,t.origemNome)} → ${transfLegLabel(t.destinoTipo,t.destinoNome)}${t.descricao?` <span style="color:var(--muted)">(${esc(t.descricao)})</span>`:''}${t.historico?` <span class="cat-pill" style="opacity:.8;">migrado</span>`:''}</span>
       <span>${brl(t.valor)}</span>
@@ -185,7 +185,7 @@ const Cards = {
       {key:'cor',label:'Cor',type:'color'},
       {key:'icone',label:'Símbolo/ícone',type:'text',default:'◈'},
     ], onSave(v){
-      S.data.contas.push({id:uid(), nome:v.nome||'Conta', tipo:v.tipo, saldoInicial:Number(v.saldoInicial)||0, rende:!!v.rende, percentualRendimento:Number(v.percentualRendimento)||0, cor:v.cor, icone:v.icone||'◈'});
+      S.data.contas.push({id:uid(), accountKind:'bank', active:true, createdAt:Date.now(), nome:(v.nome||'Conta').trim(), tipo:v.tipo, saldoInicial:Number(v.saldoInicial)||0, rende:!!v.rende, percentualRendimento:Number(v.percentualRendimento)||0, cor:v.cor, icone:v.icone||'◈'});
       saveCurrentData(); closeModal(); renderView();
     }});
   },
@@ -212,7 +212,14 @@ const Cards = {
       {key:'cor',label:'Cor',type:'color'},
       {key:'icone',label:'Símbolo/ícone',type:'text'},
     ], values:a,
-    onDelete(){ S.data.contas = S.data.contas.filter(x=>x.id!==id); saveCurrentData(); closeModal(); renderView(); },
+    onDelete(){
+      const linked=accountLinkedRecordCount(id);
+      openConfirmModal({title:'Excluir conta bancária?',text:linked?`Esta conta possui ${linked} lançamento(s) vinculado(s). Ela será removida das contas ativas, mas o histórico será preservado. Uma nova conta com o mesmo nome não herdará essas movimentações.`:'A conta será removida das contas ativas. O identificador histórico será preservado para impedir herança acidental de dados.',confirmLabel:'Arquivar conta',variant:'danger',onConfirm(){
+        a.active=false; a.archivedAt=Date.now(); a.deletedAt=a.archivedAt;
+        closeModal(); saveCurrentData(); renderView(); toast('Conta arquivada. Histórico e accountId preservados.');
+      }});
+      return false;
+    },
     onSave(v){ Object.assign(a,{nome:v.nome||a.nome, tipo:v.tipo, saldoInicial:Number(v.saldoInicial)||0, rende:!!v.rende, percentualRendimento:Number(v.percentualRendimento)||0, cor:v.cor, icone:v.icone||a.icone}); saveCurrentData(); closeModal(); renderView(); }});
   },
   addCartao(){
@@ -290,15 +297,16 @@ const Cards = {
     if(info.total<=0){ toast('Não há valor de fatura neste mês.'); return; }
     openModal({title:'Marcar fatura como paga', sub:'Escolha o banco usado para pagar a fatura de '+monthLabel(S.month.y,S.month.m)+'. O valor sai do saldo (liquidez) desse banco.', fields:[
       {key:'valor',label:'Valor pago (R$)',type:'money',default:info.total},
-      accountSelectField('faturapg',''),
+      accountSelectField('faturapg','',{key:'accountId'}),
       {key:'data',label:'Data do pagamento',type:'date',default:todayISO()},
     ], onSave(v){
-      const banco = requireBanco(v.banco,'Escolha o banco usado para pagar a fatura.');
-      if(!banco) return;
+      const accountId = requireAccountId(v.accountId,'Escolha a conta usada para pagar a fatura.');
+      if(!accountId) return;
+      const banco = accountNameSnapshot(accountId);
       const valor = Number(v.valor)||info.total;
       if(!c.faturasPagas) c.faturasPagas=[];
-      c.faturasPagas.push({id:uid(), competencia:info.competencia, valor, banco, data:v.data||todayISO(), createdAt:Date.now()});
-      adjustLiquidez(banco, -valor);
+      c.faturasPagas.push({id:uid(), competencia:info.competencia, valor, accountId, banco, data:v.data||todayISO(), createdAt:Date.now()});
+      adjustLiquidez(accountId, -valor);
       saveCurrentData(); closeModal(); renderView(); toast('Fatura marcada como paga. Saldo de '+banco+' atualizado.');
     }});
   },
@@ -309,7 +317,7 @@ const Cards = {
     if(idx<0) return;
     openConfirmModal({title:'Desfazer pagamento de fatura', text:'Desfazer este pagamento de fatura? O valor volta a aparecer como dívida e o saldo do banco é devolvido.', confirmLabel:'Desfazer pagamento', variant:'danger', onConfirm(){
       const pg = c.faturasPagas[idx];
-      adjustLiquidez(pg.banco, pg.valor);
+      adjustLiquidez(pg.accountId||resolveAccountId(pg.banco,{includeArchived:true}), pg.valor);
       c.faturasPagas.splice(idx,1);
       saveCurrentData(); renderView(); toast('Pagamento da fatura desfeito.');
     }});
@@ -321,7 +329,7 @@ const Cards = {
     openModal({title:isEdit?'Editar boleto':'Adicionar boleto', sub:'Use para boleto parcelado/carnê. Ele entra em Dívidas no Patrimônio, separado do cartão de crédito.', fields:[
       {key:'descricao',label:'Descrição do boleto',type:'text',placeholder:'Ex: Notebook, seguro, carnê...'},
       {key:'credor',label:'Para quem / empresa',type:'text',placeholder:'Ex: Loja, financeira, pessoa...'},
-      accountSelectField('boleto', b.banco),
+      accountSelectField('boleto', b.accountId||b.banco,{key:'accountId'}),
       {key:'categoria',label:'Categoria',type:'select',options:S.data.categorias.variavel,default:b.categoria||S.data.categorias.variavel[0]},
       {key:'valorParcela',label:'Valor de cada boleto (R$)',type:'money'},
       {key:'parcelaTotal',label:'Quantidade de boletos',type:'number',step:'1',default:1},
@@ -334,10 +342,11 @@ const Cards = {
     ], values:b,
     onDelete:isEdit?()=>{ unlinkBoletoFromDespesa(b); S.data.boletos = (S.data.boletos||[]).filter(x=>x.id!==id); saveCurrentData(); closeModal(); renderView(); }:null,
     onSave(v){
-      const banco = requireBanco(v.banco,'Escolha o banco/conta vinculado a este boleto.');
-      if(!banco) return;
+      const accountId = requireAccountId(v.accountId,'Escolha a conta vinculada a este boleto.');
+      if(!accountId) return;
+      const banco = accountNameSnapshot(accountId);
       if(!S.data.boletos) S.data.boletos=[];
-      const obj = {descricao:v.descricao||'Boleto', credor:v.credor||'', banco, categoria:v.categoria||'Outro', valorParcela:Number(v.valorParcela)||0, parcelaTotal:Math.max(1,Math.round(v.parcelaTotal)||1), dataInicio:v.dataInicio||monthKey(S.month.y,S.month.m), diaVencimento:v.diaVencimento||'', status:v.status||'Ativo', obs:v.obs||'', apareceDespesas:!!v.apareceDespesas, despesaTipo:v.despesaTipo||'variavel'};
+      const obj = {descricao:v.descricao||'Boleto', credor:v.credor||'', accountId, banco, categoria:v.categoria||'Outro', valorParcela:Number(v.valorParcela)||0, parcelaTotal:Math.max(1,Math.round(v.parcelaTotal)||1), dataInicio:v.dataInicio||monthKey(S.month.y,S.month.m), diaVencimento:v.diaVencimento||'', status:v.status||'Ativo', obs:v.obs||'', apareceDespesas:!!v.apareceDespesas, despesaTipo:v.despesaTipo||'variavel'};
       let alvo;
       if(isEdit){ Object.assign(b,obj); alvo=b; }
       else { alvo = Object.assign({id:uid(), createdAt:Date.now(), pagamentos:[], despesaTransacaoId:null, despesaTransacaoIds:[], despesaFixaId:null}, obj); S.data.boletos.push(alvo); }
@@ -355,15 +364,16 @@ const Cards = {
     if(info.total<=0){ toast('Não há parcela ativa neste mês.'); return; }
     openModal({title:'Marcar boleto como pago', sub:'Escolha o banco usado para pagar a parcela de '+monthLabel(S.month.y,S.month.m)+'. O valor sai do saldo (liquidez) desse banco.', fields:[
       {key:'valor',label:'Valor pago (R$)',type:'money',default:info.total},
-      accountSelectField('boletopg', b.banco),
+      accountSelectField('boletopg', b.accountId||b.banco,{key:'accountId'}),
       {key:'data',label:'Data do pagamento',type:'date',default:todayISO()},
     ], onSave(v){
-      const banco = requireBanco(v.banco,'Escolha o banco usado para pagar o boleto.');
-      if(!banco) return;
+      const accountId = requireAccountId(v.accountId,'Escolha a conta usada para pagar o boleto.');
+      if(!accountId) return;
+      const banco = accountNameSnapshot(accountId);
       const valor = Number(v.valor)||info.total;
       if(!Array.isArray(b.pagamentos)) b.pagamentos=[];
-      b.pagamentos.push({id:uid(), competencia:info.competencia, valor, banco, data:v.data||todayISO(), createdAt:Date.now()});
-      adjustLiquidez(banco, -valor);
+      b.pagamentos.push({id:uid(), competencia:info.competencia, valor, accountId, banco, data:v.data||todayISO(), createdAt:Date.now()});
+      adjustLiquidez(accountId, -valor);
       saveCurrentData(); closeModal(); renderView(); toast('Boleto marcado como pago. Saldo de '+banco+' atualizado.');
     }});
   },
@@ -374,7 +384,7 @@ const Cards = {
     if(idx<0) return;
     openConfirmModal({title:'Desfazer pagamento', text:'Desfazer este pagamento? O valor volta a aparecer como dívida e o saldo do banco é devolvido.', confirmLabel:'Desfazer pagamento', variant:'danger', onConfirm(){
       const pg = b.pagamentos[idx];
-      adjustLiquidez(pg.banco, pg.valor);
+      adjustLiquidez(pg.accountId||resolveAccountId(pg.banco,{includeArchived:true}), pg.valor);
       b.pagamentos.splice(idx,1);
       saveCurrentData(); renderView(); toast('Pagamento do boleto desfeito.');
     }});
@@ -389,29 +399,30 @@ const Cards = {
   editTransferencia(id){
     const isEdit = !!id;
     const t = isEdit ? (S.data.transferencias||[]).find(x=>x.id===id) : {origemTipo:'conta', origemId:'', destinoTipo:'conta', destinoId:'', valor:0, data:todayISO(), descricao:''};
-    const banks = accountSelectNames();
+    const accountOpts = accountSelectOptions();
+    const banks = activeAccounts();
     const reservaBoxesAll = reservasEnabled() ? ((S.data.reservas&&S.data.reservas.boxes)||[]).filter(r=>bankMatches(r.banco)) : [];
     const hasReservas = reservaBoxesAll.length>0;
-    if(banks.length<2 && !hasReservas){ alert('Cadastre pelo menos mais uma conta/banco além da Carteira, ou crie uma reserva, antes de transferir.'); return; }
+    if(accountOpts.length<2 && !hasReservas){ alert('Cadastre pelo menos mais uma conta/banco além da Carteira, ou crie uma reserva, antes de transferir.'); return; }
     const reservaLabelOf = r=>`${r.nome}${r.banco?' · '+r.banco:''}`;
     const findReservaByLabel = lbl => reservaBoxesAll.find(r=>reservaLabelOf(r)===lbl);
     const origemTipoIni = (isEdit && t.origemTipo==='reserva') ? 'reserva' : 'conta';
     const destinoTipoIni = (isEdit && t.destinoTipo==='reserva') ? 'reserva' : 'conta';
-    const origemContaIni = (isEdit && t.origemTipo==='conta' && banks.includes(t.origemId)) ? t.origemId : (banks[0]||'');
-    const destinoContaIni = (isEdit && t.destinoTipo==='conta' && banks.includes(t.destinoId)) ? t.destinoId : (banks[0]||'');
+    const origemContaIni = (isEdit && t.origemTipo==='conta' && accountById(t.origemAccountId||t.origemId)) ? (t.origemAccountId||t.origemId) : ((accountOpts[0]||{}).value||'');
+    const destinoContaIni = (isEdit && t.destinoTipo==='conta' && accountById(t.destinoAccountId||t.destinoId)) ? (t.destinoAccountId||t.destinoId) : ((accountOpts[0]||{}).value||'');
     const origemReservaObjIni = (isEdit && t.origemTipo==='reserva') ? reservaBoxesAll.find(r=>r.id===t.origemId) : null;
     const destinoReservaObjIni = (isEdit && t.destinoTipo==='reserva') ? reservaBoxesAll.find(r=>r.id===t.destinoId) : null;
     const fields = [];
     if(hasReservas){
       fields.push({key:'origemTipo',label:'De onde sai',type:'segmented',options:[{value:'conta',label:'Conta'},{value:'reserva',label:'Reserva'}],default:origemTipoIni});
-      fields.push({key:'origemConta',label:'Conta de origem',type:'select',options:banks.length?banks:['Nenhuma conta cadastrada'],default:origemContaIni,visibleWhen:{key:'origemTipo',value:'conta'}});
+      fields.push({key:'origemConta',label:'Conta de origem',type:'select',options:accountOpts.length?accountOpts:[{value:'',label:'Nenhuma conta cadastrada'}],default:origemContaIni,visibleWhen:{key:'origemTipo',value:'conta'}});
       fields.push({key:'origemReservaSel',label:'Reserva de origem',type:'select',options:reservaBoxesAll.map(reservaLabelOf),default:origemReservaObjIni?reservaLabelOf(origemReservaObjIni):reservaLabelOf(reservaBoxesAll[0]),visibleWhen:{key:'origemTipo',value:'reserva'}});
       fields.push({key:'destinoTipo',label:'Para onde vai',type:'segmented',options:[{value:'conta',label:'Conta'},{value:'reserva',label:'Reserva'}],default:destinoTipoIni});
-      fields.push({key:'destinoConta',label:'Conta de destino',type:'select',options:banks.length?banks:['Nenhuma conta cadastrada'],default:destinoContaIni,visibleWhen:{key:'destinoTipo',value:'conta'}});
+      fields.push({key:'destinoConta',label:'Conta de destino',type:'select',options:accountOpts.length?accountOpts:[{value:'',label:'Nenhuma conta cadastrada'}],default:destinoContaIni,visibleWhen:{key:'destinoTipo',value:'conta'}});
       fields.push({key:'destinoReservaSel',label:'Reserva de destino',type:'select',options:reservaBoxesAll.map(reservaLabelOf),default:destinoReservaObjIni?reservaLabelOf(destinoReservaObjIni):reservaLabelOf(reservaBoxesAll[0]),visibleWhen:{key:'destinoTipo',value:'reserva'}});
     } else {
-      fields.push({key:'origemConta',label:'Conta de origem',type:'select',options:banks,default:origemContaIni});
-      fields.push({key:'destinoConta',label:'Conta de destino',type:'select',options:banks,default:destinoContaIni});
+      fields.push({key:'origemConta',label:'Conta de origem',type:'select',options:accountOpts,default:origemContaIni});
+      fields.push({key:'destinoConta',label:'Conta de destino',type:'select',options:accountOpts,default:destinoContaIni});
     }
     fields.push({key:'valor',label:'Valor (R$)',type:'money',default:t.valor||0});
     fields.push({key:'data',label:'Data',type:'date',default:t.data||todayISO()});
@@ -429,8 +440,8 @@ const Cards = {
       const destinoReserva = destinoTipo==='reserva' ? findReservaByLabel(v.destinoReservaSel) : null;
       const origemId = origemTipo==='reserva' ? (origemReserva&&origemReserva.id) : v.origemConta;
       const destinoId = destinoTipo==='reserva' ? (destinoReserva&&destinoReserva.id) : v.destinoConta;
-      const origemNome = origemTipo==='reserva' ? (origemReserva&&origemReserva.nome) : v.origemConta;
-      const destinoNome = destinoTipo==='reserva' ? (destinoReserva&&destinoReserva.nome) : v.destinoConta;
+      const origemNome = origemTipo==='reserva' ? (origemReserva&&origemReserva.nome) : accountNameSnapshot(v.origemConta);
+      const destinoNome = destinoTipo==='reserva' ? (destinoReserva&&destinoReserva.nome) : accountNameSnapshot(v.destinoConta);
       if(!origemId || !destinoId){ alert('Escolha a origem e o destino da transferência.'); return; }
       if(origemTipo===destinoTipo && origemId===destinoId){ alert('A origem e o destino não podem ser os mesmos.'); return; }
       const valor = Number(v.valor)||0;
@@ -441,10 +452,10 @@ const Cards = {
         showReservaInsuficienteModal(origemReserva, valor);
         return;
       }
-      const obj = {origemTipo, origemId, origemNome, destinoTipo, destinoId, destinoNome, valor, data:v.data||todayISO(), descricao:v.descricao||'',
-        origemBanco: origemTipo==='reserva' ? (origemReserva&&origemReserva.banco||'') : origemId,
-        destinoBanco: destinoTipo==='reserva' ? (destinoReserva&&destinoReserva.banco||'') : destinoId,
-        contaOrigem: origemTipo==='conta'?origemId:'', contaDestino: destinoTipo==='conta'?destinoId:''};
+      const obj = {origemTipo, origemId, origemAccountId:origemTipo==='conta'?origemId:null, origemNome, destinoTipo, destinoId, destinoAccountId:destinoTipo==='conta'?destinoId:null, destinoNome, valor, data:v.data||todayISO(), descricao:v.descricao||'',
+        origemBanco: origemTipo==='reserva' ? (origemReserva&&origemReserva.banco||'') : origemNome,
+        destinoBanco: destinoTipo==='reserva' ? (destinoReserva&&destinoReserva.banco||'') : destinoNome,
+        contaOrigem: origemTipo==='conta'?origemNome:'', contaDestino: destinoTipo==='conta'?destinoNome:''};
       let alvo;
       if(isEdit){ Object.assign(t,obj); alvo=t; } else { alvo = Object.assign({id:uid(), createdAt:Date.now()}, obj); S.data.transferencias.push(alvo); }
       Cards.applyTransferenciaEffect(alvo);
@@ -462,7 +473,7 @@ const Cards = {
         t.origemMoveId = mv.id;
       }
     } else {
-      adjustLiquidez(t.origemId, -t.valor);
+      adjustLiquidez(t.origemAccountId||t.origemId, -t.valor);
     }
     if(t.destinoTipo==='reserva'){
       const bx = (S.data.reservas.boxes||[]).find(r=>r.id===t.destinoId);
@@ -473,7 +484,7 @@ const Cards = {
         t.destinoMoveId = mv.id;
       }
     } else {
-      adjustLiquidez(t.destinoId, t.valor);
+      adjustLiquidez(t.destinoAccountId||t.destinoId, t.valor);
     }
   },
   reverseTransferenciaEffect(t){
@@ -485,7 +496,7 @@ const Cards = {
         t.origemMoveId = null;
       }
     } else {
-      adjustLiquidez(t.origemId, t.valor);
+      adjustLiquidez(t.origemAccountId||t.origemId, t.valor);
     }
     if(t.destinoTipo==='reserva'){
       if(t.destinoMoveId){
@@ -494,7 +505,7 @@ const Cards = {
         t.destinoMoveId = null;
       }
     } else {
-      adjustLiquidez(t.destinoId, -t.valor);
+      adjustLiquidez(t.destinoAccountId||t.destinoId, -t.valor);
     }
   }
 };

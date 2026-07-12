@@ -52,14 +52,14 @@ function renderInvestments(){
 const Invest = {
   setMercado(m){ S.invMercado=m; renderView(); },
   addCaixa(){
-    openModal({title:'Adicionar em caixa', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor (R$)',type:'money'},bankSelectField()],
-      onSave(v){ S.data.investimentos.emCaixa.push({id:uid(),nome:v.nome,valor:Number(v.valor)||0,banco:v.banco==='— Nenhum —'?'':v.banco}); saveCurrentData(); closeModal(); renderView(); }});
+    openModal({title:'Adicionar em caixa', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor (R$)',type:'money'},bankSelectField(null,'',{key:'accountId'})],
+      onSave(v){ S.data.investimentos.emCaixa.push({id:uid(),nome:v.nome,valor:Number(v.valor)||0,accountId:v.accountId||null,banco:accountNameSnapshot(v.accountId)}); saveCurrentData(); closeModal(); renderView(); }});
   },
   editCaixa(id){
     const c = S.data.investimentos.emCaixa.find(x=>x.id===id);
-    openModal({title:'Editar item', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor (R$)',type:'money'},bankSelectField(c.banco)], values:c,
+    openModal({title:'Editar item', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor (R$)',type:'money'},bankSelectField(null,c.accountId||c.banco,{key:'accountId'})], values:c,
       onDelete(){ S.data.investimentos.emCaixa = S.data.investimentos.emCaixa.filter(x=>x.id!==id); saveCurrentData(); closeModal(); renderView(); },
-      onSave(v){ Object.assign(c,{nome:v.nome,valor:Number(v.valor)||0,banco:v.banco==='— Nenhum —'?'':v.banco}); saveCurrentData(); closeModal(); renderView(); }});
+      onSave(v){ Object.assign(c,{nome:v.nome,valor:Number(v.valor)||0,accountId:v.accountId||null,banco:accountNameSnapshot(v.accountId)}); saveCurrentData(); closeModal(); renderView(); }});
   },
   addAtivo(){
     openModal({title:'Adicionar ativo', fields:[
@@ -68,9 +68,9 @@ const Invest = {
       {key:'mercado',label:'Mercado',type:'select',options:['BR','US'],default:S.invMercado},
       {key:'investido',label:'Valor investido (R$)',type:'money'},
       {key:'atual',label:'Valor atual (R$)',type:'money'},
-      bankSelectField(),
+      bankSelectField(null,'',{key:'accountId'}),
     ], onSave(v){
-      S.data.investimentos.ativos.push({id:uid(),nome:v.nome,local:v.local,mercado:v.mercado,investido:Number(v.investido)||0,atual:Number(v.atual)||0,banco:v.banco==='— Nenhum —'?'':v.banco});
+      S.data.investimentos.ativos.push({id:uid(),nome:v.nome,local:v.local,mercado:v.mercado,investido:Number(v.investido)||0,atual:Number(v.atual)||0,accountId:v.accountId||null,banco:accountNameSnapshot(v.accountId)});
       saveCurrentData(); closeModal(); renderView();
     }});
   },
@@ -82,9 +82,9 @@ const Invest = {
       {key:'mercado',label:'Mercado',type:'select',options:['BR','US']},
       {key:'investido',label:'Valor investido (R$)',type:'money'},
       {key:'atual',label:'Valor atual (R$)',type:'money'},
-      bankSelectField(a.banco),
+      bankSelectField(null,a.accountId||a.banco,{key:'accountId'}),
     ], values:a,
     onDelete(){ S.data.investimentos.ativos = S.data.investimentos.ativos.filter(x=>x.id!==id); saveCurrentData(); closeModal(); renderView(); },
-    onSave(v){ Object.assign(a,{nome:v.nome,local:v.local,mercado:v.mercado,investido:Number(v.investido)||0,atual:Number(v.atual)||0,banco:v.banco==='— Nenhum —'?'':v.banco}); saveCurrentData(); closeModal(); renderView(); }});
+    onSave(v){ Object.assign(a,{nome:v.nome,local:v.local,mercado:v.mercado,investido:Number(v.investido)||0,atual:Number(v.atual)||0,accountId:v.accountId||null,banco:accountNameSnapshot(v.accountId)}); saveCurrentData(); closeModal(); renderView(); }});
   }
 };

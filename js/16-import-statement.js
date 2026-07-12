@@ -17,9 +17,8 @@ function renderImportStatement(){
   const selectedCount = rows.filter(r=>r.incluir).length;
   const receitas = rows.filter(r=>r.incluir && r.tipo==='receita').reduce((a,b)=>a+Number(b.valor||0),0);
   const despesas = rows.filter(r=>r.incluir && r.tipo!=='receita').reduce((a,b)=>a+Number(b.valor||0),0);
-  const bancoAtual = st.selectedBank || st.detectedBank || '';
-  const bancos = allBankNames();
-  const bankOptions = [`<option value="">Detectar/sem banco</option>`].concat(bancos.map(b=>`<option value="${esc(b)}" ${b===bancoAtual?'selected':''}>${esc(b)}</option>`)).join('');
+  const bancoAtual = resolveAccountId(st.selectedBank) || st.selectedBank || resolveAccountId(st.detectedBank) || '';
+  const bankOptions = [`<option value="">Escolha uma conta bancária ativa</option>`].concat(accountSelectOptions().map(o=>`<option value="${esc(o.value)}" ${o.value===bancoAtual?'selected':''}>${esc(o.label)}</option>`)).join('');
 
   return `
     <div class="import-hero">
@@ -110,8 +109,7 @@ function renderImportReviewTable(rows){
     const cats = (S.data.categorias[key]||['Outro']);
     return cats.map(c=>`<option value="${esc(c)}" ${c===selected?'selected':''}>${esc(c)}</option>`).join('');
   };
-  const bancos = allBankNames();
-  const bankOpts = (selected)=>`<option value="">— Nenhum —</option>` + bancos.map(b=>`<option value="${esc(b)}" ${b===selected?'selected':''}>${esc(b)}</option>`).join('');
+  const bankOpts = (selected)=>`<option value="">— Escolha uma conta —</option>` + accountSelectOptions().map(o=>`<option value="${esc(o.value)}" ${o.value===selected?'selected':''}>${esc(o.label)}</option>`).join('');
   const body = rows.map((r,i)=>`
     <tr class="${r.duplicado?'is-dup':''} ${!r.incluir?'is-muted':''}">
       <td><input type="checkbox" ${r.incluir?'checked':''} onchange="ImportStatement.update(${i},'incluir',this.checked)"></td>
@@ -126,7 +124,7 @@ function renderImportReviewTable(rows){
         </select>
       </td>
       <td><select class="mini-select" onchange="ImportStatement.update(${i},'categoria',this.value)">${catsOptions(r.tipo, r.categoria)}</select></td>
-      <td><select class="mini-select" onchange="ImportStatement.update(${i},'banco',this.value)">${bankOpts(r.banco||'')}</select></td>
+      <td><select class="mini-select" onchange="ImportStatement.update(${i},'accountId',this.value)">${bankOpts(r.accountId||resolveAccountId(r.banco)||'')}</select></td>
       <td>${r.duplicado?'<span class="dup-pill">duplicado</span>':'<span class="ok-pill">novo</span>'}</td>
       <td><button class="mini-danger" onclick="ImportStatement.removeRow('+i+')">Excluir</button></td>
     </tr>`).join('');
@@ -184,7 +182,7 @@ function dateFromOFX(s){
 }
 function detectBankFromText(text, fileName){
   const hay = normalizeText((fileName||'')+' '+(text||''));
-  const registered = allBankNames().find(b=> hay.includes(normalizeText(b)));
+  const registered = activeAccounts().map(c=>c.nome).find(b=> hay.includes(normalizeText(b)));
   if(registered) return registered;
   const patterns = [
     ['Mercado Pago', ['mercado pago','mercadopago','mercado livre']],
@@ -231,7 +229,8 @@ function pickCat(typeKey, preferred){
   return cats.includes(preferred) ? preferred : (cats.includes('Outro') ? 'Outro' : (cats[0]||'Outro'));
 }
 function duplicateKey(obj){
-  return [obj.data, Math.round(Math.abs(Number(obj.valor||0))*100), normalizeText(obj.nome).slice(0,38), normalizeText(obj.banco||'')].join('|');
+  const accountKey=obj.accountId||resolveAccountId(obj.banco,{includeArchived:true})||normalizeText(obj.banco||'');
+  return [obj.data, Math.round(Math.abs(Number(obj.valor||0))*100), normalizeText(obj.nome).slice(0,38), accountKey].join('|');
 }
 function isDuplicate(obj){
   const key = duplicateKey(obj);
@@ -241,7 +240,8 @@ function buildImportRow({data,nome,valor,banco,original,source}){
   const abs = Math.abs(Number(valor)||0);
   const tipo = inferType(nome, Number(valor)||0);
   const categoria = inferCategory(tipo, nome);
-  const row = {tempId:uid(), incluir:true, data, nome:cleanDesc(nome), valor:abs, tipo, categoria, banco:banco||'', original:original||'', source:source||'arquivo', duplicado:false};
+  const accountId=resolveAccountId(banco);
+  const row = {tempId:uid(), incluir:true, data, nome:cleanDesc(nome), valor:abs, tipo, categoria, accountId:accountId||'', banco:accountNameSnapshot(accountId,banco||''), original:original||'', source:source||'arquivo', duplicado:false};
   row.duplicado = isDuplicate(row);
   if(row.duplicado) row.incluir=false;
   return row;
@@ -375,8 +375,8 @@ const ImportStatement = {
         st.rawText = text;
         const parsed = parseAnyStatement(text, file.name, fallbackYM);
         st.detectedBank = parsed.bank || '';
-        st.selectedBank = st.selectedBank || st.detectedBank || '';
-        st.parsed = parsed.rows.map(r=>{ if(st.selectedBank && !r.banco) r.banco=st.selectedBank; r.duplicado=isDuplicate(r); if(r.duplicado) r.incluir=false; return r; });
+        st.selectedBank = resolveAccountId(st.selectedBank) || resolveAccountId(st.detectedBank) || '';
+        st.parsed = parsed.rows.map(r=>{ const id=resolveAccountId(st.selectedBank)||r.accountId||resolveAccountId(r.banco); if(id){r.accountId=id;r.banco=accountNameSnapshot(id,r.banco);} r.duplicado=isDuplicate(r); if(r.duplicado) r.incluir=false; return r; });
         if(!st.parsed.length && !st.lastError) st.lastError='Arquivo lido, mas não encontrei lançamentos. Tente CSV/OFX ou um PDF com texto selecionável.';
         st.loading=false; renderView();
       }catch(e){ console.error(e); st.lastError='Erro ao interpretar o arquivo: '+(e.message||e); st.loading=false; renderView(); }
@@ -389,16 +389,16 @@ const ImportStatement = {
     if(!st.rawText || !st.fileName) return;
     const parsed = parseAnyStatement(st.rawText, st.fileName, ym || monthKey(S.month.y,S.month.m));
     st.detectedBank = parsed.bank || st.detectedBank || '';
-    st.parsed = parsed.rows.map(r=>{ if(st.selectedBank && !r.banco) r.banco=st.selectedBank; r.duplicado=isDuplicate(r); if(r.duplicado) r.incluir=false; return r; });
+    st.parsed = parsed.rows.map(r=>{ const id=resolveAccountId(st.selectedBank)||r.accountId||resolveAccountId(r.banco); if(id){r.accountId=id;r.banco=accountNameSnapshot(id,r.banco);} r.duplicado=isDuplicate(r); if(r.duplicado) r.incluir=false; return r; });
     renderView();
   },
-  setBank(bank, applyMissing){
-    const st=ensureImportState(); st.selectedBank=bank||'';
-    if(applyMissing){ st.parsed.forEach(r=>{ if(!r.banco || r.banco===st.detectedBank) r.banco=st.selectedBank; r.duplicado=isDuplicate(r); if(r.duplicado) r.incluir=false; }); }
+  setBank(accountId, applyMissing){
+    const st=ensureImportState(); st.selectedBank=resolveAccountId(accountId)||'';
+    if(applyMissing){ st.parsed.forEach(r=>{ if(!r.accountId || r.banco===st.detectedBank){ r.accountId=st.selectedBank; r.banco=accountNameSnapshot(st.selectedBank,r.banco); } r.duplicado=isDuplicate(r); if(r.duplicado) r.incluir=false; }); }
     renderView();
   },
-  applyBankToAll(){ const st=ensureImportState(); const bank = document.getElementById('import_bank')?.value || st.selectedBank || st.detectedBank || ''; st.selectedBank=bank; st.parsed.forEach(r=>{ r.banco=bank; r.duplicado=isDuplicate(r); if(r.duplicado) r.incluir=false; }); renderView(); },
-  update(i,k,v){ const st=ensureImportState(); if(!st.parsed[i]) return; st.parsed[i][k]=v; if(['data','nome','valor','banco'].includes(k)){ st.parsed[i].duplicado=isDuplicate(st.parsed[i]); if(st.parsed[i].duplicado) st.parsed[i].incluir=false; } renderView(); },
+  applyBankToAll(){ const st=ensureImportState(); const accountId = resolveAccountId(document.getElementById('import_bank')?.value || st.selectedBank); st.selectedBank=accountId||''; st.parsed.forEach(r=>{ r.accountId=accountId||''; r.banco=accountNameSnapshot(accountId); r.duplicado=isDuplicate(r); if(r.duplicado) r.incluir=false; }); renderView(); },
+  update(i,k,v){ const st=ensureImportState(); if(!st.parsed[i]) return; st.parsed[i][k]=v; if(k==='accountId') st.parsed[i].banco=accountNameSnapshot(v); if(['data','nome','valor','accountId'].includes(k)){ st.parsed[i].duplicado=isDuplicate(st.parsed[i]); if(st.parsed[i].duplicado) st.parsed[i].incluir=false; } renderView(); },
   updateMoney(i,value){ const n = Math.abs(parseMoneyAny(value)); this.update(i,'valor',n); },
   updateType(i,tipo){ const st=ensureImportState(); const r=st.parsed[i]; if(!r) return; r.tipo=tipo; r.categoria=inferCategory(tipo,r.nome); renderView(); },
   removeRow(i){ const st=ensureImportState(); st.parsed.splice(i,1); renderView(); },
@@ -441,20 +441,43 @@ const ImportStatement = {
     const st=ensureImportState();
     const selected = st.parsed.filter(r=>r.incluir);
     if(!selected.length){ toast('Nada selecionado para importar.'); return; }
-    let trans=0, fixas=0, ignored=0;
-    selected.forEach(r=>{
-      if(isDuplicate(r)){ ignored++; return; }
-      const banco = r.banco || st.selectedBank || st.detectedBank || '';
-      if(r.tipo==='fixa'){
-        const day = Math.min(31, Math.max(1, parseInt((r.data||'').slice(8,10),10)||1));
-        S.data.fixas.push({id:uid(), nome:r.nome||'Despesa fixa importada', categoria:r.categoria||pickCat('fixa','Outro'), valor:Number(r.valor)||0, dia:day, startMonth:(r.data||todayISO()).slice(0,7), endMonth:null, banco, origemImportacao:{arquivo:st.fileName, original:r.original||''}});
-        fixas++;
-      } else {
-        S.data.transacoes.push({id:uid(), tipo:r.tipo==='receita'?'receita':'variavel', nome:r.nome||'Lançamento importado', data:r.data||todayISO(), categoria:r.categoria||pickCat(r.tipo==='receita'?'receita':'variavel','Outro'), valor:Number(r.valor)||0, banco, origemImportacao:{arquivo:st.fileName, original:r.original||''}});
-        trans++;
+
+    const prepared=[]; let ignored=0;
+    for(const r of selected){
+      if(isDuplicate(r)){ ignored++; continue; }
+      const accountId=resolveAccountId(r.accountId||st.selectedBank||r.banco);
+      if(!accountId){
+        showBankRequiredModal('Escolha uma conta bancária ativa para todos os lançamentos selecionados antes de importar.');
+        return;
       }
-    });
-    saveCurrentData();
+      const valor=Number(r.valor)||0;
+      if(valor<=0 || !r.data || !r.nome){ toast('Revise data, descrição e valor dos lançamentos antes de importar.'); return; }
+      prepared.push({r,accountId,banco:accountNameSnapshot(accountId)});
+    }
+
+    const before=JSON.parse(JSON.stringify(S.data));
+    let trans=0, fixas=0;
+    try{
+      prepared.forEach(({r,accountId,banco})=>{
+        if(r.tipo==='fixa'){
+          const day = Math.min(31, Math.max(1, parseInt((r.data||'').slice(8,10),10)||1));
+          S.data.fixas.push({id:uid(), nome:r.nome||'Despesa fixa importada', categoria:r.categoria||pickCat('fixa','Outro'), valor:Number(r.valor)||0, dia:day, startMonth:(r.data||todayISO()).slice(0,7), endMonth:null, accountId, banco, origemImportacao:{arquivo:st.fileName, original:r.original||''}});
+          fixas++;
+        } else {
+          const tx={id:uid(), tipo:r.tipo==='receita'?'receita':'variavel', nome:r.nome||'Lançamento importado', data:r.data||todayISO(), categoria:r.categoria||pickCat(r.tipo==='receita'?'receita':'variavel','Outro'), valor:Number(r.valor)||0, accountId, banco, formaPagamento:r.tipo==='receita'?'Conta':'Débito/Pix', origemImportacao:{arquivo:st.fileName, original:r.original||''}};
+          S.data.transacoes.push(tx);
+          applyTxSaldoEffect(tx);
+          trans++;
+        }
+      });
+      saveCurrentData();
+    }catch(e){
+      console.error('[IMPORT][ROLLBACK]',e);
+      S.data=before;
+      saveCurrentData();
+      toast('A importação falhou e nenhuma alteração financeira foi mantida.');
+      return;
+    }
     S.importState = {fileName:'', fileType:'', rawText:'', detectedBank:'', selectedBank:'', parsed:[], lastError:'', loading:false, stats:{}};
     renderView();
     toast(`Importação concluída: ${trans} lançamento(s), ${fixas} fixa(s)${ignored?`, ${ignored} duplicado(s) ignorado(s)`:''}.`);
@@ -466,7 +489,8 @@ const ImportStatement = {
     const st=ensureImportState();
     const selected = st.parsed.filter(r=>r.incluir);
     if(!selected.length){ toast('Nada selecionado para importar como saldo de reserva.'); return; }
-    const bancoPadrao = st.selectedBank || st.detectedBank || '';
+    const accountIdPadrao = resolveAccountId(st.selectedBank)||resolveAccountId(st.detectedBank)||null;
+    const bancoPadrao = accountNameSnapshot(accountIdPadrao,st.detectedBank||'');
     openModal({
       title:'Importar como saldo de reserva',
       sub:'Os '+selected.length+' lançamento(s) selecionados serão lançados como movimentações de uma reserva (não como lançamentos comuns). Escolha o nome da reserva de destino — se já existir uma reserva com esse nome, o saldo é somado a ela.',
@@ -478,7 +502,7 @@ const ImportStatement = {
         const nome = (v.reservaNome||'').trim() || 'Reserva importada';
         if(!S.data.reservas) S.data.reservas={enabled:true, boxes:[], moves:[]};
         let box = S.data.reservas.boxes.find(b=>b.nome===nome);
-        if(!box){ box={id:uid(), nome, banco:bancoPadrao, valorAtual:0, valorMeta:0, status:'Ativa', metaId:null}; S.data.reservas.boxes.push(box); }
+        if(!box){ box={id:uid(), nome, accountId:accountIdPadrao, banco:bancoPadrao, valorAtual:0, valorMeta:0, status:'Ativa', metaId:null}; S.data.reservas.boxes.push(box); }
         selected.forEach(r=>{
           const v2 = Number(r.valor)||0;
           box.valorAtual = Math.round(((Number(box.valorAtual)||0) + v2)*100)/100;

@@ -32,8 +32,8 @@ function renderSettings(){
   else if(S.settingsTab==='categories') content = renderSettingsCategories();
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.23.0 • Assinaturas, módulos, backup rápido e relógio</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
-<div><strong>Versão:</strong> 6.23.0</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.23.1 • Assinaturas, módulos, backup rápido e relógio</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
+<div><strong>Versão:</strong> 6.23.1</div>
 <div><strong>Lançamento:</strong> 09/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -168,10 +168,12 @@ const Settings = {
       // V6.22 — dispara os dois ao mesmo tempo (mesmo instante/estado dos dados), nunca um
       // depois do outro: cada destino usa seu próprio mecanismo já existente, mas os dois
       // partem do mesmo S.data, no mesmo clique — nunca dois snapshots de momentos diferentes.
-      const hasDrive = !!(window.GoogleDriveProvider && GoogleDriveProvider.isConnected());
-      const [driveRes, localRes] = await Promise.allSettled([
-        hasDrive ? GoogleDriveProvider.createBackup('manual_drive_local') : Promise.reject(new Error('nenhuma conta do Google Drive conectada')),
-        storageProvider.createBackup('manual_drive_local')
+      const hasDrive=!!(window.GoogleDriveProvider&&GoogleDriveProvider.isConnected());
+      // Um único objeto imutável é gerado uma vez e entregue aos dois destinos.
+      const sharedSnapshot=await buildSharedBackupSnapshot('manual_drive_local','backup manual conjunto Drive e dispositivo');
+      const [driveRes,localRes]=await Promise.allSettled([
+        hasDrive?GoogleDriveProvider.createBackup('manual_drive_local',{payload:sharedSnapshot}):Promise.reject(new Error('nenhuma conta do Google Drive conectada')),
+        storageProvider.createBackup('manual_drive_local',{payload:sharedSnapshot})
       ]);
       const driveMsg = driveRes.status==='fulfilled' ? 'Google Drive: backup criado com sucesso.' : 'Google Drive: falha ao criar backup — '+((driveRes.reason&&driveRes.reason.message)||'erro desconhecido')+'.';
       const localMsg = localRes.status==='fulfilled' ? 'Este dispositivo: backup criado com sucesso.' : 'Este dispositivo: falha ao criar backup — '+((localRes.reason&&localRes.reason.message)||'erro desconhecido')+'.';

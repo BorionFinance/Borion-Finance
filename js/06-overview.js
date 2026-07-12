@@ -3,7 +3,7 @@
 /* ---------------- VIEW: OVERVIEW ---------------- */
 
 /* ---------------- Visão Geral: cálculos auxiliares ---------------- */
-function caixaDisponivel(){ return liquidezTotal() + sumBy(S.data.investimentos.emCaixa.filter(c=>bankMatches(c.banco)),'valor'); }
+function caixaDisponivel(){ return liquidezTotal() + sumBy(S.data.investimentos.emCaixa.filter(c=>bankMatches(c.banco,c.accountId)),'valor'); }
 function patrimonioLiquido(){ return liquidezTotal() + reservasTotal() + investAtualTotal(); }
 
 function fluxoMensalData(){
@@ -32,7 +32,7 @@ function evolucaoDividasData(){
 function gastosPorCategoriaSegments(y=S.month.y, m=S.month.m){
   const totals = {};
   fixasAtivasNoMes(y,m).forEach(f=> totals[f.categoria]=(totals[f.categoria]||0)+Number(f.valor||0));
-  txInMonth(S.data.transacoes.filter(t=>t.tipo==='variavel'&&bankMatches(t.banco)), y, m).forEach(t=> totals[t.categoria]=(totals[t.categoria]||0)+Number(t.valor||0));
+  txInMonth(S.data.transacoes.filter(t=>t.tipo==='variavel'&&bankMatches(t.banco,t.accountId)), y, m).forEach(t=> totals[t.categoria]=(totals[t.categoria]||0)+Number(t.valor||0));
   assinaturasAtivasNoMes(y,m).forEach(a=> totals[a.categoria]=(totals[a.categoria]||0)+Number(a.valor||0));
   return Object.keys(totals).map(k=>({label:k, value:totals[k], color:catColor(k)}));
 }

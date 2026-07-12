@@ -1,3 +1,18 @@
+## V6.23.1 — Integridade financeira por accountId, assinaturas históricas e snapshot único (12/07/2026)
+
+Correção de integridade sobre a V6.23.0, sem reestruturar o projeto e sem alterar o comportamento de Reservas/Cofrinhos.
+
+- **Contas deixaram de ser vinculadas pelo nome**: saldo, lançamentos, transferências, pagamentos de fatura/boleto, cheques, metas, bens, investimentos, assinaturas e importação usam `accountId`. O nome virou apenas fotografia de exibição.
+- **Exclusão segura**: contas com histórico são arquivadas, somem das contas ativas e do saldo atual, mas preservam o ID e os lançamentos. Uma nova conta com o mesmo nome recebe UUID novo e nunca herda o ledger anterior.
+- **Nomes iguais e renomeação**: duas contas homônimas são independentes e aparecem desambiguadas pelo início do ID nos seletores. Renomear não altera o ID nem quebra o histórico.
+- **Migração defensiva**: cria snapshot interno antes de migrar; resolve nomes somente quando existe uma única conta compatível. Vínculos ambíguos ficam em `accountMigrationReview`, sem distribuir valores silenciosamente.
+- **Cartão separado de conta**: fatura, limite, parcelas e compras no crédito não entram no card Saldo em Contas. O banco só é reduzido quando a fatura é efetivamente paga por uma conta selecionada.
+- **Assinaturas em ocorrências próprias**: previsão futura não mexe no saldo; pausa/retomada preserva períodos; edição cria nova versão a partir do mês; exclusão encerra o futuro sem apagar o passado; falha de cartão é retentável e idempotente.
+- **Edição atômica de lançamentos**: primeiro valida todos os campos; só depois reverte/aplica efeitos. Qualquer falha restaura lançamento e saldo anteriores.
+- **Drive&Local**: um único snapshot é gerado uma vez e enviado aos dois destinos com o mesmo `snapshotId`, data-base, versão e SHA-256. Backups `manual`, `manual_quick` e `manual_drive_local` ficam protegidos da limpeza automática.
+- **Importador de extratos**: exige conta ativa por ID, valida tudo antes de gravar e reverte integralmente em caso de erro.
+- **Testes de regressão**: 18 cenários automatizados cobrindo os 12 testes obrigatórios, migração ambígua, separação cartão/conta, seletores e integridade do snapshot.
+
 ## V6.23.0 — Assinaturas, módulos Investimentos/Agenda, 3 botões de backup e relógio (12/07/2026)
 
 Segunda parte do pedido grande (a primeira foi a V6.22.0, o Saldo em Contas).

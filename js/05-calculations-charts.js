@@ -9,7 +9,7 @@ function sumBy(list, key){ return list.reduce((a,b)=>a+(Number(b[key])||0),0); }
 
 function fixasAtivasNoMes(y=S.month.y, m=S.month.m){
   const key = monthKey(y,m);
-  return S.data.fixas.filter(f=> f.startMonth<=key && (!f.endMonth || key<=f.endMonth) && bankMatches(f.banco));
+  return S.data.fixas.filter(f=> f.startMonth<=key && (!f.endMonth || key<=f.endMonth) && bankMatches(f.banco,f.accountId));
 }
 /* V5.37.0 — lista de {y,m,key} (y/m 0-indexados, no formato usado por S.month) entre
    duas datas ISO (yyyy-mm-dd), inclusive, cobrindo cada mês tocado pelo intervalo.
@@ -50,13 +50,13 @@ function fixaOcorrenciaStatus(f, mesKey){
   return dueDate < todayISO() ? 'Vencido' : 'Pendente';
 }
 function fixaMes(y=S.month.y, m=S.month.m){ return sumBy(fixasAtivasNoMes(y,m),'valor'); }
-function variavelMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='variavel'&&bankMatches(t.banco)), y, m),'valor'); }
+function variavelMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='variavel'&&bankMatches(t.banco,t.accountId)), y, m),'valor'); }
 /* Receita do mês = só dinheiro próprio (origem 'propria'). Reembolso/repasse de terceiros não contam como renda. */
-function receitaMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&(t.origem==null||t.origem==='propria')&&bankMatches(t.banco)), y, m),'valor'); }
+function receitaMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&(t.origem==null||t.origem==='propria')&&bankMatches(t.banco,t.accountId)), y, m),'valor'); }
 /* Entradas que não são renda própria: reembolsos recebidos + repasses de terceiros (ex: alguém te manda dinheiro para pagar uma conta). */
-function receitaExtraMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&(t.origem==='reembolso'||t.origem==='repasse')&&bankMatches(t.banco)), y, m),'valor'); }
-function reembolsosMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&t.origem==='reembolso'&&bankMatches(t.banco)), y, m),'valor'); }
-function repassesMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&t.origem==='repasse'&&bankMatches(t.banco)), y, m),'valor'); }
+function receitaExtraMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&(t.origem==='reembolso'||t.origem==='repasse')&&bankMatches(t.banco,t.accountId)), y, m),'valor'); }
+function reembolsosMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&t.origem==='reembolso'&&bankMatches(t.banco,t.accountId)), y, m),'valor'); }
+function repassesMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&t.origem==='repasse'&&bankMatches(t.banco,t.accountId)), y, m),'valor'); }
 function despesasMes(y=S.month.y, m=S.month.m){ return fixaMes(y,m)+variavelMes(y,m)+assinaturasMes(y,m); }
 function investirPlanejado(){ return S.data.investirPlanejado[monthKey(S.month.y,S.month.m)] || 0; }
 function saldoMes(){ return receitaMes() - despesasMes() - investirPlanejado(); }
@@ -248,7 +248,7 @@ function boletoParcelaDoMes(boletoId, y=S.month.y, m=S.month.m){
 function computeBoletosDebt(y=S.month.y, m=S.month.m){
   let total=0;
   const detail=[];
-  (S.data.boletos||[]).filter(b=>bankMatches(b.banco)).forEach(b=>{
+  (S.data.boletos||[]).filter(b=>bankMatches(b.banco,b.accountId)).forEach(b=>{
     const st = boletoRestanteValor(b,y,m);
     if(st.ativo && st.restante>0){
       total += st.restante;
@@ -274,13 +274,13 @@ function computeCardsDebt(y=S.month.y, m=S.month.m){
   return {total: Math.round((total + bol.total)*100)/100, detail: detail.concat(bol.detail), cartoesTotal: total, boletosTotal: bol.total, boletosDetail: bol.detail};
 }
 function investAtualTotal(){
-  const ativos = sumBy(S.data.investimentos.ativos.filter(a=>bankMatches(a.banco)),'atual');
-  const caixa = sumBy(S.data.investimentos.emCaixa.filter(c=>bankMatches(c.banco)),'valor');
+  const ativos = sumBy(S.data.investimentos.ativos.filter(a=>bankMatches(a.banco,a.accountId)),'atual');
+  const caixa = sumBy(S.data.investimentos.emCaixa.filter(c=>bankMatches(c.banco,c.accountId)),'valor');
   return ativos+caixa;
 }
 function investInvestidoTotal(){
-  const ativos = sumBy(S.data.investimentos.ativos.filter(a=>bankMatches(a.banco)),'investido');
-  const caixa = sumBy(S.data.investimentos.emCaixa.filter(c=>bankMatches(c.banco)),'valor');
+  const ativos = sumBy(S.data.investimentos.ativos.filter(a=>bankMatches(a.banco,a.accountId)),'investido');
+  const caixa = sumBy(S.data.investimentos.emCaixa.filter(c=>bankMatches(c.banco,c.accountId)),'valor');
   return ativos+caixa;
 }
 /* V6.22 — "liquidez" agora é derivada (saldo real das contas cadastradas), nunca digitada à
@@ -292,7 +292,7 @@ function reservasEnabled(){ return !!(S.data && S.data.modules && S.data.modules
 function investmentsEnabled(){ return !!(S.data && S.data.modules && S.data.modules.investments !== false); }
 function agendaEnabled(){ return !!(S.data && S.data.modules && S.data.modules.agenda !== false); }
 function reservasTotal(){ return reservasEnabled() ? sumBy((S.data.reservas.boxes||[]).filter(r=>bankMatches(r.banco)),'valorAtual') : 0; }
-function bensTotal(){ return sumBy(S.data.bens.filter(b=>bankMatches(b.banco)),'valor'); }
+function bensTotal(){ return sumBy(S.data.bens.filter(b=>bankMatches(b.banco,b.accountId)),'valor'); }
 function patrimonioTotal(){
   return liquidezTotal() + reservasTotal() + bensTotal() + investAtualTotal() - computeCardsDebt().total;
 }

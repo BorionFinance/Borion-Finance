@@ -40,7 +40,7 @@ function openModal({title, sub, fields, values={}, saveLabel, onSave, onDelete, 
     const val = fieldInitialVal(f);
     let fieldHtml;
     if(f.type==='select'){
-      const opts = f.options.map(o=>`<option value="${esc(o)}" ${String(o)===String(val)?'selected':''}>${esc(o)}</option>`).join('');
+      const opts = (f.options||[]).map(o=>{ const value=(o&&typeof o==='object')?o.value:o; const label=(o&&typeof o==='object')?o.label:o; return `<option value="${esc(value)}" ${String(value)===String(val)?'selected':''}>${esc(label)}</option>`; }).join('');
       fieldHtml = `<div class="field"><label>${esc(f.label)}</label><select id="mf_${f.key}">${opts}</select></div>`;
     } else if(f.type==='checkbox'){
       fieldHtml = `<div class="field-check"><input type="checkbox" id="mf_${f.key}" ${val?'checked':''}/> <label style="margin:0;" for="mf_${f.key}">${esc(f.label)}</label></div>`;
@@ -133,7 +133,8 @@ function openModal({title, sub, fields, values={}, saveLabel, onSave, onDelete, 
   if(onDelete){
     $('#mf_delete').onclick = ()=>{
       const snapshot = JSON.parse(JSON.stringify(S.data));
-      onDelete();
+      const result=onDelete();
+      if(result===false) return;
       showUndoToast('Item excluído.', ()=>{ S.data = snapshot; saveCurrentData(); renderView(); });
     };
   }

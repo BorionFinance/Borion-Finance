@@ -11,7 +11,7 @@ function patrimonioComposicaoSegments(){
   }
   if(reservas>0) segs.push({label:'Reserva', value:reservas, color:'var(--gold)'});
   saldoContasDetalhe().forEach(l=> segs.push({label:l.nome, value:l.valor, color:catColor(l.nome)}));
-  S.data.bens.filter(b=>bankMatches(b.banco)).forEach(b=> segs.push({label:b.nome, value:b.valor, color:catColor(b.nome)}));
+  S.data.bens.filter(b=>bankMatches(b.banco,b.accountId)).forEach(b=> segs.push({label:b.nome, value:b.valor, color:catColor(b.nome)}));
   return segs;
 }
 function renderPatrimony(){
@@ -26,7 +26,7 @@ function renderPatrimony(){
   const liqEmpty = !saldoContasRows.length
     ? `<div class="empty-note">Nenhuma conta bancária cadastrada ainda.</div><button class="btn-outline btn-sm" style="margin-top:8px;" onclick="Patr.goAddConta()">+ Adicionar conta</button>`
     : '';
-  const bensRows = S.data.bens.filter(b=>bankMatches(b.banco)).map(b=>`
+  const bensRows = S.data.bens.filter(b=>bankMatches(b.banco,b.accountId)).map(b=>`
     <div class="list-row"><span class="lname">${esc(b.nome)}</span><span class="lval">${brl(b.valor)}</span><button class="ledit" onclick="Patr.editBem('${b.id}')">✎</button></div>`).join('');
   const dividasDetail = divDebt.detail;
   const divRows = dividasDetail.map(d=>{
@@ -91,7 +91,7 @@ function renderPatrimony(){
 }
 
 function renderMetasList(){
-  const metas = (S.data.metas||[]).filter(mt=>bankMatches(mt.banco));
+  const metas = (S.data.metas||[]).filter(mt=>bankMatches(mt.banco,mt.accountId));
   if(!metas.length) return '<div class="empty-note">Nenhuma meta cadastrada ainda'+(S.bankFilter?' para o filtro de banco atual':'')+'.</div>';
   return metas.map(mt=>{
     const pct = mt.valorMeta>0 ? Math.min(100, Math.round(mt.valorAtual/mt.valorMeta*100)) : 0;
@@ -119,24 +119,24 @@ const Patr = {
     setTimeout(()=>{ if(typeof Cards!=='undefined' && Cards.addConta) Cards.addConta(); }, 80);
   },
   addLiquidez(){
-    openModal({title:'Adicionar ativo de liquidez', sub:'Valor neste mês.', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor',type:'money'},bankSelectField()],
-      onSave(v){ S.data.liquidez.push({id:uid(),nome:v.nome,valor:Number(v.valor)||0,banco:v.banco==='— Nenhum —'?'':v.banco}); saveCurrentData(); closeModal(); renderView(); }});
+    openModal({title:'Adicionar ativo de liquidez', sub:'Valor neste mês.', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor',type:'money'},bankSelectField(null,'',{key:'accountId'})],
+      onSave(v){ S.data.liquidez.push({id:uid(),nome:v.nome,valor:Number(v.valor)||0,accountId:v.accountId||null,banco:accountNameSnapshot(v.accountId)}); saveCurrentData(); closeModal(); renderView(); }});
   },
   editLiquidez(id){
     const l = S.data.liquidez.find(x=>x.id===id);
-    openModal({title:'Editar ativo extra (não vinculado a uma conta)', sub:'Item criado antes da conta bancária virar automática. Se preferir, exclua e cadastre uma conta de verdade em Cartões e Contas.', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor',type:'money'},bankSelectField(l.banco)], values:l,
+    openModal({title:'Editar ativo extra (não vinculado a uma conta)', sub:'Item criado antes da conta bancária virar automática. Se preferir, exclua e cadastre uma conta de verdade em Cartões e Contas.', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor',type:'money'},bankSelectField(null,l.accountId||l.banco,{key:'accountId'})], values:l,
       onDelete(){ S.data.liquidez = S.data.liquidez.filter(x=>x.id!==id); saveCurrentData(); closeModal(); renderView(); },
-      onSave(v){ Object.assign(l,{nome:v.nome,valor:Number(v.valor)||0,banco:v.banco==='— Nenhum —'?'':v.banco}); saveCurrentData(); closeModal(); renderView(); }});
+      onSave(v){ Object.assign(l,{nome:v.nome,valor:Number(v.valor)||0,accountId:v.accountId||null,banco:accountNameSnapshot(v.accountId)}); saveCurrentData(); closeModal(); renderView(); }});
   },
   addBem(){
-    openModal({title:'Adicionar bem', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor estimado',type:'money'},bankSelectField()],
-      onSave(v){ S.data.bens.push({id:uid(),nome:v.nome,valor:Number(v.valor)||0,banco:v.banco==='— Nenhum —'?'':v.banco}); saveCurrentData(); closeModal(); renderView(); }});
+    openModal({title:'Adicionar bem', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor estimado',type:'money'},bankSelectField(null,'',{key:'accountId'})],
+      onSave(v){ S.data.bens.push({id:uid(),nome:v.nome,valor:Number(v.valor)||0,accountId:v.accountId||null,banco:accountNameSnapshot(v.accountId)}); saveCurrentData(); closeModal(); renderView(); }});
   },
   editBem(id){
     const b = S.data.bens.find(x=>x.id===id);
-    openModal({title:'Editar bem', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor estimado',type:'money'},bankSelectField(b.banco)], values:b,
+    openModal({title:'Editar bem', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor estimado',type:'money'},bankSelectField(null,b.accountId||b.banco,{key:'accountId'})], values:b,
       onDelete(){ S.data.bens = S.data.bens.filter(x=>x.id!==id); saveCurrentData(); closeModal(); renderView(); },
-      onSave(v){ Object.assign(b,{nome:v.nome,valor:Number(v.valor)||0,banco:v.banco==='— Nenhum —'?'':v.banco}); saveCurrentData(); closeModal(); renderView(); }});
+      onSave(v){ Object.assign(b,{nome:v.nome,valor:Number(v.valor)||0,accountId:v.accountId||null,banco:accountNameSnapshot(v.accountId)}); saveCurrentData(); closeModal(); renderView(); }});
   },
   toggleDividas(){ S.patrView.dividasCollapsed = !S.patrView.dividasCollapsed; renderView(); },
   toggleReservas(){ S.patrView.reservasCollapsed = !(S.patrView.reservasCollapsed !== false); renderView(); },
@@ -316,7 +316,7 @@ const Reservas = {
       </div>`;
     openModal({title:isEdit?'Editar reserva':'Nova reserva', sub:'Reservas são dinheiro separado por objetivo: não são despesa nem receita, apenas organização interna do patrimônio.', fields:[
       {key:'nome',label:'Nome da reserva',type:'text',placeholder:'Ex: Reserva de emergência'},
-      accountSelectField('reserva', r.banco),
+      accountSelectField('reserva', r.accountId||r.banco,{key:'accountId'}),
       {key:'valorAtual',label:'Valor atual',type:'money'},
       {key:'valorMeta',label:'Meta da Reserva (valor alvo)',type:'money'},
       {key:'prazo',label:'Data alvo da reserva',type:'date'},
@@ -333,11 +333,12 @@ const Reservas = {
       saveCurrentData(); closeModal(); renderView();
     }:null,
     onSave(v){
-      const banco = requireBanco(v.banco, 'Escolha o banco/conta desta reserva.');
-      if(!banco) return;
+      const accountId = requireAccountId(v.accountId, 'Escolha o banco/conta desta reserva.');
+      if(!accountId) return;
+      const banco = accountNameSnapshot(accountId);
       let boxRef;
-      if(isEdit){ Object.assign(r,{nome:v.nome||'Reserva', banco, valorAtual:Number(v.valorAtual)||0, valorMeta:Number(v.valorMeta)||0, prazo:v.prazo||'', categoria:v.categoria||'', status:v.status||'Ativa', cor:v.cor||'#c9a45c', corValor:v.corValor||'#e8c98a', obs:v.obs||''}); boxRef=r; }
-      else { boxRef = {id:uid(), nome:v.nome||'Reserva', banco, valorAtual:Number(v.valorAtual)||0, valorMeta:Number(v.valorMeta)||0, prazo:v.prazo||'', categoria:v.categoria||'', status:v.status||'Ativa', cor:v.cor||'#c9a45c', corValor:v.corValor||'#e8c98a', obs:v.obs||'', metaId:null, createdAt:Date.now()}; S.data.reservas.boxes.push(boxRef); }
+      if(isEdit){ Object.assign(r,{nome:v.nome||'Reserva', accountId, banco, valorAtual:Number(v.valorAtual)||0, valorMeta:Number(v.valorMeta)||0, prazo:v.prazo||'', categoria:v.categoria||'', status:v.status||'Ativa', cor:v.cor||'#c9a45c', corValor:v.corValor||'#e8c98a', obs:v.obs||''}); boxRef=r; }
+      else { boxRef = {id:uid(), nome:v.nome||'Reserva', accountId, banco, valorAtual:Number(v.valorAtual)||0, valorMeta:Number(v.valorMeta)||0, prazo:v.prazo||'', categoria:v.categoria||'', status:v.status||'Ativa', cor:v.cor||'#c9a45c', corValor:v.corValor||'#e8c98a', obs:v.obs||'', metaId:null, createdAt:Date.now()}; S.data.reservas.boxes.push(boxRef); }
       // Meta de Patrimônio embutida na reserva
       const metaAtivaEl = document.getElementById('rz_meta_ativa');
       const metaHabilitada = metaAtivaEl ? metaAtivaEl.checked : false;
@@ -605,7 +606,7 @@ function openMetaModal(existing){
         <div class="field"><label>Valor da meta (R$)</label><input type="text" inputmode="numeric" id="mt_valorMeta" class="money-input" placeholder="0,00"/></div>
         <div class="field"><label>Valor já guardado (R$)</label><input type="text" inputmode="numeric" id="mt_valorAtual" class="money-input" placeholder="0,00"/></div>
         <div class="field"><label>Prazo (opcional)</label><input type="month" id="mt_prazo" value="${isEdit&&existing.prazo?existing.prazo.slice(0,7):''}"/></div>
-        <div class="field"><label>Banco/Conta vinculada</label><select id="mt_banco"><option>— Nenhum —</option>${allBankNames().map(b=>`<option ${isEdit&&existing.banco===b?'selected':''}>${esc(b)}</option>`).join('')}</select></div>
+        <div class="field"><label>Banco/Conta vinculada</label><select id="mt_account">${accountSelectOptions({includeNone:true}).map(o=>`<option value="${esc(o.value)}" ${isEdit&&(existing.accountId||resolveAccountId(existing.banco))===o.value?'selected':''}>${esc(o.label)}</option>`).join('')}</select></div>
         <div class="row-btns"><button class="btn btn-primary btn-block" id="mt_save">${isEdit?'Salvar':'Adicionar'}</button></div>
         ${isEdit?`<div class="row-btns" style="margin-top:8px;"><button class="btn btn-danger btn-block" id="mt_delete">Excluir</button></div>`:''}
       </div>
@@ -629,13 +630,13 @@ function openMetaModal(existing){
     const valorAtual = parseInt($('#mt_valorAtual').dataset.cents||'0',10)/100;
     const prazoVal = $('#mt_prazo').value;
     const prazo = prazoVal ? prazoVal+'-01' : null;
-    const bancoVal = $('#mt_banco').value;
-    const banco = bancoVal==='— Nenhum —' ? '' : bancoVal;
+    const accountId = $('#mt_account').value || null;
+    const banco = accountNameSnapshot(accountId);
     if(isEdit){
-      Object.assign(existing, {nome, emoji:selectedEmoji, valorMeta, valorAtual, prazo, banco});
+      Object.assign(existing, {nome, emoji:selectedEmoji, valorMeta, valorAtual, prazo, accountId, banco});
       toast('Meta atualizada.');
     } else {
-      S.data.metas.push({id:uid(), nome, emoji:selectedEmoji, valorMeta, valorAtual, prazo, banco});
+      S.data.metas.push({id:uid(), nome, emoji:selectedEmoji, valorMeta, valorAtual, prazo, accountId, banco});
       toast('Meta criada.');
     }
     saveCurrentData(); closeModal(); renderView();

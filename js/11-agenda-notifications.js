@@ -58,7 +58,7 @@ function renderAgenda(){
   const daysInMonth = new Date(y,m+1,0).getDate();
   const mKey = monthKey(y,m);
   const itemsByDay = {};
-  S.data.agenda.filter(a=>bankMatches(a.banco)).forEach(a=>{
+  S.data.agenda.filter(a=>bankMatches(a.banco,a.accountId)).forEach(a=>{
     if(a.data && a.data.startsWith(mKey)){
       const day = Number(a.data.slice(8,10));
       (itemsByDay[day] = itemsByDay[day]||[]).push(a);
@@ -79,7 +79,7 @@ function renderAgenda(){
   }
   const weekdays = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 
-  const upcoming = S.data.agenda.filter(a=>!a.pago && bankMatches(a.banco)).sort((a,b)=>a.data<b.data?-1:1).slice(0,10);
+  const upcoming = S.data.agenda.filter(a=>!a.pago && bankMatches(a.banco,a.accountId)).sort((a,b)=>a.data<b.data?-1:1).slice(0,10);
   const upcomingRows = upcoming.map(a=>{
     const diff = dateDiffDays(a.data, todayISO());
     const urgent = diff<=0;

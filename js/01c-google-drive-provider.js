@@ -490,7 +490,7 @@ const GoogleDriveProvider = {
     // (Alt-Tab). Evita checagem de token do Google acontecendo sem a pessoa por perto.
     if(typeof document!=='undefined' && document.visibilityState==='hidden') return;
     try{
-      const payload = await buildFullBackupPayload();
+      const payload = options.payload ? options.payload : await buildSharedBackupSnapshot(reason, reason);
       await this.writeRotatingSnapshot('autosave', GOOGLE_DRIVE_AUTOSAVE_SLOTS, payload);
       this.autosaveDirtySinceLast = false;
     }catch(e){
@@ -602,15 +602,15 @@ const GoogleDriveProvider = {
     finally{ this._backupsFolderPromise = null; }
   },
 
-  async createBackup(reason){
+  async createBackup(reason, options={}){
     reason = reason || 'manual';
     const folderId = await this.ensureBackupsFolder();
-    const payload = await buildFullBackupPayload();
-    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const payload = options.payload ? options.payload : await buildSharedBackupSnapshot(reason, reason);
+    const ts = String(payload.snapshotBaseDate||payload.exportedAt||new Date().toISOString()).replace(/[:.]/g, '-');
     const name = 'backup_' + ts + '_v' + BORION_APP_VERSION + '_' + reason + '.json';
     const created = await GoogleDriveFS.createFile(folderId, name, payload);
     this.pruneBackupsBySize().catch(e=>console.warn('[GoogleDriveProvider] limpeza automática de backups falhou (não crítico):', e));
-    return { id: created.id, name, createdAt: Date.now(), reasonType: reason };
+    return { id: created.id, name, createdAt: Date.now(), reasonType: reason, snapshotId:payload.snapshotId||null, snapshotChecksum:payload.snapshotChecksum||'' };
   },
 
   /* V6.8.0 — mantém a pasta "backups" do Drive dentro de um teto de tamanho (padrão
@@ -631,10 +631,11 @@ const GoogleDriveProvider = {
     const files = data.files || [];
     let cumulative = 0;
     const toDelete = [];
+    const protectedReasons=['manual','manual_quick','manual_drive_local','before_import','before_restore','before_schema_migration'];
     files.forEach(f=>{
-      const size = Number(f.size || 0);
-      cumulative += size;
-      if(cumulative > maxBytes) toDelete.push(f.id);
+      const size=Number(f.size||0);cumulative+=size;
+      const protectedFile=protectedReasons.some(r=>String(f.name||'').endsWith('_'+r+'.json'));
+      if(cumulative>maxBytes&&!protectedFile)toDelete.push(f.id);
     });
     for(const id of toDelete){
       try{

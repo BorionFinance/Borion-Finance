@@ -1,0 +1,81 @@
+{
+  "generatedAt": "2026-07-12T04:46:34.878Z",
+  "appVersion": "6.23.1",
+  "total": 18,
+  "passed": 18,
+  "failed": 0,
+  "results": [
+    {
+      "name": "1 — Nubank excluída e recriada não herda −R$ 6.000, inclusive após recarregar",
+      "status": "PASS"
+    },
+    {
+      "name": "2 — Nova Nubank com saldo inicial R$ 1.000 começa em R$ 1.000",
+      "status": "PASS"
+    },
+    {
+      "name": "3 — Cartão/fatura Nubank de R$ 6.000 não reduz conta bancária de R$ 2.000",
+      "status": "PASS"
+    },
+    {
+      "name": "4 — Duas contas Bradesco com mesmo nome permanecem independentes",
+      "status": "PASS"
+    },
+    {
+      "name": "5 — Renomear conta preserva saldo e histórico pelo mesmo accountId",
+      "status": "PASS"
+    },
+    {
+      "name": "6 — Assinatura futura fica Prevista e não altera saldo antes do vencimento",
+      "status": "PASS"
+    },
+    {
+      "name": "7 — Pausar em março e retomar em julho não cria março–junho nem retroatividade",
+      "status": "PASS"
+    },
+    {
+      "name": "8 — Editar assinatura para R$ 80 em julho mantém janeiro em R$ 50",
+      "status": "PASS"
+    },
+    {
+      "name": "9 — Excluir assinatura interrompe futuro e preserva ocorrência histórica",
+      "status": "PASS"
+    },
+    {
+      "name": "10 — Cartão inválido gera Falhou e nova tentativa não duplica",
+      "status": "PASS"
+    },
+    {
+      "name": "11 — Mutação financeira atômica restaura lançamento e saldo em caso de erro",
+      "status": "PASS"
+    },
+    {
+      "name": "12 — Persistência mantém IDs isolados e ocorrências únicas",
+      "status": "PASS"
+    },
+    {
+      "name": "Migração defensiva — único vínculo migra; homônimo ambíguo não migra; backup é anterior",
+      "status": "PASS"
+    },
+    {
+      "name": "Migração defensiva — conta arquivada + nova homônima nunca recebe legado aleatoriamente",
+      "status": "PASS"
+    },
+    {
+      "name": "Cartões e seletores — crédito não recebe accountId e Banco/Conta exclui cartão/arquivada",
+      "status": "PASS"
+    },
+    {
+      "name": "Backup Drive&Local — snapshot possui mesmo ID, data-base, versão e checksum",
+      "status": "PASS"
+    },
+    {
+      "name": "Código completo — todos os JavaScript passam na validação sintática",
+      "status": "PASS"
+    },
+    {
+      "name": "Cobertura estática — formulários Banco/Conta não usam allBankNames nem key banco",
+      "status": "PASS"
+    }
+  ]
+}

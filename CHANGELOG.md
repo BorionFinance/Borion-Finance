@@ -1,3 +1,12 @@
+## V6.23.8 — Salvar e atualizar + proteção insistente de saída
+
+- Adiciona **Salvar e atualizar** ao menu Mais do Smartphone Mode.
+- O comando cria backup local protegido, executa force save no Google Drive e só então recarrega.
+- A atualização do Service Worker é consultada antes do reload.
+- O botão Voltar ganhou 8 camadas sentinela e debounce contra gestos rápidos/repetidos.
+- Um aviso nativo do navegador permanece como última barreira caso o histórico seja atravessado de uma vez.
+- O app instalado verifica novas versões ao abrir e periodicamente quando volta ao primeiro plano.
+
 # Borion Finance — Changelog
 
 ## V6.23.7 — Botão Voltar inteligente no Smartphone Mode

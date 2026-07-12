@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-07-12T15:52:57.484Z",
-  "appVersion": "6.23.7",
-  "total": 41,
-  "passed": 41,
+  "generatedAt": "2026-07-12T16:23:51.893Z",
+  "appVersion": "6.23.8",
+  "total": 43,
+  "passed": 43,
   "failed": 0,
   "results": [
     {
@@ -154,11 +154,19 @@
       "status": "PASS"
     },
     {
-      "name": "34 — Confirmação explícita sai duas posições no histórico e evita segundo aviso nativo",
+      "name": "34 — Confirmação explícita atravessa a reserva de oito sentinelas e evita segundo aviso",
       "status": "PASS"
     },
     {
-      "name": "35 — Histórico inteligente está incluído no HTML e no cache offline",
+      "name": "35 — Gestos rápidos de Voltar contam como uma única ação lógica",
+      "status": "PASS"
+    },
+    {
+      "name": "36 — Histórico insistente está no HTML, cache offline e possui fallback beforeunload",
+      "status": "PASS"
+    },
+    {
+      "name": "37 — Mais oferece Salvar e atualizar com backup local, force save, update e reload",
       "status": "PASS"
     },
     {

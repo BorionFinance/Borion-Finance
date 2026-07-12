@@ -1761,3 +1761,34 @@ html[data-interface-mode="smartphone"] .central-mobile-actions .tbl-actions butt
   .smartphone-exit-modal{width:calc(100vw - 28px);padding:22px 18px!important;}
   .smartphone-exit-actions{grid-template-columns:1fr;}
 }
+
+
+/* =====================================================================================
+   V6.23.8 — SALVAR E ATUALIZAR + PROTEÇÃO INSISTENTE DE SAÍDA
+===================================================================================== */
+.smart-sidebar-actions{display:none;}
+html[data-interface-mode="smartphone"] .smart-sidebar-actions{
+  display:block;flex:0 0 auto;padding:10px 0 4px;border-top:1px solid rgba(255,255,255,.055);
+}
+html[data-interface-mode="smartphone"] .smart-sidebar-save-reload{
+  width:100%;display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:15px;
+  border:1px solid rgba(217,180,107,.18);background:rgba(217,180,107,.065);color:var(--text);text-align:left;
+}
+html[data-interface-mode="smartphone"] .smart-sidebar-save-reload:active{transform:scale(.985);}
+html[data-interface-mode="smartphone"] .smart-sidebar-save-icon{
+  display:flex;align-items:center;justify-content:center;flex:0 0 38px;width:38px;height:38px;border-radius:13px;
+  color:var(--gold-bright);background:rgba(217,180,107,.10);border:1px solid rgba(217,180,107,.18);
+}
+html[data-interface-mode="smartphone"] .smart-sidebar-save-icon svg{width:22px;height:22px;}
+html[data-interface-mode="smartphone"] .smart-sidebar-save-reload strong{display:block;font-size:12.5px;}
+html[data-interface-mode="smartphone"] .smart-sidebar-save-reload small{display:block;margin-top:2px;font-size:9px;color:var(--muted);}
+.smart-save-reload-modal{width:min(430px,calc(100vw - 28px));max-width:430px!important;text-align:center;padding:26px 22px;border-radius:22px;}
+.smart-save-reload-icon{display:flex;align-items:center;justify-content:center;width:58px;height:58px;margin:0 auto 14px;border-radius:18px;color:var(--gold-bright);background:rgba(217,180,107,.10);border:1px solid rgba(217,180,107,.20);}
+.smart-save-reload-icon svg{width:30px;height:30px;}
+.smart-save-reload-modal h2{margin:0 0 8px;}
+.smart-save-reload-progress{height:5px;margin:18px 0;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;}
+.smart-save-reload-progress span{display:block;width:38%;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--gold),var(--gold-bright));animation:smartSaveProgress 1.05s ease-in-out infinite alternate;}
+.smart-save-reload-modal .btn{width:100%;margin-top:4px;}
+@keyframes smartSaveProgress{from{transform:translateX(-20%)}to{transform:translateX(185%)}}
+html[data-theme="light"][data-interface-mode="smartphone"] .smart-sidebar-actions{border-color:rgba(122,85,29,.13);}
+html[data-theme="light"][data-interface-mode="smartphone"] .smart-sidebar-save-reload{background:rgba(184,137,55,.07);border-color:rgba(122,85,29,.17);}

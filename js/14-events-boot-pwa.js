@@ -235,8 +235,19 @@ window.addEventListener('pageshow', (e)=>{
 
 /* ---- PWA: service worker registration + "add to home screen" helper ---- */
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(err => console.warn('SW falhou:', err));
+  window.addEventListener('load', async () => {
+    try{
+      const registration=await navigator.serviceWorker.register('sw.js');
+      /* V6.23.8 — app instalado verifica atualização sempre que abre. O botão
+         “Salvar e atualizar” também chama registration.update() antes do reload. */
+      registration.update().catch(()=>{});
+      let lastCheck=Date.now();
+      document.addEventListener('visibilitychange',()=>{
+        if(document.visibilityState==='visible' && Date.now()-lastCheck>30*60*1000){
+          lastCheck=Date.now(); registration.update().catch(()=>{});
+        }
+      });
+    }catch(err){ console.warn('SW falhou:', err); }
   });
 }
 

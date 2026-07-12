@@ -1,4 +1,4 @@
-/* Borion Finance V6.23.5 — Smartphone Mode
+/* Borion Finance V6.23.8 — Smartphone Mode
    Interface compacta para o uso diário. Reaproveita exatamente os mesmos dados,
    formulários e cálculos do Modo Pro; muda apenas a navegação e a apresentação. */
 
@@ -24,6 +24,23 @@ function smartNavIconHTML(kind){
   };
   const svg=(typeof navIconSVG==='function') ? navIconSVG(kind) : (fallback[kind]||fallback.overview);
   return `<span class="smart-nav-icon" aria-hidden="true">${svg}</span>`;
+}
+
+
+function smartSaveReloadIconHTML(){
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 7v4h-4"/><path d="M5 17v-4h4"/><path d="M7.3 8.1A7 7 0 0 1 18.4 9"/><path d="M16.7 15.9A7 7 0 0 1 5.6 15"/><path d="M12 8.5v7"/><path d="m9.5 13 2.5 2.5 2.5-2.5"/></svg>`;
+}
+
+function smartSaveReloadModalHTML(){
+  return `<div class="modal-overlay smart-save-reload-overlay">
+    <div class="modal-box smart-save-reload-modal" role="dialog" aria-modal="true" aria-labelledby="smart_save_reload_title">
+      <div class="smart-save-reload-icon">${smartSaveReloadIconHTML()}</div>
+      <h2 id="smart_save_reload_title">Salvando e atualizando...</h2>
+      <p class="modal-sub" id="smart_save_reload_status">Guardando seus dados neste dispositivo.</p>
+      <div class="smart-save-reload-progress"><span></span></div>
+      <button type="button" class="btn btn-secondary hidden" id="smart_save_reload_close">Voltar ao Borion</button>
+    </div>
+  </div>`;
 }
 
 function renderSmartphoneOverview(){
@@ -80,6 +97,75 @@ function renderSmartphoneOverview(){
 }
 
 const SmartphoneMode={
+  savingAndReloading:false,
+  renderSidebarActions(){
+    if(!isSmartphoneMode()) return '';
+    return `<div class="smart-sidebar-actions">
+      <button type="button" class="smart-sidebar-save-reload" onclick="SmartphoneMode.saveAndReload()">
+        <span class="smart-sidebar-save-icon">${smartSaveReloadIconHTML()}</span>
+        <span><strong>Salvar e atualizar</strong><small>Force save + recarregar</small></span>
+      </button>
+    </div>`;
+  },
+  async saveAndReload(){
+    if(this.savingAndReloading) return;
+    this.savingAndReloading=true;
+    if(window.MobileMenu) MobileMenu.close();
+
+    const root=document.getElementById('modal-root');
+    if(root) root.innerHTML=smartSaveReloadModalHTML();
+    const status=()=>document.getElementById('smart_save_reload_status');
+    const title=()=>document.getElementById('smart_save_reload_title');
+    const closeBtn=()=>document.getElementById('smart_save_reload_close');
+    const setStatus=(value)=>{ const node=status(); if(node) node.textContent=value; };
+
+    try{
+      if(!(S && S.currentProfile && S.data)) throw new Error('Nenhum perfil financeiro está aberto.');
+
+      saveCurrentData({finalConfirmation:true});
+      clearExitSavePending(S.currentProfile.id);
+      setStatus('Criando uma cópia protegida neste dispositivo...');
+      if(window.storageProvider && storageProvider.createBackup){
+        await storageProvider.createBackup('manual_quick');
+      }
+
+      if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){
+        setStatus('Criando o force save no Google Drive...');
+        const ok=await GoogleDriveProvider.forceSyncNow();
+        if(!ok) throw new Error('O Google Drive não confirmou o force save. A página não foi atualizada.');
+      } else if(window.CloudStorage && CloudStorage.user){
+        if(!navigator.onLine) throw new Error('Sem internet para confirmar o salvamento na nuvem. A página não foi atualizada.');
+        setStatus('Confirmando o salvamento na nuvem...');
+        const ok=await CloudStorage.syncNow();
+        if(ok===false) throw new Error('A nuvem não confirmou o salvamento. A página não foi atualizada.');
+      } else {
+        setStatus('Dados protegidos neste dispositivo. Preparando a atualização...');
+      }
+
+      if('serviceWorker' in navigator){
+        setStatus('Procurando uma versão mais recente do Borion...');
+        try{
+          const registration=await navigator.serviceWorker.getRegistration();
+          if(registration) await registration.update();
+        }catch(e){ console.warn('[BORION_SMART_SAVE_RELOAD][SW_UPDATE_WARN]',e); }
+      }
+
+      setStatus('Tudo salvo. Atualizando o Borion...');
+      if(title()) title().textContent='Salvo com sucesso';
+      if(window.SmartphoneHistory && SmartphoneHistory.prepareInternalReload) SmartphoneHistory.prepareInternalReload();
+      window.__borionInternalReload=true;
+      setTimeout(()=>location.reload(),420);
+    }catch(e){
+      this.savingAndReloading=false;
+      if(title()) title().textContent='Não atualizei a página';
+      setStatus((e&&e.message)||String(e));
+      const btn=closeBtn();
+      if(btn){
+        btn.classList.remove('hidden');
+        btn.onclick=()=>{ if(root) root.innerHTML=''; };
+      }
+    }
+  },
   renderBottomNav(){
     const reserves=reservasEnabled();
     const reserveKey=reserves?'reservas':'patrimony';

@@ -251,8 +251,8 @@ async function testAsync(name, fn){
 
   load(ctx,'js/02-backup-local.js');
   await testAsync('Backup Drive&Local — snapshot possui mesmo ID, data-base, versão e checksum',async()=>{
-    const snap=await run(ctx,`finalizeBackupSnapshot({type:'borion-account-backup',appVersion:'6.23.7',exportedAt:'2026-07-12T12:00:00.000Z',profiles:[],dataByProfile:{},integrity:{}},'manual_drive_local','backup manual conjunto Drive e dispositivo')`);
-    assert.ok(snap.snapshotId); assert.strictEqual(snap.snapshotBaseDate,'2026-07-12T12:00:00.000Z'); assert.strictEqual(snap.appVersion,'6.23.7'); assert.strictEqual(snap.snapshotChecksum,snap.integrity.snapshotSha256); assert.strictEqual(snap.snapshotChecksum.length,64);
+    const snap=await run(ctx,`finalizeBackupSnapshot({type:'borion-account-backup',appVersion:'6.23.8',exportedAt:'2026-07-12T12:00:00.000Z',profiles:[],dataByProfile:{},integrity:{}},'manual_drive_local','backup manual conjunto Drive e dispositivo')`);
+    assert.ok(snap.snapshotId); assert.strictEqual(snap.snapshotBaseDate,'2026-07-12T12:00:00.000Z'); assert.strictEqual(snap.appVersion,'6.23.8'); assert.strictEqual(snap.snapshotChecksum,snap.integrity.snapshotSha256); assert.strictEqual(snap.snapshotChecksum.length,64);
     const local=JSON.stringify(snap),drive=JSON.stringify(snap); assert.strictEqual(local,drive);
     const settings=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
     assert.match(settings,/GoogleDriveProvider\.createBackup\('manual_drive_local',\{payload:sharedSnapshot\}\)/);
@@ -428,7 +428,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const css=fs.readFileSync(path.join(ROOT,'css/styles.css'),'utf8');
-    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.23\.7/);
+    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.23\.8/);
     assert.match(sw,/js\/20-smartphone-mode\.js/);
     assert.match(css,/html\[data-interface-mode="smartphone"\] \.smart-bottom-nav/);
     assert.match(css,/\.smart-quick-grid/); assert.match(css,/\.smart-launch-modal/);
@@ -440,51 +440,82 @@ async function testAsync(name, fn){
     const modalRoot={children:[],_html:'',appendChild(node){this.children=[node];},get innerHTML(){return this._html;},set innerHTML(v){this._html=String(v);if(v==='')this.children=[];}};
     const sidebar={classList:{contains(){return false;}}};
     const buttons={smart_exit_stay:{},smart_exit_confirm:{}};
-    const originalGet=ctx.document.getElementById, originalQuery=ctx.document.querySelector, originalEl=ctx.window.el, originalAttach=ctx.window.attachModalGuard;
+    const originalGet=ctx.document.getElementById, originalQuery=ctx.document.querySelector, originalEl=ctx.window.el;
     ctx.document.getElementById=id=>id==='modal-root'?modalRoot:(buttons[id]||null);
     ctx.document.querySelector=sel=>sel==='.sidebar'?sidebar:null;
-    ctx.window.el=html=>({html}); ctx.window.attachModalGuard=()=>{};
-    ctx.window.location={href:'https://borionfinance.github.io/Borion-Finance/'};
+    ctx.window.el=html=>({html});
+    ctx.window.location={href:'https://borionfinance.github.io/Borion-Finance/',reload(){this.reloaded=true;}};
     ctx.window.history={state:null,replaced:0,pushed:0,lastGo:null,replaceState(s){this.state=s;this.replaced++;},pushState(s){this.state=s;this.pushed++;},go(n){this.lastGo=n;}};
     if(!run(ctx,"typeof SmartphoneHistory!=='undefined'")) load(ctx,'js/21-smartphone-history.js');
     const out=run(ctx,`(()=>{
       S.config.uiMode='smartphone'; S.currentProfile={id:'p1',name:'Teste'}; S.data=migrateData(emptyData()); S.view='budget';
-      SmartphoneHistory.active=false; SmartphoneHistory.exitPromptOpen=false; SmartphoneHistory.activate();
-      const activated=history.state.__borionSmartHistory===SmartphoneHistory.GUARD;
-      history.state={__borionSmartHistory:SmartphoneHistory.BASE};
+      SmartphoneHistory.active=false; SmartphoneHistory.exitPromptOpen=false; SmartphoneHistory.lastLogicalBackAt=0; SmartphoneHistory.activate();
+      const activated=history.state.__borionSmartHistory===SmartphoneHistory.GUARD && history.state.__borionSmartDepth===SmartphoneHistory.GUARD_DEPTH;
+      history.state=SmartphoneHistory.makeState(7);
       const root=document.getElementById('modal-root'); root.children=[{}];
+      SmartphoneHistory.lastLogicalBackAt=0; SmartphoneHistory.onPopState();
+      const modalClosed=root.children.length===0 && history.state.__borionSmartDepth===SmartphoneHistory.GUARD_DEPTH && S.view==='budget';
+      history.state=SmartphoneHistory.makeState(7); SmartphoneHistory.lastLogicalBackAt=0;
       SmartphoneHistory.onPopState();
-      const modalClosed=root.children.length===0 && history.state.__borionSmartHistory===SmartphoneHistory.GUARD && S.view==='budget';
-      history.state={__borionSmartHistory:SmartphoneHistory.BASE};
-      SmartphoneHistory.onPopState();
-      const wentHome=S.view==='overview' && history.state.__borionSmartHistory===SmartphoneHistory.GUARD;
-      history.state={__borionSmartHistory:SmartphoneHistory.BASE};
+      const wentHome=S.view==='overview' && history.state.__borionSmartDepth===SmartphoneHistory.GUARD_DEPTH;
+      history.state=SmartphoneHistory.makeState(7); SmartphoneHistory.lastLogicalBackAt=0;
       SmartphoneHistory.onPopState();
       const askedExit=SmartphoneHistory.exitPromptOpen && root.children.length===1;
       return {activated,modalClosed,wentHome,askedExit};
     })()`);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{activated:true,modalClosed:true,wentHome:true,askedExit:true});
-    ctx.document.getElementById=originalGet; ctx.document.querySelector=originalQuery; ctx.window.el=originalEl; ctx.window.attachModalGuard=originalAttach;
+    ctx.document.getElementById=originalGet; ctx.document.querySelector=originalQuery; ctx.window.el=originalEl;
   });
 
-  test('34 — Confirmação explícita sai duas posições no histórico e evita segundo aviso nativo',()=>{
+  test('34 — Confirmação explícita atravessa a reserva de oito sentinelas e evita segundo aviso',()=>{
     const originalTimeout=ctx.window.setTimeout;
     ctx.window.setTimeout=fn=>{fn();return 0;};
-    run(ctx,`(()=>{ history.lastGo=null; window.__borionConfirmedExit=false; SmartphoneHistory.confirmExit(); })()`);
-    assert.strictEqual(ctx.history.lastGo,-2);
+    run(ctx,`(()=>{ history.lastGo=null; window.__borionConfirmedExit=false; window.__borionInternalReload=false; SmartphoneHistory.confirmExit(); })()`);
+    assert.strictEqual(ctx.history.lastGo,-9);
     assert.strictEqual(ctx.__borionConfirmedExit,true);
     ctx.window.setTimeout=originalTimeout;
   });
 
-  test('35 — Histórico inteligente está incluído no HTML e no cache offline',()=>{
+  test('35 — Gestos rápidos de Voltar contam como uma única ação lógica',()=>{
+    const out=run(ctx,`(()=>{
+      window.__borionConfirmedExit=false; window.__borionInternalReload=false;
+      SmartphoneHistory.exitPromptOpen=false; SmartphoneHistory.lastLogicalBackAt=0; S.view='budget';
+      history.state=SmartphoneHistory.makeState(7); SmartphoneHistory.onPopState();
+      const afterFirst=S.view;
+      history.state=SmartphoneHistory.makeState(7); SmartphoneHistory.onPopState();
+      return {afterFirst,afterSecond:S.view,prompt:SmartphoneHistory.exitPromptOpen,depth:history.state.__borionSmartDepth};
+    })()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{afterFirst:'overview',afterSecond:'overview',prompt:false,depth:8});
+  });
+
+  test('36 — Histórico insistente está no HTML, cache offline e possui fallback beforeunload',()=>{
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const src=fs.readFileSync(path.join(ROOT,'js/21-smartphone-history.js'),'utf8');
-    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.23\.7/);
+    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.23\.8/);
     assert.match(sw,/js\/21-smartphone-history\.js/);
-    assert.match(src,/Deseja sair da página\?/);
-    assert.match(src,/history\.go\(-2\)/);
+    assert.match(src,/GUARD_DEPTH:8/);
+    assert.match(src,/BACK_BURST_MS:650/);
+    assert.match(src,/onBeforeUnload\(event\)/);
+    assert.match(src,/history\.go\(-\(this\.GUARD_DEPTH\+1\)\)/);
   });
+
+  test('37 — Mais oferece Salvar e atualizar com backup local, force save, update e reload',()=>{
+    if(!run(ctx,"typeof SmartphoneMode!=='undefined'")) load(ctx,'js/20-smartphone-mode.js');
+    const html=run(ctx,`(()=>{S.config.uiMode='smartphone';return SmartphoneMode.renderSidebarActions();})()`);
+    assert.match(html,/Salvar e atualizar/);
+    assert.match(html,/Force save \+ recarregar/);
+    const src=fs.readFileSync(path.join(ROOT,'js/20-smartphone-mode.js'),'utf8');
+    const shell=fs.readFileSync(path.join(ROOT,'js/04-gate-shell.js'),'utf8');
+    const boot=fs.readFileSync(path.join(ROOT,'js/14-events-boot-pwa.js'),'utf8');
+    assert.match(src,/storageProvider\.createBackup\('manual_quick'\)/);
+    assert.match(src,/GoogleDriveProvider\.forceSyncNow\(\)/);
+    assert.match(src,/registration\.update\(\)/);
+    assert.match(src,/location\.reload\(\)/);
+    assert.match(shell,/SmartphoneMode\.renderSidebarActions\(\)/);
+    assert.match(boot,/registration\.update\(\)\.catch/);
+  });
+
 
   test('Código completo — todos os JavaScript passam na validação sintática',()=>{
     const files=fs.readdirSync(path.join(ROOT,'js')).filter(f=>f.endsWith('.js'));
@@ -502,7 +533,7 @@ async function testAsync(name, fn){
   });
 
   const failures=results.filter(r=>r.status==='FAIL');
-  const report={generatedAt:new Date().toISOString(),appVersion:'6.23.7',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
+  const report={generatedAt:new Date().toISOString(),appVersion:'6.23.8',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
   fs.writeFileSync(path.join(__dirname,'regression-results.json'),JSON.stringify(report,null,2));
   for(const r of results){
     console.log(`${r.status==='PASS'?'✓':'✗'} ${r.name}`);

@@ -99,12 +99,12 @@ const GlobalSearch = {
         }
       });
     });
-    S.data.contas.forEach(a=>{ if((a.nome||'').toLowerCase().includes(q)) out.push({type:'Conta bancária', text:a.nome, view:'cards'}); });
+    S.data.contas.forEach(a=>{ if((a.nome||'').toLowerCase().includes(q)) out.push({type:'Conta bancária', text:a.nome+' — '+brl(contaSaldoAtual(a)), view:'cards'}); });
     Object.keys(S.data.categorias).forEach(tipo=>{
       S.data.categorias[tipo].forEach(c=>{ if(c.toLowerCase().includes(q)) out.push({type:'Categoria', text:c, view:'budget', tab:tipo}); });
     });
     S.data.agenda.forEach(a=>{ if(a.titulo.toLowerCase().includes(q)) out.push({type:'Agenda', text:a.titulo+' — '+a.data.slice(8,10)+'/'+a.data.slice(5,7), view:'agenda'}); });
-    S.data.liquidez.forEach(l=>{ if(l.nome.toLowerCase().includes(q)) out.push({type:'Liquidez', text:l.nome+' — '+brl(l.valor), view:'patrimony'}); });
+    saldoContasDetalhe().filter(l=>l.tipo==='manual').forEach(l=>{ if(l.nome.toLowerCase().includes(q)) out.push({type:'Saldo em contas', text:l.nome+' — '+brl(l.valor), view:'patrimony'}); });
     S.data.bens.forEach(b=>{ if(b.nome.toLowerCase().includes(q)) out.push({type:'Bem', text:b.nome+' — '+brl(b.valor), view:'patrimony'}); });
     (S.data.metas||[]).forEach(mt=>{ if(mt.nome.toLowerCase().includes(q)) out.push({type:'Meta', text:mt.nome+' — '+brl(mt.valorAtual)+' / '+brl(mt.valorMeta), view:'patrimony'}); });
     S.data.investimentos.ativos.forEach(a=>{ if(a.nome.toLowerCase().includes(q)) out.push({type:'Investimento', text:a.nome+' — '+brl(a.atual), view:'investments'}); });

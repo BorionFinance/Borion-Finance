@@ -667,6 +667,7 @@ function payFixaOcorrencia(f, mesKey){
     const rec = jaExiste || {id:uid(), fixaId:f.id, mesKey};
     Object.assign(rec, {pago:true, origemPagamento:'conta', reservaId:null, reservaMoveId:null, valorPago:valor, banco:f.banco||'', pagoEm:Date.now()});
     if(!jaExiste) S.data.fixaPagamentos.push(rec);
+    adjustLiquidez(rec.banco, -valor); // V6.22 — desconta da conta usada para pagar
     saveCurrentData(); renderView(); toast('Despesa fixa marcada como paga.');
   }
 }
@@ -682,6 +683,8 @@ function undoFixaOcorrencia(f, mesKey){
       logEstorno({tipo:'fixa', refId:f.id, nome:f.nome, valor:rec.valorPago, reservaId:box.id, reservaNome:box.nome, banco:box.banco, descricao:'Estorno — devolução de "'+f.nome+'" para a reserva '+box.nome});
     }
     S.data.reservas.moves = (S.data.reservas.moves||[]).filter(m=>m.id!==rec.reservaMoveId);
+  } else if(rec.origemPagamento==='conta'){
+    adjustLiquidez(rec.banco, Number(rec.valorPago)||0); // V6.22 — devolve o valor à conta
   }
   S.data.fixaPagamentos = S.data.fixaPagamentos.filter(r=>r.id!==rec.id);
   saveCurrentData(); renderView(); toast('Despesa fixa voltou a pendente'+(rec.origemPagamento==='reserva'?' — valor devolvido à reserva.':'.'));
@@ -697,6 +700,8 @@ function refundAndCleanFixaOcorrencias(fixaId, fromMesKey){
       const mv = (S.data.reservas.moves||[]).find(m=>m.id===rec.reservaMoveId);
       if(box && mv) Reservas.reverseMoveEffect(mv);
       S.data.reservas.moves = (S.data.reservas.moves||[]).filter(m=>m.id!==rec.reservaMoveId);
+    } else if(rec.pago && rec.origemPagamento==='conta'){
+      adjustLiquidez(rec.banco, Number(rec.valorPago)||0); // V6.22 — devolve o valor à conta
     }
   });
   const removeIds = new Set(recs.map(r=>r.id));
@@ -713,12 +718,16 @@ function prepareFixaOcorrenciaEdit(oldFixaId, mesKeyAtual, novoValor, novoOrigem
   const oldOrigem = rec.origemPagamento, oldReservaId = rec.reservaId, oldValor = Number(rec.valorPago)||0;
   const oldMv = rec.reservaMoveId ? (S.data.reservas.moves||[]).find(m=>m.id===rec.reservaMoveId) : null;
   if(novoOrigem==='conta'){
-    return {ok:true, rec, commit(newFixaId){
+    return {ok:true, rec, commit(newFixaId, novoBanco){
+      const bancoFinal = novoBanco || rec.banco;
       if(oldOrigem==='reserva' && oldMv){
         Reservas.reverseMoveEffect(oldMv);
         S.data.reservas.moves = (S.data.reservas.moves||[]).filter(m=>m.id!==oldMv.id);
+      } else if(oldOrigem==='conta'){
+        adjustLiquidez(rec.banco, oldValor); // V6.22 — devolve o valor antigo à conta antiga
       }
-      Object.assign(rec, {fixaId:newFixaId, origemPagamento:'conta', reservaId:null, reservaMoveId:null, valorPago:novoValor});
+      adjustLiquidez(bancoFinal, -novoValor); // V6.22 — desconta o novo valor da conta (nova ou a mesma)
+      Object.assign(rec, {fixaId:newFixaId, origemPagamento:'conta', reservaId:null, reservaMoveId:null, valorPago:novoValor, banco:bancoFinal});
     }};
   }
   // novoOrigem === 'reserva'
@@ -745,6 +754,8 @@ function prepareFixaOcorrenciaEdit(oldFixaId, mesKeyAtual, novoValor, novoOrigem
     if(oldOrigem==='reserva' && oldMv){
       Reservas.reverseMoveEffect(oldMv);
       S.data.reservas.moves = (S.data.reservas.moves||[]).filter(m=>m.id!==oldMv.id);
+    } else if(oldOrigem==='conta'){
+      adjustLiquidez(rec.banco, oldValor); // V6.22 — devolve o valor à conta antiga, agora paga pela reserva
     }
     const mv = {id:uid(), boxId:targetBox.id, tipo:'Pagamento de despesa fixa', data:todayISO(), valor:novoValor, banco:targetBox.banco||'', descricao:'Pagamento de despesa fixa — '+(novoNomeParaDescricao||'')+' — '+brlPlain(novoValor), despesaFixaId:newFixaId, fixaOcorrenciaId:rec.id, createdAt:Date.now()};
     Reservas.applyMoveEffect(mv);
@@ -949,6 +960,12 @@ function openTransactionModal({type, existing}){
     const cents = parseInt($('#tm_valor').dataset.cents||'0',10);
     const valor = cents/100;
 
+    /* V6.22 — se estava editando um lançamento que já afetava o saldo de uma conta (receita
+       recebida ou despesa paga da conta), desfaz esse efeito ANTES de qualquer outra decisão —
+       o valor/banco/origem novos serão aplicados de novo mais abaixo, já com os dados corretos.
+       Não faz nada se o lançamento antigo era pago por reserva ou era compra no crédito. */
+    if(isEdit) reverseTxSaldoEffect(existing);
+
     /* V6.0 — se estava editando uma despesa paga direto de uma reserva, devolve o saldo
        ANTES de qualquer outra decisão (troca de origem, novo valor, etc.). Espelha o que já
        acontece com removeLinkedReservaMoveFromTransaction para receita → reserva. */
@@ -1046,6 +1063,10 @@ function openTransactionModal({type, existing}){
       tx.destinoModo = destino;
       createLinkedReservaMoveFromTransaction(tx, reservaBox, reservaValor);
     }
+    /* V6.22 — aplica o efeito no saldo real da conta só agora, depois que tx.reservaValor (se
+       houver) já foi definido acima — assim uma receita "parte pra reserva, parte pra conta"
+       só credita na conta a parte que realmente sobra fora da reserva (nunca conta 2x). */
+    applyTxSaldoEffect(tx);
     saveCurrentData(); closeModal(); renderView();
   };
   if(isEdit){
@@ -1053,6 +1074,7 @@ function openTransactionModal({type, existing}){
       const idx = S.data.transacoes.findIndex(x=>x.id===existing.id);
       if(idx<0) return;
       const snapshot = JSON.parse(JSON.stringify(S.data));
+      reverseTxSaldoEffect(existing); // V6.22 — devolve o saldo à conta, se este lançamento afetava uma
       removeLinkedReservaMoveFromTransaction(existing);
       removeLinkedReservaWithdrawalFromDespesa(existing); // V6.0 — devolve o saldo à reserva, se era pagamento direto
       S.data.transacoes.splice(idx,1);
@@ -1285,7 +1307,7 @@ function openFixaModal(existing){
       S.data.fixas.push({id:targetId, nome, categoria, valor, dia, startMonth:monthKeyNow, endMonth:null, banco, formaPagamento, origemPagamento:'conta', reservaOrigemId:null});
       toast('Alterada a partir de '+monthLabel(S.month.y,S.month.m)+'. Meses anteriores mantidos.');
     }
-    if(check.ok && !check.noop) check.commit(targetId);
+    if(check.ok && !check.noop) check.commit(targetId, banco);
     saveCurrentData(); closeModal(); renderView();
   };
   if(isEdit){

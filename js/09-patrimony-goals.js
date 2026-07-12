@@ -7,7 +7,7 @@ function patrimonioComposicaoSegments(){
   const segs = [];
   if(invest>0) segs.push({label: S.data.investimentos.ativos.length===1? S.data.investimentos.ativos[0].nome : 'Investimentos', value:invest, color:catColor('CDI')});
   if(reservas>0) segs.push({label:'Reserva', value:reservas, color:'var(--gold)'});
-  S.data.liquidez.filter(l=>bankMatches(l.banco)).forEach(l=> segs.push({label:l.nome, value:l.valor, color:catColor(l.nome)}));
+  saldoContasDetalhe().forEach(l=> segs.push({label:l.nome, value:l.valor, color:catColor(l.nome)}));
   S.data.bens.filter(b=>bankMatches(b.banco)).forEach(b=> segs.push({label:b.nome, value:b.valor, color:catColor(b.nome)}));
   return segs;
 }
@@ -17,8 +17,12 @@ function renderPatrimony(){
   const composicaoTotal = liq+reservas+bens+invest;
   const segs = patrimonioComposicaoSegments();
 
-  const liqRows = S.data.liquidez.filter(l=>bankMatches(l.banco)).map(l=>`
-    <div class="list-row"><span class="lname">${esc(l.nome)}</span><span class="lval">${brl(l.valor)}</span><button class="ledit" onclick="Patr.editLiquidez('${l.id}')">✎</button></div>`).join('');
+  const saldoContasRows = saldoContasDetalhe();
+  const liqRows = saldoContasRows.map(l=>`
+    <div class="list-row"><span class="lname">${esc(l.nome)}${l.isCarteira?' <span style="color:var(--muted);font-weight:400;">(dinheiro físico)</span>':''}</span><span class="lval">${brl(l.valor)}</span>${l.tipo==='conta' ? `<button class="ledit" onclick="Cards.editConta('${l.contaId}')" title="Editar conta">✎</button>` : `<button class="ledit" onclick="Patr.editLiquidez('${l.id}')" title="Editar ativo">✎</button>`}</div>`).join('');
+  const liqEmpty = !saldoContasRows.length
+    ? `<div class="empty-note">Nenhuma conta bancária cadastrada ainda.</div><button class="btn-outline btn-sm" style="margin-top:8px;" onclick="Patr.goAddConta()">+ Adicionar conta</button>`
+    : '';
   const bensRows = S.data.bens.filter(b=>bankMatches(b.banco)).map(b=>`
     <div class="list-row"><span class="lname">${esc(b.nome)}</span><span class="lval">${brl(b.valor)}</span><button class="ledit" onclick="Patr.editBem('${b.id}')">✎</button></div>`).join('');
   const dividasDetail = divDebt.detail;
@@ -36,7 +40,7 @@ function renderPatrimony(){
   return `
     <div class="cards-row">
       <div class="card hero-green"><div class="clabel">Patrimônio total</div><div class="cval">${brl(total)}</div></div>
-      <div class="card"><div class="clabel">${tagBadgeHTML('liquidez','LIQUIDEZ')}</div><div class="cval">${brl(liq)}</div></div>
+      <div class="card"><div class="clabel">${tagBadgeHTML('liquidez','SALDO EM CONTAS')}</div><div class="cval">${brl(liq)}</div></div>
       ${reservasEnabled()?`<div class="card hero-gold"><div class="clabel">${tagBadgeHTML('investimentos','RESERVA')}</div><div class="cval">${brl(reservas)}</div></div>`:''}
       <div class="card"><div class="clabel">${tagBadgeHTML('bens','BENS')}</div><div class="cval">${brl(bens)}</div></div>
       <div class="card"><div class="clabel">${tagBadgeHTML('investimentos','INVESTIMENTOS')}</div><div class="cval">${brl(invest)}</div></div>
@@ -57,8 +61,8 @@ function renderPatrimony(){
       </div>
       <div style="display:flex;flex-direction:column;gap:18px;">
         <div class="panel-box">
-          <div class="toolbar"><div class="toolbar-left" style="color:#22c55e">LIQUIDEZ</div><button class="btn-outline" onclick="Patr.addLiquidez()">+ Adicionar</button></div>
-          ${liqRows || '<div class="empty-note">Nenhum item ainda.</div>'}
+          <div class="toolbar"><div class="toolbar-left" style="color:#22c55e">SALDO EM CONTAS</div><button class="btn-outline" onclick="Patr.goAddConta()">+ Adicionar conta</button></div>
+          ${liqRows}${liqEmpty}
         </div>
         ${reservasEnabled()?renderReservasResumoPanel(reservas, reservasCollapsed):''}
         ${reservasEnabled()?renderReservaRendimentosPanel(S.patrView.reservaRendimentosCollapsed!==false):''}
@@ -105,13 +109,19 @@ function renderMetasList(){
   }).join('');
 }
 const Patr = {
+  /* V6.22 — "Saldo em contas" não aceita mais valor digitado à mão: o botão leva direto para
+     o cadastro de conta já existente em Cartões e Contas (mesmo padrão do showBankRequiredModal). */
+  goAddConta(){
+    S.view='cards'; renderApp();
+    setTimeout(()=>{ if(typeof Cards!=='undefined' && Cards.addConta) Cards.addConta(); }, 80);
+  },
   addLiquidez(){
     openModal({title:'Adicionar ativo de liquidez', sub:'Valor neste mês.', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor',type:'money'},bankSelectField()],
       onSave(v){ S.data.liquidez.push({id:uid(),nome:v.nome,valor:Number(v.valor)||0,banco:v.banco==='— Nenhum —'?'':v.banco}); saveCurrentData(); closeModal(); renderView(); }});
   },
   editLiquidez(id){
     const l = S.data.liquidez.find(x=>x.id===id);
-    openModal({title:'Editar ativo de liquidez', sub:'Valor neste mês.', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor',type:'money'},bankSelectField(l.banco)], values:l,
+    openModal({title:'Editar ativo extra (não vinculado a uma conta)', sub:'Item criado antes da conta bancária virar automática. Se preferir, exclua e cadastre uma conta de verdade em Cartões e Contas.', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor',type:'money'},bankSelectField(l.banco)], values:l,
       onDelete(){ S.data.liquidez = S.data.liquidez.filter(x=>x.id!==id); saveCurrentData(); closeModal(); renderView(); },
       onSave(v){ Object.assign(l,{nome:v.nome,valor:Number(v.valor)||0,banco:v.banco==='— Nenhum —'?'':v.banco}); saveCurrentData(); closeModal(); renderView(); }});
   },

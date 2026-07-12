@@ -283,7 +283,11 @@ function investInvestidoTotal(){
   const caixa = sumBy(S.data.investimentos.emCaixa.filter(c=>bankMatches(c.banco)),'valor');
   return ativos+caixa;
 }
-function liquidezTotal(){ return sumBy(S.data.liquidez.filter(l=>bankMatches(l.banco)),'valor'); }
+/* V6.22 — "liquidez" agora é derivada (saldo real das contas cadastradas), nunca digitada à
+   mão. Mantido com este nome de função só para não precisar tocar em todo o resto do código
+   que já chama liquidezTotal() (patrimônio, visão geral, saúde financeira, gráficos etc.) —
+   ver saldoEmContasTotal()/saldoContasDetalhe() em 01-storage-data-state.js. */
+function liquidezTotal(){ return saldoEmContasTotal(); }
 function reservasEnabled(){ return !!(S.data && S.data.modules && S.data.modules.reserves !== false && S.data.reservas && S.data.reservas.enabled !== false); }
 function reservasTotal(){ return reservasEnabled() ? sumBy((S.data.reservas.boxes||[]).filter(r=>bankMatches(r.banco)),'valorAtual') : 0; }
 function bensTotal(){ return sumBy(S.data.bens.filter(b=>bankMatches(b.banco)),'valor'); }

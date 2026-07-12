@@ -44,7 +44,7 @@ function renderCards(){
       <div class="card-entity-head">
         <div class="cehl">
           <div class="bank-badge" style="background:${a.cor||bankColor(a.nome)}">${esc(a.icone||(a.nome||'?')[0])}</div>
-          <div class="info"><div>${esc(a.nome)} <span style="font-weight:400;color:var(--muted);font-size:11.5px;">· ${a.isCarteira?'(dinheiro físico)':esc(a.tipo||'Conta')}</span></div><div>Saldo inicial: ${brl(a.saldoInicial||0)}${a.rende?` · Rende ${pct(a.percentualRendimento||0)} a.m.`:' · Não rende'}${a.isCarteira?' · Não pode ser excluída':''}</div></div>
+          <div class="info"><div>${esc(a.nome)} <span style="font-weight:400;color:var(--muted);font-size:11.5px;">· ${a.isCarteira?'(dinheiro físico)':esc(a.tipo||'Conta')}</span></div><div><b style="color:#22c55e;">Saldo atual: ${brl(contaSaldoAtual(a))}</b> · Saldo inicial: ${brl(a.saldoInicial||0)}${a.rende?` · Rende ${pct(a.percentualRendimento||0)} a.m.`:' · Não rende'}${a.isCarteira?' · Não pode ser excluída':''}</div></div>
         </div>
         ${showReorderContas ? OrderPreferences.reorderRowControlsHTML('contas', a.id, a.nome, contasNaturalIds) : `<button class="btn-outline btn-sm" onclick="Cards.editConta('${a.id}')">✎ Editar</button>`}
       </div>

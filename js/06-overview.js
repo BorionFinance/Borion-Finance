@@ -44,7 +44,7 @@ function gastosPorCartaoSegments(y=S.month.y, m=S.month.m){
 }
 function bankDistribuicaoSegments(){
   return allBankNames().map(bn=>{
-    const saldo = sumBy(S.data.liquidez.filter(l=>l.banco===bn),'valor')
+    const saldo = saldoBancoNome(bn)
       + (reservasEnabled() ? sumBy((S.data.reservas.boxes||[]).filter(r=>r.banco===bn),'valorAtual') : 0)
       + sumBy(S.data.investimentos.emCaixa.filter(c=>c.banco===bn),'valor')
       + sumBy(S.data.investimentos.ativos.filter(a=>a.banco===bn),'atual');
@@ -53,7 +53,7 @@ function bankDistribuicaoSegments(){
 }
 function bankSummaryList(y=S.month.y, m=S.month.m){
   return allBankNames().map(bn=>{
-    const saldoAtual = sumBy(S.data.liquidez.filter(l=>l.banco===bn),'valor')
+    const saldoAtual = saldoBancoNome(bn)
       + (reservasEnabled() ? sumBy((S.data.reservas.boxes||[]).filter(r=>r.banco===bn),'valorAtual') : 0)
       + sumBy(S.data.investimentos.emCaixa.filter(c=>c.banco===bn),'valor')
       - S.data.cartoes.filter(c=>c.banco===bn).reduce((acc,c)=>{

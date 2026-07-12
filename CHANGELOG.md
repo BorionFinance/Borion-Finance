@@ -1,3 +1,39 @@
+## V6.22.0 — "Liquidez" virou "Saldo em Contas": derivado de verdade, não digitado (12/07/2026)
+
+Pedido: o card "Liquidez" no Patrimônio era um valor digitado à mão — não vinha do saldo
+inicial da conta nem das receitas/despesas lançadas, então ficava sempre desatualizado e
+podia dessincronizar do resto do app.
+
+- **Card renomeado**: "LIQUIDEZ" agora é "SALDO EM CONTAS" no Patrimônio (mesmo card verde,
+  mesma posição), na Visão Geral, na Personalização (cor do ícone) e na busca global.
+- **Cálculo agora é derivado**, nunca digitado: saldo de cada conta = saldo inicial (definido
+  no cadastro em Cartões e Contas) + receitas recebidas nela + despesas pagas dela +
+  transferências + faturas/boletos pagos usando ela. Cartões e Contas, Lançamentos e
+  Patrimônio usam a mesma fonte — nunca mais números diferentes em telas diferentes.
+- **Bug real corrigido**: o "saldo inicial" de uma conta nunca tinha entrado no cálculo do
+  patrimônio antes — ficava só como um texto no card da conta. Agora entra.
+- **Bug real corrigido**: receitas e despesas variáveis/fixas pagas direto de uma conta nunca
+  mexiam no saldo daquela conta — só transferências e pagamento de fatura/boleto mexiam.
+  Agora toda movimentação ligada a uma conta atualiza o saldo dela na hora (criar, editar e
+  excluir o lançamento; pausar/retomar despesa fixa também devolve ou desconta certo).
+  Compra no crédito continua sem tocar o banco até a fatura ser paga.
+- **Reserva nunca é contada 2x**: quando uma receita manda parte do valor "direto pra
+  reserva", só a parte que sobra fora da reserva entra no Saldo em Contas — o valor que vai
+  pra reserva sai do fluxo da conta e entra só na reserva, igual já acontecia com
+  transferência conta → reserva.
+- **Painel "Saldo em contas" no Patrimônio**: agora lista as contas cadastradas com o saldo
+  já calculado (clique no lápis abre a própria conta em Cartões e Contas). O antigo botão
+  "+ Adicionar" (que criava um valor solto) virou "+ Adicionar conta", que leva direto pro
+  cadastro de conta de verdade. Sem conta cadastrada, mostra "Nenhuma conta bancária
+  cadastrada ainda." com o mesmo botão.
+- **Compatibilidade com backups antigos preservada**: se alguém já tinha criado algum "ativo
+  de liquidez" manual antes desta versão (um valor solto, sem conta correspondente), ele
+  continua aparecendo e editável — só não conta mais como conta bancária de verdade.
+- **Cartões e Contas**: cada conta agora mostra "Saldo atual" (calculado) ao lado do "Saldo
+  inicial" (o que foi digitado no cadastro).
+- Sem mudança de formato de dados — mesma estrutura interna (`liquidez`), só passou a ser
+  usada como um acumulador de ajustes por conta em vez de lista de valores soltos.
+
 ## V6.21.0 — Tela de entrada mais limpa: Google em destaque (11/07/2026)
 
 Pedido: como ninguém do grupo entra mais com e-mail/senha (todo mundo já migrou pro

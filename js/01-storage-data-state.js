@@ -20,7 +20,7 @@ const APP_NAME = 'Borion Finance';
 const CARTEIRA_CONTA_ID = 'carteira-fixa';
 const FORMAS_PAGAMENTO = ['Dinheiro','Pix','Débito','Crédito'];
 const DEFAULT_ICON_COLORS = { liquidez:'#22c55e', bens:'#3b6bf0', investimentos:'#cca160', dividas:'#ef4444', receita:'#22c55e', despesas:'#ef4444', investir:'#3b6bf0', saldo:'#eef1f4' };
-const ICON_COLOR_LABELS = { liquidez:'Liquidez', bens:'Bens', investimentos:'Investimentos', dividas:'Dívidas', receita:'Receita', despesas:'Despesas', investir:'Investir', saldo:'Saldo' };
+const ICON_COLOR_LABELS = { liquidez:'Saldo em Contas', bens:'Bens', investimentos:'Investimentos', dividas:'Dívidas', receita:'Receita', despesas:'Despesas', investir:'Investir', saldo:'Saldo' };
 const FONT_STACKS = {
   default: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif',
   elegante: 'Georgia,"Times New Roman",serif',
@@ -689,11 +689,18 @@ function showReservaInsuficienteModal(box, valorNecessario){
   $('#ri_ok').onclick=closeModal;
 }
 
-/* ---------------- Liquidez: ajuste de saldo por banco (usado por fatura paga, boleto pago e transferências) ---------------- */
+/* ---------------- Liquidez: ajuste de saldo por banco (usado por fatura paga, boleto pago,
+   transferências e, a partir da V6.22, receitas/despesas ligadas a uma conta) ----------------
+   V6.22 — o "ativo de liquidez" deixou de ser algo digitado à mão: cada conta cadastrada em
+   Cartões e Contas tem uma entrada dedicada aqui (nome===banco), que funciona só como um
+   acumulador de ajustes (delta) a partir do saldo inicial da conta. Para nunca confundir esse
+   acumulador com um "ativo de liquidez" antigo que o usuário tenha criado à mão com outro nome
+   (ex.: "Dinheiro guardado em casa"), o match exige nome===banco — só a própria entrada da
+   conta é reaproveitada; entradas manuais antigas nunca são tocadas por adjustLiquidez. */
 function findLiquidezEntry(banco, createIfMissing){
   if(!banco) return null;
   if(!Array.isArray(S.data.liquidez)) S.data.liquidez=[];
-  let l = S.data.liquidez.find(x=>x.banco===banco);
+  let l = S.data.liquidez.find(x=>x.banco===banco && x.nome===banco);
   if(!l && createIfMissing){
     l = {id:uid(), nome:banco, valor:0, banco};
     S.data.liquidez.push(l);
@@ -705,6 +712,58 @@ function adjustLiquidez(banco, delta){
   const l = findLiquidezEntry(banco, true);
   if(l) l.valor = Math.round(((Number(l.valor)||0) + delta) * 100) / 100;
 }
+
+/* ---------------- V6.22 — Saldo em Contas (fonte única, derivada) ----------------
+   saldo de uma conta = saldo inicial (definido no cadastro da conta) + acumulador de ajustes
+   (transferências, fatura/boleto pagos, receitas e despesas ligadas a essa conta). Nunca é
+   digitado diretamente aqui — é sempre a soma dessas duas fontes. */
+function contaSaldoAtual(conta){
+  if(!conta) return 0;
+  const ledger = (S.data.liquidez||[]).find(l=>l.banco===conta.nome && l.nome===conta.nome);
+  return Math.round(((Number(conta.saldoInicial)||0) + (ledger?Number(ledger.valor)||0:0)) * 100) / 100;
+}
+/* Linhas para exibir em "Saldo em contas": uma por conta cadastrada (derivada), mais
+   qualquer "ativo de liquidez" antigo criado à mão antes desta versão que não corresponda a
+   nenhuma conta real — preservado por compatibilidade com backups antigos, ainda editável. */
+function saldoContasDetalhe(){
+  const contas = (S.data.contas||[]);
+  const contaNomes = new Set(contas.map(c=>c.nome));
+  const rows = contas.filter(c=>bankMatches(c.nome)).map(c=>({
+    id:'conta:'+c.id, contaId:c.id, tipo:'conta', nome:c.nome, valor:contaSaldoAtual(c), isCarteira:!!c.isCarteira
+  }));
+  (S.data.liquidez||[]).forEach(l=>{
+    const isLedgerEntry = l.nome===l.banco && contaNomes.has(l.banco);
+    if(!isLedgerEntry && bankMatches(l.banco)) rows.push({id:l.id, tipo:'manual', nome:l.nome, valor:Number(l.valor)||0});
+  });
+  return rows;
+}
+function saldoEmContasTotal(){
+  return Math.round(saldoContasDetalhe().reduce((s,r)=>s+(Number(r.valor)||0),0) * 100) / 100;
+}
+/* Saldo (conta real + eventuais ativos manuais legados) de um único banco pelo nome — usado
+   nos resumos por banco da Visão Geral, que antes somavam só o ajuste (sem o saldo inicial). */
+function saldoBancoNome(bn){
+  if(!bn) return 0;
+  const contas = (S.data.contas||[]);
+  const conta = contas.find(c=>c.nome===bn);
+  let total = conta ? contaSaldoAtual(conta) : 0;
+  (S.data.liquidez||[]).forEach(l=>{
+    const isLedger = l.nome===l.banco && contas.some(c=>c.nome===l.banco);
+    if(!isLedger && l.banco===bn) total += Number(l.valor)||0;
+  });
+  return Math.round(total*100)/100;
+}
+/* ---------------- V6.22 — receitas/despesas ligadas a uma conta afetam o saldo real dela.
+   Nunca mexe quando a origem é reserva (Reservas.applyMoveEffect já cuida disso) nem quando é
+   compra no cartão de crédito (isso só afeta a fatura, não o banco, até a fatura ser paga). */
+function txContaDelta(tx){
+  if(!tx || !tx.banco) return 0;
+  if(tx.tipo==='receita') return (Number(tx.valor)||0) - (Number(tx.reservaValor)||0);
+  if(tx.tipo==='variavel' && tx.origemPagamento!=='reserva') return -(Number(tx.valor)||0);
+  return 0;
+}
+function applyTxSaldoEffect(tx){ const d=txContaDelta(tx); if(d) adjustLiquidez(tx.banco, d); }
+function reverseTxSaldoEffect(tx){ const d=txContaDelta(tx); if(d) adjustLiquidez(tx.banco, -d); }
 
 /* ---------------- Global App State ---------------- */
 const S = {

@@ -1,3 +1,12 @@
+# Borion Finance — Changelog
+
+## V6.23.7 — Botão Voltar inteligente no Smartphone Mode
+- Voltar fecha primeiro modais, formulários e painéis flutuantes.
+- O próximo Voltar retorna para a Visão geral.
+- No Início, o próximo Voltar abre uma confirmação antes de sair da página.
+- A saída confirmada retorna à página anterior do navegador sem mostrar um segundo aviso nativo de sincronização.
+- Menu lateral, notificações, filtro bancário e busca também respeitam a navegação em camadas.
+
 ## V6.23.5 — Metas flexíveis e Smartphone Mode (12/07/2026)
 
 - Com Reserva desligada, Metas de Patrimônio podem ser adicionadas, editadas e excluídas normalmente.

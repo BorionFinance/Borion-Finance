@@ -251,8 +251,8 @@ async function testAsync(name, fn){
 
   load(ctx,'js/02-backup-local.js');
   await testAsync('Backup Drive&Local — snapshot possui mesmo ID, data-base, versão e checksum',async()=>{
-    const snap=await run(ctx,`finalizeBackupSnapshot({type:'borion-account-backup',appVersion:'6.23.5',exportedAt:'2026-07-12T12:00:00.000Z',profiles:[],dataByProfile:{},integrity:{}},'manual_drive_local','backup manual conjunto Drive e dispositivo')`);
-    assert.ok(snap.snapshotId); assert.strictEqual(snap.snapshotBaseDate,'2026-07-12T12:00:00.000Z'); assert.strictEqual(snap.appVersion,'6.23.5'); assert.strictEqual(snap.snapshotChecksum,snap.integrity.snapshotSha256); assert.strictEqual(snap.snapshotChecksum.length,64);
+    const snap=await run(ctx,`finalizeBackupSnapshot({type:'borion-account-backup',appVersion:'6.23.7',exportedAt:'2026-07-12T12:00:00.000Z',profiles:[],dataByProfile:{},integrity:{}},'manual_drive_local','backup manual conjunto Drive e dispositivo')`);
+    assert.ok(snap.snapshotId); assert.strictEqual(snap.snapshotBaseDate,'2026-07-12T12:00:00.000Z'); assert.strictEqual(snap.appVersion,'6.23.7'); assert.strictEqual(snap.snapshotChecksum,snap.integrity.snapshotSha256); assert.strictEqual(snap.snapshotChecksum.length,64);
     const local=JSON.stringify(snap),drive=JSON.stringify(snap); assert.strictEqual(local,drive);
     const settings=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
     assert.match(settings,/GoogleDriveProvider\.createBackup\('manual_drive_local',\{payload:sharedSnapshot\}\)/);
@@ -428,10 +428,62 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const css=fs.readFileSync(path.join(ROOT,'css/styles.css'),'utf8');
-    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.23\.5/);
+    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.23\.7/);
     assert.match(sw,/js\/20-smartphone-mode\.js/);
     assert.match(css,/html\[data-interface-mode="smartphone"\] \.smart-bottom-nav/);
     assert.match(css,/\.smart-quick-grid/); assert.match(css,/\.smart-launch-modal/);
+  });
+
+
+
+  test('33 — Botão Voltar fecha modal, volta ao Início e só então pede confirmação para sair',()=>{
+    const modalRoot={children:[],_html:'',appendChild(node){this.children=[node];},get innerHTML(){return this._html;},set innerHTML(v){this._html=String(v);if(v==='')this.children=[];}};
+    const sidebar={classList:{contains(){return false;}}};
+    const buttons={smart_exit_stay:{},smart_exit_confirm:{}};
+    const originalGet=ctx.document.getElementById, originalQuery=ctx.document.querySelector, originalEl=ctx.window.el, originalAttach=ctx.window.attachModalGuard;
+    ctx.document.getElementById=id=>id==='modal-root'?modalRoot:(buttons[id]||null);
+    ctx.document.querySelector=sel=>sel==='.sidebar'?sidebar:null;
+    ctx.window.el=html=>({html}); ctx.window.attachModalGuard=()=>{};
+    ctx.window.location={href:'https://borionfinance.github.io/Borion-Finance/'};
+    ctx.window.history={state:null,replaced:0,pushed:0,lastGo:null,replaceState(s){this.state=s;this.replaced++;},pushState(s){this.state=s;this.pushed++;},go(n){this.lastGo=n;}};
+    if(!run(ctx,"typeof SmartphoneHistory!=='undefined'")) load(ctx,'js/21-smartphone-history.js');
+    const out=run(ctx,`(()=>{
+      S.config.uiMode='smartphone'; S.currentProfile={id:'p1',name:'Teste'}; S.data=migrateData(emptyData()); S.view='budget';
+      SmartphoneHistory.active=false; SmartphoneHistory.exitPromptOpen=false; SmartphoneHistory.activate();
+      const activated=history.state.__borionSmartHistory===SmartphoneHistory.GUARD;
+      history.state={__borionSmartHistory:SmartphoneHistory.BASE};
+      const root=document.getElementById('modal-root'); root.children=[{}];
+      SmartphoneHistory.onPopState();
+      const modalClosed=root.children.length===0 && history.state.__borionSmartHistory===SmartphoneHistory.GUARD && S.view==='budget';
+      history.state={__borionSmartHistory:SmartphoneHistory.BASE};
+      SmartphoneHistory.onPopState();
+      const wentHome=S.view==='overview' && history.state.__borionSmartHistory===SmartphoneHistory.GUARD;
+      history.state={__borionSmartHistory:SmartphoneHistory.BASE};
+      SmartphoneHistory.onPopState();
+      const askedExit=SmartphoneHistory.exitPromptOpen && root.children.length===1;
+      return {activated,modalClosed,wentHome,askedExit};
+    })()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{activated:true,modalClosed:true,wentHome:true,askedExit:true});
+    ctx.document.getElementById=originalGet; ctx.document.querySelector=originalQuery; ctx.window.el=originalEl; ctx.window.attachModalGuard=originalAttach;
+  });
+
+  test('34 — Confirmação explícita sai duas posições no histórico e evita segundo aviso nativo',()=>{
+    const originalTimeout=ctx.window.setTimeout;
+    ctx.window.setTimeout=fn=>{fn();return 0;};
+    run(ctx,`(()=>{ history.lastGo=null; window.__borionConfirmedExit=false; SmartphoneHistory.confirmExit(); })()`);
+    assert.strictEqual(ctx.history.lastGo,-2);
+    assert.strictEqual(ctx.__borionConfirmedExit,true);
+    ctx.window.setTimeout=originalTimeout;
+  });
+
+  test('35 — Histórico inteligente está incluído no HTML e no cache offline',()=>{
+    const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
+    const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
+    const src=fs.readFileSync(path.join(ROOT,'js/21-smartphone-history.js'),'utf8');
+    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.23\.7/);
+    assert.match(sw,/js\/21-smartphone-history\.js/);
+    assert.match(src,/Deseja sair da página\?/);
+    assert.match(src,/history\.go\(-2\)/);
   });
 
   test('Código completo — todos os JavaScript passam na validação sintática',()=>{
@@ -450,7 +502,7 @@ async function testAsync(name, fn){
   });
 
   const failures=results.filter(r=>r.status==='FAIL');
-  const report={generatedAt:new Date().toISOString(),appVersion:'6.23.5',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
+  const report={generatedAt:new Date().toISOString(),appVersion:'6.23.7',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
   fs.writeFileSync(path.join(__dirname,'regression-results.json'),JSON.stringify(report,null,2));
   for(const r of results){
     console.log(`${r.status==='PASS'?'✓':'✗'} ${r.name}`);

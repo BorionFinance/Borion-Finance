@@ -317,6 +317,7 @@ function getNavItems(){
 
 function renderApp(){
   applyInterfaceMode();
+  if(window.SmartphoneHistory) SmartphoneHistory.activate();
   if(!S.currentProfile || !S.data){
     console.warn('[BORION_UI][RENDER_APP][NO_ACTIVE_PROFILE]', {hasProfile:!!S.currentProfile, hasData:!!S.data});
     renderGate();

@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-07-12T15:12:28.012Z",
-  "appVersion": "6.23.5",
-  "total": 38,
-  "passed": 38,
+  "generatedAt": "2026-07-12T15:52:57.484Z",
+  "appVersion": "6.23.7",
+  "total": 41,
+  "passed": 41,
   "failed": 0,
   "results": [
     {
@@ -147,6 +147,18 @@
     },
     {
       "name": "32 — Smartphone Mode está no HTML, no cache offline e possui estilos próprios",
+      "status": "PASS"
+    },
+    {
+      "name": "33 — Botão Voltar fecha modal, volta ao Início e só então pede confirmação para sair",
+      "status": "PASS"
+    },
+    {
+      "name": "34 — Confirmação explícita sai duas posições no histórico e evita segundo aviso nativo",
+      "status": "PASS"
+    },
+    {
+      "name": "35 — Histórico inteligente está incluído no HTML e no cache offline",
       "status": "PASS"
     },
     {

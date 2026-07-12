@@ -81,7 +81,10 @@ const CloudStorage = {
     this.client = window.supabase.createClient(BORION_SUPABASE_URL, BORION_SUPABASE_KEY, { auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true} });
     window.addEventListener('online', ()=>{ this.setStatus('syncing','Internet voltou'); this.syncNow(); this.retryPendingProfileMeta(); });
     window.addEventListener('offline', ()=>{ this.setStatus('offline','Offline — salvando neste dispositivo'); });
-    window.addEventListener('beforeunload', e=>{ if(this.hasPendingSync()){ e.preventDefault(); e.returnValue='Existem dados do Borion ainda não sincronizados na nuvem.'; return e.returnValue; } });
+    window.addEventListener('beforeunload', e=>{
+      if(window.__borionConfirmedExit){ if(this.hasPendingSync()) this.syncNow(); return; }
+      if(this.hasPendingSync()){ e.preventDefault(); e.returnValue='Existem dados do Borion ainda não sincronizados na nuvem.'; return e.returnValue; }
+    });
     window.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden' && this.user && S && S.data) this.syncNow(); });
     window.addEventListener('pagehide', ()=>{ if(this.user && S && S.data) this.syncNow(); });
     this.client.auth.onAuthStateChange((event, session)=>{

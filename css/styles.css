@@ -1746,3 +1746,18 @@ html[data-interface-mode="smartphone"] .central-mobile-actions .tbl-actions butt
   .smart-summary-strip strong{font-size:10.5px;}
   .smart-launch-grid{grid-template-columns:1fr;}
 }
+
+
+/* =====================================================================================
+   V6.23.7 — BOTÃO VOLTAR DO CELULAR
+===================================================================================== */
+.smartphone-exit-modal{max-width:420px!important;text-align:center;padding:26px!important;}
+.smartphone-exit-icon{display:flex;align-items:center;justify-content:center;width:64px;height:64px;margin:0 auto 15px;border-radius:20px;color:var(--gold-bright);background:rgba(217,180,107,.11);border:1px solid rgba(217,180,107,.20);box-shadow:0 12px 28px rgba(0,0,0,.18);}
+.smartphone-exit-icon svg{width:34px;height:34px;}
+.smartphone-exit-modal h2{margin:0 0 8px;font-size:21px;}
+.smartphone-exit-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:20px;}
+.smartphone-exit-actions .btn{width:100%;min-height:44px;}
+@media(max-width:430px){
+  .smartphone-exit-modal{width:calc(100vw - 28px);padding:22px 18px!important;}
+  .smartphone-exit-actions{grid-template-columns:1fr;}
+}

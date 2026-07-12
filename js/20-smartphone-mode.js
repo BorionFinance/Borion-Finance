@@ -16,7 +16,14 @@ function smartNavIconHTML(kind){
   if(kind==='more'){
     return `<span class="smart-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14"/><path d="M5 12h14"/><path d="M5 17h14"/></svg></span>`;
   }
-  return `<span class="smart-nav-icon" aria-hidden="true">${navIconSVG(kind)}</span>`;
+  const fallback={
+    overview:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="5" height="14" rx="1.15"/><rect x="14" y="5" width="5" height="14" rx="1.15"/></svg>',
+    budget:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7H6"/><path d="M10 3 6 7l4 4"/><path d="M5 17h13"/><path d="M14 13l4 4-4 4"/></svg>',
+    reservas:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 20.5 12 12 20.5 3.5 12 12 3.5Z"/><path d="M12 8 16 12 12 16 8 12 12 8Z"/></svg>',
+    patrimony:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5V12h8.5"/></svg>'
+  };
+  const svg=(typeof navIconSVG==='function') ? navIconSVG(kind) : (fallback[kind]||fallback.overview);
+  return `<span class="smart-nav-icon" aria-hidden="true">${svg}</span>`;
 }
 
 function renderSmartphoneOverview(){

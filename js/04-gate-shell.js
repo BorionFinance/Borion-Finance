@@ -294,11 +294,11 @@ window.switchProfileScreen = switchProfileScreen;
 const NAV = [
   {key:'overview', label:'Visão geral'},
   {key:'budget', label:'Lançamentos'},
-  {key:'investments', label:'Investimentos'},
+  {key:'investments', label:'Investimentos', optionalModule:'investments'},
   {key:'patrimony', label:'Patrimônio'},
   {key:'reservas', label:'Reserva', optionalModule:'reserves'},
   {key:'cards', label:'Cartões e Contas'},
-  {key:'agenda', label:'Agenda Financeira'},
+  {key:'agenda', label:'Agenda Financeira', optionalModule:'agenda'},
   {key:'cheques', label:'Cheques', optionalModule:'cheques'},
   {key:'imports', label:'Importar Extrato', optionalModule:'imports'},
   {key:'settings', label:'Configurações'},
@@ -309,6 +309,8 @@ function getNavItems(){
     if(n.optionalModule==='cheques') return !!(S.data && S.data.cheques && S.data.cheques.enabled);
     if(n.optionalModule==='imports') return !!(S.data && S.data.modules && S.data.modules.imports !== false);
     if(n.optionalModule==='reserves') return !!(S.data && S.data.modules && S.data.modules.reserves !== false && S.data.reservas && S.data.reservas.enabled !== false);
+    if(n.optionalModule==='investments') return investmentsEnabled();
+    if(n.optionalModule==='agenda') return agendaEnabled();
     return true;
   });
 }
@@ -319,6 +321,7 @@ function renderApp(){
     renderGate();
     return;
   }
+  if(window.Assinaturas && Assinaturas.sync) Assinaturas.sync(); // V6.22 — cobra períodos pendentes até hoje, nunca duplicando
   const p=S.currentProfile;
   /* Organização visual (opcional): quando o usuário personaliza a ordem dos módulos em
      Configurações → Módulos, a barra lateral segue essa ordem. Sem personalização salva,
@@ -381,13 +384,18 @@ function renderView(){
   if(S.view==='cheques' && !(S.data && S.data.cheques && S.data.cheques.enabled)) S.view='overview';
   if(S.view==='imports' && !(S.data && S.data.modules && S.data.modules.imports !== false)) S.view='overview';
   if(S.view==='reservas' && !(S.data && S.data.modules && S.data.modules.reserves !== false && S.data.reservas && S.data.reservas.enabled !== false)) S.view='overview';
+  if(S.view==='investments' && !investmentsEnabled()) S.view='overview';
+  if(S.view==='agenda' && !agendaEnabled()) S.view='overview';
   const container = $('#view-root');
   const titles = {overview:'Visão geral',budget:'Lançamentos',investments:'Investimentos',patrimony:'Patrimônio',reservas:'Reserva',cards:'Cartões e Contas',agenda:'Agenda Financeira',cheques:'Cheques',imports:'Importar Extrato',settings:'Configurações'};
   const monthNav = `
-    <div class="month-nav">
-      <button onclick="Months.prev()">‹</button>
-      <div class="mlabel">${monthLabel(S.month.y,S.month.m)}</div>
-      <button onclick="Months.next()">›</button>
+    <div class="month-nav-wrap">
+      <div class="month-nav">
+        <button onclick="Months.prev()">‹</button>
+        <div class="mlabel">${monthLabel(S.month.y,S.month.m)}</div>
+        <button onclick="Months.next()">›</button>
+      </div>
+      <div class="clock-label" id="borion_clock"></div>
     </div>`;
   const unread = (S.data && Array.isArray(S.data.notificacoes) ? S.data.notificacoes : []).filter(n=>!n.lida).length;
   const bfLabel = (!S.bankFilter || S.bankFilter.size===0) ? 'Todos' : (S.bankFilter.size===1 ? Array.from(S.bankFilter)[0] : S.bankFilter.size+' selecionados');
@@ -433,7 +441,30 @@ function renderView(){
   else if(S.view==='settings') body.innerHTML = renderSettings();
   wireViewEvents();
   if(window.OrderPreferences) OrderPreferences.ensureBanner();
+  Clock.start(); // V6.22 — relógio "Atualizado em dd/mm/aaaa hh:mm" abaixo do filtro de mês, em toda página
 }
+
+/* ---------------- V6.22 — data/hora abaixo do filtro global (seção 8 do pedido) ----------------
+   Um único setInterval pra vida toda do app (nunca duplica, mesmo com renderView() chamado
+   várias vezes por minuto) — cada tick só busca o elemento pelo id na hora, então funciona
+   mesmo depois do innerHTML da topbar ser recriado a cada renderView(). */
+const Clock = {
+  intervalId: null,
+  start(){
+    this.tick();
+    if(this.intervalId) return;
+    this.intervalId = setInterval(()=>this.tick(), 60000);
+  },
+  stop(){ if(this.intervalId){ clearInterval(this.intervalId); this.intervalId=null; } },
+  tick(){
+    const el = document.getElementById('borion_clock');
+    if(!el) return;
+    const d = new Date();
+    const p2 = n=>String(n).padStart(2,'0');
+    el.textContent = `Atualizado em ${p2(d.getDate())}/${p2(d.getMonth()+1)}/${d.getFullYear()} às ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  }
+};
+window.Clock = Clock;
 
 const Months = {
   prev(){ let {y,m}=S.month; m--; if(m<0){m=11;y--;} S.month={y,m}; renderView(); },

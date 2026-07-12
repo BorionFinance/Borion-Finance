@@ -41,7 +41,7 @@ function txOrigemToKey(label){
 function txOrigemToLabel(key){ return TX_ORIGEM_LABELS[key] || TX_ORIGEM_LABELS.propria; }
 
 const DEFAULT_PROFILE_COLORS = ['#1f8a5b','#7c5cff','#c9a45c','#2563eb','#be123c','#0f766e','#9333ea','#ea580c'];
-const DEFAULT_MODULES = { reserves:true, imports:true };
+const DEFAULT_MODULES = { reserves:true, imports:true, investments:true, agenda:true };
 const DEFAULT_DASHBOARD_WIDGETS = ['fluxoMensal','evolucaoPatrimonio','evolucaoDividasCartao','distribuicaoPatrimonio','gastosCategoria','gastosCartao','distribuicaoBanco','resumoBanco'];
 const DASHBOARD_WIDGET_LABELS = {
   fluxoMensal:'Fluxo mensal',
@@ -266,7 +266,12 @@ function emptyData(){
     cheques: { enabled:false, items:[] },
     modules: Object.assign({}, DEFAULT_MODULES),
     dashboard: { widgets: DEFAULT_DASHBOARD_WIDGETS.slice() },
-    reservas: { enabled:true, boxes:[], moves:[] }
+    reservas: { enabled:true, boxes:[], moves:[] },
+    /* V6.22 — Assinaturas (seção 9 do pedido): despesas recorrentes mensais ou anuais, com
+       pausar/retomar. assinaturas = o cadastro; assinaturaCobrancas = idempotência + histórico
+       de cada período já efetivamente cobrado (nunca cobra o mesmo período duas vezes). */
+    assinaturas: [],
+    assinaturaCobrancas: []
   };
 }
 function migrateData(d){
@@ -309,6 +314,8 @@ function migrateData(d){
   d.modules.reserves = d.reservas.enabled!==false;
   if(!d.contas) d.contas=[];
   if(!Array.isArray(d.contas)) d.contas=[];
+  if(!Array.isArray(d.assinaturas)) d.assinaturas=[];
+  if(!Array.isArray(d.assinaturaCobrancas)) d.assinaturaCobrancas=[];
   if(!d.boletos) d.boletos=[];
   if(!Array.isArray(d.boletos)) d.boletos=[];
   if(!d.transferencias) d.transferencias=[];

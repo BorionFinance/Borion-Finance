@@ -57,7 +57,7 @@ function receitaMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.tra
 function receitaExtraMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&(t.origem==='reembolso'||t.origem==='repasse')&&bankMatches(t.banco)), y, m),'valor'); }
 function reembolsosMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&t.origem==='reembolso'&&bankMatches(t.banco)), y, m),'valor'); }
 function repassesMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&t.origem==='repasse'&&bankMatches(t.banco)), y, m),'valor'); }
-function despesasMes(y=S.month.y, m=S.month.m){ return fixaMes(y,m)+variavelMes(y,m); }
+function despesasMes(y=S.month.y, m=S.month.m){ return fixaMes(y,m)+variavelMes(y,m)+assinaturasMes(y,m); }
 function investirPlanejado(){ return S.data.investirPlanejado[monthKey(S.month.y,S.month.m)] || 0; }
 function saldoMes(){ return receitaMes() - despesasMes() - investirPlanejado(); }
 /* V6.0 — "Resultado do período" do novo Dashboard: Receitas - Despesas, sem descontar o
@@ -289,6 +289,8 @@ function investInvestidoTotal(){
    ver saldoEmContasTotal()/saldoContasDetalhe() em 01-storage-data-state.js. */
 function liquidezTotal(){ return saldoEmContasTotal(); }
 function reservasEnabled(){ return !!(S.data && S.data.modules && S.data.modules.reserves !== false && S.data.reservas && S.data.reservas.enabled !== false); }
+function investmentsEnabled(){ return !!(S.data && S.data.modules && S.data.modules.investments !== false); }
+function agendaEnabled(){ return !!(S.data && S.data.modules && S.data.modules.agenda !== false); }
 function reservasTotal(){ return reservasEnabled() ? sumBy((S.data.reservas.boxes||[]).filter(r=>bankMatches(r.banco)),'valorAtual') : 0; }
 function bensTotal(){ return sumBy(S.data.bens.filter(b=>bankMatches(b.banco)),'valor'); }
 function patrimonioTotal(){

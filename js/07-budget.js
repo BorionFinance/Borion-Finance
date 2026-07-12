@@ -5,6 +5,8 @@ function renderBudget(){
   // V6.1 — aba "Central": consulta unificada de todas as movimentações do perfil (recursos
   // à parte, não toca nas abas Receita/Despesa fixa/Despesa variável já existentes abaixo).
   if(S.budgetTab==='central') return renderCentralLancamentos();
+  // V6.22 — aba "Assinaturas": mesma ideia, view própria, não mexe nas abas já existentes.
+  if(S.budgetTab==='assinaturas') return renderAssinaturas();
   const rec = receitaMes(), desp = despesasMes(), inv = investirPlanejado();
   const saldo = saldoMes();
   const tab = S.budgetTab;
@@ -123,6 +125,7 @@ function renderBudget(){
       <button class="tab-btn ${tab==='receita'?'active':''}" onclick="Budget.tab('receita')">Receita</button>
       <button class="tab-btn ${tab==='fixa'?'active':''}" onclick="Budget.tab('fixa')">Despesa fixa</button>
       <button class="tab-btn ${tab==='variavel'?'active':''}" onclick="Budget.tab('variavel')">Despesa variável</button>
+      <button class="tab-btn" onclick="Assinaturas.tab()">Assinaturas</button>
       <button class="tab-btn" onclick="Budget.tab('central')">⌕ Central</button>
     </div>
     <div class="grid2">
@@ -298,6 +301,7 @@ function renderCentralLancamentos(){
       <button class="tab-btn" onclick="Budget.tab('receita')">Receita</button>
       <button class="tab-btn" onclick="Budget.tab('fixa')">Despesa fixa</button>
       <button class="tab-btn" onclick="Budget.tab('variavel')">Despesa variável</button>
+      <button class="tab-btn" onclick="Assinaturas.tab()">Assinaturas</button>
       <button class="tab-btn active">⌕ Central</button>
     </div>
     <div class="panel-box">

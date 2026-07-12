@@ -5,7 +5,10 @@ function patrimonioComposicaoSegments(){
   const invest = investAtualTotal();
   const reservas = reservasTotal();
   const segs = [];
-  if(invest>0) segs.push({label: S.data.investimentos.ativos.length===1? S.data.investimentos.ativos[0].nome : 'Investimentos', value:invest, color:catColor('CDI')});
+  if(invest>0){
+    if(investmentsEnabled()) segs.push({label: S.data.investimentos.ativos.length===1? S.data.investimentos.ativos[0].nome : 'Investimentos', value:invest, color:catColor('CDI')});
+    else segs.push({label:'Outros', value:invest, color:'var(--muted)'});
+  }
   if(reservas>0) segs.push({label:'Reserva', value:reservas, color:'var(--gold)'});
   saldoContasDetalhe().forEach(l=> segs.push({label:l.nome, value:l.valor, color:catColor(l.nome)}));
   S.data.bens.filter(b=>bankMatches(b.banco)).forEach(b=> segs.push({label:b.nome, value:b.valor, color:catColor(b.nome)}));
@@ -43,7 +46,7 @@ function renderPatrimony(){
       <div class="card"><div class="clabel">${tagBadgeHTML('liquidez','SALDO EM CONTAS')}</div><div class="cval">${brl(liq)}</div></div>
       ${reservasEnabled()?`<div class="card hero-gold"><div class="clabel">${tagBadgeHTML('investimentos','RESERVA')}</div><div class="cval">${brl(reservas)}</div></div>`:''}
       <div class="card"><div class="clabel">${tagBadgeHTML('bens','BENS')}</div><div class="cval">${brl(bens)}</div></div>
-      <div class="card"><div class="clabel">${tagBadgeHTML('investimentos','INVESTIMENTOS')}</div><div class="cval">${brl(invest)}</div></div>
+      ${investmentsEnabled()?`<div class="card"><div class="clabel">${tagBadgeHTML('investimentos','INVESTIMENTOS')}</div><div class="cval">${brl(invest)}</div></div>`:''}
       <div class="card"><div class="clabel">${tagBadgeHTML('dividas','DÍVIDAS')}</div><div class="cval" style="color:${iconColor('dividas')}">${brl(div)}</div></div>
     </div>
     <div class="grid2b">

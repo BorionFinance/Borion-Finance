@@ -23,6 +23,7 @@ function renderSettings(){
       ${settingsTabButton('categories','Categorias')}
       ${settingsTabButton('personalization','Personalização')}
       ${settingsTabButton('backup','Backups')}
+      <button id="qb_both" class="btn btn-primary btn-sm settings-quick-backup-btn" onclick="Settings.quickBackupBoth()" title="Cria um backup agora e salva ao mesmo tempo no Google Drive e neste dispositivo">SALVAR DRIVE&amp;LOCAL</button>
     </div>`;
   let content='';
   if(S.settingsTab==='modules') content = renderSettingsModules();
@@ -31,8 +32,8 @@ function renderSettings(){
   else if(S.settingsTab==='categories') content = renderSettingsCategories();
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.22.0 • Saldo em Contas derivado das contas reais</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
-<div><strong>Versão:</strong> 6.22.0</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.23.0 • Assinaturas, módulos, backup rápido e relógio</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
+<div><strong>Versão:</strong> 6.23.0</div>
 <div><strong>Lançamento:</strong> 09/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -42,12 +43,16 @@ function renderSettingsModules(){
   const chequesEnabled = !!(S.data.cheques && S.data.cheques.enabled);
   const reservasEnabledNow = !!(S.data.modules && S.data.modules.reserves !== false && S.data.reservas && S.data.reservas.enabled !== false);
   const importsEnabled = !!(S.data.modules && S.data.modules.imports !== false);
+  const investmentsEnabledNow = investmentsEnabled();
+  const agendaEnabledNow = agendaEnabled();
   const popupCfg = S.config.popupNotifs || {enabled:true,durationMs:40000};
   const popupEnabled = popupCfg.enabled !== false;
   const dur = Number(popupCfg.durationMs)||40000;
   return `
     <div class="settings-section settings-hero-section"><h3>Módulos do Borion</h3><p class="desc">Ative só o que você usa. Desativar uma função apenas oculta a tela; não apaga seus dados.</p></div>
     <div class="settings-module-grid">
+      ${moduleToggleHTML({key:'investments',title:'Investimentos',desc:'Ativos, dinheiro em caixa e evolução de investimentos — aparece em Investimentos e no card de Patrimônio.',enabled:investmentsEnabledNow,onClick:'Settings.toggleInvestments()'})}
+      ${moduleToggleHTML({key:'agenda',title:'Agenda Financeira',desc:'Compromissos e lembretes financeiros com data.',enabled:agendaEnabledNow,onClick:'Settings.toggleAgenda()'})}
       ${moduleToggleHTML({key:'cheques',title:'Cheques',desc:'Controle cheques recebidos e emitidos, lotes, baixas, vencimentos, devoluções e reapresentações.',enabled:chequesEnabled,onClick:'Settings.toggleCheques()'})}
       ${moduleToggleHTML({key:'reserves',title:'Reserva',desc:'Separe dinheiro por objetivo dentro do patrimônio, com extrato de reservar, resgatar, rendimento e ajuste.',enabled:reservasEnabledNow,onClick:'Settings.toggleReservas()'})}
       ${moduleToggleHTML({key:'imports',title:'Importar extratos',desc:'Importe CSV, OFX, TXT e PDF textual para revisar e lançar automaticamente depois de conferir.',enabled:importsEnabled,onClick:'Settings.toggleImports()'})}
@@ -113,7 +118,7 @@ const Settings = {
     openModal({title:'Renomear categoria', fields:[{key:'nome',label:'Novo nome',type:'text',default:oldName}], onSave(v){ const list=S.data.categorias[typeKey]; const idx=list.indexOf(oldName); if(idx>-1 && v.nome){ list[idx]=v.nome; S.data.transacoes.forEach(t=>{ if(t.categoria===oldName) t.categoria=v.nome; }); S.data.fixas.forEach(f=>{ if(f.categoria===oldName) f.categoria=v.nome; }); saveCurrentData(); } closeModal(); renderView(); }});
   },
   deleteCategory(typeKey, name){
-    const snapshot=JSON.parse(JSON.stringify(S.data)); S.data.categorias[typeKey]=S.data.categorias[typeKey].filter(c=>c!==name); if(!S.data.categorias[typeKey].includes('Outro')) S.data.categorias[typeKey].push('Outro'); S.data.transacoes.forEach(t=>{ if(t.categoria===name) t.categoria='Outro'; }); S.data.fixas.forEach(f=>{ if(f.categoria===name) f.categoria='Outro'; }); saveCurrentData(); renderView(); showUndoToast('Categoria "'+name+'" excluída.', ()=>{ S.data=snapshot; saveCurrentData(); renderView(); });
+    const snapshot=JSON.parse(JSON.stringify(S.data)); S.data.categorias[typeKey]=S.data.categorias[typeKey].filter(c=>c!==name); if(!S.data.categorias[typeKey].includes('Outro')) S.data.categorias[typeKey].push('Outro'); S.data.transacoes.forEach(t=>{ if(t.categoria===name) t.categoria='Outro'; }); S.data.fixas.forEach(f=>{ if(f.categoria===name) f.categoria='Outro'; }); if(typeKey==='variavel') (S.data.assinaturas||[]).forEach(a=>{ if(a.categoria===name) a.categoria='Outro'; }); saveCurrentData(); renderView(); showUndoToast('Categoria "'+name+'" excluída.', ()=>{ S.data=snapshot; saveCurrentData(); renderView(); });
   },
   savePersonal(){
     const p=S.currentProfile; p.name=$('#pf_name').value.trim()||p.name; p.email=$('#pf_email').value.trim(); const color=$('#pf_avatar_color'); if(color) p.avatarColor=color.value; setProfiles(S.profiles); renderApp(); toast('Perfil atualizado.');
@@ -135,9 +140,49 @@ const Settings = {
   exportProfile(){ const p=S.currentProfile; const payload={type:'multicap-profile-backup',version:2,exportedAt:new Date().toISOString(),profile:{id:p.id,name:p.name,email:p.email,passwordHash:p.passwordHash,salt:p.salt,avatarColor:p.avatarColor,avatarImage:p.avatarImage},data:S.data}; downloadJSON(payload, `backup-${slug(p.name)}-${dateSlug()}.json`); toast('Backup exportado.'); },
   emailBackup(){ BackupFS.manualBackupNow(); const p=S.currentProfile; const subject=encodeURIComponent('Backup - '+APP_NAME); const body=encodeURIComponent('Olá,\n\nSegue em anexo o backup do '+APP_NAME+' (perfil atual: "'+p.name+'").\nO arquivo foi baixado/salvo agora — anexe-o a este e-mail antes de enviar.\n\n'); setTimeout(()=>{ window.location.href=`mailto:${p.email||''}?subject=${subject}&body=${body}`; },400); },
   resetColors(){ S.config.iconColors=Object.assign({},DEFAULT_ICON_COLORS); setConfig(S.config); renderView(); toast('Cores restauradas.'); },
+  /* ---------------- V6.22 — 3 botões novos de backup rápido (seções 11-13 do pedido) ----------------
+     Reaproveita o mecanismo já existente de cada destino (storageProvider.createBackup para
+     este dispositivo, GoogleDriveProvider.createBackup para o Drive) — nenhum formato novo de
+     backup foi criado. Cada função trava o próprio botão contra duplo clique enquanto roda. */
+  async _runQuickBackup(btnId, defaultLabel, busyLabel, task){
+    const btn = document.getElementById(btnId);
+    if(btn){ if(btn.disabled) return; btn.disabled = true; btn.textContent = busyLabel; }
+    try{ await task(); }
+    finally{ if(btn){ btn.disabled = false; btn.textContent = defaultLabel; } }
+  },
+  quickBackupDrive(){
+    Settings._runQuickBackup('qb_drive', 'Criar backup agora', 'Criando...', async ()=>{
+      if(!(window.GoogleDriveProvider && GoogleDriveProvider.isConnected())){ toast('Google Drive: nenhuma conta conectada — conecte o Drive acima para criar backup lá.'); return; }
+      try{ await GoogleDriveProvider.createBackup('manual_quick'); toast('Google Drive: backup criado com sucesso.'); }
+      catch(e){ toast('Google Drive: falha ao criar backup — '+(e&&e.message?e.message:String(e))); }
+    });
+  },
+  quickBackupLocal(){
+    Settings._runQuickBackup('qb_local', 'Criar backup agora', 'Criando...', async ()=>{
+      try{ await storageProvider.createBackup('manual_quick'); toast('Este dispositivo: backup criado com sucesso.'); }
+      catch(e){ toast('Este dispositivo: falha ao criar backup — '+(e&&e.message?e.message:String(e))); }
+    });
+  },
+  quickBackupBoth(){
+    Settings._runQuickBackup('qb_both', 'SALVAR DRIVE&LOCAL', 'Salvando...', async ()=>{
+      // V6.22 — dispara os dois ao mesmo tempo (mesmo instante/estado dos dados), nunca um
+      // depois do outro: cada destino usa seu próprio mecanismo já existente, mas os dois
+      // partem do mesmo S.data, no mesmo clique — nunca dois snapshots de momentos diferentes.
+      const hasDrive = !!(window.GoogleDriveProvider && GoogleDriveProvider.isConnected());
+      const [driveRes, localRes] = await Promise.allSettled([
+        hasDrive ? GoogleDriveProvider.createBackup('manual_drive_local') : Promise.reject(new Error('nenhuma conta do Google Drive conectada')),
+        storageProvider.createBackup('manual_drive_local')
+      ]);
+      const driveMsg = driveRes.status==='fulfilled' ? 'Google Drive: backup criado com sucesso.' : 'Google Drive: falha ao criar backup — '+((driveRes.reason&&driveRes.reason.message)||'erro desconhecido')+'.';
+      const localMsg = localRes.status==='fulfilled' ? 'Este dispositivo: backup criado com sucesso.' : 'Este dispositivo: falha ao criar backup — '+((localRes.reason&&localRes.reason.message)||'erro desconhecido')+'.';
+      toast(driveMsg+' · '+localMsg);
+    });
+  },
   toggleCheques(){ if(!S.data.cheques) S.data.cheques={enabled:false,items:[]}; S.data.cheques.enabled=!S.data.cheques.enabled; if(!Array.isArray(S.data.cheques.items)) S.data.cheques.items=[]; saveCurrentData(); if(!S.data.cheques.enabled && S.view==='cheques') S.view='settings'; renderApp(); toast(S.data.cheques.enabled?'Módulo de cheques ativado.':'Módulo de cheques desativado.'); },
   toggleReservas(){ if(!S.data.modules) S.data.modules=Object.assign({},DEFAULT_MODULES); if(!S.data.reservas) S.data.reservas={enabled:true,boxes:[],moves:[]}; const next = !(S.data.modules.reserves !== false && S.data.reservas.enabled !== false); S.data.modules.reserves=next; S.data.reservas.enabled=next; saveCurrentData(); if(!next && S.view==='reservas') S.view='settings'; renderApp(); toast(next?'Reserva ativada.':'Reserva desativada.'); },
   toggleImports(){ if(!S.data.modules) S.data.modules=Object.assign({},DEFAULT_MODULES); S.data.modules.imports = !(S.data.modules.imports !== false); saveCurrentData(); if(S.data.modules.imports===false && S.view==='imports') S.view='settings'; renderApp(); toast(S.data.modules.imports!==false?'Importador de extratos ativado.':'Importador de extratos desativado.'); },
+  toggleInvestments(){ if(!S.data.modules) S.data.modules=Object.assign({},DEFAULT_MODULES); S.data.modules.investments = !(S.data.modules.investments !== false); saveCurrentData(); if(S.data.modules.investments===false && S.view==='investments') S.view='settings'; renderApp(); toast(S.data.modules.investments!==false?'Investimentos ativado.':'Investimentos desativado — os dados continuam salvos.'); },
+  toggleAgenda(){ if(!S.data.modules) S.data.modules=Object.assign({},DEFAULT_MODULES); S.data.modules.agenda = !(S.data.modules.agenda !== false); saveCurrentData(); if(S.data.modules.agenda===false && S.view==='agenda') S.view='settings'; renderApp(); toast(S.data.modules.agenda!==false?'Agenda Financeira ativada.':'Agenda Financeira desativada — os dados continuam salvos.'); },
   togglePopupNotifs(){ if(!S.config.popupNotifs) S.config.popupNotifs={enabled:true,durationMs:40000}; S.config.popupNotifs.enabled = !(S.config.popupNotifs.enabled !== false); setConfig(S.config); renderView(); toast(S.config.popupNotifs.enabled!==false?'Popups de notificação ativados.':'Popups de notificação desativados.'); },
   toggleDashboardWidget(key){ if(!S.data.dashboard) S.data.dashboard={widgets:DEFAULT_DASHBOARD_WIDGETS.slice()}; let arr=S.data.dashboard.widgets||[]; if(arr.includes(key)){ arr=arr.filter(k=>k!==key); } else { arr=[key].concat(arr.filter(k=>k!==key)); } S.data.dashboard.widgets=arr; saveCurrentData(); renderView(); },
   resetDashboardWidgets(){ S.data.dashboard={widgets:DEFAULT_DASHBOARD_WIDGETS.slice()}; saveCurrentData(); renderView(); toast('Dashboard restaurado.'); }
@@ -184,7 +229,7 @@ function renderSettingsBackup(){
   const isLocal = !user && !isDrive;
 
   const localBackupsBlock = `
-    <div class="settings-section"><h3>Backups neste dispositivo</h3><p class="desc">Histórico guardado só no navegador (IndexedDB) — funciona mesmo sem conta na nuvem, e mesmo sem internet.</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewLocalBackups()">Ver backups deste dispositivo</button></div></div>`;
+    <div class="settings-section"><h3>Backups neste dispositivo</h3><p class="desc">Histórico guardado só no navegador (IndexedDB) — funciona mesmo sem conta na nuvem, e mesmo sem internet.</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewLocalBackups()">Ver backups deste dispositivo</button><button id="qb_local" class="btn btn-primary btn-sm" onclick="Settings.quickBackupLocal()">Criar backup agora</button></div></div>`;
 
   let backupFolderBlock;
   if(!FS_ACCESS_SUPPORTED) backupFolderBlock = `<p class="desc">Este navegador não permite escolher uma pasta fixa pra backup automático.</p>`;
@@ -206,7 +251,7 @@ function renderSettingsBackup(){
     <div class="settings-section"><h3>Status</h3><p class="desc"><strong>Conta:</strong> ${esc(gs.email||'')}<br><strong>Pasta conectada:</strong> ${esc(gs.folderName||'(não identificada)')} ${gs.folderLink?`<a href="${esc(gs.folderLink)}" target="_blank" rel="noopener">Abrir no Google Drive ↗</a>`:''}<br><strong>Status:</strong> ${gs.conflict?'Conflito — veja acima':gs.pending?'Salvando alterações...':'Tudo sincronizado'}<br><strong>Perfil ativo:</strong> ${esc(S.currentProfile?S.currentProfile.name:'Nenhum')}</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="GoogleDriveProvider.syncNow()">Sincronizar agora</button><button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button><button class="btn-outline btn-sm" onclick="GoogleDriveProvider.disconnect();S.currentProfile=null;S.data=null;CloudAuth.mode='login';CloudAuth.error='';CloudAuth.info='';CloudAuth.emailExpanded=false;CloudAuth.render();">Sair da conta Google</button></div>
     </div>
-    <div class="settings-section"><h3>Backups no Google Drive</h3><p class="desc">Histórico guardado na pasta <b>backups</b>, dentro da pasta acima. Limpeza automática mantém no máximo ~10GB (mais antigos são apagados — o histórico completo continua no disco local).</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewDriveBackups()">Ver backups no Drive</button></div></div>
+    <div class="settings-section"><h3>Backups no Google Drive</h3><p class="desc">Histórico guardado na pasta <b>backups</b>, dentro da pasta acima. Limpeza automática mantém no máximo ~10GB (mais antigos são apagados — o histórico completo continua no disco local).</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewDriveBackups()">Ver backups no Drive</button><button id="qb_drive" class="btn btn-primary btn-sm" onclick="Settings.quickBackupDrive()">Criar backup agora</button></div></div>
     ${localBackupsBlock}
     ${folderSection}
     <div class="info-box">Se a internet cair, o Borion continua salvando neste dispositivo e envia pro Drive automaticamente quando a conexão voltar.</div>`;
@@ -400,6 +445,7 @@ function updateCategoryReferences(typeKey, oldName, newName){
     (S.data.transacoes||[]).forEach(t=>{ if(t.tipo==='variavel' && t.categoria===oldName) t.categoria=newName; });
     (S.data.cartoes||[]).forEach(card=>(card.parcelas||[]).forEach(p=>{ if(p.categoria===oldName) p.categoria=newName; }));
     (S.data.boletos||[]).forEach(b=>{ if(b.categoria===oldName) b.categoria=newName; });
+    (S.data.assinaturas||[]).forEach(a=>{ if(a.categoria===oldName) a.categoria=newName; });
     if(S.data.cheques&&Array.isArray(S.data.cheques.items)) S.data.cheques.items.forEach(c=>{ if(c.tipo==='emitido' && c.categoria===oldName) c.categoria=newName; });
   }
 }

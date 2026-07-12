@@ -1,3 +1,43 @@
+## V6.23.0 — Assinaturas, módulos Investimentos/Agenda, 3 botões de backup e relógio (12/07/2026)
+
+Segunda parte do pedido grande (a primeira foi a V6.22.0, o Saldo em Contas).
+
+- **Data e hora abaixo do filtro de mês**: em toda página, logo abaixo do seletor de mês/ano
+  no topo, aparece "Atualizado em dd/mm/aaaa às hh:mm", atualizando sozinho a cada minuto —
+  um único relógio pra vida toda do app, nunca duplica mesmo trocando de mês ou de tela.
+- **Nova aba "Assinaturas" em Lançamentos**, entre "Despesa variável" e "Central": cadastro de
+  despesas recorrentes mensais (ex: Netflix, todo dia X) ou anuais (ex: antivírus, dia X de um
+  mês só), com Pausar/Ativar, Editar e Excluir.
+  - Mensal entra nas despesas totais todo mês; anual entra só no mês do vencimento — nunca
+    dividido por 12.
+  - Pausar para a partir do mês selecionado no topo pra frente; nunca apaga o histórico
+    anterior. Reativar nunca preenche retroativamente os meses em que ficou pausada.
+  - Cobrança automática (sem precisar marcar "paga" manualmente): se a forma de pagamento for
+    Dinheiro/Pix/Débito, desconta o saldo da conta escolhida; se for Crédito, lança uma compra
+    real no cartão daquele mês (aparece na fatura, igual uma compra normal). Nunca cobra o
+    mesmo mês duas vezes, mesmo atualizando a página, trocando de perfil ou sincronizando.
+    Dia de vencimento inexistente no mês (ex: 31 em fevereiro) usa o último dia válido.
+  - Nunca adianta cobrança de mês futuro só por navegar o filtro de mês pra frente — só cobra
+    de verdade até o mês real de hoje.
+- **Configurações → Módulos**: agora dá pra ativar/desativar também **Investimentos** e
+  **Agenda Financeira** (além de Reserva, Cheques e Importar extratos que já existiam).
+  Desativar só esconde do menu e do Patrimônio — nunca apaga dado. Investimentos escondido
+  também some do card e do gráfico de composição do Patrimônio (o valor, se existir, some
+  visualmente pra uma fatia neutra "Outros" só enquanto estiver desativado — nunca conta 2x
+  nem desaparece do patrimônio total).
+- **3 botões novos de backup** em Configurações:
+  1. **SALVAR DRIVE&LOCAL** — botão dourado novo, logo abaixo de "Backups" no menu de abas de
+     Configurações. Cria backup no Google Drive e neste dispositivo ao mesmo tempo, a partir
+     do mesmo estado dos dados, informando o resultado de cada destino separadamente.
+  2. **Criar backup agora** ao lado de "Ver backups no Drive" — cria backup só no Drive, sem
+     precisar abrir a lista.
+  3. **Criar backup agora** ao lado de "Ver backups deste dispositivo" — cria backup só neste
+     dispositivo, sem precisar abrir a lista.
+  Os três reaproveitam o mecanismo de backup já existente (nenhum formato novo). Cada botão
+  trava contra duplo clique enquanto roda.
+- Sem mudança de formato de dados que quebre backups antigos — tudo novo (assinaturas,
+  cobranças, módulos) é preenchido automaticamente com valor padrão em perfis antigos.
+
 ## V6.22.0 — "Liquidez" virou "Saldo em Contas": derivado de verdade, não digitado (12/07/2026)
 
 Pedido: o card "Liquidez" no Patrimônio era um valor digitado à mão — não vinha do saldo

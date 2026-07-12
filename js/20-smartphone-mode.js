@@ -31,6 +31,10 @@ function smartSaveReloadIconHTML(){
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 7v4h-4"/><path d="M5 17v-4h4"/><path d="M7.3 8.1A7 7 0 0 1 18.4 9"/><path d="M16.7 15.9A7 7 0 0 1 5.6 15"/><path d="M12 8.5v7"/><path d="m9.5 13 2.5 2.5 2.5-2.5"/></svg>`;
 }
 
+function smartQuickSaveIconHTML(){
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4.5h9l3 3V19a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19Z"/><path d="M9 4.5V9h6V7.5"/><path d="M9 20.5v-6h6v6"/></svg>`;
+}
+
 function smartSaveReloadModalHTML(){
   return `<div class="modal-overlay smart-save-reload-overlay">
     <div class="modal-box smart-save-reload-modal" role="dialog" aria-modal="true" aria-labelledby="smart_save_reload_title">
@@ -98,14 +102,63 @@ function renderSmartphoneOverview(){
 
 const SmartphoneMode={
   savingAndReloading:false,
+  quickSaving:false,
   renderSidebarActions(){
     if(!isSmartphoneMode()) return '';
     return `<div class="smart-sidebar-actions">
+      <button type="button" class="smart-sidebar-save-drive-local" id="smart_sidebar_quick_save" onclick="SmartphoneMode.quickSaveBoth()">
+        <span class="smart-sidebar-save-icon">${smartQuickSaveIconHTML()}</span>
+        <span><strong>SALVAR DRIVE & LOCAL</strong><small>Backup manual rápido</small></span>
+      </button>
       <button type="button" class="smart-sidebar-save-reload" onclick="SmartphoneMode.saveAndReload()">
         <span class="smart-sidebar-save-icon">${smartSaveReloadIconHTML()}</span>
         <span><strong>Salvar e atualizar</strong><small>Force save + recarregar</small></span>
       </button>
     </div>`;
+  },
+  async quickSaveBoth(){
+    if(this.quickSaving) return;
+    this.quickSaving=true;
+    const btn=document.getElementById('smart_sidebar_quick_save');
+    const strong=btn?btn.querySelector('strong'):null;
+    const small=btn?btn.querySelector('small'):null;
+    const prevStrong=strong?strong.textContent:'';
+    const prevSmall=small?small.textContent:'';
+    try{
+      if(btn){ btn.disabled=true; btn.classList.add('is-saving'); }
+      if(strong) strong.textContent='Salvando...';
+      if(small) small.textContent='Drive + dispositivo';
+      if(window.MobileMenu) MobileMenu.close();
+      if(navigator.vibrate) try{ navigator.vibrate(12); }catch(_e){}
+      if(window.Settings && typeof Settings.quickBackupBoth==='function'){
+        await Settings.quickBackupBoth();
+      }else{
+        throw new Error('Função de backup rápido não está disponível.');
+      }
+      if(strong) strong.textContent='Salvo com sucesso';
+      if(small) small.textContent='Drive + local atualizados';
+      if(navigator.vibrate) try{ navigator.vibrate([12,60,18]); }catch(_e){}
+      setTimeout(()=>{
+        const b=document.getElementById('smart_sidebar_quick_save');
+        if(!b) return;
+        const s1=b.querySelector('strong'); const s2=b.querySelector('small');
+        if(s1) s1.textContent='SALVAR DRIVE & LOCAL';
+        if(s2) s2.textContent='Backup manual rápido';
+      },1800);
+    }catch(e){
+      if(strong) strong.textContent='Falha ao salvar';
+      if(small) small.textContent=(e&&e.message)?e.message:String(e);
+    }finally{
+      setTimeout(()=>{
+        const b=document.getElementById('smart_sidebar_quick_save');
+        if(b){ b.disabled=false; b.classList.remove('is-saving'); }
+        const s1=b?b.querySelector('strong'):null; const s2=b?b.querySelector('small'):null;
+        if(s1 && s1.textContent!=='Falha ao salvar') s1.textContent='SALVAR DRIVE & LOCAL';
+        if(s2 && s2.textContent!=='Backup manual rápido' && s1 && s1.textContent==='SALVAR DRIVE & LOCAL') s2.textContent='Backup manual rápido';
+        this.quickSaving=false;
+      }, 1900);
+      if(btn && !btn.isConnected) this.quickSaving=false;
+    }
   },
   async saveAndReload(){
     if(this.savingAndReloading) return;

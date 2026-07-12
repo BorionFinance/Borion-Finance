@@ -341,8 +341,8 @@ function renderApp(){
       <div class="sidebar" id="borion_sidebar">
         <div class="sb-logo"><img src="borion-emblem.png" alt="Borion Finance"/><div class="name">${esc(APP_NAME)}</div><button class="mobile-menu-close" title="Fechar menu" aria-label="Fechar menu" onclick="MobileMenu.close()">×</button></div>
         <div class="sb-nav">${nav}</div>
-        ${window.SmartphoneMode ? SmartphoneMode.renderSidebarActions() : ''}
         <div class="sb-footer">
+          ${window.SmartphoneMode ? SmartphoneMode.renderSidebarActions() : ''}
           <div class="sb-profile">
             ${profileAvatarHTML(p)}
             <div class="pname">${esc(p.name)}</div>

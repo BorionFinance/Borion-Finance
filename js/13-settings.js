@@ -181,14 +181,14 @@ const Settings = {
     return {entry,folderFile};
   },
   quickBackupDrive(){
-    Settings._runQuickBackup('qb_drive', 'Criar backup agora', 'Criando...', async ()=>{
+    return Settings._runQuickBackup('qb_drive', 'Criar backup agora', 'Criando...', async ()=>{
       if(!(window.GoogleDriveProvider && GoogleDriveProvider.isConnected())){ toast('Google Drive: nenhuma conta conectada — conecte o Drive acima para criar backup lá.'); return; }
       try{ await GoogleDriveProvider.createBackup('manual_quick'); toast('Google Drive: backup criado com sucesso.'); }
       catch(e){ toast('Google Drive: falha ao criar backup — '+(e&&e.message?e.message:String(e))); }
     });
   },
   quickBackupLocal(){
-    Settings._runQuickBackup('qb_local', 'Criar backup agora', 'Criando...', async ()=>{
+    return Settings._runQuickBackup('qb_local', 'Criar backup agora', 'Criando...', async ()=>{
       try{
         await Settings._prepareLocalFolderAccess();
         const snapshot=await buildSharedBackupSnapshot('manual_quick','backup manual rápido neste dispositivo');
@@ -199,7 +199,7 @@ const Settings = {
     });
   },
   quickBackupBoth(){
-    Settings._runQuickBackup('qb_both', 'SALVAR DRIVE&LOCAL', 'Salvando...', async ()=>{
+    return Settings._runQuickBackup('qb_both', 'SALVAR DRIVE&LOCAL', 'Salvando...', async ()=>{
       // V6.22 — dispara os dois ao mesmo tempo (mesmo instante/estado dos dados), nunca um
       // depois do outro: cada destino usa seu próprio mecanismo já existente, mas os dois
       // partem do mesmo S.data, no mesmo clique — nunca dois snapshots de momentos diferentes.

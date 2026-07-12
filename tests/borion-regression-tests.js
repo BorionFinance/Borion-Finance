@@ -251,8 +251,8 @@ async function testAsync(name, fn){
 
   load(ctx,'js/02-backup-local.js');
   await testAsync('Backup Drive&Local — snapshot possui mesmo ID, data-base, versão e checksum',async()=>{
-    const snap=await run(ctx,`finalizeBackupSnapshot({type:'borion-account-backup',appVersion:'6.23.9',exportedAt:'2026-07-12T12:00:00.000Z',profiles:[],dataByProfile:{},integrity:{}},'manual_drive_local','backup manual conjunto Drive e dispositivo')`);
-    assert.ok(snap.snapshotId); assert.strictEqual(snap.snapshotBaseDate,'2026-07-12T12:00:00.000Z'); assert.strictEqual(snap.appVersion,'6.23.9'); assert.strictEqual(snap.snapshotChecksum,snap.integrity.snapshotSha256); assert.strictEqual(snap.snapshotChecksum.length,64);
+    const snap=await run(ctx,`finalizeBackupSnapshot({type:'borion-account-backup',appVersion:'6.24.1',exportedAt:'2026-07-12T12:00:00.000Z',profiles:[],dataByProfile:{},integrity:{}},'manual_drive_local','backup manual conjunto Drive e dispositivo')`);
+    assert.ok(snap.snapshotId); assert.strictEqual(snap.snapshotBaseDate,'2026-07-12T12:00:00.000Z'); assert.strictEqual(snap.appVersion,'6.24.1'); assert.strictEqual(snap.snapshotChecksum,snap.integrity.snapshotSha256); assert.strictEqual(snap.snapshotChecksum.length,64);
     const local=JSON.stringify(snap),drive=JSON.stringify(snap); assert.strictEqual(local,drive);
     const settings=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
     assert.match(settings,/GoogleDriveProvider\.createBackup\('manual_drive_local',\{payload:sharedSnapshot\}\)/);
@@ -428,7 +428,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const css=fs.readFileSync(path.join(ROOT,'css/styles.css'),'utf8');
-    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.23\.9/);
+    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.24\.1/);
     assert.match(sw,/js\/20-smartphone-mode\.js/);
     assert.match(css,/html\[data-interface-mode="smartphone"\] \.smart-bottom-nav/);
     assert.match(css,/\.smart-quick-grid/); assert.match(css,/\.smart-launch-modal/);
@@ -492,7 +492,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const src=fs.readFileSync(path.join(ROOT,'js/21-smartphone-history.js'),'utf8');
-    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.23\.9/);
+    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.24\.1/);
     assert.match(sw,/js\/21-smartphone-history\.js/);
     assert.match(src,/GUARD_DEPTH:8/);
     assert.match(src,/BACK_BURST_MS:650/);
@@ -556,7 +556,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const src=fs.readFileSync(path.join(ROOT,'js/22-mobile-experience.js'),'utf8');
-    assert.match(index,/js\/22-mobile-experience\.js\?v=6\.23\.9/);
+    assert.match(index,/js\/22-mobile-experience\.js\?v=6\.24\.1/);
     assert.match(sw,/js\/22-mobile-experience\.js/);
     assert.match(src,/visualViewport/);
     assert.match(src,/navigator\.vibrate/);
@@ -584,6 +584,30 @@ async function testAsync(name, fn){
   });
 
 
+  test('44 — Atalho Drive & Local aparece somente no Modo Pro e Smartphone mantém Salvar e atualizar',()=>{
+    const src=fs.readFileSync(path.join(ROOT,'js/20-smartphone-mode.js'),'utf8');
+    const css=fs.readFileSync(path.join(ROOT,'css/styles.css'),'utf8');
+    const shell=fs.readFileSync(path.join(ROOT,'js/04-gate-shell.js'),'utf8');
+    assert.match(src,/if\(isSmartphoneMode\(\)\)/);
+    assert.match(src,/smart-sidebar-save-reload/);
+    assert.match(src,/pro-sidebar-save-drive-local/);
+    assert.match(src,/SALVAR DRIVE & LOCAL/);
+    assert.match(css,/data-interface-mode="pro"\] \.pro-sidebar-actions/);
+    assert.match(css,/data-interface-mode="smartphone"\] \.smart-sidebar-actions/);
+    assert.match(shell,/SmartphoneMode\.renderSidebarActions\(\)/);
+  });
+
+  test('45 — Rodapé técnico preserva lançamento original e autoria, atualizando apenas a versão',()=>{
+    const src=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
+    const backup=fs.readFileSync(path.join(ROOT,'js/02-backup-local.js'),'utf8');
+    assert.match(src,/<strong>Versão:<\/strong> 6\.24\.1/);
+    assert.match(src,/<strong>Lançamento:<\/strong> 07\/07\/2026/);
+    assert.match(src,/Desenvolvido por <strong>Pedro Bardella<\/strong>/);
+    assert.match(src,/© 2026 Pedro Bardella\. Todos os direitos reservados\./);
+    assert.match(backup,/BORION_APP_VERSION = '6\.24\.1'/);
+  });
+
+
   test('Código completo — todos os JavaScript passam na validação sintática',()=>{
     const files=fs.readdirSync(path.join(ROOT,'js')).filter(f=>f.endsWith('.js'));
     files.forEach(f=>execFileSync(process.execPath,['--check',path.join(ROOT,'js',f)],{stdio:'pipe'}));
@@ -600,7 +624,7 @@ async function testAsync(name, fn){
   });
 
   const failures=results.filter(r=>r.status==='FAIL');
-  const report={generatedAt:new Date().toISOString(),appVersion:'6.23.9',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
+  const report={generatedAt:new Date().toISOString(),appVersion:'6.24.1',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
   fs.writeFileSync(path.join(__dirname,'regression-results.json'),JSON.stringify(report,null,2));
   for(const r of results){
     console.log(`${r.status==='PASS'?'✓':'✗'} ${r.name}`);

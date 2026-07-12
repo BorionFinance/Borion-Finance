@@ -32,12 +32,12 @@ function renderSettings(){
   else if(S.settingsTab==='categories') content = renderSettingsCategories();
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.23.5 • Metas flexíveis e Smartphone Mode</div><div style="margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12);text-align:center;opacity:.85;font-size:.95rem;line-height:1.7">
-<div><strong>Versão:</strong> 6.23.5</div>
-<div><strong>Lançamento:</strong> 12/07/2026</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.24.1 • Atalho de backup no Modo Pro</div><footer class="app-release-footer" aria-label="Informações do Borion">
+<div><strong>Versão:</strong> 6.24.1</div>
+<div><strong>Lançamento:</strong> 07/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
-</div></div>`;
+</footer></div>`;
 }
 function renderSettingsModules(){
   const chequesEnabled = !!(S.data.cheques && S.data.cheques.enabled);
@@ -149,7 +149,7 @@ const Settings = {
   async _runQuickBackup(btnId, defaultLabel, busyLabel, task){
     const btn = document.getElementById(btnId);
     if(btn){ if(btn.disabled) return; btn.disabled = true; btn.textContent = busyLabel; }
-    try{ await task(); }
+    try{ return await task(); }
     finally{ if(btn){ btn.disabled = false; btn.textContent = defaultLabel; } }
   },
   async _prepareLocalFolderAccess(){
@@ -217,6 +217,12 @@ const Settings = {
         ? ('Este dispositivo: backup criado com sucesso.'+(localRes.value&&localRes.value.folderFile?' JSON: '+localRes.value.folderFile.filename+'.':''))
         : 'Este dispositivo: falha ao criar backup — '+((localRes.reason&&localRes.reason.message)||'erro desconhecido')+'.';
       toast(driveMsg+' · '+localMsg);
+      return {
+        driveOk:driveRes.status==='fulfilled',
+        localOk:localRes.status==='fulfilled',
+        driveError:driveRes.status==='rejected'?((driveRes.reason&&driveRes.reason.message)||'erro desconhecido'):'',
+        localError:localRes.status==='rejected'?((localRes.reason&&localRes.reason.message)||'erro desconhecido'):''
+      };
     });
   },
   toggleCheques(){ if(!S.data.cheques) S.data.cheques={enabled:false,items:[]}; S.data.cheques.enabled=!S.data.cheques.enabled; if(!Array.isArray(S.data.cheques.items)) S.data.cheques.items=[]; saveCurrentData(); if(!S.data.cheques.enabled && S.view==='cheques') S.view='settings'; renderApp(); toast(S.data.cheques.enabled?'Módulo de cheques ativado.':'Módulo de cheques desativado.'); },

@@ -613,6 +613,10 @@ input.agenda-check{width:16px;height:16px;accent-color:var(--gold);cursor:pointe
 .overview-top-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;align-items:start;}
 .dashboard-flexible .dash-widget-wide{grid-column:1/-1;}
 .settings-layout{display:grid;grid-template-columns:230px 1fr;gap:20px;align-items:start;}
+.app-release-footer{grid-column:1/-1;margin-top:18px;padding:18px 16px 6px;border-top:1px solid rgba(255,255,255,.10);text-align:center;color:var(--muted);font-size:12px;line-height:1.75;letter-spacing:.01em;}
+.app-release-footer strong{color:var(--text);font-weight:800;}
+html[data-theme="light"] .app-release-footer{border-top-color:rgba(122,85,29,.14);color:#6f7480;}
+html[data-theme="light"] .app-release-footer strong{color:#27313f;}
 .settings-tabs{position:sticky;top:22px;background:linear-gradient(180deg, rgba(18,28,38,.94), rgba(10,16,24,.94));border:1px solid rgba(255,255,255,.065);border-radius:18px;padding:10px;box-shadow:var(--shadow-md);display:flex;flex-direction:column;gap:6px;}
 .settings-tab{background:transparent;border:none;color:var(--muted);text-align:left;padding:11px 12px;border-radius:12px;font-weight:750;font-size:13px;transition:background-color .2s ease,color .2s ease,transform .2s ease;}
 .settings-tab:hover{background:rgba(255,255,255,.035);color:var(--gold-bright);transform:translateX(3px);}
@@ -1764,38 +1768,68 @@ html[data-interface-mode="smartphone"] .central-mobile-actions .tbl-actions butt
 
 
 /* =====================================================================================
-   V6.23.8 — SALVAR E ATUALIZAR + PROTEÇÃO INSISTENTE DE SAÍDA
+   V6.24.1 — ATALHOS DE SALVAMENTO POR MODO
+   Modo Pro: SALVAR DRIVE & LOCAL. Smartphone: somente Salvar e atualizar.
 ===================================================================================== */
-.smart-sidebar-actions{display:none;}
+.smart-sidebar-actions,.pro-sidebar-actions{display:none;}
+
+/* Smartphone Mode — mantém apenas Salvar e atualizar */
 html[data-interface-mode="smartphone"] .smart-sidebar-actions{
-  display:flex;flex-direction:column;gap:9px;flex:0 0 auto;padding:2px 0 10px;border-top:1px solid rgba(255,255,255,.055);
+  display:block;flex:0 0 auto;padding:2px 0 10px;border-top:1px solid rgba(255,255,255,.055);
 }
-html[data-interface-mode="smartphone"] .smart-sidebar-save-drive-local,
 html[data-interface-mode="smartphone"] .smart-sidebar-save-reload{
   width:100%;display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:15px;
-  border:1px solid rgba(217,180,107,.18);color:var(--text);text-align:left;transition:transform .16s ease, box-shadow .18s ease, background-color .18s ease, border-color .18s ease, opacity .18s ease;
+  border:1px solid rgba(217,180,107,.18);background:rgba(217,180,107,.065);color:var(--text);text-align:left;
+  transition:transform .16s ease,background-color .18s ease,border-color .18s ease;
 }
-html[data-interface-mode="smartphone"] .smart-sidebar-save-drive-local{
-  background:linear-gradient(180deg, rgba(217,180,107,.16), rgba(217,180,107,.09));
-  box-shadow:0 10px 24px rgba(0,0,0,.15), inset 0 1px 0 rgba(255,255,255,.08);
-}
-html[data-interface-mode="smartphone"] .smart-sidebar-save-reload{
-  background:rgba(217,180,107,.065);
-}
-html[data-interface-mode="smartphone"] .smart-sidebar-save-drive-local:active,
 html[data-interface-mode="smartphone"] .smart-sidebar-save-reload:active{transform:scale(.985);}
-html[data-interface-mode="smartphone"] .smart-sidebar-save-drive-local[disabled]{opacity:.82;pointer-events:none;}
-html[data-interface-mode="smartphone"] .smart-sidebar-save-drive-local.is-saving .smart-sidebar-save-icon{animation:smartSidebarPulse .95s ease-in-out infinite alternate;}
 html[data-interface-mode="smartphone"] .smart-sidebar-save-icon{
   display:flex;align-items:center;justify-content:center;flex:0 0 38px;width:38px;height:38px;border-radius:13px;
   color:var(--gold-bright);background:rgba(217,180,107,.10);border:1px solid rgba(217,180,107,.18);
 }
 html[data-interface-mode="smartphone"] .smart-sidebar-save-icon svg{width:22px;height:22px;}
-html[data-interface-mode="smartphone"] .smart-sidebar-save-drive-local strong,
 html[data-interface-mode="smartphone"] .smart-sidebar-save-reload strong{display:block;font-size:12.5px;}
-html[data-interface-mode="smartphone"] .smart-sidebar-save-drive-local small,
 html[data-interface-mode="smartphone"] .smart-sidebar-save-reload small{display:block;margin-top:2px;font-size:9px;color:var(--muted);}
-@keyframes smartSidebarPulse{from{transform:scale(1)}to{transform:scale(1.045)}}
+html[data-theme="light"][data-interface-mode="smartphone"] .smart-sidebar-actions{border-color:rgba(122,85,29,.13);}
+html[data-theme="light"][data-interface-mode="smartphone"] .smart-sidebar-save-reload{background:rgba(184,137,55,.07);border-color:rgba(122,85,29,.17);}
+
+/* Modo Pro / PC — atalho fixo acima do usuário */
+html[data-interface-mode="pro"] .pro-sidebar-actions{
+  display:block;flex:0 0 auto;padding:2px 0 10px;border-top:1px solid rgba(255,255,255,.055);
+}
+html[data-interface-mode="pro"] .pro-sidebar-save-drive-local{
+  width:100%;display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:15px;
+  border:1px solid rgba(217,180,107,.22);color:var(--text);text-align:left;
+  background:linear-gradient(180deg,rgba(217,180,107,.16),rgba(217,180,107,.08));
+  box-shadow:0 10px 24px rgba(0,0,0,.17),inset 0 1px 0 rgba(255,255,255,.08);
+  transition:transform .16s ease,box-shadow .18s ease,background-color .18s ease,border-color .18s ease,opacity .18s ease;
+}
+html[data-interface-mode="pro"] .pro-sidebar-save-drive-local:hover{
+  transform:translateY(-1px);border-color:rgba(217,180,107,.34);
+  box-shadow:0 14px 28px rgba(0,0,0,.22),0 0 0 1px rgba(217,180,107,.05) inset;
+}
+html[data-interface-mode="pro"] .pro-sidebar-save-drive-local:active{transform:scale(.985);}
+html[data-interface-mode="pro"] .pro-sidebar-save-drive-local[disabled]{opacity:.8;pointer-events:none;}
+html[data-interface-mode="pro"] .pro-sidebar-save-drive-local.is-saving .pro-sidebar-save-icon{animation:proSidebarPulse .95s ease-in-out infinite alternate;}
+html[data-interface-mode="pro"] .pro-sidebar-save-icon{
+  display:flex;align-items:center;justify-content:center;flex:0 0 38px;width:38px;height:38px;border-radius:13px;
+  color:var(--gold-bright);background:rgba(217,180,107,.12);border:1px solid rgba(217,180,107,.20);
+}
+html[data-interface-mode="pro"] .pro-sidebar-save-icon svg{width:22px;height:22px;}
+html[data-interface-mode="pro"] .pro-sidebar-save-drive-local span:last-child{min-width:0;}
+html[data-interface-mode="pro"] .pro-sidebar-save-drive-local strong{display:block;font-size:11.5px;line-height:1.25;white-space:nowrap;}
+html[data-interface-mode="pro"] .pro-sidebar-save-drive-local small{display:block;margin-top:3px;font-size:9px;color:var(--muted);white-space:nowrap;}
+@keyframes proSidebarPulse{from{transform:scale(1)}to{transform:scale(1.045)}}
+html[data-theme="light"][data-interface-mode="pro"] .pro-sidebar-actions{border-color:rgba(122,85,29,.13);}
+html[data-theme="light"][data-interface-mode="pro"] .pro-sidebar-save-drive-local{
+  color:#27313f;background:linear-gradient(180deg,rgba(184,137,55,.16),rgba(184,137,55,.08));
+  border-color:rgba(122,85,29,.20);box-shadow:0 10px 24px rgba(90,70,34,.09),inset 0 1px 0 rgba(255,255,255,.58);
+}
+html[data-theme="light"][data-interface-mode="pro"] .pro-sidebar-save-icon{
+  color:#8a5a17;background:rgba(184,137,55,.10);border-color:rgba(122,85,29,.16);
+}
+
+/* Modal de Salvar e atualizar (somente Smartphone) */
 .smart-save-reload-modal{width:min(430px,calc(100vw - 28px));max-width:430px!important;text-align:center;padding:26px 22px;border-radius:22px;}
 .smart-save-reload-icon{display:flex;align-items:center;justify-content:center;width:58px;height:58px;margin:0 auto 14px;border-radius:18px;color:var(--gold-bright);background:rgba(217,180,107,.10);border:1px solid rgba(217,180,107,.20);}
 .smart-save-reload-icon svg{width:30px;height:30px;}
@@ -1804,9 +1838,6 @@ html[data-interface-mode="smartphone"] .smart-sidebar-save-reload small{display:
 .smart-save-reload-progress span{display:block;width:38%;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--gold),var(--gold-bright));animation:smartSaveProgress 1.05s ease-in-out infinite alternate;}
 .smart-save-reload-modal .btn{width:100%;margin-top:4px;}
 @keyframes smartSaveProgress{from{transform:translateX(-20%)}to{transform:translateX(185%)}}
-html[data-theme="light"][data-interface-mode="smartphone"] .smart-sidebar-actions{border-color:rgba(122,85,29,.13);}
-html[data-theme="light"][data-interface-mode="smartphone"] .smart-sidebar-save-drive-local{background:linear-gradient(180deg, rgba(184,137,55,.16), rgba(184,137,55,.09));border-color:rgba(122,85,29,.20);box-shadow:0 10px 24px rgba(90,70,34,.08), inset 0 1px 0 rgba(255,255,255,.5);}
-html[data-theme="light"][data-interface-mode="smartphone"] .smart-sidebar-save-reload{background:rgba(184,137,55,.07);border-color:rgba(122,85,29,.17);}
 
 /* =====================================================================================
    V6.23.9 — MOBILE EXPERIENCE 2026

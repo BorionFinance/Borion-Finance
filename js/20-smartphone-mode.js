@@ -1,4 +1,4 @@
-/* Borion Finance V6.23.9 — Smartphone Mode
+/* Borion Finance V6.24.1 — Smartphone Mode
    Interface compacta para o uso diário. Reaproveita exatamente os mesmos dados,
    formulários e cálculos do Modo Pro; muda apenas a navegação e a apresentação. */
 
@@ -104,22 +104,25 @@ const SmartphoneMode={
   savingAndReloading:false,
   quickSaving:false,
   renderSidebarActions(){
-    if(!isSmartphoneMode()) return '';
-    return `<div class="smart-sidebar-actions">
-      <button type="button" class="smart-sidebar-save-drive-local" id="smart_sidebar_quick_save" onclick="SmartphoneMode.quickSaveBoth()">
-        <span class="smart-sidebar-save-icon">${smartQuickSaveIconHTML()}</span>
+    if(isSmartphoneMode()){
+      return `<div class="smart-sidebar-actions">
+        <button type="button" class="smart-sidebar-save-reload" onclick="SmartphoneMode.saveAndReload()">
+          <span class="smart-sidebar-save-icon">${smartSaveReloadIconHTML()}</span>
+          <span><strong>Salvar e atualizar</strong><small>Force save + recarregar</small></span>
+        </button>
+      </div>`;
+    }
+    return `<div class="pro-sidebar-actions">
+      <button type="button" class="pro-sidebar-save-drive-local" id="pro_sidebar_quick_save" onclick="SmartphoneMode.quickSaveBoth()">
+        <span class="pro-sidebar-save-icon">${smartQuickSaveIconHTML()}</span>
         <span><strong>SALVAR DRIVE & LOCAL</strong><small>Backup manual rápido</small></span>
-      </button>
-      <button type="button" class="smart-sidebar-save-reload" onclick="SmartphoneMode.saveAndReload()">
-        <span class="smart-sidebar-save-icon">${smartSaveReloadIconHTML()}</span>
-        <span><strong>Salvar e atualizar</strong><small>Force save + recarregar</small></span>
       </button>
     </div>`;
   },
   async quickSaveBoth(){
     if(this.quickSaving) return;
     this.quickSaving=true;
-    const btn=document.getElementById('smart_sidebar_quick_save');
+    const btn=document.getElementById('pro_sidebar_quick_save');
     const strong=btn?btn.querySelector('strong'):null;
     const small=btn?btn.querySelector('small'):null;
     const prevStrong=strong?strong.textContent:'';
@@ -128,18 +131,23 @@ const SmartphoneMode={
       if(btn){ btn.disabled=true; btn.classList.add('is-saving'); }
       if(strong) strong.textContent='Salvando...';
       if(small) small.textContent='Drive + dispositivo';
-      if(window.MobileMenu) MobileMenu.close();
-      if(navigator.vibrate) try{ navigator.vibrate(12); }catch(_e){}
       if(window.Settings && typeof Settings.quickBackupBoth==='function'){
-        await Settings.quickBackupBoth();
+        const result=await Settings.quickBackupBoth();
+        if(!result || (!result.driveOk && !result.localOk)){
+          throw new Error('Não foi possível salvar no Drive nem no dispositivo.');
+        }
+        if(result.driveOk && result.localOk){
+          if(strong) strong.textContent='Salvo com sucesso';
+          if(small) small.textContent='Drive + local atualizados';
+        }else{
+          if(strong) strong.textContent='Salvo parcialmente';
+          if(small) small.textContent=result.driveOk?'Drive salvo · local falhou':'Local salvo · Drive falhou';
+        }
       }else{
         throw new Error('Função de backup rápido não está disponível.');
       }
-      if(strong) strong.textContent='Salvo com sucesso';
-      if(small) small.textContent='Drive + local atualizados';
-      if(navigator.vibrate) try{ navigator.vibrate([12,60,18]); }catch(_e){}
       setTimeout(()=>{
-        const b=document.getElementById('smart_sidebar_quick_save');
+        const b=document.getElementById('pro_sidebar_quick_save');
         if(!b) return;
         const s1=b.querySelector('strong'); const s2=b.querySelector('small');
         if(s1) s1.textContent='SALVAR DRIVE & LOCAL';
@@ -150,7 +158,7 @@ const SmartphoneMode={
       if(small) small.textContent=(e&&e.message)?e.message:String(e);
     }finally{
       setTimeout(()=>{
-        const b=document.getElementById('smart_sidebar_quick_save');
+        const b=document.getElementById('pro_sidebar_quick_save');
         if(b){ b.disabled=false; b.classList.remove('is-saving'); }
         const s1=b?b.querySelector('strong'):null; const s2=b?b.querySelector('small'):null;
         if(s1 && s1.textContent!=='Falha ao salvar') s1.textContent='SALVAR DRIVE & LOCAL';

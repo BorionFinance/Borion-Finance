@@ -1,3 +1,11 @@
+# Borion Finance — Changelog
+
+## V6.24.1 — Atalho de backup no Modo Pro (12/07/2026)
+- **SALVAR DRIVE & LOCAL** removido do Smartphone Mode e mantido somente no menu lateral do Modo Pro/PC.
+- Botão fixado acima do perfil no menu lateral, com os mesmos estados visuais de salvamento.
+- Smartphone Mode mantém apenas **Salvar e atualizar**.
+- Rodapé técnico atualizado para a versão 6.24.1, preservando o lançamento original em 07/07/2026.
+
 ## V6.23.9 — Mobile Experience 2026
 
 - Popups de notificação agora aceitam gesto horizontal para dispensar sem apagar o registro do sino.

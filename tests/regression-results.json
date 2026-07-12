@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-07-12T16:56:29.142Z",
-  "appVersion": "6.23.9",
-  "total": 49,
-  "passed": 49,
+  "generatedAt": "2026-07-12T17:33:35.440Z",
+  "appVersion": "6.24.1",
+  "total": 51,
+  "passed": 51,
   "failed": 0,
   "results": [
     {
@@ -191,6 +191,14 @@
     },
     {
       "name": "43 — Manifesto PWA possui identidade, foco na instância existente e display standalone",
+      "status": "PASS"
+    },
+    {
+      "name": "44 — Atalho Drive & Local aparece somente no Modo Pro e Smartphone mantém Salvar e atualizar",
+      "status": "PASS"
+    },
+    {
+      "name": "45 — Rodapé técnico preserva lançamento original e autoria, atualizando apenas a versão",
       "status": "PASS"
     },
     {

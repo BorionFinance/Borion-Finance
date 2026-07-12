@@ -198,6 +198,8 @@ function notifMessage(n){
 }
 const Notifs = {
   panelOpen:false,
+  swipeThreshold:0.28,
+  swipeVelocity:0.55,
   refresh(){
     const today = todayISO();
     const newOnes = [];
@@ -212,7 +214,7 @@ const Notifs = {
       if(!tipo) return;
       const exists = S.data.notificacoes.find(n=>n.lembreteId===item.id && n.tipo===tipo);
       if(!exists){
-        const n = {id:uid(), lembreteId:item.id, tipo, lida:false, criadaEm:Date.now()};
+        const n = {id:uid(), lembreteId:item.id, tipo, lida:false, criadaEm:Date.now(), popupDispensadaEm:null};
         S.data.notificacoes.push(n);
         newOnes.push(n);
       }
@@ -221,7 +223,7 @@ const Notifs = {
     return newOnes;
   },
   unreadForPopup(){
-    const list = (S.data.notificacoes||[]).filter(n=>!n.lida && S.data.agenda.some(a=>a.id===n.lembreteId && !a.pago));
+    const list = (S.data.notificacoes||[]).filter(n=>!n.lida && !n.popupDispensadaEm && S.data.agenda.some(a=>a.id===n.lembreteId && !a.pago));
     const priority = {atraso:0, vencimento:1, '1dia':2, '2dias':3};
     return list.sort((a,b)=>{
       const pa = priority[a.tipo] ?? 9;
@@ -230,57 +232,201 @@ const Notifs = {
       return (b.criadaEm||0)-(a.criadaEm||0);
     });
   },
+  relativeTime(ts){
+    const diff=Math.max(0,Date.now()-Number(ts||0));
+    if(diff<60000) return 'agora';
+    const min=Math.floor(diff/60000);
+    if(min<60) return `há ${min} min`;
+    const hr=Math.floor(min/60);
+    if(hr<24) return `há ${hr} h`;
+    const day=Math.floor(hr/24);
+    if(day===1) return 'ontem';
+    if(day<7) return `há ${day} dias`;
+    const d=new Date(Number(ts||0));
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+  },
+  typeLabel(tipo){
+    return ({atraso:'Em atraso',vencimento:'Vence hoje','1dia':'Vence amanhã','2dias':'Próximo vencimento'})[tipo]||'Lembrete';
+  },
+  haptic(pattern=8){
+    if(window.MobileExperience && MobileExperience.haptic) MobileExperience.haptic(pattern);
+    else if(navigator.vibrate) try{ navigator.vibrate(pattern); }catch(e){}
+  },
+  bindSwipe(node,{onCommit,onProgress,onCancel,axis='x'}={}){
+    if(!node || node.dataset.swipeBound==='1') return;
+    node.dataset.swipeBound='1';
+    let pointerId=null,startX=0,startY=0,startAt=0,lastX=0,lastAt=0,mode='pending';
+    const content=node.classList.contains('notif-swipe-shell') ? node.querySelector('.notif-item') : node;
+    const target=content||node;
+    const reset=()=>{
+      target.classList.remove('is-swiping');
+      target.style.removeProperty('--swipe-x');
+      target.style.removeProperty('--swipe-opacity');
+      if(onCancel) onCancel();
+      pointerId=null;mode='pending';
+    };
+    const down=e=>{
+      if(e.button!=null && e.button!==0) return;
+      if(e.target.closest('button,a,input,select,textarea')) return;
+      pointerId=e.pointerId;startX=e.clientX;startY=e.clientY;lastX=e.clientX;startAt=lastAt=performance.now();mode='pending';
+      target.classList.add('is-swiping');
+      try{ target.setPointerCapture(pointerId); }catch(err){}
+    };
+    const move=e=>{
+      if(pointerId!==e.pointerId) return;
+      const dx=e.clientX-startX,dy=e.clientY-startY;
+      if(mode==='pending' && (Math.abs(dx)>7 || Math.abs(dy)>7)) mode=Math.abs(dx)>Math.abs(dy)*1.15?'horizontal':'vertical';
+      if(mode==='vertical') return;
+      if(mode!=='horizontal') return;
+      e.preventDefault();
+      const width=Math.max(1,target.getBoundingClientRect().width);
+      const resistance=1/(1+Math.max(0,Math.abs(dx)-width*.72)/width*1.8);
+      const rendered=dx*resistance;
+      const opacity=Math.max(.2,1-Math.abs(rendered)/(width*1.05));
+      target.style.setProperty('--swipe-x',`${rendered}px`);
+      target.style.setProperty('--swipe-opacity',String(opacity));
+      lastX=e.clientX;lastAt=performance.now();
+      if(onProgress) onProgress({dx:rendered,rawDx:dx,width});
+    };
+    const finish=e=>{
+      if(pointerId!==e.pointerId) return;
+      const now=performance.now();
+      const dx=e.clientX-startX;
+      const width=Math.max(1,target.getBoundingClientRect().width);
+      const velocity=(e.clientX-lastX)/Math.max(1,now-lastAt);
+      const commit=mode==='horizontal' && (Math.abs(dx)>=Math.max(62,width*this.swipeThreshold) || (Math.abs(velocity)>=this.swipeVelocity && Math.abs(dx)>34));
+      try{ target.releasePointerCapture(pointerId); }catch(err){}
+      if(commit){
+        const direction=dx===0?(velocity>=0?1:-1):(dx>0?1:-1);
+        target.classList.remove('is-swiping');
+        target.classList.add('is-swipe-committed');
+        target.style.setProperty('--swipe-x',`${direction*(window.innerWidth+width)}px`);
+        target.style.setProperty('--swipe-opacity','0');
+        this.haptic(10);
+        setTimeout(()=>{ if(onCommit) onCommit({direction,dx,velocity}); },155);
+      }else reset();
+    };
+    target.addEventListener('pointerdown',down,{passive:true});
+    target.addEventListener('pointermove',move,{passive:false});
+    target.addEventListener('pointerup',finish,{passive:true});
+    target.addEventListener('pointercancel',reset,{passive:true});
+  },
+  dismissPopup(id,element,{direction=1,persist=true}={}){
+    if(!element || element.dataset.removing==='1') return;
+    element.dataset.removing='1';
+    if(persist){
+      const n=(S.data.notificacoes||[]).find(x=>x.id===id);
+      if(n){ n.popupDispensadaEm=Date.now(); saveCurrentData(); }
+    }
+    const width=Math.max(element.offsetWidth||320,320);
+    element.classList.add('is-swipe-committed');
+    element.style.setProperty('--swipe-x',`${direction*(window.innerWidth+width)}px`);
+    element.style.setProperty('--swipe-opacity','0');
+    setTimeout(()=>{
+      element.remove();
+      const wrap=document.getElementById('floating-notifs');
+      if(wrap && !wrap.children.length) wrap.remove();
+    },180);
+  },
   showFloating(list){
     list = (list||[]).filter(Boolean);
     if(!list.length) return;
     if(S.config && S.config.popupNotifs && S.config.popupNotifs.enabled===false) return;
     let wrap = document.getElementById('floating-notifs');
-    if(!wrap){ wrap = document.createElement('div'); wrap.id='floating-notifs'; wrap.className='floating-notifs'; document.body.appendChild(wrap); }
+    if(!wrap){ wrap = document.createElement('div'); wrap.id='floating-notifs'; wrap.className='floating-notifs'; wrap.setAttribute('aria-live','polite'); document.body.appendChild(wrap); }
     wrap.innerHTML = '';
-    list.forEach(n=>{
+    list.slice(0,4).forEach((n,index)=>{
       const msg = notifMessage(n);
-      const el2 = document.createElement('div');
+      const el2 = document.createElement('article');
       el2.className = 'floating-notif';
-      el2.innerHTML = `<button class="fn-close" title="Fechar">&times;</button><div>${msg.icon} ${esc(msg.text)}</div>`;
+      el2.dataset.notifId=n.id;
+      el2.style.setProperty('--notif-index',String(index));
+      el2.setAttribute('role','status');
+      el2.innerHTML = `<button class="fn-close" title="Dispensar popup" aria-label="Dispensar popup">&times;</button>
+        <div class="fn-icon" aria-hidden="true">${msg.icon}</div>
+        <div class="fn-copy"><strong>${esc(this.typeLabel(n.tipo))}</strong><span>${esc(msg.text)}</span><small>Deslize para o lado para dispensar</small></div>`;
       wrap.appendChild(el2);
-      const remove = ()=>{ el2.style.transition='opacity .25s ease, transform .25s ease'; el2.style.opacity='0'; el2.style.transform='translateY(8px)'; setTimeout(()=>el2.remove(),250); };
-      el2.querySelector('.fn-close').onclick = remove;
+      const remove=(direction=1)=>this.dismissPopup(n.id,el2,{direction,persist:true});
+      el2.querySelector('.fn-close').onclick=e=>{e.stopPropagation();this.haptic(6);remove(1);};
+      this.bindSwipe(el2,{onCommit:({direction})=>remove(direction)});
       const dur = Math.max(30000, Math.min(50000, Number((S.config.popupNotifs||{}).durationMs)||40000));
-      setTimeout(remove, dur);
+      const timer=setTimeout(()=>remove(1),dur);
+      el2.addEventListener('pointerdown',()=>clearTimeout(timer),{once:true,passive:true});
     });
   },
   togglePanel(evt){
     if(evt) evt.stopPropagation();
     this.panelOpen = !this.panelOpen;
     this.renderPanel();
+    this.haptic(5);
+  },
+  closePanel(){
+    this.panelOpen=false;
+    this.renderPanel();
   },
   renderPanel(){
     let panel = document.getElementById('notif-panel');
-    if(!this.panelOpen){ if(panel) panel.remove(); return; }
-    if(!panel){ panel = document.createElement('div'); panel.id='notif-panel'; panel.className='notif-panel'; document.body.appendChild(panel); }
-    const list = S.data.notificacoes.slice().sort((a,b)=>b.criadaEm-a.criadaEm);
-    panel.innerHTML = list.length ? list.map(n=>{
+    if(!this.panelOpen){ if(panel) panel.remove(); document.body.classList.remove('notif-panel-open'); return; }
+    if(!panel){ panel = document.createElement('section'); panel.id='notif-panel'; panel.className='notif-panel'; document.body.appendChild(panel); }
+    panel.classList.toggle('notif-panel-mobile',typeof isSmartphoneMode==='function' && isSmartphoneMode());
+    const list = (S.data.notificacoes||[]).slice().sort((a,b)=>(b.criadaEm||0)-(a.criadaEm||0));
+    const unread=list.filter(n=>!n.lida).length;
+    const items=list.map(n=>{
       const msg = notifMessage(n);
-      return `<div class="notif-item ${n.lida?'':'unread'}">
-        <span class="ni-icon">${msg.icon}</span>
-        <span class="ni-text">${esc(msg.text)}</span>
-        <span class="ni-actions">
-          <button onclick="Notifs.toggleRead('${n.id}')">${n.lida?'Marcar não lida':'Marcar lida'}</button>
-          <button onclick="Notifs.remove('${n.id}')">Excluir</button>
-        </span>
+      return `<div class="notif-swipe-shell" data-notif-id="${esc(n.id)}">
+        <div class="notif-delete-bg" aria-hidden="true"><span>⌫</span><strong>Excluir</strong></div>
+        <article class="notif-item ${n.lida?'':'unread'}" tabindex="0">
+          <span class="ni-icon" aria-hidden="true">${msg.icon}</span>
+          <span class="ni-text"><strong>${esc(this.typeLabel(n.tipo))}</strong><span>${esc(msg.text)}</span><small>${esc(this.relativeTime(n.criadaEm))}${n.lida?' · lida':' · nova'}</small></span>
+          <span class="ni-actions">
+            <button onclick="Notifs.toggleRead('${n.id}')">${n.lida?'Não lida':'Marcar lida'}</button>
+            <button class="ni-delete" onclick="Notifs.remove('${n.id}')">Excluir</button>
+          </span>
+        </article>
       </div>`;
-    }).join('') : '<div class="notif-empty">Nenhuma notificação por aqui.</div>';
-    panel.onclick = (e)=> e.stopPropagation();
+    }).join('');
+    panel.innerHTML = `<div class="notif-panel-handle" aria-hidden="true"></div>
+      <header class="notif-panel-header">
+        <div><strong>Notificações</strong><small>${unread?`${unread} não lida${unread===1?'':'s'}`:'Tudo em dia'}</small></div>
+        <button class="notif-panel-close" onclick="Notifs.closePanel()" aria-label="Fechar notificações">&times;</button>
+      </header>
+      ${list.length?`<div class="notif-panel-tools"><button onclick="Notifs.markAllRead()" ${unread?'':'disabled'}>Marcar todas como lidas</button><span>No celular, deslize para excluir</span></div>`:''}
+      <div class="notif-list">${items||'<div class="notif-empty"><span>✓</span><strong>Nenhuma notificação</strong><small>Seus lembretes aparecerão aqui.</small></div>'}</div>`;
+    panel.onclick = e=> e.stopPropagation();
+    panel.querySelectorAll('.notif-swipe-shell').forEach(shell=>{
+      this.bindSwipe(shell,{onCommit:()=>this.removeWithUndo(shell.dataset.notifId)});
+    });
+    document.body.classList.add('notif-panel-open');
+    if(window.MobileExperience && MobileExperience.decorateNotificationPanel) MobileExperience.decorateNotificationPanel(panel);
   },
   toggleRead(id){
-    const n = S.data.notificacoes.find(x=>x.id===id);
-    if(n){ n.lida = !n.lida; saveCurrentData(); this.renderPanel(); renderView(); }
+    const n = (S.data.notificacoes||[]).find(x=>x.id===id);
+    if(n){
+      n.lida = !n.lida;
+      n.popupDispensadaEm = n.lida ? (n.popupDispensadaEm||Date.now()) : null;
+      saveCurrentData(); this.renderPanel(); renderView(); this.haptic(5);
+    }
   },
-  remove(id){
-    S.data.notificacoes = S.data.notificacoes.filter(x=>x.id!==id);
+  markAllRead(){
+    let changed=false;
+    (S.data.notificacoes||[]).forEach(n=>{ if(!n.lida){n.lida=true;n.popupDispensadaEm=n.popupDispensadaEm||Date.now();changed=true;} });
+    if(changed){ saveCurrentData(); this.renderPanel(); renderView(); this.haptic([7,25,7]); }
+  },
+  removeWithUndo(id){
+    const idx=(S.data.notificacoes||[]).findIndex(x=>x.id===id);
+    if(idx<0) return;
+    const snapshot=JSON.parse(JSON.stringify(S.data.notificacoes[idx]));
+    S.data.notificacoes.splice(idx,1);
     saveCurrentData(); this.renderPanel(); renderView();
+    showUndoToast('Notificação excluída.',()=>{
+      S.data.notificacoes.splice(Math.min(idx,S.data.notificacoes.length),0,snapshot);
+      saveCurrentData(); this.renderPanel(); renderView();
+    });
   },
+  remove(id){ this.removeWithUndo(id); },
   closePanelOnOutsideClick(){
+    if(window.__borionNotifOutsideWired) return;
+    window.__borionNotifOutsideWired=true;
     document.addEventListener('click', ()=>{ if(Notifs.panelOpen){ Notifs.panelOpen=false; Notifs.renderPanel(); } });
   }
 };

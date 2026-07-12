@@ -251,8 +251,8 @@ async function testAsync(name, fn){
 
   load(ctx,'js/02-backup-local.js');
   await testAsync('Backup Drive&Local — snapshot possui mesmo ID, data-base, versão e checksum',async()=>{
-    const snap=await run(ctx,`finalizeBackupSnapshot({type:'borion-account-backup',appVersion:'6.23.8',exportedAt:'2026-07-12T12:00:00.000Z',profiles:[],dataByProfile:{},integrity:{}},'manual_drive_local','backup manual conjunto Drive e dispositivo')`);
-    assert.ok(snap.snapshotId); assert.strictEqual(snap.snapshotBaseDate,'2026-07-12T12:00:00.000Z'); assert.strictEqual(snap.appVersion,'6.23.8'); assert.strictEqual(snap.snapshotChecksum,snap.integrity.snapshotSha256); assert.strictEqual(snap.snapshotChecksum.length,64);
+    const snap=await run(ctx,`finalizeBackupSnapshot({type:'borion-account-backup',appVersion:'6.23.9',exportedAt:'2026-07-12T12:00:00.000Z',profiles:[],dataByProfile:{},integrity:{}},'manual_drive_local','backup manual conjunto Drive e dispositivo')`);
+    assert.ok(snap.snapshotId); assert.strictEqual(snap.snapshotBaseDate,'2026-07-12T12:00:00.000Z'); assert.strictEqual(snap.appVersion,'6.23.9'); assert.strictEqual(snap.snapshotChecksum,snap.integrity.snapshotSha256); assert.strictEqual(snap.snapshotChecksum.length,64);
     const local=JSON.stringify(snap),drive=JSON.stringify(snap); assert.strictEqual(local,drive);
     const settings=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
     assert.match(settings,/GoogleDriveProvider\.createBackup\('manual_drive_local',\{payload:sharedSnapshot\}\)/);
@@ -428,7 +428,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const css=fs.readFileSync(path.join(ROOT,'css/styles.css'),'utf8');
-    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.23\.8/);
+    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.23\.9/);
     assert.match(sw,/js\/20-smartphone-mode\.js/);
     assert.match(css,/html\[data-interface-mode="smartphone"\] \.smart-bottom-nav/);
     assert.match(css,/\.smart-quick-grid/); assert.match(css,/\.smart-launch-modal/);
@@ -492,7 +492,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const src=fs.readFileSync(path.join(ROOT,'js/21-smartphone-history.js'),'utf8');
-    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.23\.8/);
+    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.23\.9/);
     assert.match(sw,/js\/21-smartphone-history\.js/);
     assert.match(src,/GUARD_DEPTH:8/);
     assert.match(src,/BACK_BURST_MS:650/);
@@ -517,6 +517,73 @@ async function testAsync(name, fn){
   });
 
 
+  test('38 — Dispensar popup preserva a notificação no sino e impede que o popup reapareça',()=>{
+    if(!run(ctx,"typeof Notifs!=='undefined'")) load(ctx,'js/11-agenda-notifications.js');
+    const out=run(ctx,`(()=>{
+      S.data=migrateData(emptyData());
+      S.data.agenda=[{id:'ag1',titulo:'Conta de luz',data:'2026-07-12',pago:false}];
+      S.data.notificacoes=[{id:'n1',lembreteId:'ag1',tipo:'vencimento',lida:false,criadaEm:Date.now(),popupDispensadaEm:Date.now()}];
+      return {popup:Notifs.unreadForPopup().length,total:S.data.notificacoes.length,lida:S.data.notificacoes[0].lida};
+    })()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{popup:0,total:1,lida:false});
+  });
+
+  test('39 — Marcar notificação como não lida rearma somente o popup, sem recriar o registro',()=>{
+    if(!run(ctx,"typeof Notifs!=='undefined'")) load(ctx,'js/11-agenda-notifications.js');
+    const out=run(ctx,`(()=>{
+      S.data=migrateData(emptyData());
+      S.data.agenda=[{id:'ag2',titulo:'Cartão',data:'2026-07-12',pago:false}];
+      S.data.notificacoes=[{id:'n2',lembreteId:'ag2',tipo:'vencimento',lida:true,criadaEm:Date.now(),popupDispensadaEm:Date.now()}];
+      Notifs.panelOpen=false; Notifs.toggleRead('n2');
+      return {count:S.data.notificacoes.length,lida:S.data.notificacoes[0].lida,popupDispensadaEm:S.data.notificacoes[0].popupDispensadaEm,popup:Notifs.unreadForPopup().length};
+    })()`);
+    assert.strictEqual(out.count,1); assert.strictEqual(out.lida,false); assert.strictEqual(out.popupDispensadaEm,null); assert.strictEqual(out.popup,1);
+  });
+
+  test('40 — Notificações possuem gesto horizontal, exclusão com desfazer e central em bottom sheet',()=>{
+    const src=fs.readFileSync(path.join(ROOT,'js/11-agenda-notifications.js'),'utf8');
+    const css=fs.readFileSync(path.join(ROOT,'css/styles.css'),'utf8');
+    assert.match(src,/bindSwipe\(node/);
+    assert.match(src,/popupDispensadaEm/);
+    assert.match(src,/removeWithUndo\(id\)/);
+    assert.match(src,/showUndoToast\('Notificação excluída\.'/);
+    assert.match(css,/\.notif-swipe-shell/);
+    assert.match(css,/\.notif-panel-handle/);
+    assert.match(css,/\.floating-notif\.is-swiping/);
+  });
+
+  test('41 — Camada Mobile Experience está no HTML, no cache offline e inclui viewport, haptics e bottom sheets',()=>{
+    const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
+    const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
+    const src=fs.readFileSync(path.join(ROOT,'js/22-mobile-experience.js'),'utf8');
+    assert.match(index,/js\/22-mobile-experience\.js\?v=6\.23\.9/);
+    assert.match(sw,/js\/22-mobile-experience\.js/);
+    assert.match(src,/visualViewport/);
+    assert.match(src,/navigator\.vibrate/);
+    assert.match(src,/decorateModalOverlay/);
+    assert.match(src,/document\.startViewTransition/);
+    assert.match(src,/showConnectivity/);
+  });
+
+  test('42 — CSS mobile respeita safe areas, teclado, movimento reduzido e alvos de toque',()=>{
+    const css=fs.readFileSync(path.join(ROOT,'css/styles.css'),'utf8');
+    assert.match(css,/--borion-keyboard/);
+    assert.match(css,/env\(safe-area-inset-bottom\)/);
+    assert.match(css,/keyboard-open \.smart-bottom-nav/);
+    assert.match(css,/@media\(prefers-reduced-motion:reduce\)/);
+    assert.match(css,/min-height:44px/);
+  });
+
+  test('43 — Manifesto PWA possui identidade, foco na instância existente e display standalone',()=>{
+    const manifest=JSON.parse(fs.readFileSync(path.join(ROOT,'manifest.json'),'utf8'));
+    assert.strictEqual(manifest.id,'./');
+    assert.ok(Array.isArray(manifest.display_override));
+    assert.ok(manifest.display_override.includes('standalone'));
+    assert.strictEqual(manifest.launch_handler.client_mode,'focus-existing');
+    assert.strictEqual(manifest.lang,'pt-BR');
+  });
+
+
   test('Código completo — todos os JavaScript passam na validação sintática',()=>{
     const files=fs.readdirSync(path.join(ROOT,'js')).filter(f=>f.endsWith('.js'));
     files.forEach(f=>execFileSync(process.execPath,['--check',path.join(ROOT,'js',f)],{stdio:'pipe'}));
@@ -533,7 +600,7 @@ async function testAsync(name, fn){
   });
 
   const failures=results.filter(r=>r.status==='FAIL');
-  const report={generatedAt:new Date().toISOString(),appVersion:'6.23.8',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
+  const report={generatedAt:new Date().toISOString(),appVersion:'6.23.9',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
   fs.writeFileSync(path.join(__dirname,'regression-results.json'),JSON.stringify(report,null,2));
   for(const r of results){
     console.log(`${r.status==='PASS'?'✓':'✗'} ${r.name}`);

@@ -1,4 +1,4 @@
-/* Borion Finance V6.23.8 — Histórico insistente do botão Voltar no Smartphone Mode
+/* Borion Finance V6.23.9 — Histórico insistente do botão Voltar no Smartphone Mode
    Ordem lógica:
    1) fecha a camada flutuante aberta;
    2) volta para a Visão geral;

@@ -1792,3 +1792,312 @@ html[data-interface-mode="smartphone"] .smart-sidebar-save-reload small{display:
 @keyframes smartSaveProgress{from{transform:translateX(-20%)}to{transform:translateX(185%)}}
 html[data-theme="light"][data-interface-mode="smartphone"] .smart-sidebar-actions{border-color:rgba(122,85,29,.13);}
 html[data-theme="light"][data-interface-mode="smartphone"] .smart-sidebar-save-reload{background:rgba(184,137,55,.07);border-color:rgba(122,85,29,.17);}
+
+/* =====================================================================================
+   V6.23.9 — MOBILE EXPERIENCE 2026
+   Camada de refinamento exclusiva do Smartphone Mode. Não altera regras financeiras.
+===================================================================================== */
+:root{
+  --borion-vh:100dvh;
+  --borion-keyboard:0px;
+  --mobile-ease:cubic-bezier(.2,.8,.2,1);
+  --mobile-spring:cubic-bezier(.2,1.05,.32,1);
+}
+
+html[data-interface-mode="smartphone"]{
+  min-height:100%;
+  overscroll-behavior-y:none;
+  -webkit-tap-highlight-color:transparent;
+  scroll-behavior:smooth;
+}
+html[data-interface-mode="smartphone"] body{
+  min-height:var(--borion-vh);
+  overscroll-behavior-y:none;
+  touch-action:pan-y;
+  text-rendering:optimizeLegibility;
+  -webkit-font-smoothing:antialiased;
+}
+html[data-interface-mode="smartphone"] #root,
+html[data-interface-mode="smartphone"] .shell{min-height:var(--borion-vh);}
+html[data-interface-mode="smartphone"] button,
+html[data-interface-mode="smartphone"] [role="button"]{touch-action:manipulation;user-select:none;-webkit-user-select:none;}
+html[data-interface-mode="smartphone"] input,
+html[data-interface-mode="smartphone"] select,
+html[data-interface-mode="smartphone"] textarea{font-size:16px!important;}
+html[data-interface-mode="smartphone"] button:focus-visible,
+html[data-interface-mode="smartphone"] input:focus-visible,
+html[data-interface-mode="smartphone"] select:focus-visible,
+html[data-interface-mode="smartphone"] textarea:focus-visible{
+  outline:none;box-shadow:0 0 0 3px rgba(217,180,107,.28)!important;
+}
+
+/* Topo com comportamento de app nativo */
+html[data-interface-mode="smartphone"] .topbar{
+  position:sticky;top:0;z-index:75;
+  margin:-14px -12px 14px!important;
+  padding:calc(10px + env(safe-area-inset-top)) 12px 10px;
+  background:linear-gradient(180deg,rgba(6,10,16,.92),rgba(6,10,16,.78) 78%,rgba(6,10,16,0));
+  backdrop-filter:blur(18px) saturate(1.15);
+  -webkit-backdrop-filter:blur(18px) saturate(1.15);
+}
+html[data-interface-mode="smartphone"] .topbar::after{
+  content:"";position:absolute;left:12px;right:12px;bottom:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(217,180,107,.14),transparent);
+  pointer-events:none;
+}
+html[data-interface-mode="smartphone"] #view-body{
+  animation:mobileContentIn .28s var(--mobile-ease) both;
+  view-transition-name:borion-content;
+}
+@keyframes mobileContentIn{from{opacity:.72;transform:translateY(5px)}to{opacity:1;transform:none}}
+::view-transition-old(borion-content){animation:mobileViewOut .16s ease both;}
+::view-transition-new(borion-content){animation:mobileViewIn .24s var(--mobile-ease) both;}
+@keyframes mobileViewOut{to{opacity:0;transform:translateY(-4px)}}
+@keyframes mobileViewIn{from{opacity:0;transform:translateY(7px)}}
+
+/* Cartões, painéis e ações com resposta tátil/visual curta */
+html[data-interface-mode="smartphone"] .card,
+html[data-interface-mode="smartphone"] .panel-box,
+html[data-interface-mode="smartphone"] .smart-quick-action,
+html[data-interface-mode="smartphone"] .smart-summary-strip button,
+html[data-interface-mode="smartphone"] .central-mobile-row{
+  transition:transform .16s var(--mobile-ease),border-color .18s ease,box-shadow .18s ease,background-color .18s ease;
+}
+html[data-interface-mode="smartphone"] .is-touching,
+html[data-interface-mode="smartphone"] button:active,
+html[data-interface-mode="smartphone"] .smart-recent-row:active{
+  transform:scale(.975)!important;
+}
+html[data-interface-mode="smartphone"] .panel-box{
+  border-radius:20px;
+  box-shadow:0 12px 28px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.025);
+}
+html[data-interface-mode="smartphone"] .btn,
+html[data-interface-mode="smartphone"] .btn-outline,
+html[data-interface-mode="smartphone"] .tab-btn{
+  min-height:44px;
+}
+html[data-interface-mode="smartphone"] .smart-recent-row{min-height:54px;}
+
+/* Barra inferior com indicador ativo e safe area real */
+html[data-interface-mode="smartphone"] .smart-bottom-nav{
+  bottom:max(8px,env(safe-area-inset-bottom));
+  padding:8px 7px calc(8px + env(safe-area-inset-bottom));
+  border-radius:24px;
+  background:linear-gradient(180deg,rgba(13,20,28,.94),rgba(7,12,18,.96));
+  border-color:rgba(255,255,255,.11);
+  box-shadow:0 20px 55px rgba(0,0,0,.52),inset 0 1px 0 rgba(255,255,255,.055);
+  isolation:isolate;
+}
+html[data-interface-mode="smartphone"] .smart-bottom-nav button{
+  position:relative;overflow:visible;
+  transition:color .18s ease,background-color .18s ease,transform .16s var(--mobile-ease);
+}
+html[data-interface-mode="smartphone"] .smart-bottom-nav button.active::after{
+  content:"";position:absolute;bottom:-3px;left:50%;width:4px;height:4px;border-radius:50%;
+  background:var(--gold-bright);box-shadow:0 0 10px rgba(232,201,138,.7);transform:translateX(-50%);
+}
+html[data-interface-mode="smartphone"] .smart-bottom-nav .smart-bottom-launch{
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:0 14px 30px rgba(201,164,92,.34),inset 0 1px 0 rgba(255,255,255,.28);
+}
+html[data-interface-mode="smartphone"].keyboard-open .smart-bottom-nav{display:none;}
+html[data-interface-mode="smartphone"].keyboard-open .main{padding-bottom:24px!important;}
+
+/* Toasts acima da barra inferior */
+html[data-interface-mode="smartphone"] .toast{
+  bottom:calc(96px + env(safe-area-inset-bottom));
+  width:max-content;max-width:calc(100vw - 28px);
+  border-radius:14px;padding:12px 15px;
+  background:rgba(15,23,32,.96);backdrop-filter:blur(16px);
+  box-shadow:0 16px 38px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.04);
+}
+html[data-interface-mode="smartphone"] .toast-undo{justify-content:space-between;min-width:min(360px,calc(100vw - 28px));}
+
+/* Popups: heads-up notification com gesto horizontal */
+html[data-interface-mode="smartphone"] .floating-notifs{
+  top:calc(10px + env(safe-area-inset-top));bottom:auto;left:10px;right:10px;
+  align-items:stretch;gap:9px;pointer-events:none;
+}
+html[data-interface-mode="smartphone"] .floating-notif{
+  --swipe-x:0px;--swipe-opacity:1;
+  width:100%;min-width:0;max-width:none;
+  display:grid;grid-template-columns:42px minmax(0,1fr);align-items:center;gap:11px;
+  padding:13px 43px 13px 13px;
+  border-radius:20px;
+  background:linear-gradient(150deg,rgba(24,37,47,.95),rgba(10,18,25,.96));
+  border:1px solid rgba(74,222,128,.33);
+  backdrop-filter:blur(22px) saturate(1.25);-webkit-backdrop-filter:blur(22px) saturate(1.25);
+  box-shadow:0 20px 48px rgba(0,0,0,.46),inset 0 1px 0 rgba(255,255,255,.06),0 0 22px rgba(34,197,94,.07);
+  color:var(--text);pointer-events:auto;touch-action:pan-y;
+  transform:translate3d(var(--swipe-x),0,0);opacity:var(--swipe-opacity);
+  transition:transform .24s var(--mobile-spring),opacity .18s ease;
+  animation:mobileNotifIn .34s var(--mobile-spring) both;
+  animation-delay:calc(var(--notif-index,0) * 55ms);
+  will-change:transform,opacity;
+}
+@keyframes mobileNotifIn{from{opacity:0;transform:translate3d(0,-18px,0) scale(.97)}to{opacity:1;transform:translate3d(0,0,0) scale(1)}}
+html[data-interface-mode="smartphone"] .floating-notif.is-swiping{transition:none;}
+html[data-interface-mode="smartphone"] .floating-notif.is-swipe-committed{transition:transform .18s ease-in,opacity .14s linear;}
+html[data-interface-mode="smartphone"] .floating-notif .fn-icon{
+  display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:14px;
+  background:rgba(34,197,94,.10);border:1px solid rgba(74,222,128,.18);font-size:20px;
+}
+html[data-interface-mode="smartphone"] .floating-notif .fn-copy{min-width:0;display:flex;flex-direction:column;gap:2px;}
+html[data-interface-mode="smartphone"] .floating-notif .fn-copy strong{font-size:12px;letter-spacing:.01em;}
+html[data-interface-mode="smartphone"] .floating-notif .fn-copy span{font-size:12px;line-height:1.35;color:var(--text);}
+html[data-interface-mode="smartphone"] .floating-notif .fn-copy small{font-size:9px;color:var(--muted-2);margin-top:2px;}
+html[data-interface-mode="smartphone"] .floating-notif .fn-close{top:9px;right:10px;width:32px;height:32px;border-radius:11px;display:flex;align-items:center;justify-content:center;}
+html[data-interface-mode="smartphone"] .floating-notif .fn-close:active{background:rgba(255,255,255,.07);}
+
+/* Central de notificações como bottom sheet */
+html[data-interface-mode="smartphone"] .notif-panel{
+  --notif-sheet-y:0px;
+  top:auto!important;left:0!important;right:0!important;bottom:0!important;
+  width:100%!important;max-width:none!important;
+  max-height:min(82dvh,var(--borion-vh));
+  padding:8px 10px calc(14px + env(safe-area-inset-bottom));
+  border-radius:26px 26px 0 0;
+  border:1px solid rgba(255,255,255,.10);border-bottom:0;
+  background:linear-gradient(180deg,rgba(17,26,35,.985),rgba(7,12,18,.99));
+  box-shadow:0 -24px 60px rgba(0,0,0,.56),inset 0 1px 0 rgba(255,255,255,.05);
+  backdrop-filter:blur(24px) saturate(1.2);-webkit-backdrop-filter:blur(24px) saturate(1.2);
+  transform:translate3d(0,var(--notif-sheet-y),0);
+  animation:notifSheetIn .32s var(--mobile-spring) both;
+  overflow:hidden;display:flex;flex-direction:column;
+}
+@keyframes notifSheetIn{from{transform:translate3d(0,104%,0)}to{transform:translate3d(0,0,0)}}
+html[data-interface-mode="smartphone"] .notif-panel.is-panel-dragging{transition:none;}
+html[data-interface-mode="smartphone"] .notif-panel.is-panel-closing{transition:transform .18s ease-in;}
+html[data-interface-mode="smartphone"] body.notif-panel-open::after{
+  content:"";position:fixed;inset:0;z-index:240;background:rgba(0,0,0,.46);backdrop-filter:blur(3px);pointer-events:none;animation:overlayIn .18s ease;
+}
+.notif-panel-handle{display:none;}
+html[data-interface-mode="smartphone"] .notif-panel-handle{
+  display:flex;align-items:center;justify-content:center;flex:0 0 22px;touch-action:none;cursor:grab;
+}
+html[data-interface-mode="smartphone"] .notif-panel-handle::before{content:"";width:42px;height:5px;border-radius:999px;background:rgba(255,255,255,.18);}
+.notif-panel-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 8px 12px;border-bottom:1px solid rgba(255,255,255,.06);}
+.notif-panel-header>div{min-width:0;display:flex;flex-direction:column;gap:2px;}
+.notif-panel-header strong{font-size:17px;letter-spacing:-.015em;}
+.notif-panel-header small{font-size:10.5px;color:var(--muted);}
+.notif-panel-close{width:40px;height:40px;border:0;border-radius:13px;background:rgba(255,255,255,.045);color:var(--muted);font-size:22px;}
+.notif-panel-tools{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 8px 8px;}
+.notif-panel-tools button{border:0;background:transparent;color:var(--gold-bright);font-size:11px;font-weight:750;padding:7px 0;}
+.notif-panel-tools button:disabled{opacity:.4;}
+.notif-panel-tools span{font-size:9px;color:var(--muted-2);}
+.notif-list{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:2px 0 6px;}
+.notif-swipe-shell{position:relative;overflow:hidden;border-radius:15px;margin:4px 0;background:rgba(239,68,68,.16);}
+.notif-delete-bg{position:absolute;inset:0;display:flex;align-items:center;justify-content:flex-end;gap:7px;padding:0 18px;background:linear-gradient(90deg,rgba(239,68,68,.88),rgba(220,38,38,.96));color:#fff;font-size:11px;}
+.notif-delete-bg span{font-size:20px;}
+.notif-item{
+  --swipe-x:0px;--swipe-opacity:1;
+  position:relative;z-index:1;margin:0;padding:13px 12px;min-height:72px;
+  background:var(--panel);border:1px solid rgba(255,255,255,.055);border-radius:15px;
+  transform:translate3d(var(--swipe-x),0,0);opacity:var(--swipe-opacity);touch-action:pan-y;
+  transition:transform .24s var(--mobile-spring),opacity .18s ease,background-color .18s ease;
+}
+.notif-item.is-swiping{transition:none;}
+.notif-item.is-swipe-committed{transition:transform .18s ease-in,opacity .14s linear;}
+.notif-item.unread{background:linear-gradient(90deg,rgba(201,164,92,.12),rgba(201,164,92,.035));border-color:rgba(201,164,92,.14);}
+.notif-item .ni-icon{display:flex;align-items:center;justify-content:center;flex:0 0 38px;width:38px;height:38px;border-radius:13px;background:rgba(217,180,107,.09);font-size:17px;}
+.notif-item .ni-text{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.notif-item .ni-text strong{font-size:12px;color:var(--text);}
+.notif-item .ni-text>span{font-size:11.5px;line-height:1.38;color:var(--text);}
+.notif-item .ni-text small{font-size:9.5px;color:var(--muted-2);margin-top:2px;}
+.notif-item .ni-actions{gap:3px;}
+html[data-interface-mode="smartphone"] .notif-item .ni-actions{display:none;}
+.notif-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:210px;padding:28px;}
+.notif-empty>span{display:flex;align-items:center;justify-content:center;width:54px;height:54px;border-radius:18px;background:rgba(34,197,94,.09);color:#4ade80;font-size:25px;}
+.notif-empty strong{font-size:14px;color:var(--text);}
+.notif-empty small{font-size:10.5px;color:var(--muted);}
+
+/* Modais viram bottom sheets no celular */
+html[data-interface-mode="smartphone"] .mobile-sheet-overlay{
+  align-items:flex-end!important;justify-content:center!important;padding:0!important;
+  background:rgba(0,0,0,calc(.62 * var(--sheet-overlay-opacity,1)));
+  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+}
+html[data-interface-mode="smartphone"] .mobile-bottom-sheet{
+  --sheet-y:0px;
+  width:100%!important;max-width:none!important;max-height:min(91dvh,var(--borion-vh))!important;
+  margin:0!important;padding:8px 18px calc(18px + env(safe-area-inset-bottom))!important;
+  border-radius:27px 27px 0 0!important;border-bottom:0!important;
+  transform:translate3d(0,var(--sheet-y),0);
+  animation:mobileSheetIn .32s var(--mobile-spring) both!important;
+  box-shadow:0 -26px 68px rgba(0,0,0,.58),inset 0 1px 0 rgba(255,255,255,.055)!important;
+  overscroll-behavior:contain;
+}
+@keyframes mobileSheetIn{from{opacity:.85;transform:translate3d(0,102%,0)}to{opacity:1;transform:translate3d(0,0,0)}}
+html[data-interface-mode="smartphone"] .mobile-bottom-sheet.is-sheet-dragging{transition:none!important;animation:none!important;}
+html[data-interface-mode="smartphone"] .mobile-bottom-sheet.is-sheet-closing{transition:transform .18s ease-in!important;animation:none!important;}
+.mobile-sheet-handle{display:none;}
+html[data-interface-mode="smartphone"] .mobile-sheet-handle{
+  display:flex;align-items:center;justify-content:center;width:100%;height:24px;margin:0 0 2px;
+  border:0;background:transparent;touch-action:none;cursor:grab;
+}
+html[data-interface-mode="smartphone"] .mobile-sheet-handle span{width:44px;height:5px;border-radius:999px;background:rgba(255,255,255,.18);}
+html[data-interface-mode="smartphone"] .mobile-bottom-sheet .modal-head{position:sticky;top:-8px;z-index:2;padding:8px 0 10px;background:linear-gradient(180deg,var(--panel) 78%,transparent);}
+html[data-interface-mode="smartphone"] .mobile-bottom-sheet .modal-head h2{font-size:18px;}
+html[data-interface-mode="smartphone"] .mobile-bottom-sheet .row-btns{gap:8px;}
+
+/* Estado da conexão */
+.mobile-network-banner{display:none;}
+html[data-interface-mode="smartphone"] .mobile-network-banner{
+  position:fixed;left:50%;top:calc(12px + env(safe-area-inset-top));z-index:390;
+  display:grid;grid-template-columns:auto 1fr;column-gap:8px;row-gap:1px;align-items:center;
+  width:min(360px,calc(100vw - 28px));padding:10px 13px;border-radius:15px;
+  background:rgba(13,20,28,.96);border:1px solid rgba(255,255,255,.08);color:var(--text);
+  box-shadow:0 18px 44px rgba(0,0,0,.45);backdrop-filter:blur(18px);
+  opacity:0;pointer-events:none;transform:translate(-50%,-18px) scale(.98);
+  transition:opacity .2s ease,transform .25s var(--mobile-spring);
+}
+html[data-interface-mode="smartphone"] .mobile-network-banner.is-visible{opacity:1;transform:translate(-50%,0) scale(1);}
+.mobile-network-banner .mnb-dot{grid-row:1/3;width:10px;height:10px;border-radius:50%;background:var(--red);box-shadow:0 0 12px rgba(255,90,95,.55);}
+.mobile-network-banner.is-online .mnb-dot{background:var(--green);box-shadow:0 0 12px rgba(34,197,94,.55);}
+.mobile-network-banner strong{font-size:11.5px;}
+.mobile-network-banner small{font-size:9px;color:var(--muted);}
+
+/* Tema claro */
+html[data-theme="light"][data-interface-mode="smartphone"] .topbar{
+  background:linear-gradient(180deg,rgba(248,243,233,.94),rgba(248,243,233,.80) 78%,rgba(248,243,233,0));
+}
+html[data-theme="light"][data-interface-mode="smartphone"] .floating-notif,
+html[data-theme="light"][data-interface-mode="smartphone"] .notif-panel,
+html[data-theme="light"][data-interface-mode="smartphone"] .mobile-network-banner{
+  background:linear-gradient(160deg,rgba(255,255,255,.97),rgba(246,239,227,.97));
+  color:#1b2632;border-color:rgba(122,85,29,.16);box-shadow:0 18px 44px rgba(90,70,34,.18);
+}
+html[data-theme="light"][data-interface-mode="smartphone"] .notif-item{background:rgba(255,255,255,.95);border-color:rgba(122,85,29,.11);}
+html[data-theme="light"][data-interface-mode="smartphone"] .notif-item.unread{background:linear-gradient(90deg,rgba(184,137,55,.12),rgba(255,255,255,.95));}
+html[data-theme="light"][data-interface-mode="smartphone"] .mobile-sheet-handle span,
+html[data-theme="light"][data-interface-mode="smartphone"] .notif-panel-handle::before{background:rgba(72,57,34,.22);}
+
+/* Acessibilidade: movimento reduzido */
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;}
+}
+
+@media(max-width:430px){
+  html[data-interface-mode="smartphone"] .floating-notif .fn-copy small{display:none;}
+  html[data-interface-mode="smartphone"] .floating-notif{grid-template-columns:38px minmax(0,1fr);padding:12px 40px 12px 12px;border-radius:18px;}
+  html[data-interface-mode="smartphone"] .floating-notif .fn-icon{width:38px;height:38px;border-radius:13px;}
+  .notif-panel-tools span{display:none;}
+  html[data-interface-mode="smartphone"] .mobile-bottom-sheet{padding-left:14px!important;padding-right:14px!important;}
+}
+
+/* Compatibilidade do novo conteúdo das notificações também no Modo Pro */
+.floating-notif{
+  --swipe-x:0px;--swipe-opacity:1;
+  display:grid;grid-template-columns:40px minmax(0,1fr);align-items:center;gap:11px;
+  transform:translate3d(var(--swipe-x),0,0);opacity:var(--swipe-opacity);touch-action:pan-y;
+  transition:transform .24s var(--mobile-spring),opacity .18s ease;
+}
+.floating-notif.is-swiping{transition:none;}
+.floating-notif.is-swipe-committed{transition:transform .18s ease-in,opacity .14s linear;}
+.floating-notif .fn-icon{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:13px;background:rgba(34,197,94,.10);border:1px solid rgba(74,222,128,.18);font-size:19px;}
+.floating-notif .fn-copy{min-width:0;display:flex;flex-direction:column;gap:2px;}
+.floating-notif .fn-copy strong{font-size:12.5px;}
+.floating-notif .fn-copy span{font-size:12.5px;line-height:1.4;}
+.floating-notif .fn-copy small{font-size:9.5px;color:var(--muted-2);margin-top:2px;}
+body.notif-panel-open{overflow:hidden;}

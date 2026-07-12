@@ -1,3 +1,13 @@
+## V6.23.9 — Mobile Experience 2026
+
+- Popups de notificação agora aceitam gesto horizontal para dispensar sem apagar o registro do sino.
+- Central de notificações virou bottom sheet no celular, com gesto para baixo, swipe para excluir e opção de desfazer.
+- Modais comuns viraram bottom sheets com gesto de fechar, safe areas e adaptação ao teclado.
+- Navegação recebeu transições nativas quando disponíveis, feedback tátil leve e restauração de rolagem.
+- Topo, barra inferior, toasts, cartões e alvos de toque foram refinados para uso diário.
+- Adicionado aviso online/offline, suporte a movimento reduzido e melhorias no manifesto PWA.
+- Nenhuma regra financeira foi alterada.
+
 ## V6.23.8 — Salvar e atualizar + proteção insistente de saída
 
 - Adiciona **Salvar e atualizar** ao menu Mais do Smartphone Mode.

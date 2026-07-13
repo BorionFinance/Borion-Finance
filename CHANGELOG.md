@@ -1,3 +1,10 @@
+## V6.25.0 — Histórico automático e Lançamentos personalizáveis
+- Remove o fechamento manual dos Cofrinhos; meses completos são consolidados automaticamente na virada.
+- Histórico mostra saldo inicial, saldo final, entradas, saídas, rendimentos e evolução em reais e porcentagem.
+- Fechamentos parciais do mês corrente criados por versões antigas são descartados sem apagar movimentações.
+- Configurações → Personalização permite mostrar, ocultar e reordenar os cards do resumo de Lançamentos por perfil.
+- Mantém Receita, Investir, Despesas e Saldo como padrão para os demais usuários.
+
 ## V6.24.6 — Exclusão limpa de assinaturas
 - Excluir remove o cadastro da assinatura em vez de deixá-la como “Excluída”.
 - Previsões, falhas e ocorrências não consolidadas são apagadas junto.

@@ -97,6 +97,12 @@ function renderSettingsCategories(){
     <div class="settings-section settings-hero-section"><h3>Categorias</h3><p class="desc">Receitas, despesas fixas e despesas variáveis agora têm cor própria. Se uma categoria já estiver vinculada a lançamentos, o Borion bloqueia a exclusão para não bagunçar seu histórico.</p></div>
     <div class="settings-categories-grid">${catBlock('receita','Receitas')}${catBlock('fixa','Despesas fixas')}${catBlock('variavel','Despesas variáveis')}</div>`;
 }
+function renderBudgetSummaryPersonalization(){
+  if(typeof budgetSummaryPreferences!=='function') return '';
+  const pref=budgetSummaryPreferences();
+  const rows=pref.order.map((k,i)=>{ const d=BUDGET_SUMMARY_CARD_DEFS[k], checked=pref.visible.includes(k); return `<div class="summary-pref-row" draggable="true" data-summary-key="${k}" ondragstart="Settings.summaryDragStart(event,'${k}')" ondragover="event.preventDefault()" ondrop="Settings.summaryDrop(event,'${k}')"><span class="summary-drag" title="Arraste para reorganizar">☰</span><label><input type="checkbox" ${checked?'checked':''} onchange="Settings.toggleBudgetSummaryCard('${k}',this.checked)"> ${esc(d.label)}</label><span class="summary-pref-actions"><button class="cat-mini-btn" onclick="Settings.moveBudgetSummaryCard('${k}',-1)" ${i===0?'disabled':''}>↑</button><button class="cat-mini-btn" onclick="Settings.moveBudgetSummaryCard('${k}',1)" ${i===pref.order.length-1?'disabled':''}>↓</button></span></div>`; }).join('');
+  return `<div class="settings-section"><h3>Resumo de Lançamentos</h3><p class="desc">Escolha quais indicadores aparecem no topo de Lançamentos e arraste para mudar a ordem. Esta preferência pertence somente a este perfil financeiro.</p><div class="summary-pref-list">${rows}</div><button class="btn-outline btn-sm" onclick="Settings.resetBudgetSummaryCards()">Restaurar padrão</button></div>`;
+}
 function renderSettingsPersonalization(){
   const fontOptions = Object.keys(FONT_LABELS).map(k=>`<option value="${k}" ${S.config.font===k?'selected':''}>${esc(FONT_LABELS[k])}</option>`).join('');
   const theme = S.config.theme || 'dark';
@@ -106,12 +112,18 @@ function renderSettingsPersonalization(){
     <div class="settings-section interface-mode-card"><h3>Modo de interface</h3><p class="desc">No Automático, celulares usam o Smartphone Mode para lançamentos rápidos e computadores continuam no Modo Pro completo. Nenhuma função ou dado é removido.</p><div class="field" style="max-width:360px;"><select id="cfg_ui_mode"><option value="auto" ${uiMode==='auto'?'selected':''}>Automático — Smartphone no celular / Pro no PC</option><option value="smartphone" ${uiMode==='smartphone'?'selected':''}>Forçar Smartphone Mode</option><option value="pro" ${uiMode==='pro'?'selected':''}>Forçar Modo Pro</option></select></div><div class="interface-mode-preview"><span class="${resolvedInterfaceMode()==='smartphone'?'active':''}">Smartphone</span><span class="${resolvedInterfaceMode()==='pro'?'active':''}">Pro</span></div></div>
     <div class="settings-section"><h3>Tema</h3><p class="desc">Use o tema private banking escuro, o tema claro ou siga o tema do sistema.</p><div class="field" style="max-width:320px;"><select id="cfg_theme"><option value="dark" ${theme==='dark'?'selected':''}>Escuro / Private banking</option><option value="light" ${theme==='light'?'selected':''}>Claro / Branco</option><option value="system" ${theme==='system'?'selected':''}>Tema do sistema</option></select></div></div>
     <div class="settings-section"><h3>Fonte do app</h3><p class="desc">Escolha a fonte usada em todo o app.</p><div class="field" style="max-width:320px;"><select id="cfg_font">${fontOptions}</select></div></div>
+    ${renderBudgetSummaryPersonalization()}
     ${window.OrderPreferences ? OrderPreferences.renderModulesOrganizePanel() : ''}
     <div class="info-box">A personalização de cores dos ícones continua fora da tela para manter o visual premium e consistente.</div>`;
 }
 
 
 const Settings = {
+  toggleBudgetSummaryCard(key,checked){ const p=budgetSummaryPreferences(); p.visible=p.visible.filter(k=>k!==key); if(checked)p.visible.push(key); saveCurrentData(); renderView(); },
+  moveBudgetSummaryCard(key,dir){ const p=budgetSummaryPreferences(), i=p.order.indexOf(key), j=i+dir; if(i<0||j<0||j>=p.order.length)return; [p.order[i],p.order[j]]=[p.order[j],p.order[i]]; saveCurrentData(); renderView(); },
+  summaryDragStart(ev,key){ Settings._summaryDragKey=key; if(ev.dataTransfer){ev.dataTransfer.effectAllowed='move';ev.dataTransfer.setData('text/plain',key);} },
+  summaryDrop(ev,target){ ev.preventDefault(); const source=Settings._summaryDragKey||(ev.dataTransfer&&ev.dataTransfer.getData('text/plain')); if(!source||source===target)return; const p=budgetSummaryPreferences(), from=p.order.indexOf(source), to=p.order.indexOf(target); if(from<0||to<0)return; p.order.splice(from,1); p.order.splice(to,0,source); Settings._summaryDragKey=null; saveCurrentData(); renderView(); },
+  resetBudgetSummaryCards(){ const p=budgetSummaryPreferences(); p.order=Object.keys(BUDGET_SUMMARY_CARD_DEFS); p.visible=DEFAULT_BUDGET_SUMMARY_CARDS.slice(); saveCurrentData(); renderView(); toast('Resumo de Lançamentos restaurado.'); },
   setTab(tab){ S.settingsTab=tab; renderView(); },
   addCategory(typeKey){
     openModal({title:'Nova categoria', fields:[{key:'nome',label:'Nome da categoria',type:'text'}], onSave(v){ if(v.nome && !S.data.categorias[typeKey].includes(v.nome)){ S.data.categorias[typeKey].push(v.nome); saveCurrentData(); } closeModal(); renderView(); }});

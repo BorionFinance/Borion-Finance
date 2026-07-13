@@ -1,6 +1,34 @@
 /* Borion Finance — Tela Orçamento/Receitas/Despesas, filtros e modais de lançamentos. */
 
 /* ---------------- VIEW: BUDGET ---------------- */
+const BUDGET_SUMMARY_CARD_DEFS={
+  receita:{label:'RECEITA',colorKey:'receita'}, investir:{label:'INVESTIR',colorKey:'investir'}, despesas:{label:'DESPESAS',colorKey:'despesas'}, saldo:{label:'SALDO',colorKey:'saldo'},
+  patrimonio:{label:'PATRIMÔNIO',colorKey:'patrimonio'}, cofrinhos:{label:'COFRINHOS',colorKey:'reserva'}, variacaoCofrinhos:{label:'VARIAÇÃO DOS COFRINHOS',colorKey:'reserva'}, disponivel:{label:'VALOR DISPONÍVEL',colorKey:'saldo'}
+};
+const DEFAULT_BUDGET_SUMMARY_CARDS=['receita','investir','despesas','saldo'];
+function budgetSummaryPreferences(){
+  if(!S.data.uiPreferences) S.data.uiPreferences={};
+  let p=S.data.uiPreferences.budgetSummary;
+  if(!p||!Array.isArray(p.order)) p={order:DEFAULT_BUDGET_SUMMARY_CARDS.slice(),visible:DEFAULT_BUDGET_SUMMARY_CARDS.slice()};
+  p.order=p.order.filter(k=>BUDGET_SUMMARY_CARD_DEFS[k]); Object.keys(BUDGET_SUMMARY_CARD_DEFS).forEach(k=>{if(!p.order.includes(k))p.order.push(k);});
+  if(!Array.isArray(p.visible)) p.visible=DEFAULT_BUDGET_SUMMARY_CARDS.slice();
+  p.visible=p.visible.filter(k=>BUDGET_SUMMARY_CARD_DEFS[k]); S.data.uiPreferences.budgetSummary=p; return p;
+}
+function budgetSummaryValues(rec,inv,desp,saldo){
+  const cofrinhos=((S.data.reservas&&S.data.reservas.boxes)||[]).reduce((a,r)=>a+(Number(r.valorAtual)||0),0);
+  const contas=(typeof activeAccounts==='function'?activeAccounts():(S.data.contas||[])).reduce((a,c)=>a+(typeof contaSaldoAtual==='function'?contaSaldoAtual(c):(Number(c.saldoInicial)||0)),0);
+  const patrimonio=typeof patrimonioLiquido==='function'?Number(patrimonioLiquido())||0:contas+cofrinhos;
+  const current=monthKey(S.month.y,S.month.m), rep=(S.data.reservas&&S.data.reservas.monthlyReports||[]).find(r=>r.monthKey===current);
+  const moves=((S.data.reservas&&S.data.reservas.moves)||[]).filter(m=>m.data&&m.data.slice(0,7)===current);
+  const variacao=rep?Number(rep.variation)||0:moves.reduce((a,m)=>a+(typeof reservaMoveDelta==='function'?reservaMoveDelta(m):0),0);
+  return {receita:rec,investir:inv,despesas:desp,saldo,patrimonio,cofrinhos,variacaoCofrinhos:variacao,disponivel:contas};
+}
+function renderBudgetSummaryCards(rec,inv,desp,saldo){
+  const pref=budgetSummaryPreferences(), vals=budgetSummaryValues(rec,inv,desp,saldo);
+  const cards=pref.order.filter(k=>pref.visible.includes(k)).map(k=>{ const d=BUDGET_SUMMARY_CARD_DEFS[k], v=vals[k]||0; return `<div class="card"><div class="clabel">${tagBadgeHTML(d.colorKey,d.label)}</div><div class="cval" style="color:${iconColor(d.colorKey)}">${brl(v)}</div>${k==='investir'?'<div style="margin-top:8px;"><button class="adjust-link" onclick="Budget.adjustInvest()">Ajustar ✎</button></div>':''}</div>`; }).join('');
+  return `<div class="cards-row budget-summary-cards">${cards||'<div class="empty-note">Todos os cards do resumo estão ocultos. Ative em Configurações → Personalização.</div>'}</div>`;
+}
+
 function renderBudget(){
   // V6.1 — aba "Central": consulta unificada de todas as movimentações do perfil (recursos
   // à parte, não toca nas abas Receita/Despesa fixa/Despesa variável já existentes abaixo).
@@ -115,12 +143,7 @@ function renderBudget(){
   const periodoLabel = hasDateRange ? `${filt.dataDe.slice(8,10)}/${filt.dataDe.slice(5,7)}/${filt.dataDe.slice(0,4)} até ${filt.dataAte.slice(8,10)}/${filt.dataAte.slice(5,7)}/${filt.dataAte.slice(0,4)}` : '';
 
   return `
-    <div class="cards-row">
-      <div class="card"><div class="clabel">${tagBadgeHTML('receita','RECEITA')}</div><div class="cval" style="color:${iconColor('receita')}">${brl(rec)}</div></div>
-      <div class="card"><div class="clabel">${tagBadgeHTML('investir','INVESTIR')}</div><div class="cval">${brl(inv)}</div><div style="margin-top:8px;"><button class="adjust-link" onclick="Budget.adjustInvest()">Ajustar ✎</button></div></div>
-      <div class="card"><div class="clabel">${tagBadgeHTML('despesas','DESPESAS')}</div><div class="cval">${brl(desp)}</div></div>
-      <div class="card"><div class="clabel">${tagBadgeHTML('saldo','SALDO')}</div><div class="cval">${brl(saldo)}</div></div>
-    </div>
+    ${renderBudgetSummaryCards(rec,inv,desp,saldo)}
     <div class="tabs">
       <button class="tab-btn ${tab==='receita'?'active':''}" onclick="Budget.tab('receita')">Receita</button>
       <button class="tab-btn ${tab==='fixa'?'active':''}" onclick="Budget.tab('fixa')">Despesa fixa</button>

@@ -337,6 +337,8 @@ function migrateData(d){
      ao perfil atual porque fica dentro de S.data. Não participa de nenhum cálculo e não
      altera valores atuais; serve somente para consulta e comparação histórica. */
   if(!Array.isArray(d.reservas.monthlyReports)) d.reservas.monthlyReports=[];
+  if(!d.uiPreferences || typeof d.uiPreferences!=='object') d.uiPreferences={};
+  if(!d.uiPreferences.budgetSummary || !Array.isArray(d.uiPreferences.budgetSummary.order)) d.uiPreferences.budgetSummary={order:['receita','investir','despesas','saldo'],visible:['receita','investir','despesas','saldo']};
   /* Mantém apenas o primeiro fechamento válido de cada competência. Isso protege o relatório
      original inclusive após importações/mesclagens antigas que possam ter duplicado arrays. */
   const _reportMonths=new Set();

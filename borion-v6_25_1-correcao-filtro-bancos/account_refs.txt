@@ -1,0 +1,252 @@
+js/10-cards-accounts.js:47:          <div class="info"><div>${esc(a.nome)} <span style="font-weight:400;color:var(--muted);font-size:11.5px;">· ${a.isCarteira?'(dinheiro físico)':esc(a.tipo||'Conta')}</span></div><div><b style="color:#22c55e;">Saldo atual: ${brl(contaSaldoAtual(a))}</b> · Saldo inicial: ${brl(a.saldoInicial||0)}${a.rende?` · Rende ${pct(a.percentualRendimento||0)} a.m.`:' · Não rende'}${a.isCarteira?' · Não pode ser excluída':''}</div></div>
+js/10-cards-accounts.js:53:  const cartoesBase = S.data.cartoes.filter(c=>bankMatches(c.banco));
+js/10-cards-accounts.js:94:      ? `<div class="installment-row" style="color:#22c55e;"><span>Fatura de ${monthLabel(S.month.y,S.month.m)} — <b>PAGA</b></span><span>${brl(fatura.pagamento.valor)}</span><span>via ${esc(fatura.pagamento.banco)}</span><span>${fatura.pagamento.data?fatura.pagamento.data.slice(8,10)+'/'+fatura.pagamento.data.slice(5,7):''}</span><button onclick="Cards.undoFaturaPagamento('${c.id}','${fatura.pagamento.id}')" title="Desfazer pagamento">↺</button></div>`
+js/10-cards-accounts.js:100:          <div class="bank-badge" style="background:${bankColor(c.banco)}">${esc((c.banco||'?')[0])}</div>
+js/10-cards-accounts.js:101:          <div class="info"><div>${esc(c.banco)}</div><div>Limite: ${c.limite?brl(c.limite):'não definido'} · Dívida total em cartão a partir de ${monthLabel(S.month.y,S.month.m)}: <b style="color:#ef4444">${brl(computeCardsDebtForCartao(c,S.month.y,S.month.m))}</b> · ${active.length} compra(s) ativa(s)</div></div>
+js/10-cards-accounts.js:104:          ${showReorderCartoes ? OrderPreferences.reorderRowControlsHTML('cartoes', c.id, c.banco, cartoesNaturalIds) : `
+js/10-cards-accounts.js:116:  const boletoBlocks = (S.data.boletos||[]).filter(b=>bankMatches(b.banco)).map(b=>{
+js/10-cards-accounts.js:122:      ? `<div class="installment-row" style="color:#22c55e;"><span>Parcela de ${monthLabel(S.month.y,S.month.m)} — <b>PAGA</b></span><span>${brl(mesRef.pagamento.valor)}</span><span>via ${esc(mesRef.pagamento.banco)}</span><span>${mesRef.pagamento.data?mesRef.pagamento.data.slice(8,10)+'/'+mesRef.pagamento.data.slice(5,7):''}</span><button onclick="Cards.undoBoletoPagamento('${b.id}','${mesRef.pagamento.id}')" title="Desfazer pagamento">↺</button></div>`
+js/10-cards-accounts.js:128:          <div class="bank-badge boleto-badge" style="background:${bankColor(b.banco||b.credor||'Boleto')}">▧</div>
+js/10-cards-accounts.js:129:          <div class="info"><div>${esc(b.descricao||'Boleto')} <span style="font-weight:400;color:var(--muted);font-size:11.5px;">· ${esc(b.credor||'Sem credor')}</span>${b.categoria?` <span class="cat-pill" style="margin-left:4px;"><span class="dot" style="background:${catColor(b.categoria)}"></span>${esc(b.categoria)}</span>`:''}</div><div>${esc(b.banco||'Sem banco')} · ${Number(b.parcelaTotal||1)} boleto(s) · ${st.ativo?`${st.atual} de ${b.parcelaTotal}`:'fora do mês'} · <b style="color:${statusColor}">${esc(b.status||'Ativo')}</b></div></div>
+js/10-cards-accounts.js:222:      const banco = (v.banco||'').trim();
+js/10-cards-accounts.js:234:      const banco = (v.banco||'').trim();
+js/10-cards-accounts.js:293:      accountSelectField('faturapg',''),
+js/10-cards-accounts.js:296:      const banco = requireBanco(v.banco,'Escolha o banco usado para pagar a fatura.');
+js/10-cards-accounts.js:301:      adjustLiquidez(banco, -valor);
+js/10-cards-accounts.js:312:      adjustLiquidez(pg.banco, pg.valor);
+js/10-cards-accounts.js:324:      accountSelectField('boleto', b.banco),
+js/10-cards-accounts.js:337:      const banco = requireBanco(v.banco,'Escolha o banco/conta vinculado a este boleto.');
+js/10-cards-accounts.js:358:      accountSelectField('boletopg', b.banco),
+js/10-cards-accounts.js:361:      const banco = requireBanco(v.banco,'Escolha o banco usado para pagar o boleto.');
+js/10-cards-accounts.js:366:      adjustLiquidez(banco, -valor);
+js/10-cards-accounts.js:377:      adjustLiquidez(pg.banco, pg.valor);
+js/10-cards-accounts.js:392:    const banks = accountSelectNames();
+js/10-cards-accounts.js:393:    const reservaBoxesAll = reservasEnabled() ? ((S.data.reservas&&S.data.reservas.boxes)||[]).filter(r=>bankMatches(r.banco)) : [];
+js/10-cards-accounts.js:396:    const reservaLabelOf = r=>`${r.nome}${r.banco?' · '+r.banco:''}`;
+js/10-cards-accounts.js:445:        origemBanco: origemTipo==='reserva' ? (origemReserva&&origemReserva.banco||'') : origemId,
+js/10-cards-accounts.js:446:        destinoBanco: destinoTipo==='reserva' ? (destinoReserva&&destinoReserva.banco||'') : destinoId,
+js/10-cards-accounts.js:459:        const mv = {id:uid(), boxId:bx.id, tipo:'Transferência enviada', data:t.data||todayISO(), valor:t.valor, banco:bx.banco||'', descricao:t.descricao||('Transferência para '+(t.destinoNome||'')), transferenciaId:t.id, createdAt:Date.now()};
+js/10-cards-accounts.js:465:      adjustLiquidez(t.origemId, -t.valor);
+js/10-cards-accounts.js:470:        const mv = {id:uid(), boxId:bx.id, tipo:'Transferência recebida', data:t.data||todayISO(), valor:t.valor, banco:bx.banco||'', descricao:t.descricao||('Transferência de '+(t.origemNome||'')), transferenciaId:t.id, createdAt:Date.now()};
+js/10-cards-accounts.js:476:      adjustLiquidez(t.destinoId, t.valor);
+js/10-cards-accounts.js:488:      adjustLiquidez(t.origemId, t.valor);
+js/10-cards-accounts.js:497:      adjustLiquidez(t.destinoId, -t.valor);
+js/11-agenda-notifications.js:61:  S.data.agenda.filter(a=>bankMatches(a.banco)).forEach(a=>{
+js/11-agenda-notifications.js:82:  const upcoming = S.data.agenda.filter(a=>!a.pago && bankMatches(a.banco)).sort((a,b)=>a.data<b.data?-1:1).slice(0,10);
+js/12-bank-filter-search.js:15:    const banks = allBankNames();
+js/12-bank-filter-search.js:95:      if(c.banco.toLowerCase().includes(q)) out.push({type:'Cartão', text:c.banco, view:'cards'});
+js/12-bank-filter-search.js:98:          out.push({type:'Compra parcelada · '+c.banco, text:p.descricao+' — '+brl(p.valorParcela)+'/mês', view:'cards'});
+js/12-bank-filter-search.js:102:    S.data.contas.forEach(a=>{ if((a.nome||'').toLowerCase().includes(q)) out.push({type:'Conta bancária', text:a.nome+' — '+brl(contaSaldoAtual(a)), view:'cards'}); });
+js/01-storage-data-state.js:353:    if(c.nome==null) c.nome = c.banco || 'Conta';
+js/01-storage-data-state.js:363:    if(t.banco==null) t.banco='';
+js/01-storage-data-state.js:377:    if(f.banco==null) f.banco='';
+js/01-storage-data-state.js:396:  (d.liquidez||[]).forEach(l=>{ if(l.banco==null) l.banco=''; });
+js/01-storage-data-state.js:397:  (d.bens||[]).forEach(b=>{ if(b.banco==null) b.banco=''; });
+js/01-storage-data-state.js:398:  (d.metas||[]).forEach(mt=>{ if(mt.banco==null) mt.banco=''; if(mt.reservaId===undefined) mt.reservaId=null; });
+js/01-storage-data-state.js:399:  (d.agenda||[]).forEach(a=>{ if(a.banco==null) a.banco=''; });
+js/01-storage-data-state.js:400:  (d.cheques.items||[]).forEach(ch=>{ if(ch.banco==null) ch.banco=''; });
+js/01-storage-data-state.js:402:    if(b.banco==null) b.banco='';
+js/01-storage-data-state.js:411:  (d.reservas.boxes||[]).forEach(r=>{ if(r.banco==null) r.banco=''; if(r.valorAtual==null) r.valorAtual=0; if(r.valorMeta==null) r.valorMeta=0; if(r.status==null) r.status='Ativa'; if(r.metaId===undefined) r.metaId=null; if(r.corValor==null) r.corValor='#e8c98a'; });
+js/01-storage-data-state.js:417:    if(m.banco==null) m.banco='';
+js/01-storage-data-state.js:430:    (d.investimentos.ativos||[]).forEach(a=>{ if(a.banco==null) a.banco=''; });
+js/01-storage-data-state.js:431:    (d.investimentos.emCaixa||[]).forEach(c=>{ if(c.banco==null) c.banco=''; });
+js/01-storage-data-state.js:458:    if(t.viaParcelaId && t.viaCartaoId && !t.banco){
+js/01-storage-data-state.js:460:      if(cartao && cartao.banco) t.banco = cartao.banco;
+js/01-storage-data-state.js:464:    if(f.viaParcelaId && f.viaCartaoId && !f.banco){
+js/01-storage-data-state.js:466:      if(cartao && cartao.banco) f.banco = cartao.banco;
+js/01-storage-data-state.js:505:          return {id:uid(), tipo:'variavel', nome, data:ym+'-01', categoria:p.categoria||'Outro', valor:valorParcela, banco:c.banco||'', formaPagamento:'Crédito', viaCartaoId:c.id, viaParcelaId:p.id, parcelaAtual:i+1, parcelaTotal:total};
+js/01-storage-data-state.js:519:        return {id:uid(), tipo:'variavel', nome, data:ym+'-01', categoria:b.categoria||'Outro', valor:valorParcela, banco:b.banco||'', formaPagamento:'Boleto', viaBoletoId:b.id, parcelaAtual:i+1, parcelaTotal:total};
+js/01-storage-data-state.js:556:        destinoTipo:'conta', destinoId:t.banco||box.banco||'', destinoNome:t.banco||box.banco||'', destinoBanco:t.banco||box.banco||'',
+js/01-storage-data-state.js:595:function allBankNames(){
+js/01-storage-data-state.js:598:  (S.data.cartoes||[]).forEach(c=>{ if(c.banco) names.add(c.banco); });
+js/01-storage-data-state.js:599:  (S.data.boletos||[]).forEach(b=>{ if(b.banco) names.add(b.banco); });
+js/01-storage-data-state.js:601:    (S.data.reservas.boxes||[]).forEach(r=>{ if(r.banco) names.add(r.banco); });
+js/01-storage-data-state.js:602:    (S.data.reservas.moves||[]).forEach(m=>{ if(m.banco) names.add(m.banco); });
+js/01-storage-data-state.js:610:function bankSelectField(idPrefix, selected){
+js/01-storage-data-state.js:611:  return {key:'banco', label:'Banco/Conta', type:'select', options:['— Nenhum —',...allBankNames()], default: selected||'— Nenhum —'};
+js/01-storage-data-state.js:623:function accountSelectNames(){
+js/01-storage-data-state.js:628:function accountSelectField(idPrefix, selected){
+js/01-storage-data-state.js:629:  const names = accountSelectNames();
+js/01-storage-data-state.js:634:function nonCarteiraAccountNames(){
+js/01-storage-data-state.js:638:  return (S.data.cartoes||[]).filter(c=>c && c.banco).map(c=>c.banco);
+js/01-storage-data-state.js:667:function requireBanco(bancoVal, msg){
+js/01-storage-data-state.js:710:  let l = S.data.liquidez.find(x=>x.banco===banco && x.nome===banco);
+js/01-storage-data-state.js:717:function adjustLiquidez(banco, delta){
+js/01-storage-data-state.js:727:function contaSaldoAtual(conta){
+js/01-storage-data-state.js:729:  const ledger = (S.data.liquidez||[]).find(l=>l.banco===conta.nome && l.nome===conta.nome);
+js/01-storage-data-state.js:739:    id:'conta:'+c.id, contaId:c.id, tipo:'conta', nome:c.nome, valor:contaSaldoAtual(c), isCarteira:!!c.isCarteira
+js/01-storage-data-state.js:742:    const isLedgerEntry = l.nome===l.banco && contaNomes.has(l.banco);
+js/01-storage-data-state.js:743:    if(!isLedgerEntry && bankMatches(l.banco)) rows.push({id:l.id, tipo:'manual', nome:l.nome, valor:Number(l.valor)||0});
+js/01-storage-data-state.js:752:function saldoBancoNome(bn){
+js/01-storage-data-state.js:756:  let total = conta ? contaSaldoAtual(conta) : 0;
+js/01-storage-data-state.js:758:    const isLedger = l.nome===l.banco && contas.some(c=>c.nome===l.banco);
+js/01-storage-data-state.js:759:    if(!isLedger && l.banco===bn) total += Number(l.valor)||0;
+js/01-storage-data-state.js:767:  if(!tx || !tx.banco) return 0;
+js/01-storage-data-state.js:772:function applyTxSaldoEffect(tx){ const d=txContaDelta(tx); if(d) adjustLiquidez(tx.banco, d); }
+js/01-storage-data-state.js:773:function reverseTxSaldoEffect(tx){ const d=txContaDelta(tx); if(d) adjustLiquidez(tx.banco, -d); }
+js/01-storage-data-state.js:791:    central:{tipo:'todos', origem:'todas', reservaId:'', contaId:'', periodo:'todos', dataDe:'', dataAte:'', status:'todos', categoria:'', busca:'', sort:'data_desc'}
+js/15-cheques.js:45:    .filter(ch=>bankMatches(ch.banco))
+js/15-cheques.js:59:  const banks = allBankNames();
+js/15-cheques.js:146:      return `<tr><td>${ch.tipo==='recebido'?'Recebido':'Emitido'}</td><td>${status}</td><td>${esc(ch.banco||'—')}</td><td>${esc(ch.pessoa||'—')}</td><td class="${dueCls}">${chequeFmtDate(ch.dataBom)}</td><td class="${ch.tipo==='recebido'?'val-pos':'val-neg'}">${brl(ch.valor)}</td><td>${actions}</td></tr>`;
+js/15-cheques.js:148:    return `<tr><td>${status}</td><td>${esc(ch.banco||'—')}</td><td>${esc(ch.numero||'—')}</td><td>${esc(ch.pessoa||'—')}</td><td class="${dueCls}">${chequeFmtDate(ch.dataBom)}</td><td class="${ch.tipo==='recebido'?'val-pos':'val-neg'}">${brl(ch.valor)}</td><td>${esc(ch.lote||'—')}</td><td>${actions}</td></tr>`;
+js/15-cheques.js:181:      {key:'banco',label:'Banco/Conta',type:'select',options:chequeBankOptions(ch.banco),default:ch.banco||'— Nenhum —'},
+js/15-cheques.js:199:      if(item.banco==='— Nenhum —') item.banco='';
+js/15-cheques.js:234:          id:uid(), tipo, status:chequeStatuses(tipo)[0], banco:v.banco==='— Nenhum —'?'':v.banco,
+js/16-import-statement.js:21:  const bancos = allBankNames();
+js/16-import-statement.js:113:  const bancos = allBankNames();
+js/16-import-statement.js:129:      <td><select class="mini-select" onchange="ImportStatement.update(${i},'banco',this.value)">${bankOpts(r.banco||'')}</select></td>
+js/16-import-statement.js:187:  const registered = allBankNames().find(b=> hay.includes(normalizeText(b)));
+js/16-import-statement.js:234:  return [obj.data, Math.round(Math.abs(Number(obj.valor||0))*100), normalizeText(obj.nome).slice(0,38), normalizeText(obj.banco||'')].join('|');
+js/16-import-statement.js:379:        st.parsed = parsed.rows.map(r=>{ if(st.selectedBank && !r.banco) r.banco=st.selectedBank; r.duplicado=isDuplicate(r); if(r.duplicado) r.incluir=false; return r; });
+js/16-import-statement.js:392:    st.parsed = parsed.rows.map(r=>{ if(st.selectedBank && !r.banco) r.banco=st.selectedBank; r.duplicado=isDuplicate(r); if(r.duplicado) r.incluir=false; return r; });
+js/16-import-statement.js:397:    if(applyMissing){ st.parsed.forEach(r=>{ if(!r.banco || r.banco===st.detectedBank) r.banco=st.selectedBank; r.duplicado=isDuplicate(r); if(r.duplicado) r.incluir=false; }); }
+js/16-import-statement.js:400:  applyBankToAll(){ const st=ensureImportState(); const bank = document.getElementById('import_bank')?.value || st.selectedBank || st.detectedBank || ''; st.selectedBank=bank; st.parsed.forEach(r=>{ r.banco=bank; r.duplicado=isDuplicate(r); if(r.duplicado) r.incluir=false; }); renderView(); },
+js/16-import-statement.js:447:      const banco = r.banco || st.selectedBank || st.detectedBank || '';
+js/16-import-statement.js:485:          S.data.reservas.moves.push({id:uid(), banco:box.banco||bancoPadrao||'', data:r.data||todayISO(), tipo: v2>=0?'Reservar':'Resgatar', valor:Math.abs(v2), origemImportacao:{arquivo:st.fileName, original:r.original||'', reservaId:box.id}});
+js/05-calculations-charts.js:12:  return S.data.fixas.filter(f=> f.startMonth<=key && (!f.endMonth || key<=f.endMonth) && bankMatches(f.banco));
+js/05-calculations-charts.js:53:function variavelMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='variavel'&&bankMatches(t.banco)), y, m),'valor'); }
+js/05-calculations-charts.js:55:function receitaMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&(t.origem==null||t.origem==='propria')&&bankMatches(t.banco)), y, m),'valor'); }
+js/05-calculations-charts.js:57:function receitaExtraMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&(t.origem==='reembolso'||t.origem==='repasse')&&bankMatches(t.banco)), y, m),'valor'); }
+js/05-calculations-charts.js:58:function reembolsosMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&t.origem==='reembolso'&&bankMatches(t.banco)), y, m),'valor'); }
+js/05-calculations-charts.js:59:function repassesMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&t.origem==='repasse'&&bankMatches(t.banco)), y, m),'valor'); }
+js/05-calculations-charts.js:167:    const f = {id:uid(), nome, categoria, valor:valorParcela, dia:parcela.diaEntrada||1, startMonth, endMonth:totalParcelas>1?endMonth:startMonth, banco:cartao.banco||'', viaCartaoId:cartao.id, viaParcelaId:parcela.id, parcelaTotal:totalParcelas};
+js/05-calculations-charts.js:174:      nome, categoria, valorParcela, totalParcelas, startMonth, banco:cartao.banco||'', formaPagamento:'Crédito',
+js/05-calculations-charts.js:191:    const f = {id:uid(), nome, categoria, valor:valorParcela, dia:boleto.diaVencimento||1, startMonth, endMonth:totalParcelas>1?endMonth:startMonth, banco:boleto.banco||'', viaBoletoId:boleto.id, parcelaTotal:totalParcelas};
+js/05-calculations-charts.js:198:      nome, categoria, valorParcela, totalParcelas, startMonth, banco:boleto.banco||'', formaPagamento:'Boleto',
+js/05-calculations-charts.js:251:  (S.data.boletos||[]).filter(b=>bankMatches(b.banco)).forEach(b=>{
+js/05-calculations-charts.js:255:      detail.push({tipoDivida:'boleto', cartao:'Boleto', descricao:b.descricao||b.credor||'Boleto', local:b.credor||'', banco:b.banco||'', valorParcela:Number(b.valorParcela)||0, parcelaTotal:Number(b.parcelaTotal)||1, atualCalc:st.atual, restante:st.restante, id:b.id});
+js/05-calculations-charts.js:263:  S.data.cartoes.filter(c=>bankMatches(c.banco)).forEach(c=>{
+js/05-calculations-charts.js:268:        detail.push({tipoDivida:'cartao', cartao:c.banco, ...p, atualCalc:st.atual, restante:st.restante});
+js/05-calculations-charts.js:277:  const ativos = sumBy(S.data.investimentos.ativos.filter(a=>bankMatches(a.banco)),'atual');
+js/05-calculations-charts.js:278:  const caixa = sumBy(S.data.investimentos.emCaixa.filter(c=>bankMatches(c.banco)),'valor');
+js/05-calculations-charts.js:282:  const ativos = sumBy(S.data.investimentos.ativos.filter(a=>bankMatches(a.banco)),'investido');
+js/05-calculations-charts.js:283:  const caixa = sumBy(S.data.investimentos.emCaixa.filter(c=>bankMatches(c.banco)),'valor');
+js/05-calculations-charts.js:294:function reservasTotal(){ return reservasEnabled() ? sumBy((S.data.reservas.boxes||[]).filter(r=>bankMatches(r.banco)),'valorAtual') : 0; }
+js/05-calculations-charts.js:295:function bensTotal(){ return sumBy(S.data.bens.filter(b=>bankMatches(b.banco)),'valor'); }
+js/06-overview.js:6:function caixaDisponivel(){ return liquidezTotal() + sumBy(S.data.investimentos.emCaixa.filter(c=>bankMatches(c.banco)),'valor'); }
+js/06-overview.js:35:  txInMonth(S.data.transacoes.filter(t=>t.tipo==='variavel'&&bankMatches(t.banco)), y, m).forEach(t=> totals[t.categoria]=(totals[t.categoria]||0)+Number(t.valor||0));
+js/06-overview.js:40:  return S.data.cartoes.filter(c=>bankMatches(c.banco)).map(c=>{
+js/06-overview.js:43:    return {label:c.banco, value:total, color:bankColor(c.banco)};
+js/06-overview.js:47:  return allBankNames().map(bn=>{
+js/06-overview.js:48:    const saldo = saldoBancoNome(bn)
+js/06-overview.js:49:      + (reservasEnabled() ? sumBy((S.data.reservas.boxes||[]).filter(r=>r.banco===bn),'valorAtual') : 0)
+js/06-overview.js:50:      + sumBy(S.data.investimentos.emCaixa.filter(c=>c.banco===bn),'valor')
+js/06-overview.js:51:      + sumBy(S.data.investimentos.ativos.filter(a=>a.banco===bn),'atual');
+js/06-overview.js:56:  return allBankNames().map(bn=>{
+js/06-overview.js:57:    const saldoAtual = saldoBancoNome(bn)
+js/06-overview.js:58:      + (reservasEnabled() ? sumBy((S.data.reservas.boxes||[]).filter(r=>r.banco===bn),'valorAtual') : 0)
+js/06-overview.js:59:      + sumBy(S.data.investimentos.emCaixa.filter(c=>c.banco===bn),'valor')
+js/06-overview.js:60:      - S.data.cartoes.filter(c=>c.banco===bn).reduce((acc,c)=>{
+js/06-overview.js:64:    const receitas = sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&t.banco===bn), y, m),'valor');
+js/06-overview.js:65:    const despesasFixas = sumBy(fixasAtivasNoMes(y,m).filter(f=>f.banco===bn),'valor');
+js/06-overview.js:66:    const despesasVar = sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='variavel'&&t.banco===bn), y, m),'valor');
+js/06-overview.js:68:    const investVinc = sumBy(S.data.investimentos.ativos.filter(a=>a.banco===bn),'atual');
+js/06-overview.js:69:    const reservas = reservasEnabled() ? sumBy((S.data.reservas.boxes||[]).filter(r=>r.banco===bn),'valorAtual') : 0;
+js/07-budget.js:84:      ? S.data.transacoes.filter(t=>t.tipo===tab && bankMatches(t.banco) && t.data>=filt.dataDe && t.data<=filt.dataAte)
+js/07-budget.js:85:      : txInMonth(S.data.transacoes.filter(t=>t.tipo===tab), S.month.y, S.month.m).filter(t=>bankMatches(t.banco));
+js/07-budget.js:176:    entries.push({id:'rc_'+t.id, tipo:'receita', data:t.data||'', nome:t.nome||'Receita', categoria:t.categoria||'', valor:Number(t.valor)||0, sinal:1, origem:'', reservaId:null, reservaNome:'', conta:t.banco||'', status:'Pago', descricao:t.nome||'', refType:'transacao', refId:t.id});
+js/07-budget.js:181:    entries.push({id:'vr_'+t.id, tipo:'variavel', data:t.data||'', nome:t.nome||'Despesa variável', categoria:t.categoria||'', valor:Number(t.valor)||0, sinal:-1, origem:isReserva?'reserva':'conta', reservaId:box?box.id:null, reservaNome:box?box.nome:'', conta:t.banco||'', status:'Pago', descricao:t.nome||'', refType:'transacao', refId:t.id});
+js/07-budget.js:197:      entries.push({id:'fx_'+f.id+'_'+key, tipo:'fixa', data:dueDate, nome:f.nome||'Despesa fixa', categoria:f.categoria||'', valor, sinal:-1, origem:origemUsada==='reserva'?'reserva':'conta', reservaId:box?box.id:null, reservaNome:box?box.nome:'', conta:f.banco||'', status, descricao:f.nome||'', refType:'fixa', refId:f.id, mesKey:key});
+js/07-budget.js:209:    entries.push({id:'mv_'+m.id, tipo:'reserva_mov', data:m.data||'', nome:m.tipo, categoria:'', valor:Number(m.valor)||0, sinal:positive?1:(negative?-1:0), origem:'reserva', reservaId:m.boxId, reservaNome:box?box.nome:'Reserva removida', conta:m.banco||'', status:'Transferido', descricao:m.descricao||'', refType:'reserva_move', refId:m.id});
+js/07-budget.js:212:    entries.push({id:'es_'+e.id, tipo:'estorno', data:e.data||'', nome:e.nome||'Estorno', categoria:'', valor:Number(e.valor)||0, sinal:1, origem:'reserva', reservaId:e.reservaId||null, reservaNome:e.reservaNome||'', conta:e.banco||'', status:'Estornado', descricao:e.descricao||'', refType:'estorno', refId:e.refId||e.id});
+js/07-budget.js:225:  if(f.contaId) list = list.filter(e=>e.conta===f.contaId);
+js/07-budget.js:254:  if(f.contaId) chips.push({key:'contaId', label:'Conta: '+f.contaId});
+js/07-budget.js:276:  const reservaOptions = ((S.data.reservas&&S.data.reservas.boxes)||[]).filter(r=>bankMatches(r.banco));
+js/07-budget.js:277:  const contaOptions = allBankNames();
+js/07-budget.js:339:  const reservaOptions = ((S.data.reservas&&S.data.reservas.boxes)||[]).filter(r=>bankMatches(r.banco));
+js/07-budget.js:340:  const contaOptions = allBankNames();
+js/07-budget.js:365:          ${contaOptions.map(c=>`<option value="${esc(c)}" ${f.contaId===c?'selected':''}>${esc(c)}</option>`).join('')}
+js/07-budget.js:396:    S.filters.central = {tipo:'todos', origem:'todas', reservaId:'', contaId:'', periodo:'todos', dataDe:'', dataAte:'', status:'todos', categoria:'', busca:'', sort:S.filters.central.sort};
+js/07-budget.js:405:      contaId:$('#cf_conta').value, status:$('#cf_status').value, categoria:$('#cf_categoria').value,
+js/07-budget.js:499:    S.filters.central = {tipo:'todos', origem:'todas', reservaId:'', contaId:'', periodo:'todos', dataDe:'', dataAte:'', status:'todos', categoria:'', busca:'', sort:S.filters.central.sort};
+js/07-budget.js:504:    const reset = {tipo:'todos', origem:'todas', reservaId:'', contaId:'', status:'todos', categoria:'', busca:''};
+js/07-budget.js:565:  return reservasEnabled() ? ((S.data.reservas && S.data.reservas.boxes)||[]).filter(r=>bankMatches(r.banco)) : [];
+js/07-budget.js:567:function reservaBoxLabel(r){ return `${r.nome}${r.banco?' · '+r.banco:''}`; }
+js/07-budget.js:592:    banco:reservaBox.banco||tx.banco||'', descricao:'Receita enviada direto para reserva: '+(tx.nome||'Sem nome'),
+js/07-budget.js:628:    banco:reservaBox.banco||'', descricao:'Pagamento direto: '+(tx.nome||'Despesa'),
+js/07-budget.js:662:    const mv = {id:uid(), boxId:box.id, tipo:'Pagamento de despesa fixa', data:todayISO(), valor, banco:box.banco||'', descricao:'Pagamento de despesa fixa — '+(f.nome||'Sem nome')+' — '+brlPlain(valor), despesaFixaId:f.id, fixaOcorrenciaId:null, createdAt:Date.now()};
+js/07-budget.js:666:    Object.assign(rec, {pago:true, origemPagamento:'reserva', reservaId:box.id, reservaMoveId:mv.id, valorPago:valor, banco:box.banco||'', pagoEm:Date.now()});
+js/07-budget.js:672:    Object.assign(rec, {pago:true, origemPagamento:'conta', reservaId:null, reservaMoveId:null, valorPago:valor, banco:f.banco||'', pagoEm:Date.now()});
+js/07-budget.js:674:    adjustLiquidez(rec.banco, -valor); // V6.22 — desconta da conta usada para pagar
+js/07-budget.js:687:      logEstorno({tipo:'fixa', refId:f.id, nome:f.nome, valor:rec.valorPago, reservaId:box.id, reservaNome:box.nome, banco:box.banco, descricao:'Estorno — devolução de "'+f.nome+'" para a reserva '+box.nome});
+js/07-budget.js:691:    adjustLiquidez(rec.banco, Number(rec.valorPago)||0); // V6.22 — devolve o valor à conta
+js/07-budget.js:708:      adjustLiquidez(rec.banco, Number(rec.valorPago)||0); // V6.22 — devolve o valor à conta
+js/07-budget.js:726:      const bancoFinal = novoBanco || rec.banco;
+js/07-budget.js:731:        adjustLiquidez(rec.banco, oldValor); // V6.22 — devolve o valor antigo à conta antiga
+js/07-budget.js:733:      adjustLiquidez(bancoFinal, -novoValor); // V6.22 — desconta o novo valor da conta (nova ou a mesma)
+js/07-budget.js:762:      adjustLiquidez(rec.banco, oldValor); // V6.22 — devolve o valor à conta antiga, agora paga pela reserva
+js/07-budget.js:764:    const mv = {id:uid(), boxId:targetBox.id, tipo:'Pagamento de despesa fixa', data:todayISO(), valor:novoValor, banco:targetBox.banco||'', descricao:'Pagamento de despesa fixa — '+(novoNomeParaDescricao||'')+' — '+brlPlain(novoValor), despesaFixaId:newFixaId, fixaOcorrenciaId:rec.id, createdAt:Date.now()};
+js/07-budget.js:825:        <div class="field" id="tm_banco_wrap"><label>${isReceita?'Onde a receita entra':'De onde o dinheiro sai'}</label><select id="tm_banco"><option>— Nenhum —</option>${accountSelectNames().map(b=>`<option ${isEdit&&existing.banco===b?'selected':''}>${esc(b)}</option>`).join('')}</select></div>
+js/07-budget.js:938:        const names = nonCarteiraAccountNames();
+js/07-budget.js:956:    syncFormaPagamentoUI(isEdit?existing.banco:null);
+js/07-budget.js:989:        Object.assign(existing, {nome, data, categoria, valor, banco:rbox.banco||'', origemPagamento:'reserva', formaPagamento:null});
+js/07-budget.js:993:        tx = {id:uid(), tipo:'variavel', nome, data, categoria, valor, banco:rbox.banco||'', origemPagamento:'reserva', formaPagamento:null};
+js/07-budget.js:1012:      const cartao = (S.data.cartoes||[]).find(c=>c.banco===cartaoNome);
+js/07-budget.js:1033:      toast('Compra no crédito lançada no cartão '+cartao.banco+' e em Despesas.');
+js/07-budget.js:1038:    const banco = requireBanco(bancoVal, isReceita ? 'Toda receita precisa de um banco/conta/carteira vinculado.' : 'Toda despesa precisa de um banco/conta/carteira vinculado.');
+js/07-budget.js:1096:  const initialForma = isEdit ? (existing.formaPagamento || (carteira && existing.banco===carteira.nome ? 'Dinheiro' : 'Pix')) : (nonCarteiraAccountNames().length ? 'Pix' : 'Dinheiro');
+js/07-budget.js:1130:        <div class="field" id="fm_banco_wrap"><label>Banco/Conta</label><select id="fm_banco"><option>— Nenhum —</option>${accountSelectNames().map(b=>`<option ${isEdit&&existing.banco===b?'selected':''}>${esc(b)}</option>`).join('')}</select></div>
+js/07-budget.js:1208:        const names = nonCarteiraAccountNames();
+js/07-budget.js:1224:  syncFixaFormaPagamentoUI(isEdit?existing.banco:null);
+js/07-budget.js:1242:        S.data.fixas.push({id:uid(), nome, categoria, valor, dia, startMonth:monthKeyNow, endMonth:null, banco:rbox.banco||'', formaPagamento:null, origemPagamento:'reserva', reservaOrigemId:rbox.id});
+js/07-budget.js:1257:        Object.assign(existing,{nome,categoria,valor,dia,banco:rbox.banco||'',formaPagamento:null,origemPagamento:'reserva',reservaOrigemId:rbox.id});
+js/07-budget.js:1260:        S.data.fixas.push({id:targetId, nome, categoria, valor, dia, startMonth:monthKeyNow, endMonth:null, banco:rbox.banco||'', formaPagamento:null, origemPagamento:'reserva', reservaOrigemId:rbox.id});
+js/07-budget.js:1273:      const cartao = (S.data.cartoes||[]).find(c=>c.banco===cartaoNome);
+js/07-budget.js:1289:      toast('Compra no crédito lançada no cartão '+cartao.banco+' como despesa fixa parcelada.');
+js/07-budget.js:1294:    const banco = requireBanco(bancoVal, 'Toda despesa fixa precisa de um banco/conta vinculado.');
+js/19-subscriptions.js:36:  return (S.data.assinaturas||[]).filter(a=> a.formaPagamento!=='Crédito' && assinaturaOcorreNoMes(a,key) && bankMatches(a.banco));
+js/19-subscriptions.js:98:      rec.banco = a.banco||'';
+js/19-subscriptions.js:99:      if(rec.banco) adjustLiquidez(rec.banco, -valor);
+js/19-subscriptions.js:111:    const accountNames = accountSelectNames();
+js/19-subscriptions.js:125:      {key:'banco', label:'Banco/Conta', type:'select', options:accountNames.length?accountNames:['Cadastre uma conta em Cartões e Contas'], default:isEdit&&accountNames.includes(existing.banco)?existing.banco:(accountNames[0]||''), visibleWhen:{key:'origem',value:'conta'}},
+js/19-subscriptions.js:126:      {key:'cartao', label:'Cartão de crédito', type:'select', options:cardNames.length?cardNames:['Cadastre um cartão em Cartões e Contas'], default:isEdit&&existing.formaPagamento==='Crédito'?(((S.data.cartoes||[]).find(cc=>cc.id===existing.cartaoId)||{}).banco||cardNames[0]||''):(cardNames[0]||''), visibleWhen:{key:'origem',value:'cartao'}},
+js/19-subscriptions.js:140:        if(isCartao && (!cardNames.length || !(S.data.cartoes||[]).some(c=>c.banco===v.cartao))){ alert('Escolha um cartão de crédito válido. Cadastre um cartão em "Cartões e Contas" antes.'); return; }
+js/19-subscriptions.js:141:        if(!isCartao && (!accountNames.length || !accountNames.includes(v.banco))){ alert('Escolha um banco/conta válido. Cadastre uma conta em "Cartões e Contas" antes.'); return; }
+js/19-subscriptions.js:142:        const cartaoObj = isCartao ? (S.data.cartoes||[]).find(c=>c.banco===v.cartao) : null;
+js/19-subscriptions.js:149:          banco: isCartao ? '' : v.banco,
+js/19-subscriptions.js:190:  const list = (S.data.assinaturas||[]).filter(a=>bankMatches(a.formaPagamento==='Crédito' ? ((S.data.cartoes||[]).find(c=>c.id===a.cartaoId)||{}).banco : a.banco));
+js/19-subscriptions.js:194:    const cartaoNome = a.formaPagamento==='Crédito' ? (((S.data.cartoes||[]).find(c=>c.id===a.cartaoId)||{}).banco || 'cartão removido') : '';
+js/19-subscriptions.js:195:    const contaLabel = a.formaPagamento==='Crédito' ? ('Cartão: '+esc(cartaoNome)) : (esc(a.formaPagamento)+' · '+esc(a.banco||'—'));
+js/08-investments.js:55:    openModal({title:'Adicionar em caixa', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor (R$)',type:'money'},bankSelectField()],
+js/08-investments.js:56:      onSave(v){ S.data.investimentos.emCaixa.push({id:uid(),nome:v.nome,valor:Number(v.valor)||0,banco:v.banco==='— Nenhum —'?'':v.banco}); saveCurrentData(); closeModal(); renderView(); }});
+js/08-investments.js:60:    openModal({title:'Editar item', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor (R$)',type:'money'},bankSelectField(c.banco)], values:c,
+js/08-investments.js:62:      onSave(v){ Object.assign(c,{nome:v.nome,valor:Number(v.valor)||0,banco:v.banco==='— Nenhum —'?'':v.banco}); saveCurrentData(); closeModal(); renderView(); }});
+js/08-investments.js:71:      bankSelectField(),
+js/08-investments.js:73:      S.data.investimentos.ativos.push({id:uid(),nome:v.nome,local:v.local,mercado:v.mercado,investido:Number(v.investido)||0,atual:Number(v.atual)||0,banco:v.banco==='— Nenhum —'?'':v.banco});
+js/08-investments.js:85:      bankSelectField(a.banco),
+js/08-investments.js:88:    onSave(v){ Object.assign(a,{nome:v.nome,local:v.local,mercado:v.mercado,investido:Number(v.investido)||0,atual:Number(v.atual)||0,banco:v.banco==='— Nenhum —'?'':v.banco}); saveCurrentData(); closeModal(); renderView(); }});
+js/09-patrimony-goals.js:14:  S.data.bens.filter(b=>bankMatches(b.banco)).forEach(b=> segs.push({label:b.nome, value:b.valor, color:catColor(b.nome)}));
+js/09-patrimony-goals.js:25:    <div class="list-row"><span class="lname">${esc(l.nome)}${l.isCarteira?' <span style="color:var(--muted);font-weight:400;">(dinheiro físico)</span>':''}</span><span class="lval">${brl(l.valor)}</span>${l.tipo==='conta' ? `<button class="ledit" onclick="Cards.editConta('${l.contaId}')" title="Editar conta">✎</button>` : `<button class="ledit" onclick="Patr.editLiquidez('${l.id}')" title="Editar ativo">✎</button>`}</div>`).join('');
+js/09-patrimony-goals.js:29:  const bensRows = S.data.bens.filter(b=>bankMatches(b.banco)).map(b=>`
+js/09-patrimony-goals.js:34:    const origem = d.tipoDivida==='boleto' ? (d.banco || d.local || 'Boleto') : d.cartao;
+js/09-patrimony-goals.js:94:  const metas = (S.data.metas||[]).filter(mt=>bankMatches(mt.banco));
+js/09-patrimony-goals.js:122:    openModal({title:'Adicionar ativo de liquidez', sub:'Valor neste mês.', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor',type:'money'},bankSelectField()],
+js/09-patrimony-goals.js:123:      onSave(v){ S.data.liquidez.push({id:uid(),nome:v.nome,valor:Number(v.valor)||0,banco:v.banco==='— Nenhum —'?'':v.banco}); saveCurrentData(); closeModal(); renderView(); }});
+js/09-patrimony-goals.js:127:    openModal({title:'Editar ativo extra (não vinculado a uma conta)', sub:'Item criado antes da conta bancária virar automática. Se preferir, exclua e cadastre uma conta de verdade em Cartões e Contas.', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor',type:'money'},bankSelectField(l.banco)], values:l,
+js/09-patrimony-goals.js:129:      onSave(v){ Object.assign(l,{nome:v.nome,valor:Number(v.valor)||0,banco:v.banco==='— Nenhum —'?'':v.banco}); saveCurrentData(); closeModal(); renderView(); }});
+js/09-patrimony-goals.js:132:    openModal({title:'Adicionar bem', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor estimado',type:'money'},bankSelectField()],
+js/09-patrimony-goals.js:133:      onSave(v){ S.data.bens.push({id:uid(),nome:v.nome,valor:Number(v.valor)||0,banco:v.banco==='— Nenhum —'?'':v.banco}); saveCurrentData(); closeModal(); renderView(); }});
+js/09-patrimony-goals.js:137:    openModal({title:'Editar bem', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor estimado',type:'money'},bankSelectField(b.banco)], values:b,
+js/09-patrimony-goals.js:139:      onSave(v){ Object.assign(b,{nome:v.nome,valor:Number(v.valor)||0,banco:v.banco==='— Nenhum —'?'':v.banco}); saveCurrentData(); closeModal(); renderView(); }});
+js/09-patrimony-goals.js:150:  const base = ((S.data.reservas&&S.data.reservas.boxes)||[]).filter(r=>bankMatches(r.banco));
+js/09-patrimony-goals.js:157:  return ((S.data.reservas&&S.data.reservas.moves)||[]).filter(m=>ids.has(m.boxId) || bankMatches(m.banco)).sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))).slice(0,12);
+js/09-patrimony-goals.js:167:    const banco = (box&&box.banco) || mv.banco || '';
+js/09-patrimony-goals.js:180:      <span class="lname"><span class="dot" style="background:${esc(r.cor||'var(--gold)')}"></span>${esc(r.nome)} <span class="lmeta">${esc(r.banco||'Sem banco')} · ${monthLabel(S.month.y,S.month.m)}</span></span>
+js/09-patrimony-goals.js:198:  if(mt){ mt.valorAtual = Number(box.valorAtual)||0; mt.nome = box.nome; mt.banco = box.banco; }
+js/09-patrimony-goals.js:211:      <span class="lname"><span class="dot" style="background:${esc(r.cor||'var(--gold)')}"></span>${esc(r.nome)} <span class="lmeta">${esc(r.banco||'Sem banco')} ${pct?('· '+pct+'%'):''}</span></span>
+js/09-patrimony-goals.js:270:      <div class="reserva-head"><div><div class="reserva-title"><span class="dot" style="background:${esc(r.cor||'var(--gold)')}"></span>${esc(r.nome)}</div><div class="reserva-meta">${esc(r.banco||'Sem banco')} ${r.categoria?'· '+esc(r.categoria):''}</div></div>${reservaStatusPill(r.status)}</div>
+js/09-patrimony-goals.js:287:    return `<tr><td>${reservaFmtDate(m.data)}</td><td>${esc(box?box.nome:'Reserva removida')}</td><td>${esc(m.tipo)}</td><td>${esc(m.banco||'')}</td><td class="${positive||isAdjust?'val-pos':negative?'val-neg':''}">${positive?'+ ':negative?'- ':''}${brl(m.valor)}</td><td>${esc(m.descricao||'')}${linked}</td><td style="text-align:right;white-space:nowrap;"><button class="ledit" onclick="Reservas.editMove('${m.id}')">✎</button><button class="ledit danger-mini" onclick="Reservas.deleteMove('${m.id}')">×</button></td></tr>`;
+js/09-patrimony-goals.js:319:      accountSelectField('reserva', r.banco),
+js/09-patrimony-goals.js:336:      const banco = requireBanco(v.banco, 'Escolha o banco/conta desta reserva.');
+js/09-patrimony-goals.js:352:        Object.assign(mt, {nome:boxRef.nome, emoji:metaEmoji, valorMeta:metaValor, valorAtual:boxRef.valorAtual, prazo:metaPrazo, banco:boxRef.banco, cor:metaCor, reservaId:boxRef.id});
+js/09-patrimony-goals.js:375:    const boxes = (S.data.reservas.boxes||[]).filter(r=>bankMatches(r.banco));
+js/09-patrimony-goals.js:377:    const labels = boxes.map(r=>`${r.nome}${r.banco?' · '+r.banco:''}`);
+js/09-patrimony-goals.js:379:    const selectedLabel = `${selectedBox.nome}${selectedBox.banco?' · '+selectedBox.banco:''}`;
+js/09-patrimony-goals.js:398:      S.data.reservas.moves.push({id:uid(), boxId:bx.id, tipo:v.tipo, data:v.data||todayISO(), valor, banco:bx.banco||'', descricao:v.descricao||'', saldoAntes, saldoDepois:Number(bx.valorAtual||0), createdAt:Date.now()});
+js/09-patrimony-goals.js:433:    mv.banco = bx.banco||mv.banco||'';
+js/09-patrimony-goals.js:445:    const boxes = (S.data.reservas.boxes||[]).filter(r=>bankMatches(r.banco));
+js/09-patrimony-goals.js:446:    const labels = boxes.map(r=>`${r.nome}${r.banco?' · '+r.banco:''}`);
+js/09-patrimony-goals.js:449:    const curLabel = `${curBox.nome}${curBox.banco?' · '+curBox.banco:''}`;
+js/09-patrimony-goals.js:471:      Object.assign(mv,{boxId:bx.id, tipo:v.tipo, data:v.data||todayISO(), valor, banco:bx.banco||'', descricao:v.descricao||'', editedAt:Date.now()});
+js/09-patrimony-goals.js:544:          const haystack = [m.tipo, m.descricao, m.banco, fixaRef&&fixaRef.nome, txRef&&txRef.nome].filter(Boolean).join(' ').toLowerCase();
+js/09-patrimony-goals.js:608:        <div class="field"><label>Banco/Conta vinculada</label><select id="mt_banco"><option>— Nenhum —</option>${allBankNames().map(b=>`<option ${isEdit&&existing.banco===b?'selected':''}>${esc(b)}</option>`).join('')}</select></div>

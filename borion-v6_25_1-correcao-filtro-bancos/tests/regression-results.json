@@ -1,0 +1,265 @@
+{
+  "generatedAt": "2026-07-12T23:54:05.651Z",
+  "appVersion": "6.24.6",
+  "total": 63,
+  "passed": 59,
+  "failed": 4,
+  "results": [
+    {
+      "name": "1 — Nubank excluída e recriada não herda −R$ 6.000, inclusive após recarregar",
+      "status": "PASS"
+    },
+    {
+      "name": "2 — Nova Nubank com saldo inicial R$ 1.000 começa em R$ 1.000",
+      "status": "PASS"
+    },
+    {
+      "name": "3 — Cartão/fatura Nubank de R$ 6.000 não reduz conta bancária de R$ 2.000",
+      "status": "PASS"
+    },
+    {
+      "name": "4 — Duas contas Bradesco com mesmo nome permanecem independentes",
+      "status": "PASS"
+    },
+    {
+      "name": "5 — Renomear conta preserva saldo e histórico pelo mesmo accountId",
+      "status": "PASS"
+    },
+    {
+      "name": "6 — Assinatura futura fica Prevista e não altera saldo antes do vencimento",
+      "status": "PASS"
+    },
+    {
+      "name": "7 — Pausar em março e retomar em julho não cria março–junho nem retroatividade",
+      "status": "PASS"
+    },
+    {
+      "name": "8 — Editar assinatura para R$ 80 em julho mantém janeiro em R$ 50",
+      "status": "PASS"
+    },
+    {
+      "name": "9 — Excluir assinatura remove o cadastro e não deixa card fantasma",
+      "status": "PASS"
+    },
+    {
+      "name": "9B — Assinatura sem cobrança é apagada junto com todas as previsões",
+      "status": "PASS"
+    },
+    {
+      "name": "9C — Ghosts de versões antigas são limpos automaticamente ao sincronizar",
+      "status": "PASS"
+    },
+    {
+      "name": "10 — Cartão inválido gera Falhou e nova tentativa não duplica",
+      "status": "PASS"
+    },
+    {
+      "name": "11 — Mutação financeira atômica restaura lançamento e saldo em caso de erro",
+      "status": "PASS"
+    },
+    {
+      "name": "12 — Persistência mantém IDs isolados e ocorrências únicas",
+      "status": "PASS"
+    },
+    {
+      "name": "Migração defensiva — único vínculo migra; homônimo ambíguo não migra; backup é anterior",
+      "status": "PASS"
+    },
+    {
+      "name": "Migração defensiva — conta arquivada + nova homônima nunca recebe legado aleatoriamente",
+      "status": "PASS"
+    },
+    {
+      "name": "Cartões e seletores — crédito não recebe accountId e Banco/Conta exclui cartão/arquivada",
+      "status": "PASS"
+    },
+    {
+      "name": "13 — Migração cria o histórico mensal e elimina duplicatas preservando o primeiro fechamento",
+      "status": "PASS"
+    },
+    {
+      "name": "14 — Fechamento dos Cofrinhos congela valores e somente movimentações da competência",
+      "status": "PASS"
+    },
+    {
+      "name": "15 — Mesmo mês fecha uma única vez e o snapshot sobrevive à serialização",
+      "status": "PASS"
+    },
+    {
+      "name": "16 — Comparação histórica usa ID, separa nomes iguais e identifica criado/removido",
+      "status": "PASS"
+    },
+    {
+      "name": "17 — Conteúdo do relatório é somente leitura e não oferece ações de edição",
+      "status": "PASS"
+    },
+    {
+      "name": "18 — Modal do histórico sobrescreve o limite global de 400px e usa rolagem interna",
+      "status": "PASS"
+    },
+    {
+      "name": "19 — Acesso ao histórico ficou discreto e integrado à barra dos Cofrinhos",
+      "status": "PASS"
+    },
+    {
+      "name": "Backup Drive&Local — snapshot possui mesmo ID, data-base, versão e checksum",
+      "status": "PASS"
+    },
+    {
+      "name": "20 — Organizar módulos e itens aparece em Personalização, não em Módulos",
+      "status": "PASS"
+    },
+    {
+      "name": "21 — Menu de ordem inicia em ORDEM e só revela Organizar ordem após escolher personalizada",
+      "status": "PASS"
+    },
+    {
+      "name": "22 — Salvar organização faz o botão sumir e o menu voltar para ORDEM",
+      "status": "PASS"
+    },
+    {
+      "name": "23 — Autosave do Google Drive constrói snapshot válido e grava autosave-N.json",
+      "status": "PASS"
+    },
+    {
+      "name": "24 — Um único Ctrl+S aguarda sincronização em andamento e cria forcesave",
+      "status": "PASS"
+    },
+    {
+      "name": "25 — Criar backup local grava um arquivo JSON real na pasta autorizada",
+      "status": "PASS"
+    },
+    {
+      "name": "26 — Backup rápido é atalho do manual e o local sempre produz JSON",
+      "status": "PASS"
+    },
+    {
+      "name": "27 — Reserva desligada oculta metas ligadas aos Cofrinhos e mantém metas independentes editáveis",
+      "status": "PASS"
+    },
+    {
+      "name": "28 — Metas independentes viram Cofrinhos uma única vez e Cofrinhos antigos são preservados",
+      "status": "PASS"
+    },
+    {
+      "name": "29 — Ligar Reserva em Configurações converte metas e mantém a conversão após desligar/ligar novamente",
+      "status": "PASS"
+    },
+    {
+      "name": "30 — Modo automático usa Smartphone no celular e Pro no computador, com opção de forçar",
+      "status": "PASS"
+    },
+    {
+      "name": "31 — Smartphone Mode oferece início simples, ações rápidas e navegação inferior sem remover o menu completo",
+      "status": "PASS"
+    },
+    {
+      "name": "32 — Smartphone Mode está no HTML, no cache offline e possui estilos próprios",
+      "status": "FAIL",
+      "error": "AssertionError [ERR_ASSERTION]: The input did not match the regular expression /js\\/20-smartphone-mode\\.js\\?v=6\\.24\\.6/. Input:\n\n'<!DOCTYPE html>\\n' +\n  '<html lang=\"pt-BR\">\\n' +\n  '<head>\\n' +\n  '<meta charset=\"UTF-8\">\\n' +\n  '<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, viewport-fit=cover\">\\n' +\n  '<title>Borion Finance</title>\\n' +\n  '<meta name=\"description\" content=\"Controle financeiro pessoal — receitas, despesas, cartões e patrimônio.\">\\n' +\n  '<link rel=\"manifest\" href=\"manifest.json\">\\n' +\n  '<meta name=\"theme-color\" content=\"#060a10\">\\n' +\n  '<meta name=\"mobile-web-app-capable\" content=\"yes\">\\n' +\n  '<meta name=\"apple-mobile-web-app-capable\" content=\"yes\">\\n' +\n  '<meta name=\"apple-mobile-web-app-status-bar-style\" content=\"black-translucent\">\\n' +\n  '<meta name=\"apple-mobile-web-app-title\" content=\"Borion Finance\">\\n' +\n  '<link rel=\"apple-touch-icon\" href=\"apple-touch-icon.png\">\\n' +\n  '<link rel=\"shortcut icon\" href=\"borion.ico\">\\n' +\n  '<link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"favicon-32.png\">\\n' +\n  '<link rel=\"icon\" type=\"image/png\" sizes=\"192x192\" href=\"icon-192.png\">\\n' +\n  '<script>\\n' +\n  '(function(){\\n' +\n  '  try{\\n' +\n  \"    var raw=localStorage.getItem('mc_config');\\n\" +\n  '    var cfg=raw?JSON.parse(raw):{};\\n' +\n  \"    var choice=cfg.theme||'dark';\\n\" +\n  \"    var resolved=choice==='system'&&window.matchMedia? (window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark') : choice;\\n\" +\n  \"    resolved = resolved==='light'?'light':'dark';\\n\" +\n  \"    document.documentElement.setAttribute('data-theme', resolved);\\n\" +\n  \"    document.documentElement.setAttribute('data-theme-choice', choice);\\n\" +\n  `    var meta=document.querySelector('meta[name=\"theme-color\"]');\\n` +\n  \"    if(meta) meta.setAttribute('content', resolved==='light'?'#f7f2e7':'#060a10');\\n\" +\n  \"  }catch(e){ document.documentElement.setAttribute('data-theme','dark'); }\\n\" +\n  '})();\\n' +\n  '</script>\\n' +\n  '<link rel=\"stylesheet\" href=\"css/styles.css?v=6.25.0\">\\n' +\n  '</head>\\n' +\n  '<body>\\n' +\n  '<div id=\"root\"></div>\\n' +\n  '<div id=\"modal-root\"></div>\\n' +\n  '<div id=\"toast-root\"></div>\\n' +\n  '\\n' +\n  '\\n' +\n  '<script src=\"https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2\"></script>\\n' +\n  '<script src=\"js/00-utils.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/01-storage-data-state.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/01b-storage-provider.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/01c-google-drive-provider.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/18-order-preferences.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/02-backup-local.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/17-borion-cloud.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/03-modals-shared.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/04-gate-shell.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/05-calculations-charts.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/06-overview.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/07-budget.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/08-investments.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/09-patrimony-goals.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/10-cards-accounts.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/11-agenda-notifications.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/12-bank-filter-search.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/13-settings.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/19-subscriptions.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/20-smartphone-mode.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/21-smartphone-history.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/22-mobile-experience.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/15-cheques.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/16-import-statement.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/23-profile-import-review.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/14-events-boot-pwa.js?v=6.25.0\"></script>\\n' +\n  '</body>\\n' +\n  '</html>\\n'\n\n    at /mnt/data/borion_work/tests/borion-regression-tests.js:447:12\n    at test (/mnt/data/borion_work/tests/borion-regression-tests.js:73:8)\n    at /mnt/data/borion_work/tests/borion-regression-tests.js:443:3"
+    },
+    {
+      "name": "33 — Botão Voltar fecha modal, volta ao Início e só então pede confirmação para sair",
+      "status": "PASS"
+    },
+    {
+      "name": "34 — Confirmação explícita atravessa a reserva de oito sentinelas e evita segundo aviso",
+      "status": "PASS"
+    },
+    {
+      "name": "35 — Gestos rápidos de Voltar contam como uma única ação lógica",
+      "status": "PASS"
+    },
+    {
+      "name": "36 — Histórico insistente está no HTML, cache offline e possui fallback beforeunload",
+      "status": "FAIL",
+      "error": "AssertionError [ERR_ASSERTION]: The input did not match the regular expression /js\\/21-smartphone-history\\.js\\?v=6\\.24\\.6/. Input:\n\n'<!DOCTYPE html>\\n' +\n  '<html lang=\"pt-BR\">\\n' +\n  '<head>\\n' +\n  '<meta charset=\"UTF-8\">\\n' +\n  '<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, viewport-fit=cover\">\\n' +\n  '<title>Borion Finance</title>\\n' +\n  '<meta name=\"description\" content=\"Controle financeiro pessoal — receitas, despesas, cartões e patrimônio.\">\\n' +\n  '<link rel=\"manifest\" href=\"manifest.json\">\\n' +\n  '<meta name=\"theme-color\" content=\"#060a10\">\\n' +\n  '<meta name=\"mobile-web-app-capable\" content=\"yes\">\\n' +\n  '<meta name=\"apple-mobile-web-app-capable\" content=\"yes\">\\n' +\n  '<meta name=\"apple-mobile-web-app-status-bar-style\" content=\"black-translucent\">\\n' +\n  '<meta name=\"apple-mobile-web-app-title\" content=\"Borion Finance\">\\n' +\n  '<link rel=\"apple-touch-icon\" href=\"apple-touch-icon.png\">\\n' +\n  '<link rel=\"shortcut icon\" href=\"borion.ico\">\\n' +\n  '<link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"favicon-32.png\">\\n' +\n  '<link rel=\"icon\" type=\"image/png\" sizes=\"192x192\" href=\"icon-192.png\">\\n' +\n  '<script>\\n' +\n  '(function(){\\n' +\n  '  try{\\n' +\n  \"    var raw=localStorage.getItem('mc_config');\\n\" +\n  '    var cfg=raw?JSON.parse(raw):{};\\n' +\n  \"    var choice=cfg.theme||'dark';\\n\" +\n  \"    var resolved=choice==='system'&&window.matchMedia? (window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark') : choice;\\n\" +\n  \"    resolved = resolved==='light'?'light':'dark';\\n\" +\n  \"    document.documentElement.setAttribute('data-theme', resolved);\\n\" +\n  \"    document.documentElement.setAttribute('data-theme-choice', choice);\\n\" +\n  `    var meta=document.querySelector('meta[name=\"theme-color\"]');\\n` +\n  \"    if(meta) meta.setAttribute('content', resolved==='light'?'#f7f2e7':'#060a10');\\n\" +\n  \"  }catch(e){ document.documentElement.setAttribute('data-theme','dark'); }\\n\" +\n  '})();\\n' +\n  '</script>\\n' +\n  '<link rel=\"stylesheet\" href=\"css/styles.css?v=6.25.0\">\\n' +\n  '</head>\\n' +\n  '<body>\\n' +\n  '<div id=\"root\"></div>\\n' +\n  '<div id=\"modal-root\"></div>\\n' +\n  '<div id=\"toast-root\"></div>\\n' +\n  '\\n' +\n  '\\n' +\n  '<script src=\"https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2\"></script>\\n' +\n  '<script src=\"js/00-utils.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/01-storage-data-state.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/01b-storage-provider.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/01c-google-drive-provider.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/18-order-preferences.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/02-backup-local.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/17-borion-cloud.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/03-modals-shared.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/04-gate-shell.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/05-calculations-charts.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/06-overview.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/07-budget.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/08-investments.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/09-patrimony-goals.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/10-cards-accounts.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/11-agenda-notifications.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/12-bank-filter-search.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/13-settings.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/19-subscriptions.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/20-smartphone-mode.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/21-smartphone-history.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/22-mobile-experience.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/15-cheques.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/16-import-statement.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/23-profile-import-review.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/14-events-boot-pwa.js?v=6.25.0\"></script>\\n' +\n  '</body>\\n' +\n  '</html>\\n'\n\n    at /mnt/data/borion_work/tests/borion-regression-tests.js:511:12\n    at test (/mnt/data/borion_work/tests/borion-regression-tests.js:73:8)\n    at /mnt/data/borion_work/tests/borion-regression-tests.js:507:3"
+    },
+    {
+      "name": "37 — Mais oferece Salvar e atualizar com backup local, force save, update e reload",
+      "status": "PASS"
+    },
+    {
+      "name": "38 — Dispensar popup preserva a notificação no sino e impede que o popup reapareça",
+      "status": "PASS"
+    },
+    {
+      "name": "39 — Marcar notificação como não lida rearma somente o popup, sem recriar o registro",
+      "status": "PASS"
+    },
+    {
+      "name": "40 — Notificações possuem gesto horizontal, exclusão com desfazer e central em bottom sheet",
+      "status": "PASS"
+    },
+    {
+      "name": "41 — Camada Mobile Experience está no HTML, no cache offline e inclui viewport, haptics e bottom sheets",
+      "status": "FAIL",
+      "error": "AssertionError [ERR_ASSERTION]: The input did not match the regular expression /js\\/22-mobile-experience\\.js\\?v=6\\.24\\.6/. Input:\n\n'<!DOCTYPE html>\\n' +\n  '<html lang=\"pt-BR\">\\n' +\n  '<head>\\n' +\n  '<meta charset=\"UTF-8\">\\n' +\n  '<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, viewport-fit=cover\">\\n' +\n  '<title>Borion Finance</title>\\n' +\n  '<meta name=\"description\" content=\"Controle financeiro pessoal — receitas, despesas, cartões e patrimônio.\">\\n' +\n  '<link rel=\"manifest\" href=\"manifest.json\">\\n' +\n  '<meta name=\"theme-color\" content=\"#060a10\">\\n' +\n  '<meta name=\"mobile-web-app-capable\" content=\"yes\">\\n' +\n  '<meta name=\"apple-mobile-web-app-capable\" content=\"yes\">\\n' +\n  '<meta name=\"apple-mobile-web-app-status-bar-style\" content=\"black-translucent\">\\n' +\n  '<meta name=\"apple-mobile-web-app-title\" content=\"Borion Finance\">\\n' +\n  '<link rel=\"apple-touch-icon\" href=\"apple-touch-icon.png\">\\n' +\n  '<link rel=\"shortcut icon\" href=\"borion.ico\">\\n' +\n  '<link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"favicon-32.png\">\\n' +\n  '<link rel=\"icon\" type=\"image/png\" sizes=\"192x192\" href=\"icon-192.png\">\\n' +\n  '<script>\\n' +\n  '(function(){\\n' +\n  '  try{\\n' +\n  \"    var raw=localStorage.getItem('mc_config');\\n\" +\n  '    var cfg=raw?JSON.parse(raw):{};\\n' +\n  \"    var choice=cfg.theme||'dark';\\n\" +\n  \"    var resolved=choice==='system'&&window.matchMedia? (window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark') : choice;\\n\" +\n  \"    resolved = resolved==='light'?'light':'dark';\\n\" +\n  \"    document.documentElement.setAttribute('data-theme', resolved);\\n\" +\n  \"    document.documentElement.setAttribute('data-theme-choice', choice);\\n\" +\n  `    var meta=document.querySelector('meta[name=\"theme-color\"]');\\n` +\n  \"    if(meta) meta.setAttribute('content', resolved==='light'?'#f7f2e7':'#060a10');\\n\" +\n  \"  }catch(e){ document.documentElement.setAttribute('data-theme','dark'); }\\n\" +\n  '})();\\n' +\n  '</script>\\n' +\n  '<link rel=\"stylesheet\" href=\"css/styles.css?v=6.25.0\">\\n' +\n  '</head>\\n' +\n  '<body>\\n' +\n  '<div id=\"root\"></div>\\n' +\n  '<div id=\"modal-root\"></div>\\n' +\n  '<div id=\"toast-root\"></div>\\n' +\n  '\\n' +\n  '\\n' +\n  '<script src=\"https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2\"></script>\\n' +\n  '<script src=\"js/00-utils.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/01-storage-data-state.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/01b-storage-provider.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/01c-google-drive-provider.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/18-order-preferences.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/02-backup-local.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/17-borion-cloud.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/03-modals-shared.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/04-gate-shell.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/05-calculations-charts.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/06-overview.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/07-budget.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/08-investments.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/09-patrimony-goals.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/10-cards-accounts.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/11-agenda-notifications.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/12-bank-filter-search.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/13-settings.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/19-subscriptions.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/20-smartphone-mode.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/21-smartphone-history.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/22-mobile-experience.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/15-cheques.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/16-import-statement.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/23-profile-import-review.js?v=6.25.0\"></script>\\n' +\n  '<script src=\"js/14-events-boot-pwa.js?v=6.25.0\"></script>\\n' +\n  '</body>\\n' +\n  '</html>\\n'\n\n    at /mnt/data/borion_work/tests/borion-regression-tests.js:575:12\n    at test (/mnt/data/borion_work/tests/borion-regression-tests.js:73:8)\n    at /mnt/data/borion_work/tests/borion-regression-tests.js:571:3"
+    },
+    {
+      "name": "42 — CSS mobile respeita safe areas, teclado, movimento reduzido e alvos de toque",
+      "status": "PASS"
+    },
+    {
+      "name": "43 — Manifesto PWA possui identidade, foco na instância existente e display standalone",
+      "status": "PASS"
+    },
+    {
+      "name": "44 — Atalho Drive & Local aparece somente no Modo Pro e Smartphone mantém Salvar e atualizar",
+      "status": "PASS"
+    },
+    {
+      "name": "45 — Rodapé técnico preserva lançamento original e autoria, atualizando apenas a versão",
+      "status": "PASS"
+    },
+    {
+      "name": "46 — Reservas no Modo Pro oferecem grade de 2, 3 ou 4 colunas com slots arrastáveis",
+      "status": "PASS"
+    },
+    {
+      "name": "47 — Quantidade de colunas é confirmada no OK e cancelamento preserva a configuração anterior",
+      "status": "PASS"
+    },
+    {
+      "name": "Código completo — todos os JavaScript passam na validação sintática",
+      "status": "PASS"
+    },
+    {
+      "name": "Cobertura estática — formulários Banco/Conta não usam allBankNames nem key banco",
+      "status": "PASS"
+    },
+    {
+      "name": "48 — Ctrl+S usa a mesma rotina manual dos botões",
+      "status": "PASS"
+    },
+    {
+      "name": "49 — Atalho fixo do Modo Pro chama exatamente o mesmo force save do Ctrl+S",
+      "status": "PASS"
+    },
+    {
+      "name": "50 — Pasta local é verificada ao abrir e avisa quando precisa reconectar",
+      "status": "PASS"
+    },
+    {
+      "name": "51 — Force save aceita e reutiliza o snapshot manual compartilhado",
+      "status": "PASS"
+    },
+    {
+      "name": "V6.24.6 — Settings é exportado globalmente para Ctrl+S e botão fixo",
+      "status": "PASS"
+    },
+    {
+      "name": "V6.24.6 — botão fixo do Modo Pro usa exatamente forceManualSave",
+      "status": "PASS"
+    },
+    {
+      "name": "V6.24.4 — importação completa usa tela de revisão e não mesclagem silenciosa",
+      "status": "PASS"
+    },
+    {
+      "name": "V6.24.4 — service worker inclui módulo de revisão de perfis",
+      "status": "FAIL",
+      "error": "AssertionError [ERR_ASSERTION]: The input did not match the regular expression /v6-24-6-subscription-delete-clean/. Input:\n\n'// Service worker do Borion Finance.\\n' +\n  '// Versão modular: cacheia o HTML, CSS e os arquivos JS separados.\\n' +\n  '// Estratégia: stale-while-revalidate.\\n' +\n  '//\\n' +\n  '// Ao editar o app e quiser forçar atualização do cache, aumente o número abaixo.\\n' +\n  \"const CACHE_NAME = 'borion-finance-v6-25-0-auto-month-history';\\n\" +\n  '\\n' +\n  'const ASSETS = [\\n' +\n  '  \"./\",\\n' +\n  '  \"./index.html\",\\n' +\n  '  \"./manifest.json\",\\n' +\n  '  \"./css/styles.css\",\\n' +\n  '  \"./js/00-utils.js\",\\n' +\n  '  \"./js/01-storage-data-state.js\",\\n' +\n  '  \"./js/01b-storage-provider.js\",\\n' +\n  '  \"./js/01c-google-drive-provider.js\",\\n' +\n  '  \"./js/02-backup-local.js\",\\n' +\n  '  \"./js/03-modals-shared.js\",\\n' +\n  '  \"./js/04-gate-shell.js\",\\n' +\n  '  \"./js/05-calculations-charts.js\",\\n' +\n  '  \"./js/06-overview.js\",\\n' +\n  '  \"./js/07-budget.js\",\\n' +\n  '  \"./js/08-investments.js\",\\n' +\n  '  \"./js/09-patrimony-goals.js\",\\n' +\n  '  \"./js/10-cards-accounts.js\",\\n' +\n  '  \"./js/11-agenda-notifications.js\",\\n' +\n  '  \"./js/12-bank-filter-search.js\",\\n' +\n  '  \"./js/13-settings.js\",\\n' +\n  '  \"./js/14-events-boot-pwa.js\",\\n' +\n  '  \"./js/15-cheques.js\",\\n' +\n  '  \"./js/16-import-statement.js\",\\n' +\n  '  \"./js/17-borion-cloud.js\",\\n' +\n  '  \"./js/18-order-preferences.js\",\\n' +\n  '  \"./js/19-subscriptions.js\",\\n' +\n  '  \"./js/20-smartphone-mode.js\",\\n' +\n  '  \"./js/21-smartphone-history.js\",\\n' +\n  '  \"./js/22-mobile-experience.js\",\\n' +\n  '  \"./js/23-profile-import-review.js\",\\n' +\n  '  \"./FUNDO.png\",\\n' +\n  '  \"./borion-emblem.png\",\\n' +\n  '  \"./borion-full.png\",\\n' +\n  '  \"./icon-192.png\",\\n' +\n  '    \"./icon-512-maskable.png\",\\n' +\n  '  \"./apple-touch-icon.png\",\\n' +\n  '  \"./favicon-32.png\",\\n' +\n  '  \"./borion.ico\"\\n' +\n  '];\\n' +\n  '\\n' +\n  \"self.addEventListener('install', (event) => {\\n\" +\n  '  event.waitUntil(\\n' +\n  '    caches.open(CACHE_NAME)\\n' +\n  '      .then((cache) => Promise.all(\\n' +\n  '        ASSETS.map((asset) =>\\n' +\n  \"          cache.add(asset).catch((err) => console.warn('Não foi possível cachear:', asset, err))\\n\" +\n  '        )\\n' +\n  '      ))\\n' +\n  '      .then(() => self.skipWaiting())\\n' +\n  '  );\\n' +\n  '});\\n' +\n  '\\n' +\n  \"self.addEventListener('activate', (event) => {\\n\" +\n  '  event.waitUntil(\\n' +\n  '    caches.keys()\\n' +\n  '      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))\\n' +\n  '      .then(() => self.clients.claim())\\n' +\n  '  );\\n' +\n  '});\\n' +\n  '\\n' +\n  \"self.addEventListener('fetch', (event) => {\\n\" +\n  \"  if (event.request.method !== 'GET') return;\\n\" +\n  '\\n' +\n  '  const request = event.request;\\n' +\n  \"  const freshFirst = request.destination === 'document' || request.destination === 'script' || request.destination === 'style';\\n\" +\n  '\\n' +\n  '  if (freshFirst) {\\n' +\n  '    event.respondWith(\\n' +\n  '      fetch(request)\\n' +\n  '        .then((response) => {\\n' +\n  '          if (response && response.status === 200) {\\n' +\n  '            const clone = response.clone();\\n' +\n  '            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));\\n' +\n  '          }\\n' +\n  '          return response;\\n' +\n  '        })\\n' +\n  '        .catch(() => caches.match(request))\\n' +\n  '    );\\n' +\n  '    return;\\n' +\n  '  }\\n' +\n  '\\n' +\n  '  event.respondWith(\\n' +\n  '    caches.match(request).then((cached) => {\\n' +\n  '      const network = fetch(request)\\n' +\n  '        .then((response) => {\\n' +\n  '          if (response && response.status === 200) {\\n' +\n  '            const clone = response.clone();\\n' +\n  '            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));\\n' +\n  '          }\\n' +\n  '          return response;\\n' +\n  '        })\\n' +\n  '        .catch(() => cached);\\n' +\n  '      return cached || network;\\n' +\n  '    })\\n' +\n  '  );\\n' +\n  '});\\n'\n\n    at /mnt/data/borion_work/tests/borion-regression-tests.js:738:12\n    at test (/mnt/data/borion_work/tests/borion-regression-tests.js:73:8)\n    at /mnt/data/borion_work/tests/borion-regression-tests.js:734:3"
+    }
+  ]
+}

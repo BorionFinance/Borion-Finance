@@ -12,13 +12,15 @@ const BankFilter = {
     let panel = document.getElementById('bank-filter-panel');
     if(!this.panelOpen){ if(panel) panel.remove(); return; }
     if(!panel){ panel = document.createElement('div'); panel.id='bank-filter-panel'; panel.className='bank-filter-panel'; document.body.appendChild(panel); }
-    const banks = allBankNames();
+    const banks = bankFilterNames();
     const sel = S.bankFilter;
-    const allSelected = !sel || sel.size===0;
+    const validKeys = new Set(banks.map(normalizeAccountName));
+    const selectedKeys = new Set(Array.from(sel||[]).map(normalizeAccountName).filter(k=>validKeys.has(k)));
+    const allSelected = selectedKeys.size===0;
     panel.innerHTML = `
       <div class="bf-head">Filtrar por banco</div>
       <label class="bf-row"><input type="checkbox" id="bf_all" ${allSelected?'checked':''}/> <b>Todos</b></label>
-      ${banks.length? banks.map(b=>`<label class="bf-row"><input type="checkbox" class="bf-bank" value="${esc(b)}" ${(!allSelected && sel.has(b))?'checked':''}/> <span class="bf-dot" style="background:${bankColor(b)}"></span>${esc(b)}</label>`).join('') : '<div class="bf-empty">Cadastre bancos/contas em "Cartões e Contas".</div>'}
+      ${banks.length? banks.map(b=>`<label class="bf-row"><input type="checkbox" class="bf-bank" value="${esc(b)}" ${(!allSelected && selectedKeys.has(normalizeAccountName(b)))?'checked':''}/> <span class="bf-dot" style="background:${bankColor(b)}"></span>${esc(b)}</label>`).join('') : '<div class="bf-empty">Cadastre bancos/contas em "Cartões e Contas".</div>'}
       <div class="bf-actions">
         <button class="btn-secondary btn-sm" id="bf_clear" style="flex:1;">Limpar</button>
         <button class="btn btn-primary btn-sm" id="bf_apply" style="flex:1;">Aplicar</button>

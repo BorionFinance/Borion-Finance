@@ -1,3 +1,10 @@
+## V6.25.1 — Correção do filtro de bancos
+
+- O filtro superior agora exibe somente instituições financeiras reais.
+- A Carteira/dinheiro físico não aparece mais como banco.
+- Nomes equivalentes com diferenças de maiúsculas e minúsculas, como `Nubank` e `NUBANK`, são unificados em uma única opção.
+- O filtro continua funcionando em lançamentos vinculados tanto à conta quanto ao cartão da mesma instituição.
+
 ## V6.25.0 — Histórico automático e Lançamentos personalizáveis
 - Remove o fechamento manual dos Cofrinhos; meses completos são consolidados automaticamente na virada.
 - Histórico mostra saldo inicial, saldo final, entradas, saídas, rendimentos e evolução em reais e porcentagem.

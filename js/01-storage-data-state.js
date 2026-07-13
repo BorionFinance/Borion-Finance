@@ -750,10 +750,37 @@ function allBankNames(){
   (S.data.cartoes||[]).forEach(c=>{ if(c.banco) names.add(c.banco); });
   return Array.from(names).sort((a,b)=>a.localeCompare(b,'pt-BR'));
 }
+
+/* V6.25.1 — O filtro superior representa instituições financeiras, não registros.
+   Portanto: ignora Carteira/dinheiro físico e unifica nomes como Nubank/NUBANK. */
+function bankFilterNames(){
+  const preferred = new Map();
+  const score = value => {
+    const text=String(value||'').trim();
+    if(!text) return -1;
+    const letters=text.replace(/[^A-Za-zÀ-ÿ]/g,'');
+    if(!letters) return 0;
+    const allUpper=letters===letters.toLocaleUpperCase('pt-BR');
+    const allLower=letters===letters.toLocaleLowerCase('pt-BR');
+    return (!allUpper && !allLower) ? 2 : (allLower ? 1 : 0);
+  };
+  const add = value => {
+    const label=String(value||'').trim();
+    const key=normalizeAccountName(label);
+    if(!key) return;
+    const current=preferred.get(key);
+    if(!current || score(label)>score(current)) preferred.set(key,label);
+  };
+  activeAccounts().filter(c=>!c.isCarteira && c.accountKind!=='wallet').forEach(c=>add(c.nome));
+  (S.data.cartoes||[]).forEach(c=>add(c&&c.banco));
+  return Array.from(preferred.values()).sort((a,b)=>a.localeCompare(b,'pt-BR'));
+}
 function bankMatches(itemBanco, itemAccountId){
   if(!S.bankFilter || S.bankFilter.size===0) return true;
   const name=itemAccountId?accountNameSnapshot(itemAccountId,itemBanco):itemBanco;
-  return !!name && S.bankFilter.has(name);
+  if(!name) return false;
+  const wanted=normalizeAccountName(name);
+  return Array.from(S.bankFilter).some(selected=>normalizeAccountName(selected)===wanted);
 }
 function bankSelectField(idPrefix, selected, opts={}){
   const selectedId=resolveAccountId(selected)||selected||'';

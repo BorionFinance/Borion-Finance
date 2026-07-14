@@ -44,6 +44,9 @@ function fixaOcorrenciaFor(fixaId, mesKey){
   return (S.data.fixaPagamentos||[]).find(r=>r.fixaId===fixaId && r.mesKey===mesKey) || null;
 }
 function fixaOcorrenciaStatus(f, mesKey){
+  /* Compras espelhadas do cartão não movimentam uma conta diretamente: o estado vem da
+     própria compra e o pagamento real da fatura continua controlado em Cartões e Contas. */
+  if(f && f.viaParcelaId && f.statusPagamento==='Pago') return 'Pago';
   const rec = fixaOcorrenciaFor(f.id, mesKey);
   if(rec && rec.pago) return 'Pago';
   const dueDate = mesKey+'-'+pad2(f.dia||1);
@@ -164,7 +167,7 @@ function linkParcelaToDespesa(cartao, parcela){
   /* A despesa espelhada herda o banco/nome do cartão para respeitar o filtro por banco/cartão. */
   if(parcela.despesaTipo==='fixa'){
     const endMonth = shiftYM(startMonth, totalParcelas-1);
-    const f = {id:uid(), nome, categoria, valor:valorParcela, dia:parcela.diaEntrada||1, startMonth, endMonth:totalParcelas>1?endMonth:startMonth, banco:cartao.banco||'', viaCartaoId:cartao.id, viaParcelaId:parcela.id, parcelaTotal:totalParcelas};
+    const f = {id:uid(), nome, localCompra:parcela.local||'', categoria, valor:valorParcela, dia:parcela.diaEntrada||1, startMonth, endMonth:totalParcelas>1?endMonth:startMonth, banco:cartao.banco||'', formaPagamento:'Crédito', statusPagamento:parcela.statusPagamento==='Pago'?'Pago':'Em aberto', viaCartaoId:cartao.id, viaParcelaId:parcela.id, parcelaTotal:totalParcelas};
     S.data.fixas.push(f);
     parcela.despesaFixaId = f.id;
     parcela.despesaTransacaoId = null;
@@ -172,7 +175,7 @@ function linkParcelaToDespesa(cartao, parcela){
   } else {
     parcela.despesaTransacaoIds = createParcelaDespesaVariavel({
       nome, categoria, valorParcela, totalParcelas, startMonth, banco:cartao.banco||'', formaPagamento:'Crédito',
-      extra:{viaCartaoId:cartao.id, viaParcelaId:parcela.id, localCompra:parcela.local||'', statusPagamento:parcela.statusPagamento==='Em aberto'?'Em aberto':'Pago', diaEntrada:parcela.diaEntrada||1}
+      extra:{viaCartaoId:cartao.id, viaParcelaId:parcela.id, localCompra:parcela.local||'', statusPagamento:parcela.statusPagamento==='Em aberto'?'Em aberto':'Pago', diaEntrada:parcela.diaEntrada||1, viaAssinaturaId:parcela.viaAssinaturaId||null, assinaturaCobrancaId:parcela.assinaturaCobrancaId||null}
     });
     parcela.despesaTransacaoId = parcela.despesaTransacaoIds[0] || null; // compatibilidade com dados antigos
     parcela.despesaFixaId = null;

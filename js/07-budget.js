@@ -738,15 +738,16 @@ function logEstorno(entry){
    duplo clique) nunca desconta duas vezes. */
 function getOrPeekFixaOcorrencia(fixaId, mesKey){ return fixaOcorrenciaFor(fixaId, mesKey); }
 
-function payFixaOcorrencia(f, mesKey){
+function payFixaOcorrencia(f, mesKey, options={}){
   if(!f) return;
+  const persist=options.persist!==false, notify=options.notify!==false;
   const jaExiste = fixaOcorrenciaFor(f.id, mesKey);
-  if(jaExiste && jaExiste.pago){ toast('Essa ocorrência já está marcada como paga.'); return; } // proteção contra duplicidade
+  if(jaExiste && jaExiste.pago){ if(notify)toast('Essa ocorrência já está marcada como paga.'); return true; } // proteção contra duplicidade
   const valor = Number(f.valor)||0;
   if((f.origemPagamento||'conta')==='reserva'){
     const box = findReservaBoxById(f.reservaOrigemId);
-    if(!box){ toast('A reserva vinculada a esta despesa fixa não existe mais. Edite a despesa e escolha outra reserva.'); return; }
-    if(!reservaTemSaldo(box, valor)){ showReservaInsuficienteModal(box, valor); return; }
+    if(!box){ if(notify)toast('A reserva vinculada a esta despesa fixa não existe mais. Edite a despesa e escolha outra reserva.'); return false; }
+    if(!reservaTemSaldo(box, valor)){ if(notify)showReservaInsuficienteModal(box, valor); return false; }
     const mv = {id:uid(), boxId:box.id, tipo:'Pagamento de despesa fixa', data:todayISO(), valor, banco:box.banco||'', descricao:'Pagamento de despesa fixa — '+(f.nome||'Sem nome')+' — '+brlPlain(valor), despesaFixaId:f.id, fixaOcorrenciaId:null, createdAt:Date.now()};
     Reservas.applyMoveEffect(mv);
     S.data.reservas.moves.push(mv);
@@ -754,19 +755,24 @@ function payFixaOcorrencia(f, mesKey){
     Object.assign(rec, {pago:true, origemPagamento:'reserva', reservaId:box.id, reservaMoveId:mv.id, valorPago:valor, banco:box.banco||'', pagoEm:Date.now()});
     mv.fixaOcorrenciaId = rec.id;
     if(!jaExiste) S.data.fixaPagamentos.push(rec);
-    saveCurrentData(); renderView(); toast('Despesa fixa paga com a reserva "'+box.nome+'".');
+    if(persist){saveCurrentData();renderView();}
+    if(notify)toast('Despesa fixa paga com a reserva "'+box.nome+'".');
+    return true;
   } else {
     const rec = jaExiste || {id:uid(), fixaId:f.id, mesKey};
     Object.assign(rec,{pago:true,origemPagamento:'conta',reservaId:null,reservaMoveId:null,valorPago:valor,accountId:f.accountId||resolveAccountId(f.banco),banco:accountNameSnapshot(f.accountId||resolveAccountId(f.banco),f.banco),pagoEm:Date.now()});
     if(!jaExiste) S.data.fixaPagamentos.push(rec);
     adjustLiquidez(rec.accountId||resolveAccountId(rec.banco,{includeArchived:true}),-valor); // V6.22 — desconta da conta usada para pagar
-    saveCurrentData(); renderView(); toast('Despesa fixa marcada como paga.');
+    if(persist){saveCurrentData();renderView();}
+    if(notify)toast('Despesa fixa marcada como paga.');
+    return true;
   }
 }
-function undoFixaOcorrencia(f, mesKey){
+function undoFixaOcorrencia(f, mesKey, options={}){
   if(!f) return;
+  const persist=options.persist!==false, notify=options.notify!==false;
   const rec = fixaOcorrenciaFor(f.id, mesKey);
-  if(!rec || !rec.pago) return; // nada para desfazer — já pendente (idempotente)
+  if(!rec || !rec.pago) return true; // nada para desfazer — já pendente (idempotente)
   if(rec.origemPagamento==='reserva' && rec.reservaMoveId){
     const box = findReservaBoxById(rec.reservaId);
     const mv = (S.data.reservas.moves||[]).find(m=>m.id===rec.reservaMoveId);
@@ -779,7 +785,9 @@ function undoFixaOcorrencia(f, mesKey){
     adjustLiquidez(rec.accountId||resolveAccountId(rec.banco,{includeArchived:true}),Number(rec.valorPago)||0); // V6.22 — devolve o valor à conta
   }
   S.data.fixaPagamentos = S.data.fixaPagamentos.filter(r=>r.id!==rec.id);
-  saveCurrentData(); renderView(); toast('Despesa fixa voltou a pendente'+(rec.origemPagamento==='reserva'?' — valor devolvido à reserva.':'.'));
+  if(persist){saveCurrentData();renderView();}
+  if(notify)toast('Despesa fixa voltou a pendente'+(rec.origemPagamento==='reserva'?' — valor devolvido à reserva.':'.'));
+  return true;
 }
 /* Ao excluir uma despesa fixa "a partir deste mês" (ou por completo), devolve à reserva
    qualquer ocorrência já paga por reserva a partir do mês afetado (fromMesKey==null =
@@ -905,7 +913,7 @@ function openTransactionModal({type, existing}){
       <div class="segmented-toggle payment-source-toggle" id="tm_pagamento_origem_group">
         <button type="button" class="seg-btn ${initialPaymentSource==='carteira'?'active':''}" data-value="carteira">Carteira</button>
         <button type="button" class="seg-btn ${initialPaymentSource==='conta'?'active':''}" data-value="conta">Conta</button>
-        <button type="button" class="seg-btn ${initialPaymentSource==='reserva'?'active':''}" data-value="reserva" ${reservaBoxes.length?'':'disabled title="Crie e ative uma reserva primeiro"'}>Reserva</button>
+        ${reservasEnabled()?`<button type="button" class="seg-btn ${initialPaymentSource==='reserva'?'active':''}" data-value="reserva" ${reservaBoxes.length?'':'disabled title="Crie uma reserva primeiro"'}>Reserva</button>`:''}
         <button type="button" class="seg-btn ${initialPaymentSource==='credito'?'active':''}" data-value="credito">Crédito</button>
       </div>
       <input type="hidden" id="tm_pagamento_origem" value="${initialPaymentSource}"/>
@@ -920,10 +928,10 @@ function openTransactionModal({type, existing}){
       </div><input type="hidden" id="tm_conta_forma" value="${initialContaForma}"/></div>
       <div class="field"><label>De onde sai o dinheiro</label><select id="tm_banco">${accounts.length?accounts.map(o=>`<option value="${esc(o.value)}" ${o.value===selectedAccount?'selected':''}>${esc(o.label)}</option>`).join(''):'<option value="">Cadastre uma conta bancária</option>'}</select></div>
     </div>
-    <div id="tm_reserva_pg_wrap" class="payment-source-panel reserve-destination-box ${initialPaymentSource==='reserva'?'':'hidden'}">
+    ${reservasEnabled()?`<div id="tm_reserva_pg_wrap" class="payment-source-panel reserve-destination-box ${initialPaymentSource==='reserva'?'':'hidden'}">
       <div class="field"><label>Reserva que pagará</label><select id="tm_reserva_pg_box">${reservaOptions||'<option value="">Nenhuma reserva disponível</option>'}</select></div>
       <p class="modal-sub reserve-hint">Quando estiver como Pago, o valor sai diretamente desta reserva. Em aberto não altera o saldo.</p>
-    </div>
+    </div>`:''}
     <div id="tm_credito_fields" class="payment-source-panel ${initialPaymentSource==='credito'?'':'hidden'}">
       <div class="field"><label>Cartão de crédito</label><select id="tm_cartao">${cards.length?cards.map(o=>`<option value="${esc(o.value)}">${esc(o.label)}</option>`).join(''):'<option value="">Nenhum cartão cadastrado</option>'}</select></div>
       <div class="field"><label>Tipo de compra</label><select id="tm_credito_tipo"><option value="avista">Crédito à vista</option><option value="parcelado">Crédito parcelado</option></select></div>
@@ -1038,245 +1046,181 @@ function openTransactionModal({type, existing}){
 
 /* ---- dedicated modal: recurring fixed expense (despesa fixa) ---- */
 function openFixaModal(existing){
-  const isEdit = !!existing;
-  const monthKeyNow = monthKey(S.month.y,S.month.m);
-  const carteira = getCarteiraConta();
-  const initialForma = isEdit ? (existing.formaPagamento || (carteira && existing.banco===carteira.nome ? 'Dinheiro' : 'Pix')) : (nonCarteiraAccountNames().length ? 'Pix' : 'Dinheiro');
-  /* V6.1 — "Origem do pagamento": de onde sai o dinheiro quando a ocorrência do mês for
-     marcada como paga (Conta bancária/carteira ou Reserva/cofrinho). Cadastrar ou editar a
-     despesa fixa aqui NUNCA move saldo — só define o padrão herdado pelas próximas
-     ocorrências; o desconto de verdade só acontece em Budget.toggleFixaPago. */
-  const reservaBoxesFixa = reservaBoxesForLancamento();
-  const podeOrigemPagamentoReserva = reservasEnabled() && reservaBoxesFixa.length>0;
-  const origemPagamentoInicial = (podeOrigemPagamentoReserva && isEdit && existing.origemPagamento==='reserva') ? 'reserva' : 'conta';
-  const origemPagamentoBoxSel = (isEdit && existing.reservaOrigemId) ? reservaBoxesFixa.find(r=>r.id===existing.reservaOrigemId) : null;
-  const origemPagamentoOptions = reservaBoxesFixa.map(r=>`<option value="${esc(reservaBoxLabel(r))}" ${origemPagamentoBoxSel&&origemPagamentoBoxSel.id===r.id?'selected':''}>${esc(reservaBoxLabel(r))}</option>`).join('');
-  const box = el(`
-    <div class="modal-overlay">
-      <div class="modal-box">
-        <div class="modal-head"><h2>${isEdit?'Editar':'Adicionar'} despesa fixa</h2><button id="fm_close">&times;</button></div>
-        <p class="modal-sub">${isEdit? 'Alterações se aplicam a partir de '+monthLabel(S.month.y,S.month.m)+'; meses anteriores mantêm o valor antigo.' : 'Essa despesa se repete todos os meses a partir de '+monthLabel(S.month.y,S.month.m)+', até que você a remova. Ela fica só cadastrada até você marcar cada mês como pago — não retira dinheiro sozinha.'}</p>
-        <div class="field"><label>Nome</label><input type="text" id="fm_nome" value="${isEdit?esc(existing.nome):''}"/></div>
-        ${categorySelectHTML('fm', 'fixa', isEdit?existing.categoria:null)}
-        <div class="field"><label id="fm_valor_label">Valor mensal (R$)</label><input type="text" inputmode="numeric" id="fm_valor" class="money-input" placeholder="0,00"/></div>
-        <div class="field"><label>Dia do vencimento</label><input type="number" id="fm_dia" min="1" max="31" value="${isEdit?(existing.dia||1):1}"/></div>
-        ${podeOrigemPagamentoReserva ? `
-        <div class="field">
-          <label>Origem do pagamento</label>
-          <div class="segmented-toggle" id="fm_origempg_group">
-            <button type="button" class="seg-btn ${origemPagamentoInicial==='conta'?'active':''}" data-value="conta">Conta bancária / carteira</button>
-            <button type="button" class="seg-btn ${origemPagamentoInicial==='reserva'?'active':''}" data-value="reserva">Reserva / cofrinho</button>
-          </div>
-          <input type="hidden" id="fm_origempg" value="${origemPagamentoInicial}"/>
-        </div>
-        <div class="reserve-destination-box ${origemPagamentoInicial==='reserva'?'':'hidden'}" id="fm_reserva_pg_wrap">
-          <div class="field"><label>Reserva</label><select id="fm_reserva_pg_box">${origemPagamentoOptions}</select></div>
-          <p class="modal-sub reserve-hint">Cadastrar não desconta nada agora. O valor só sai dessa reserva quando você marcar cada mês como pago — e volta pra reserva se você desfazer o pagamento.</p>
-        </div>` : ''}
-        <div id="fm_conta_fields_wrap" class="${podeOrigemPagamentoReserva&&origemPagamentoInicial==='reserva'?'hidden':''}">
-        <div class="field"><label>Forma de pagamento</label><select id="fm_forma">${FORMAS_PAGAMENTO.map(f=>`<option value="${esc(f)}" ${initialForma===f?'selected':''}>${esc(f)}</option>`).join('')}</select></div>
-        <div class="field" id="fm_banco_wrap"><label>Banco/Conta</label><select id="fm_banco"><option value="">— Nenhum —</option>${accountSelectOptions().map(o=>`<option value="${esc(o.value)}" ${isEdit&&(existing.accountId||resolveAccountId(existing.banco,{includeArchived:true}))===o.value?'selected':''}>${esc(o.label)}</option>`).join('')}</select></div>
-        <div id="fm_credito_fields" class="hidden">
-          <div class="field"><label>Cartão de crédito</label><select id="fm_cartao">${cardSelectOptions().map(o=>`<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('') || '<option value="">Nenhum cartão cadastrado</option>'}</select></div>
-          <div class="field"><label>Tipo de compra</label><select id="fm_credito_tipo">
-            <option value="avista">Crédito à vista</option>
-            <option value="parcelado">Crédito parcelado</option>
-          </select></div>
-          <div class="field hidden" id="fm_parcelas_wrap"><label>Quantidade de parcelas <span id="fm_parcela_preview" style="color:var(--muted);font-weight:600;"></span></label><input type="number" id="fm_parcelas" min="2" step="1" value="2"/></div>
-          <p class="modal-sub" style="margin:4px 0 0;">No crédito, informe o valor total da compra. O Borion calcula o valor de cada parcela e cria a despesa fixa mensal somente até a última parcela.</p>
-        </div>
-        <p class="modal-sub" id="fm_banco_hint" style="margin:4px 0 0;">Só aparecem aqui a Carteira e os bancos/contas cadastrados — cartão de crédito não é banco/conta de origem.</p>
-        </div>
-        <div class="row-btns"><button class="btn btn-primary btn-block" id="fm_save">${isEdit?'Salvar':'Adicionar'}</button></div>
-        ${isEdit?`<div class="row-btns" style="margin-top:8px;"><button class="btn btn-danger btn-block" id="fm_delete">Remover a partir deste mês</button></div>`:''}
+  const isEdit=!!existing;
+  const monthKeyNow=monthKey(S.month.y,S.month.m);
+  const carteira=getCarteiraConta();
+  const reservaBoxesFixa=reservaBoxesForLancamento();
+  const currentRec=isEdit?fixaOcorrenciaFor(existing.id,monthKeyNow):null;
+  const initialStatus=currentRec&&currentRec.pago?'Pago':'Em aberto';
+  const initialPaymentSource=isEdit
+    ? (existing.origemPagamento==='reserva'&&reservasEnabled()?'reserva':(existing.formaPagamento==='Dinheiro'?'carteira':'conta'))
+    : (accountSelectOptions({excludeCarteira:true}).length?'conta':'carteira');
+  const initialContaForma=isEdit&&existing.formaPagamento==='Débito'?'Débito':'Pix';
+  const accounts=accountSelectOptions({excludeCarteira:true});
+  const cards=cardSelectOptions();
+  const selectedAccount=isEdit?(existing.accountId||resolveAccountId(existing.banco,{includeArchived:true})):((accounts[0]||{}).value||'');
+  const reservaOptions=reservaBoxesFixa.map(r=>`<option value="${esc(r.id)}" ${isEdit&&existing.reservaOrigemId===r.id?'selected':''}>${esc(reservaBoxLabel(r))}</option>`).join('');
+
+  const paymentHTML=`
+    <div class="field"><label>De onde será pago</label>
+      <div class="segmented-toggle payment-source-toggle" id="fm_pagamento_origem_group">
+        <button type="button" class="seg-btn ${initialPaymentSource==='carteira'?'active':''}" data-value="carteira">Carteira</button>
+        <button type="button" class="seg-btn ${initialPaymentSource==='conta'?'active':''}" data-value="conta">Conta</button>
+        ${reservasEnabled()?`<button type="button" class="seg-btn ${initialPaymentSource==='reserva'?'active':''}" data-value="reserva" ${reservaBoxesFixa.length?'':'disabled title="Crie uma reserva primeiro"'}>Reserva</button>`:''}
+        <button type="button" class="seg-btn ${initialPaymentSource==='credito'?'active':''}" data-value="credito">Crédito</button>
       </div>
-    </div>`);
-  $('#modal-root').innerHTML=''; $('#modal-root').appendChild(box);
-  attachModalGuard(box);
-  $('#fm_close').onclick = closeModal;
-  attachMoneyMask($('#fm_valor'), isEdit?existing.valor:0);
-  wireQuickCategory($('#fm_categoria'), $('#fm_newcat_box'), $('#fm_newcat_input'), $('#fm_newcat_add'), 'fixa');
+      <input type="hidden" id="fm_pagamento_origem" value="${initialPaymentSource}"/>
+    </div>
+    <div id="fm_carteira_fields" class="payment-source-panel ${initialPaymentSource==='carteira'?'':'hidden'}">
+      <div class="info-box">Pagamento em <b>Dinheiro</b>, saindo automaticamente da <b>Carteira</b>${carteira?' ('+esc(carteira.nome)+')':''}.</div>
+    </div>
+    <div id="fm_conta_fields" class="payment-source-panel ${initialPaymentSource==='conta'?'':'hidden'}">
+      <div class="field"><label>Forma de pagamento</label><div class="segmented-toggle" id="fm_conta_forma_group">
+        <button type="button" class="seg-btn ${initialContaForma==='Pix'?'active':''}" data-value="Pix">Pix</button>
+        <button type="button" class="seg-btn ${initialContaForma==='Débito'?'active':''}" data-value="Débito">Débito</button>
+      </div><input type="hidden" id="fm_conta_forma" value="${initialContaForma}"/></div>
+      <div class="field"><label>De onde sai o dinheiro</label><select id="fm_banco">${accounts.length?accounts.map(o=>`<option value="${esc(o.value)}" ${o.value===selectedAccount?'selected':''}>${esc(o.label)}</option>`).join(''):'<option value="">Cadastre uma conta bancária</option>'}</select></div>
+    </div>
+    ${reservasEnabled()?`<div id="fm_reserva_fields" class="payment-source-panel reserve-destination-box ${initialPaymentSource==='reserva'?'':'hidden'}">
+      <div class="field"><label>Reserva que pagará</label><select id="fm_reserva_pg_box">${reservaOptions||'<option value="">Nenhuma reserva disponível</option>'}</select></div>
+      <p class="modal-sub reserve-hint">Quando estiver como Pago, o valor sai diretamente desta reserva. Em aberto não altera o saldo.</p>
+    </div>`:''}
+    <div id="fm_credito_fields" class="payment-source-panel ${initialPaymentSource==='credito'?'':'hidden'}">
+      <div class="field"><label>Cartão de crédito</label><select id="fm_cartao">${cards.length?cards.map(o=>`<option value="${esc(o.value)}">${esc(o.label)}</option>`).join(''):'<option value="">Nenhum cartão cadastrado</option>'}</select></div>
+      <div class="field"><label>Tipo de compra</label><select id="fm_credito_tipo"><option value="avista">Crédito à vista</option><option value="parcelado">Crédito parcelado</option></select></div>
+      <div class="field hidden" id="fm_parcelas_wrap"><label>Quantidade de parcelas <span id="fm_parcela_preview" style="color:var(--muted);font-weight:600;"></span></label><input type="number" id="fm_parcelas" min="2" step="1" value="2"/></div>
+      <p class="modal-sub" style="margin:4px 0 0;">No crédito, o dia do vencimento será usado como dia de entrada na fatura.</p>
+    </div>
+    <div class="field"><label>Status deste mês</label><div class="segmented-toggle" id="fm_status_group">
+      <button type="button" class="seg-btn ${initialStatus==='Pago'?'active':''}" data-value="Pago">Pago</button>
+      <button type="button" class="seg-btn ${initialStatus==='Em aberto'?'active':''}" data-value="Em aberto">Em aberto</button>
+    </div><input type="hidden" id="fm_status" value="${initialStatus}"/>
+    <p class="modal-sub" style="margin:4px 0 0;">Em aberto cadastra a despesa sem retirar dinheiro. Pago aplica o pagamento somente no mês selecionado.</p></div>`;
 
-  function syncFixaOrigemPagamentoUI(){
-    const hidden = $('#fm_origempg');
-    if(!hidden) return;
-    const isReserva = hidden.value==='reserva';
-    const contaWrap = $('#fm_conta_fields_wrap');
-    const reservaWrap = $('#fm_reserva_pg_wrap');
-    if(contaWrap) contaWrap.classList.toggle('hidden', isReserva);
-    if(reservaWrap) reservaWrap.classList.toggle('hidden', !isReserva);
-  }
-  if($('#fm_origempg_group')){
-    $('#fm_origempg_group').querySelectorAll('.seg-btn').forEach(btn=>{
-      btn.onclick = ()=>{
-        $('#fm_origempg_group').querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('active'));
-        btn.classList.add('active');
-        $('#fm_origempg').value = btn.dataset.value;
-        syncFixaOrigemPagamentoUI();
-      };
-    });
-  }
+  const box=el(`<div class="modal-overlay"><div class="modal-box">
+    <div class="modal-head"><h2>${isEdit?'Editar':'Adicionar'} despesa fixa</h2><button id="fm_close">&times;</button></div>
+    <p class="modal-sub">${isEdit?'Alterações se aplicam a partir de '+monthLabel(S.month.y,S.month.m)+'; meses anteriores mantêm o histórico.':'Essa despesa se repete mensalmente a partir de '+monthLabel(S.month.y,S.month.m)+'. O status Pago/Em aberto abaixo vale apenas para o mês selecionado.'}</p>
+    <div class="field"><label>Nome</label><input type="text" id="fm_nome" value="${isEdit?esc(existing.nome):''}"/></div>
+    <div class="field"><label>Local da compra</label><input type="text" id="fm_local" value="${isEdit?esc(existing.localCompra||existing.local||''):''}" placeholder="Ex: Academia, aluguel, operadora..."/></div>
+    ${categorySelectHTML('fm','fixa',isEdit?existing.categoria:null)}
+    <div class="field"><label id="fm_valor_label">Valor mensal (R$)</label><input type="text" inputmode="numeric" id="fm_valor" class="money-input" placeholder="0,00"/></div>
+    <div class="field"><label>Dia do vencimento</label><input type="number" id="fm_dia" min="1" max="31" value="${isEdit?(existing.dia||1):1}"/></div>
+    ${paymentHTML}
+    <div class="row-btns"><button class="btn btn-primary btn-block" id="fm_save">${isEdit?'Salvar':'Adicionar'}</button></div>
+    ${isEdit?'<div class="row-btns" style="margin-top:8px;"><button class="btn btn-danger btn-block" id="fm_delete">Remover a partir deste mês</button></div>':''}
+  </div></div>`);
+  $('#modal-root').innerHTML='';$('#modal-root').appendChild(box);attachModalGuard(box);$('#fm_close').onclick=closeModal;
+  attachMoneyMask($('#fm_valor'),isEdit?existing.valor:0);
+  wireQuickCategory($('#fm_categoria'),$('#fm_newcat_box'),$('#fm_newcat_input'),$('#fm_newcat_add'),'fixa');
 
-  function updateFixaCreditoParcelPreview(){
-    const formaSel = $('#fm_forma');
-    const tipoSel = $('#fm_credito_tipo');
-    const label = $('#fm_valor_label');
-    const preview = $('#fm_parcela_preview');
-    const isCredito = formaSel && formaSel.value==='Crédito';
-    if(label) label.textContent = isCredito ? 'Valor total da compra (R$)' : 'Valor mensal (R$)';
-    if(!preview || !isCredito || !tipoSel || tipoSel.value!=='parcelado'){
-      if(preview) preview.textContent = '';
-      return;
+  function wireSegmented(groupId,inputId,onChange){
+    const group=$(groupId),hidden=$(inputId);if(!group||!hidden)return;
+    group.querySelectorAll('.seg-btn:not([disabled])').forEach(btn=>btn.onclick=()=>{group.querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');hidden.value=btn.dataset.value;if(onChange)onChange(hidden.value);});
+  }
+  function syncPaymentSourceUI(source){
+    ['carteira','conta','reserva','credito'].forEach(k=>{const node=$('#fm_'+k+'_fields');if(node)node.classList.toggle('hidden',source!==k);});
+    const label=$('#fm_valor_label');if(label)label.textContent=source==='credito'?'Valor total da compra (R$)':'Valor mensal (R$)';
+    updateCreditoParcelPreview();
+  }
+  function updateCreditoParcelPreview(){
+    const tipo=$('#fm_credito_tipo'),wrap=$('#fm_parcelas_wrap'),preview=$('#fm_parcela_preview');
+    if(!tipo)return;if(wrap)wrap.classList.toggle('hidden',tipo.value!=='parcelado');
+    if(!preview||tipo.value!=='parcelado'){if(preview)preview.textContent='';return;}
+    const total=parseInt(($('#fm_valor')&&$('#fm_valor').dataset.cents)||'0',10)/100;
+    const qtd=Math.max(2,Math.round(Number(($('#fm_parcelas')&&$('#fm_parcelas').value)||2)));
+    preview.textContent=`(${brlPlain(Math.round((total/qtd)*100)/100)} cada)`;
+  }
+  wireSegmented('#fm_pagamento_origem_group','#fm_pagamento_origem',syncPaymentSourceUI);
+  wireSegmented('#fm_conta_forma_group','#fm_conta_forma');
+  wireSegmented('#fm_status_group','#fm_status');
+  if($('#fm_credito_tipo'))$('#fm_credito_tipo').onchange=updateCreditoParcelPreview;
+  if($('#fm_parcelas'))$('#fm_parcelas').oninput=updateCreditoParcelPreview;
+  if($('#fm_valor'))$('#fm_valor').addEventListener('input',updateCreditoParcelPreview);
+  syncPaymentSourceUI(initialPaymentSource);
+
+  $('#fm_save').onclick=()=>{
+    const nome=$('#fm_nome').value.trim()||'Sem nome';
+    const localCompra=($('#fm_local').value||'').trim();
+    const categoria=$('#fm_categoria').value;
+    if(categoria==='__new__'){alert('Confirme o nome da nova categoria antes de salvar.');return;}
+    const valor=parseInt($('#fm_valor').dataset.cents||'0',10)/100;
+    if(valor<=0){alert('Digite um valor maior que zero.');return;}
+    const dia=Math.min(31,Math.max(1,parseInt($('#fm_dia').value,10)||1));
+    const source=$('#fm_pagamento_origem').value;
+    const requestedStatus=$('#fm_status').value==='Pago'?'Pago':'Em aberto';
+    const inPlace=isEdit&&existing.startMonth===monthKeyNow;
+
+    if(source==='credito'){
+      const cartao=(S.data.cartoes||[]).find(c=>c.id===$('#fm_cartao').value);
+      if(!cartao){alert('Escolha um cartão de crédito válido.');return;}
+      const parcelaTotal=$('#fm_credito_tipo').value==='parcelado'?Math.max(2,Math.round(Number($('#fm_parcelas').value)||2)):1;
+      const valorParcela=Math.round((valor/parcelaTotal)*100)/100;
+      const ok=runAtomicFinancialMutation(()=>{
+        if(isEdit){
+          refundAndCleanFixaOcorrencias(existing.id,inPlace?null:monthKeyNow);
+          if(inPlace)S.data.fixas=S.data.fixas.filter(x=>x.id!==existing.id);else existing.endMonth=monthBeforeKey(monthKeyNow);
+        }
+        const p={id:uid(),descricao:nome,local:localCompra,categoria:categoria||'Outro',valorParcela,parcelaTotal,dataCompra:monthKeyNow,diaEntrada:dia,apareceDespesas:true,despesaTipo:'fixa',statusPagamento:requestedStatus,despesaTransacaoId:null,despesaTransacaoIds:[],despesaFixaId:null};
+        cartao.parcelas.push(p);linkParcelaToDespesa(cartao,p);
+      },()=>alert('Não foi possível salvar a compra no cartão. Os dados anteriores foram preservados.'));
+      if(!ok)return;
+      saveCurrentData();closeModal();renderView();toast('Compra fixa adicionada ao cartão '+cartao.banco+' e à aba Despesa fixa.');return;
     }
-    const cents = parseInt(($('#fm_valor') && $('#fm_valor').dataset.cents) || '0', 10);
-    const total = cents/100;
-    const qtd = Math.max(2, Math.round(Number(($('#fm_parcelas') && $('#fm_parcelas').value) || 2)));
-    const valorParcela = qtd>0 ? Math.round((total/qtd)*100)/100 : 0;
-    preview.textContent = `(${brlPlain(valorParcela)} cada)`;
-  }
-  function syncFixaFormaPagamentoUI(preferBanco){
-    const formaSel = $('#fm_forma');
-    if(!formaSel) return;
-    const forma = formaSel.value;
-    const bancoWrap = $('#fm_banco_wrap');
-    const bancoSel = $('#fm_banco');
-    const creditoFields = $('#fm_credito_fields');
-    const bancoHint = $('#fm_banco_hint');
-    const isCredito = forma==='Crédito';
-    if(bancoWrap) bancoWrap.classList.toggle('hidden', isCredito);
-    if(creditoFields) creditoFields.classList.toggle('hidden', !isCredito);
-    if(bancoHint) bancoHint.classList.toggle('hidden', isCredito);
-    if(!isCredito && bancoSel){
-      if(forma==='Dinheiro'){
-        const cart = getCarteiraConta();
-        bancoSel.innerHTML = cart ? `<option value="${esc(cart.id)}">${esc(cart.nome)}</option>` : '<option value="">Carteira não encontrada</option>';
-        bancoSel.value = cart ? cart.id : '';
-        bancoSel.disabled = true;
-      } else {
-        const opts=accountSelectOptions({excludeCarteira:true});
-        const preferredId=resolveAccountId(preferBanco)||preferBanco;
-        const wanted=opts.some(o=>o.value===preferredId)?preferredId:(opts.some(o=>o.value===bancoSel.value)?bancoSel.value:((opts[0]||{}).value||''));
-        bancoSel.innerHTML=opts.length?opts.map(o=>`<option value="${esc(o.value)}" ${o.value===wanted?'selected':''}>${esc(o.label)}</option>`).join(''):'<option value="">Cadastre um banco em Cartões e Contas</option>';
-        bancoSel.value=wanted;
-        bancoSel.disabled = false;
-      }
+
+    let origemPagamento='conta',formaPagamento=null,accountId=null,banco='',reservaBox=null;
+    if(source==='carteira'){
+      accountId=requireAccountId(CARTEIRA_CONTA_ID,'A Carteira precisa estar disponível.');if(!accountId)return;
+      banco=accountNameSnapshot(accountId);formaPagamento='Dinheiro';
+    }else if(source==='conta'){
+      accountId=requireAccountId($('#fm_banco').value,'Escolha a conta de onde sai o dinheiro.');if(!accountId)return;
+      banco=accountNameSnapshot(accountId);formaPagamento=$('#fm_conta_forma').value==='Débito'?'Débito':'Pix';
+    }else if(source==='reserva'){
+      reservaBox=reservaBoxesFixa.find(r=>r.id===$('#fm_reserva_pg_box').value);
+      if(!reservaBox){toast('Escolha uma reserva válida.');return;}
+      origemPagamento='reserva';banco=reservaBox.banco||'';
+      if(requestedStatus==='Pago'&&!(currentRec&&currentRec.pago)&&!reservaTemSaldo(reservaBox,valor)){showReservaInsuficienteModal(reservaBox,valor);return;}
     }
-    const tipoSel = $('#fm_credito_tipo');
-    const parcelasWrap = $('#fm_parcelas_wrap');
-    if(parcelasWrap && tipoSel) parcelasWrap.classList.toggle('hidden', tipoSel.value!=='parcelado');
-    updateFixaCreditoParcelPreview();
-  }
-  $('#fm_forma').onchange = ()=>syncFixaFormaPagamentoUI();
-  if($('#fm_credito_tipo')) $('#fm_credito_tipo').onchange = ()=>syncFixaFormaPagamentoUI();
-  if($('#fm_parcelas')) $('#fm_parcelas').addEventListener('input', updateFixaCreditoParcelPreview);
-  if($('#fm_valor')) $('#fm_valor').addEventListener('input', updateFixaCreditoParcelPreview);
-  syncFixaFormaPagamentoUI(isEdit?(existing.accountId||existing.banco):null);
 
-  $('#fm_save').onclick = ()=>{
-    const nome = $('#fm_nome').value.trim() || 'Sem nome';
-    const categoria = $('#fm_categoria').value;
-    if(categoria==='__new__'){ alert('Confirme o nome da nova categoria antes de salvar.'); return; }
-    const cents = parseInt($('#fm_valor').dataset.cents||'0',10);
-    const valor = cents/100;
-    const dia = Math.min(31, Math.max(1, parseInt($('#fm_dia').value,10)||1));
-    const origemPagamentoNovo = (podeOrigemPagamentoReserva && $('#fm_origempg')) ? $('#fm_origempg').value : 'conta';
-    const inPlace = isEdit && existing.startMonth===monthKeyNow;
-
-    /* ---- Origem = Reserva: nunca passa por forma de pagamento/banco/crédito. ---- */
-    if(origemPagamentoNovo==='reserva'){
-      const reservaSel = $('#fm_reserva_pg_box') ? $('#fm_reserva_pg_box').value : '';
-      const rbox = reservaBoxesFixa.find(r=>reservaBoxLabel(r)===reservaSel) || reservaBoxesFixa[0];
-      if(!rbox){ toast('Escolha uma reserva válida.'); return; }
-      if(!isEdit){
-        S.data.fixas.push({id:uid(), nome, categoria, valor, dia, startMonth:monthKeyNow, endMonth:null, banco:rbox.banco||'', formaPagamento:null, origemPagamento:'reserva', reservaOrigemId:rbox.id});
-        saveCurrentData(); closeModal(); renderView();
-        toast('Despesa fixa adicionada. Pague cada mês pela reserva "'+rbox.nome+'" quando quiser.');
+    let prepare={ok:true,noop:true};
+    if(isEdit&&requestedStatus==='Pago'){
+      prepare=prepareFixaOcorrenciaEdit(existing.id,monthKeyNow,valor,origemPagamento,reservaBox&&reservaBox.id,nome);
+      if(!prepare.ok){
+        if(prepare.reason==='saldo_insuficiente')showReservaInsuficienteModal(prepare.box,prepare.necessario);
+        else toast('Não foi possível manter o pagamento com a origem escolhida.');
         return;
       }
-      const targetId = inPlace ? existing.id : uid();
-      // V6.1 — valida ANTES de mudar qualquer coisa em S.data.fixas: se não há saldo, a
-      // alteração inteira é cancelada e nada é tocado (nem o valor, nem a origem antiga).
-      const check = prepareFixaOcorrenciaEdit(existing.id, monthKeyNow, valor, 'reserva', rbox.id, nome);
-      if(!check.ok){
-        if(check.reason==='saldo_insuficiente') showReservaInsuficienteModal(check.box, check.necessario);
-        else toast('Escolha uma reserva válida.');
-        return;
-      }
-      if(inPlace){
-        Object.assign(existing,{nome,categoria,valor,dia,banco:rbox.banco||'',formaPagamento:null,origemPagamento:'reserva',reservaOrigemId:rbox.id});
-      } else {
-        existing.endMonth = monthBeforeKey(monthKeyNow);
-        S.data.fixas.push({id:targetId, nome, categoria, valor, dia, startMonth:monthKeyNow, endMonth:null, banco:rbox.banco||'', formaPagamento:null, origemPagamento:'reserva', reservaOrigemId:rbox.id});
-      }
-      check.commit(targetId);
-      saveCurrentData(); closeModal(); renderView();
-      toast(inPlace ? 'Despesa fixa atualizada.' : 'Alterada a partir de '+monthLabel(S.month.y,S.month.m)+'. Meses anteriores mantidos.');
-      return;
     }
 
-    /* ---- Origem = Conta: comportamento igual ao já existente (nunca move saldo real). ---- */
-    const formaPagamento = $('#fm_forma') ? $('#fm_forma').value : 'Pix';
-
-    if(formaPagamento==='Crédito'){
-      const cartaoId = $('#fm_cartao') ? $('#fm_cartao').value : '';
-      const cartao = (S.data.cartoes||[]).find(c=>c.id===cartaoId);
-      if(!cartao){ alert('Escolha um cartão de crédito válido. Cadastre um cartão em "Cartões e Contas" antes de lançar uma compra no crédito.'); return; }
-      const tipoCredito = $('#fm_credito_tipo') ? $('#fm_credito_tipo').value : 'avista';
-      const parcelaTotal = tipoCredito==='parcelado' ? Math.max(2, Math.round(Number($('#fm_parcelas').value)||2)) : 1;
-      const valorParcela = Math.round((valor/parcelaTotal)*100)/100;
+    let target=null;
+    const ok=runAtomicFinancialMutation(()=>{
+      if(isEdit&&requestedStatus==='Em aberto'&&currentRec&&currentRec.pago)undoFixaOcorrencia(existing,monthKeyNow,{persist:false,notify:false});
+      const payload={nome,localCompra,categoria,valor,dia,accountId:origemPagamento==='conta'?accountId:null,banco,formaPagamento:origemPagamento==='conta'?formaPagamento:null,origemPagamento,reservaOrigemId:origemPagamento==='reserva'?reservaBox.id:null};
       if(isEdit){
-        // Convertendo para compra no cartão: se havia ocorrência já paga por reserva,
-        // devolve o valor antes de a despesa fixa deixar de existir nesse formato.
-        refundAndCleanFixaOcorrencias(existing.id, inPlace ? null : monthKeyNow);
-        if(inPlace) S.data.fixas = S.data.fixas.filter(x=>x.id!==existing.id);
-        else existing.endMonth = monthBeforeKey(monthKeyNow);
+        const targetId=inPlace?existing.id:uid();
+        if(inPlace){Object.assign(existing,payload);target=existing;}
+        else{existing.endMonth=monthBeforeKey(monthKeyNow);target=Object.assign({id:targetId,startMonth:monthKeyNow,endMonth:null},payload);S.data.fixas.push(target);}
+        if(requestedStatus==='Pago'){
+          if(prepare.ok&&!prepare.noop)prepare.commit(targetId,accountId||banco);
+          else if(!fixaOcorrenciaFor(targetId,monthKeyNow)&&!payFixaOcorrencia(target,monthKeyNow,{persist:false,notify:false}))throw new Error('Falha ao aplicar pagamento da despesa fixa.');
+        }
+      }else{
+        target=Object.assign({id:uid(),startMonth:monthKeyNow,endMonth:null},payload);S.data.fixas.push(target);
+        if(requestedStatus==='Pago'&&!payFixaOcorrencia(target,monthKeyNow,{persist:false,notify:false}))throw new Error('Falha ao aplicar pagamento da despesa fixa.');
       }
-      const p = {id:uid(), descricao:nome, local:'', categoria:categoria||'Outro', valorParcela, parcelaTotal, dataCompra:monthKeyNow, diaEntrada:dia, apareceDespesas:true, despesaTipo:'fixa', despesaTransacaoId:null, despesaTransacaoIds:[], despesaFixaId:null};
-      cartao.parcelas.push(p);
-      linkParcelaToDespesa(cartao, p);
-      saveCurrentData(); closeModal(); renderView();
-      toast('Compra no crédito lançada no cartão '+cartao.banco+' como despesa fixa parcelada.');
-      return;
-    }
-
-    const accountId=requireAccountId($('#fm_banco').value,'Toda despesa fixa precisa de uma conta ativa vinculada.');
-    if(!accountId)return;
-    const banco=accountNameSnapshot(accountId);
-    if(!isEdit){
-      S.data.fixas.push({id:uid(), nome, categoria, valor, dia, startMonth:monthKeyNow, endMonth:null, accountId, banco, formaPagamento, origemPagamento:'conta', reservaOrigemId:null});
-      toast('Despesa fixa adicionada. Ela se repetirá todos os meses.');
-      saveCurrentData(); closeModal(); renderView();
-      return;
-    }
-    const targetId = inPlace ? existing.id : uid();
-    // Origem = conta nunca falha por saldo — só pode existir devolução (se a ocorrência
-    // deste mês estava paga por reserva antes da edição).
-    const check = prepareFixaOcorrenciaEdit(existing.id, monthKeyNow, valor, 'conta', null, nome);
-    if(inPlace){
-      Object.assign(existing,{nome,categoria,valor,dia,accountId,banco,formaPagamento,origemPagamento:'conta',reservaOrigemId:null});
-      toast('Despesa fixa atualizada.');
-    } else {
-      existing.endMonth = monthBeforeKey(monthKeyNow);
-      S.data.fixas.push({id:targetId, nome, categoria, valor, dia, startMonth:monthKeyNow, endMonth:null, accountId, banco, formaPagamento, origemPagamento:'conta', reservaOrigemId:null});
-      toast('Alterada a partir de '+monthLabel(S.month.y,S.month.m)+'. Meses anteriores mantidos.');
-    }
-    if(check.ok && !check.noop) check.commit(targetId, banco);
-    saveCurrentData(); closeModal(); renderView();
+    },()=>alert('Não foi possível salvar. A despesa fixa e os saldos anteriores foram preservados.'));
+    if(!ok)return;
+    saveCurrentData();closeModal();renderView();toast(isEdit?'Despesa fixa atualizada.':(requestedStatus==='Pago'?'Despesa fixa adicionada como paga.':'Despesa fixa adicionada em aberto.'));
   };
+
   if(isEdit){
-    $('#fm_delete').onclick = ()=>{
-      const snapshot = JSON.parse(JSON.stringify(S.data));
-      const deletingEntirely = existing.startMonth===monthKeyNow;
-      // V6.1 — devolve à reserva qualquer ocorrência paga (deste mês em diante, ou todas se
-      // a despesa some por completo) ANTES de excluir o cadastro da despesa fixa.
-      refundAndCleanFixaOcorrencias(existing.id, deletingEntirely ? null : monthKeyNow);
-      if(deletingEntirely){
-        S.data.fixas = S.data.fixas.filter(x=>x.id!==existing.id);
-      } else {
-        existing.endMonth = monthBeforeKey(monthKeyNow);
-      }
-      saveCurrentData(); closeModal(); renderView();
-      showUndoToast('Despesa fixa removida a partir deste mês.', ()=>{ S.data = snapshot; saveCurrentData(); renderView(); });
+    $('#fm_delete').onclick=()=>{
+      const snapshot=JSON.parse(JSON.stringify(S.data));
+      const deletingEntirely=existing.startMonth===monthKeyNow;
+      refundAndCleanFixaOcorrencias(existing.id,deletingEntirely?null:monthKeyNow);
+      if(deletingEntirely)S.data.fixas=S.data.fixas.filter(x=>x.id!==existing.id);else existing.endMonth=monthBeforeKey(monthKeyNow);
+      saveCurrentData();closeModal();renderView();
+      showUndoToast('Despesa fixa removida a partir deste mês.',()=>{S.data=snapshot;saveCurrentData();renderView();});
     };
   }
 }
+

@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-07-14T02:08:12.335Z",
-  "appVersion": "6.26.0",
-  "total": 68,
-  "passed": 68,
+  "generatedAt": "2026-07-14T02:42:06.041Z",
+  "appVersion": "6.27.0",
+  "total": 72,
+  "passed": 72,
   "failed": 0,
   "results": [
     {
@@ -26,7 +26,7 @@
       "status": "PASS"
     },
     {
-      "name": "6 — Assinatura futura fica Prevista e não altera saldo antes do vencimento",
+      "name": "6 — Assinatura futura aparece em Despesa variável como Em aberto sem alterar saldo",
       "status": "PASS"
     },
     {
@@ -235,6 +235,22 @@
     },
     {
       "name": "56 — Rendimento entra na Receita do mês sem transformar reembolso ou repasse em renda",
+      "status": "PASS"
+    },
+    {
+      "name": "57 — Assinatura no crédito entra imediatamente no cartão e em Despesa variável sem duplicar",
+      "status": "PASS"
+    },
+    {
+      "name": "58 — Assinatura vencida por conta paga uma vez e mantém um único lançamento variável",
+      "status": "PASS"
+    },
+    {
+      "name": "59 — Despesa fixa suporta Pago/Em aberto com aplicação e estorno idempotentes",
+      "status": "PASS"
+    },
+    {
+      "name": "60 — Formulários novos contêm fluxo visual completo e categoria dinâmica da parcela",
       "status": "PASS"
     },
     {

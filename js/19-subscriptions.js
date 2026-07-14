@@ -68,7 +68,12 @@ function assinaturasAtivasNoMes(y=S.month.y,m=S.month.m){
   const key=monthKey(y,m);
   return (S.data.assinaturas||[]).filter(a=>assinaturaOcorreNoMes(a,key)).map(a=>assinaturaProjection(a,key)).filter(r=>r&&r.formaPagamento!=='Crédito'&&bankMatches(r.banco,r.accountId));
 }
-function assinaturasMes(y=S.month.y,m=S.month.m){ return assinaturasAtivasNoMes(y,m).reduce((s,a)=>s+(Number(a.valor)||0),0); }
+function assinaturasMes(y=S.month.y,m=S.month.m){
+  const period=monthKey(y,m);
+  return assinaturasAtivasNoMes(y,m)
+    .filter(a=>!assinaturaTemDespesaNoMes(a.assinaturaId||a.id,period))
+    .reduce((s,a)=>s+(Number(a.valor)||0),0);
+}
 function assinaturaCobrancaFor(assinaturaId,period){ return (S.data.assinaturaCobrancas||[]).find(c=>c&&c.assinaturaId===assinaturaId&&c.period===period)||null; }
 function assinaturaPeriodsUntilCurrent(a){
   assinaturaEnsureModel(a);
@@ -90,6 +95,68 @@ function assinaturaProximaCobranca(a){
 }
 function assinaturaOccurrenceStatusLabel(status){ return ({prevista:'Prevista',vencida:'Vencida',paga:'Paga',cobrada:'Cobrada',pausada:'Pausada',falhou:'Falhou'})[status]||status||'Prevista'; }
 
+/* V6.27 — toda ocorrência de assinatura também possui uma representação financeira
+   visível em Despesa variável. Conta = lançamento em aberto até o vencimento; crédito =
+   compra criada imediatamente no cartão selecionado e espelhada em Despesas. */
+function assinaturaTransacaoById(id){ return id ? (S.data.transacoes||[]).find(t=>t&&t.id===id) || null : null; }
+function assinaturaParcelaRef(rec){
+  if(!rec||!rec.parcelaId) return null;
+  for(const card of (S.data.cartoes||[])){
+    const parcela=(card.parcelas||[]).find(p=>p&&p.id===rec.parcelaId);
+    if(parcela) return {card,parcela};
+  }
+  return null;
+}
+function assinaturaFindLinkedTx(rec){
+  const direct=assinaturaTransacaoById(rec&&rec.transacaoId);
+  if(direct) return direct;
+  return (S.data.transacoes||[]).find(t=>t&&t.assinaturaCobrancaId===rec.id) || null;
+}
+function assinaturaEnsureAccountTx(rec){
+  let tx=assinaturaFindLinkedTx(rec);
+  const paid=!!(rec.balanceApplied||['paga','cobrada'].includes(rec.status));
+  const accountId=resolveAccountId(rec.accountId,{includeArchived:true});
+  const payload={
+    tipo:'variavel',nome:rec.nome||'Assinatura',data:rec.dueDate||rec.data||rec.period+'-01',
+    categoria:rec.categoria||'Outro',valor:Number(rec.valor)||0,accountId:accountId||rec.accountId||null,
+    banco:accountNameSnapshot(accountId||rec.accountId,rec.banco||''),formaPagamento:rec.formaPagamento||'Pix',
+    origemPagamento:'conta',statusPagamento:paid?'Pago':'Em aberto',viaAssinaturaId:rec.assinaturaId||null,
+    assinaturaCobrancaId:rec.id
+  };
+  if(tx){Object.assign(tx,payload);rec.transacaoId=tx.id;return false;}
+  tx=Object.assign({id:uid()},payload);S.data.transacoes.push(tx);rec.transacaoId=tx.id;return true;
+}
+function assinaturaEnsureCreditPurchase(rec){
+  const card=(S.data.cartoes||[]).find(c=>c&&c.id===rec.cartaoId);
+  if(!card){rec.status='falhou';rec.lastError='Cartão inexistente, removido ou inválido.';return false;}
+  let ref=assinaturaParcelaRef(rec);
+  if(ref){
+    rec.cartaoId=ref.card.id;
+    rec.transacaoId=ref.parcela.despesaTransacaoId||((ref.parcela.despesaTransacaoIds||[])[0])||rec.transacaoId||null;
+    if(rec.status!=='cobrada'){rec.status='cobrada';rec.processedAt=rec.processedAt||Date.now();rec.lastError='';return true;}
+    return false;
+  }
+  const valor=Math.round((Number(rec.valor)||0)*100)/100;
+  const p={id:uid(),descricao:rec.nome||'Assinatura',local:'',categoria:rec.categoria||'Outro',valorParcela:valor,parcelaTotal:1,dataCompra:rec.period,diaEntrada:Number(String(rec.dueDate||'').slice(8,10))||1,apareceDespesas:true,despesaTipo:'variavel',statusPagamento:'Pago',despesaTransacaoId:null,despesaTransacaoIds:[],despesaFixaId:null,viaAssinaturaId:rec.assinaturaId,assinaturaCobrancaId:rec.id};
+  if(!Array.isArray(card.parcelas))card.parcelas=[];
+  card.parcelas.push(p);linkParcelaToDespesa(card,p);
+  rec.cartaoId=card.id;rec.parcelaId=p.id;rec.transacaoId=p.despesaTransacaoId;rec.status='cobrada';rec.processedAt=Date.now();rec.lastError='';
+  return true;
+}
+function assinaturaRemovePendingMaterialization(rec){
+  if(!rec||['paga','cobrada'].includes(rec.status)) return false;
+  let changed=false;
+  const ref=assinaturaParcelaRef(rec);
+  if(ref){unlinkParcelaFromDespesa(ref.parcela);ref.card.parcelas=ref.card.parcelas.filter(p=>p.id!==ref.parcela.id);changed=true;}
+  const tx=assinaturaFindLinkedTx(rec);
+  if(tx){S.data.transacoes=S.data.transacoes.filter(t=>t.id!==tx.id);changed=true;}
+  rec.parcelaId=null;rec.transacaoId=null;rec.balanceApplied=false;
+  return changed;
+}
+function assinaturaTemDespesaNoMes(assinaturaId,period){
+  return (S.data.transacoes||[]).some(t=>t&&t.viaAssinaturaId===assinaturaId&&String(t.data||'').slice(0,7)===period);
+}
+
 const Assinaturas={
   cleanupDeletedGhosts(){
     if(!S.data||!Array.isArray(S.data.assinaturas)) return false;
@@ -107,6 +174,7 @@ const Assinaturas={
         rec.subscriptionNameSnapshot=rec.nome||((rec.snapshot&&rec.snapshot.nome)||'Assinatura');
         return true;
       }
+      assinaturaRemovePendingMaterialization(rec);
       return false;
     });
     (S.data.cartoes||[]).forEach(card=>(card.parcelas||[]).forEach(parcela=>{
@@ -136,28 +204,32 @@ const Assinaturas={
     return Object.assign({id:uid(),assinaturaId:a.id,period,dueDate:due,data:due,status:'prevista',attemptCount:0,lastError:'',createdAt:Date.now(),processedAt:null,cartaoId:null,parcelaId:null,transacaoId:null},snap,{snapshot:snap});
   },
   processOccurrence(a,rec){
-    if(!rec||['paga','cobrada'].includes(rec.status))return false;
-    if(!assinaturaActiveInPeriod(a,rec.period)){ if(rec.status!=='pausada'){rec.status='pausada';return true;} return false; }
+    if(!rec)return false;
+    if(rec.formaPagamento==='Crédito'){
+      if(['paga','cobrada'].includes(rec.status)) return assinaturaEnsureCreditPurchase(rec);
+      return this.chargeOccurrence(rec);
+    }
+    let changed=assinaturaEnsureAccountTx(rec);
+    if(['paga','cobrada'].includes(rec.status))return changed;
+    if(!assinaturaActiveInPeriod(a,rec.period)){
+      changed=assinaturaRemovePendingMaterialization(rec)||changed;
+      if(rec.status!=='pausada'){rec.status='pausada';return true;} return changed;
+    }
     const today=assinaturaTodayISO();
-    if(rec.dueDate>today){ if(rec.status!=='prevista'){rec.status='prevista';rec.lastError='';return true;} return false; }
-    return this.chargeOccurrence(rec);
+    if(rec.dueDate>today){ if(rec.status!=='prevista'){rec.status='prevista';rec.lastError='';return true;} return changed; }
+    return this.chargeOccurrence(rec)||changed;
   },
   chargeOccurrence(rec){
     rec.attemptCount=(Number(rec.attemptCount)||0)+1; rec.lastAttemptAt=Date.now();
     const valor=Math.round((Number(rec.valor)||0)*100)/100;
     if(rec.formaPagamento==='Crédito'){
-      const cartao=(S.data.cartoes||[]).find(c=>c&&c.id===rec.cartaoId);
-      if(!cartao){rec.status='falhou';rec.lastError='Cartão inexistente, removido ou inválido.';return true;}
-      if(rec.parcelaId&&(cartao.parcelas||[]).some(p=>p.id===rec.parcelaId)){rec.status='cobrada';rec.lastError='';return true;}
-      const p={id:uid(),descricao:rec.nome||'Assinatura',local:'',categoria:rec.categoria||'Outro',valorParcela:valor,parcelaTotal:1,dataCompra:rec.period,diaEntrada:Number(rec.dueDate.slice(8,10))||1,apareceDespesas:true,despesaTipo:'variavel',despesaTransacaoId:null,despesaTransacaoIds:[],despesaFixaId:null,viaAssinaturaId:rec.assinaturaId,assinaturaCobrancaId:rec.id};
-      if(!Array.isArray(cartao.parcelas))cartao.parcelas=[];
-      cartao.parcelas.push(p); linkParcelaToDespesa(cartao,p);
-      rec.cartaoId=cartao.id;rec.parcelaId=p.id;rec.transacaoId=p.despesaTransacaoId;rec.status='cobrada';rec.processedAt=Date.now();rec.lastError='';
-      return true;
+      return assinaturaEnsureCreditPurchase(rec);
     }
     const accountId=resolveAccountId(rec.accountId,{includeArchived:false});
     if(!accountId){rec.status='falhou';rec.lastError='Conta bancária inexistente, arquivada ou inválida.';return true;}
+    const tx=assinaturaFindLinkedTx(rec)||null;
     if(!rec.balanceApplied){ adjustLiquidez(accountId,-valor);rec.balanceApplied=true; }
+    if(tx){tx.statusPagamento='Pago';tx.accountId=accountId;tx.banco=accountNameSnapshot(accountId,rec.banco);tx.formaPagamento=rec.formaPagamento||'Pix';}
     rec.accountId=accountId;rec.banco=accountNameSnapshot(accountId,rec.banco);rec.status='cobrada';rec.processedAt=Date.now();rec.lastError='';
     return true;
   },
@@ -194,7 +266,7 @@ const Assinaturas={
       if(isEdit){
         const version=Object.assign({id:uid(),effectiveFrom:currentKey,createdAt:Date.now()},payload);
         existing.versions=(existing.versions||[]).filter(x=>x.effectiveFrom!==currentKey);existing.versions.push(version);existing.versions.sort((a,b)=>a.effectiveFrom.localeCompare(b.effectiveFrom));Object.assign(existing,payload);
-        const pending=assinaturaCobrancaFor(existing.id,currentKey);if(pending&&['prevista','vencida','falhou'].includes(pending.status)){Object.assign(pending,assinaturaRuleSnapshot(version),{snapshot:assinaturaRuleSnapshot(version),dueDate:assinaturaDataVencimento(version,currentKey),data:assinaturaDataVencimento(version,currentKey),status:'prevista',lastError:''});}
+        const pending=assinaturaCobrancaFor(existing.id,currentKey);if(pending&&['prevista','vencida','falhou','pausada'].includes(pending.status)){assinaturaRemovePendingMaterialization(pending);Object.assign(pending,assinaturaRuleSnapshot(version),{snapshot:assinaturaRuleSnapshot(version),dueDate:assinaturaDataVencimento(version,currentKey),data:assinaturaDataVencimento(version,currentKey),status:'prevista',lastError:''});}
         toast('Nova versão criada. O passado consolidado foi preservado.');
       }else{
         const a=Object.assign({id:uid(),status:'ativa',createdKey:currentKey,createdAt:Date.now(),versions:[],activityPeriods:[{from:currentKey,to:null}],pauseHistory:[]},payload);a.versions=[Object.assign({id:uid(),effectiveFrom:currentKey,createdAt:Date.now()},payload)];S.data.assinaturas.push(a);toast('Assinatura criada.');
@@ -206,7 +278,7 @@ const Assinaturas={
     const a=(S.data.assinaturas||[]).find(x=>x.id===id);if(!a)return;assinaturaEnsureModel(a);const key=monthKey(S.month.y,S.month.m);
     const open=(a.activityPeriods||[]).find(p=>!p.to);if(open&&open.from<=key)open.to=shiftYM(key,-1);
     a.pauseHistory.push({from:key,to:null,createdAt:Date.now()});a.status='pausada';a.pausedFromKey=key;
-    (S.data.assinaturaCobrancas||[]).forEach(r=>{if(r.assinaturaId===id&&r.period>=key&&!['paga','cobrada'].includes(r.status)){r.status='pausada';r.lastError='';}});
+    (S.data.assinaturaCobrancas||[]).forEach(r=>{if(r.assinaturaId===id&&r.period>=key&&!['paga','cobrada'].includes(r.status)){assinaturaRemovePendingMaterialization(r);r.status='pausada';r.lastError='';}});
     saveCurrentData();renderView();toast('Assinatura pausada. Nenhum mês pausado será cobrado retroativamente.');
   },
   resume(id){
@@ -223,6 +295,7 @@ const Assinaturas={
       ? 'O cadastro da assinatura será removido completamente e não aparecerá mais como “Excluída”. As cobranças que já aconteceram continuarão somente como registros financeiros normais.'
       : 'A assinatura e todas as previsões ligadas a ela serão removidas completamente. Ela não aparecerá no histórico como assinatura excluída.';
     openConfirmModal({title:'Excluir assinatura definitivamente?',text,confirmLabel:'Excluir definitivamente',variant:'danger',onConfirm:()=>{
+      occurrences.forEach(rec=>{if(!['paga','cobrada'].includes(rec.status))assinaturaRemovePendingMaterialization(rec);});
       S.data.assinaturas=(S.data.assinaturas||[]).filter(x=>x&&x.id!==id);
       S.data.assinaturaCobrancas=(S.data.assinaturaCobrancas||[]).filter(rec=>{
         if(!rec||rec.assinaturaId!==id) return true;

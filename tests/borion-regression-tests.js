@@ -127,9 +127,9 @@ async function testAsync(name, fn){
     assert.strictEqual(out.saldo,35000); assert.strictEqual(out.txAccountId,out.accountId); assert.strictEqual(out.ledgerAccountId,out.accountId);
   });
 
-  test('6 — Assinatura futura fica Prevista e não altera saldo antes do vencimento',()=>{
-    const out=run(ctx,`(()=>{S.data=migrateData(emptyData());const a={id:uid(),accountKind:'bank',active:true,nome:'Conta teste',saldoInicial:1000};S.data.contas.push(a);const sub={id:'sub-futura',status:'ativa',createdKey:'2026-07',createdAt:1,versions:[{id:'v1',effectiveFrom:'2026-07',nome:'Streaming',categoria:'Assinaturas',tipo:'mensal',valor:100,diaVencimento:31,mesVencimento:null,formaPagamento:'Pix',accountId:a.id,banco:a.nome,cartaoId:null}],activityPeriods:[{from:'2026-07',to:null}],pauseHistory:[]};S.data.assinaturas.push(sub);Assinaturas.sync();const rec=assinaturaCobrancaFor(sub.id,'2026-07');return {saldo:contaSaldoAtual(a),status:rec&&rec.status,forecast:assinaturasMes(2026,6),count:S.data.assinaturaCobrancas.length};})()`);
-    assert.strictEqual(out.saldo,1000); assert.strictEqual(out.status,'prevista'); assert.strictEqual(out.forecast,100); assert.strictEqual(out.count,1);
+  test('6 — Assinatura futura aparece em Despesa variável como Em aberto sem alterar saldo',()=>{
+    const out=run(ctx,`(()=>{S.data=migrateData(emptyData());const a={id:uid(),accountKind:'bank',active:true,nome:'Conta teste',saldoInicial:1000};S.data.contas.push(a);const sub={id:'sub-futura',status:'ativa',createdKey:'2026-07',createdAt:1,versions:[{id:'v1',effectiveFrom:'2026-07',nome:'Streaming',categoria:'Assinaturas',tipo:'mensal',valor:100,diaVencimento:31,mesVencimento:null,formaPagamento:'Pix',accountId:a.id,banco:a.nome,cartaoId:null}],activityPeriods:[{from:'2026-07',to:null}],pauseHistory:[]};S.data.assinaturas.push(sub);Assinaturas.sync();const rec=assinaturaCobrancaFor(sub.id,'2026-07');const tx=S.data.transacoes.find(t=>t.assinaturaCobrancaId===rec.id);return {saldo:contaSaldoAtual(a),status:rec&&rec.status,forecast:assinaturasMes(2026,6),variavel:variavelMes(2026,6),despesas:despesasMes(2026,6),txStatus:tx&&tx.statusPagamento,count:S.data.assinaturaCobrancas.length};})()`);
+    assert.strictEqual(out.saldo,1000); assert.strictEqual(out.status,'prevista'); assert.strictEqual(out.forecast,0); assert.strictEqual(out.variavel,100); assert.strictEqual(out.despesas,100); assert.strictEqual(out.txStatus,'Em aberto'); assert.strictEqual(out.count,1);
   });
 
   test('7 — Pausar em março e retomar em julho não cria março–junho nem retroatividade',()=>{
@@ -444,7 +444,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const css=fs.readFileSync(path.join(ROOT,'css/styles.css'),'utf8');
-    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.26\.0/);
+    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.27\.0/);
     assert.match(sw,/js\/20-smartphone-mode\.js/);
     assert.match(css,/html\[data-interface-mode="smartphone"\] \.smart-bottom-nav/);
     assert.match(css,/\.smart-quick-grid/); assert.match(css,/\.smart-launch-modal/);
@@ -508,7 +508,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const src=fs.readFileSync(path.join(ROOT,'js/21-smartphone-history.js'),'utf8');
-    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.26\.0/);
+    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.27\.0/);
     assert.match(sw,/js\/21-smartphone-history\.js/);
     assert.match(src,/GUARD_DEPTH:8/);
     assert.match(src,/BACK_BURST_MS:650/);
@@ -572,7 +572,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const src=fs.readFileSync(path.join(ROOT,'js/22-mobile-experience.js'),'utf8');
-    assert.match(index,/js\/22-mobile-experience\.js\?v=6\.26\.0/);
+    assert.match(index,/js\/22-mobile-experience\.js\?v=6\.27\.0/);
     assert.match(sw,/js\/22-mobile-experience\.js/);
     assert.match(src,/visualViewport/);
     assert.match(src,/navigator\.vibrate/);
@@ -617,11 +617,11 @@ async function testAsync(name, fn){
   test('45 — Rodapé técnico preserva lançamento original e autoria, atualizando apenas a versão',()=>{
     const src=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
     const backup=fs.readFileSync(path.join(ROOT,'js/02-backup-local.js'),'utf8');
-    assert.match(src,/<strong>Versão:<\/strong> 6\.26\.0/);
+    assert.match(src,/<strong>Versão:<\/strong> 6\.27\.0/);
     assert.match(src,/<strong>Lançamento:<\/strong> 13\/07\/2026/);
     assert.match(src,/Desenvolvido por <strong>Pedro Bardella<\/strong>/);
     assert.match(src,/© 2026 Pedro Bardella\. Todos os direitos reservados\./);
-    assert.match(backup,/BORION_APP_VERSION = '6\.26\.0'/);
+    assert.match(backup,/BORION_APP_VERSION = '6\.27\.0'/);
   });
 
 
@@ -694,6 +694,44 @@ async function testAsync(name, fn){
     load(c,'js/00-utils.js'); load(c,'js/01-storage-data-state.js'); load(c,'js/05-calculations-charts.js');
     const out=run(c,`(()=>{S.data=migrateData(emptyData());S.month={y:2026,m:6};S.data.transacoes=[{id:'r1',tipo:'receita',data:'2026-07-01',valor:100,origem:'propria',banco:''},{id:'r2',tipo:'receita',data:'2026-07-02',valor:25,origem:'rendimento',banco:''},{id:'r3',tipo:'receita',data:'2026-07-03',valor:40,origem:'reembolso',banco:''},{id:'r4',tipo:'receita',data:'2026-07-04',valor:60,origem:'repasse',banco:''}];return {renda:receitaMes(),extras:receitaExtraMes()};})()`);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{renda:125,extras:100});
+  });
+
+  test('57 — Assinatura no crédito entra imediatamente no cartão e em Despesa variável sem duplicar',()=>{
+    const c=createContext();
+    load(c,'js/00-utils.js');load(c,'js/01-storage-data-state.js');load(c,'js/05-calculations-charts.js');load(c,'js/19-subscriptions.js');
+    run(c,"todayISO=()=> '2026-07-12'; todayYM=()=>({y:2026,m:6}); toast=()=>{}; S.month={y:2026,m:6};");
+    const out=run(c,`(()=>{S.data=migrateData(emptyData());S.data.cartoes.push({id:'card-sub',banco:'Nubank',limite:1000,parcelas:[],faturasPagas:[]});const sub={id:'sub-credit-now',status:'ativa',createdKey:'2026-07',versions:[{id:'v1',effectiveFrom:'2026-07',nome:'Streaming',categoria:'Assinaturas',tipo:'mensal',valor:39.9,diaVencimento:31,formaPagamento:'Crédito',cartaoId:'card-sub'}],activityPeriods:[{from:'2026-07',to:null}],pauseHistory:[]};S.data.assinaturas.push(sub);Assinaturas.sync();Assinaturas.sync();const rec=assinaturaCobrancaFor(sub.id,'2026-07');const tx=S.data.transacoes.filter(t=>t.viaAssinaturaId===sub.id);return {status:rec.status,parcelas:S.data.cartoes[0].parcelas.length,txCount:tx.length,txStatus:tx[0]&&tx[0].statusPagamento,variavel:variavelMes(2026,6),assinaturas:assinaturasMes(2026,6),despesas:despesasMes(2026,6)};})()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{status:'cobrada',parcelas:1,txCount:1,txStatus:'Pago',variavel:39.9,assinaturas:0,despesas:39.9});
+  });
+
+  test('58 — Assinatura vencida por conta paga uma vez e mantém um único lançamento variável',()=>{
+    const c=createContext();
+    load(c,'js/00-utils.js');load(c,'js/01-storage-data-state.js');load(c,'js/05-calculations-charts.js');load(c,'js/19-subscriptions.js');
+    run(c,"todayISO=()=> '2026-07-12'; todayYM=()=>({y:2026,m:6}); toast=()=>{}; S.month={y:2026,m:6};");
+    const out=run(c,`(()=>{S.data=migrateData(emptyData());const a={id:'acc-sub',accountKind:'bank',active:true,nome:'Conta',saldoInicial:1000};S.data.contas.push(a);const sub={id:'sub-account-due',status:'ativa',createdKey:'2026-07',versions:[{id:'v1',effectiveFrom:'2026-07',nome:'Academia',categoria:'Assinaturas',tipo:'mensal',valor:80,diaVencimento:1,formaPagamento:'Pix',accountId:a.id,banco:a.nome}],activityPeriods:[{from:'2026-07',to:null}],pauseHistory:[]};S.data.assinaturas.push(sub);Assinaturas.sync();Assinaturas.sync();const rec=assinaturaCobrancaFor(sub.id,'2026-07');const tx=S.data.transacoes.filter(t=>t.viaAssinaturaId===sub.id);return {saldo:contaSaldoAtual(a),status:rec.status,balanceApplied:rec.balanceApplied,txCount:tx.length,txStatus:tx[0]&&tx[0].statusPagamento};})()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{saldo:920,status:'cobrada',balanceApplied:true,txCount:1,txStatus:'Pago'});
+  });
+
+  test('59 — Despesa fixa suporta Pago/Em aberto com aplicação e estorno idempotentes',()=>{
+    const c=createContext();
+    load(c,'js/00-utils.js');load(c,'js/01-storage-data-state.js');load(c,'js/05-calculations-charts.js');load(c,'js/07-budget.js');
+    run(c,"todayISO=()=> '2026-07-12'; todayYM=()=>({y:2026,m:6}); toast=()=>{}; renderView=()=>{}; saveCurrentData=()=>true; S.month={y:2026,m:6};");
+    const out=run(c,`(()=>{S.data=migrateData(emptyData());const a={id:'acc-fixa',accountKind:'bank',active:true,nome:'Conta',saldoInicial:1000};S.data.contas.push(a);const f={id:'fixa-status',nome:'Internet',categoria:'Casa',valor:100,dia:10,startMonth:'2026-07',endMonth:null,accountId:a.id,banco:a.nome,formaPagamento:'Pix',origemPagamento:'conta'};S.data.fixas.push(f);payFixaOcorrencia(f,'2026-07',{persist:false,notify:false});payFixaOcorrencia(f,'2026-07',{persist:false,notify:false});const paid={saldo:contaSaldoAtual(a),count:S.data.fixaPagamentos.length,status:fixaOcorrenciaStatus(f,'2026-07')};undoFixaOcorrencia(f,'2026-07',{persist:false,notify:false});undoFixaOcorrencia(f,'2026-07',{persist:false,notify:false});return {paid,open:{saldo:contaSaldoAtual(a),count:S.data.fixaPagamentos.length,status:fixaOcorrenciaStatus(f,'2026-07')}};})()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{paid:{saldo:900,count:1,status:'Pago'},open:{saldo:1000,count:0,status:'Vencido'}});
+  });
+
+  test('60 — Formulários novos contêm fluxo visual completo e categoria dinâmica da parcela',()=>{
+    const budget=fs.readFileSync(path.join(ROOT,'js/07-budget.js'),'utf8');
+    const cards=fs.readFileSync(path.join(ROOT,'js/10-cards-accounts.js'),'utf8');
+    assert.match(budget,/Status deste mês/);
+    assert.match(budget,/fm_pagamento_origem_group/);
+    assert.match(budget,/data-value="carteira"/);
+    assert.match(budget,/data-value="conta"/);
+    assert.match(budget,/reservasEnabled\(\)\?`<button[^`]+data-value="reserva"/);
+    assert.match(budget,/data-value="credito"/);
+    assert.match(cards,/wireParcelaCategoriaPorTipo/);
+    assert.match(cards,/orderedCategories\(tipo\)/);
+    assert.match(cards,/tipoEl\.addEventListener\('change',refresh\)/);
   });
 
   test('Código completo — todos os JavaScript passam na validação sintática',()=>{
@@ -779,11 +817,11 @@ async function testAsync(name, fn){
     const fs=require('fs');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     assert.match(sw,/23-profile-import-review\.js/);
-    assert.match(sw,/v6-26-0-visual-launch-reserve-update/);
+    assert.match(sw,/v6-27-0-subscriptions-fixed-expenses/);
   });
 
   const failures=results.filter(r=>r.status==='FAIL');
-  const report={generatedAt:new Date().toISOString(),appVersion:'6.26.0',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
+  const report={generatedAt:new Date().toISOString(),appVersion:'6.27.0',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
   fs.writeFileSync(path.join(__dirname,'regression-results.json'),JSON.stringify(report,null,2));
   for(const r of results){
     console.log(`${r.status==='PASS'?'✓':'✗'} ${r.name}`);

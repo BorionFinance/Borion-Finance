@@ -27,6 +27,26 @@ const FaturaSort = {
 };
 window.FaturaSort = FaturaSort;
 
+/* V6.27 — a categoria da compra espelhada acompanha o tipo escolhido em Despesas.
+   Ao alternar entre "variável" e "fixa" no modal da parcela, a lista de categorias é
+   reconstruída na hora usando exatamente o cadastro e a ordenação daquele tipo. */
+function wireParcelaCategoriaPorTipo(preferredCategory){
+  const tipoEl=document.getElementById('mf_despesaTipo');
+  const categoriaEl=document.getElementById('mf_categoria');
+  if(!tipoEl||!categoriaEl) return;
+  const refresh=()=>{
+    const tipo=tipoEl.value==='fixa'?'fixa':'variavel';
+    const cats=typeof orderedCategories==='function'
+      ? orderedCategories(tipo)
+      : (((S.data.categorias&&S.data.categorias[tipo])||[]).slice());
+    const current=categoriaEl.value||preferredCategory||'';
+    categoriaEl.innerHTML=cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    categoriaEl.value=cats.includes(current)?current:(cats[0]||'');
+  };
+  tipoEl.addEventListener('change',refresh);
+  refresh();
+}
+
 /* ---------------- VIEW: CARDS & ACCOUNTS ---------------- */
 function renderCards(){
   /* Organização visual (opcional): quando o modo Organizar está ligado (Configurações →
@@ -266,6 +286,7 @@ const Cards = {
       saveCurrentData(); closeModal(); renderView();
       toast(p.apareceDespesas ? 'Compra adicionada ao cartão e em Despesas.' : 'Compra adicionada ao cartão.');
     }});
+    wireParcelaCategoriaPorTipo((S.data.categorias.variavel||[])[0]);
   },
   editParcela(cartaoId, parcelaId){
     const c = S.data.cartoes.find(x=>x.id===cartaoId);
@@ -287,6 +308,7 @@ const Cards = {
       linkParcelaToDespesa(c, p);
       saveCurrentData(); closeModal(); renderView();
     }});
+    wireParcelaCategoriaPorTipo(p.categoria);
   },
   /* Marca a fatura do mês selecionado como paga: debita o banco escolhido e some da dívida em aberto. */
   payFatura(cartaoId){

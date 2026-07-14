@@ -33,7 +33,8 @@ function gastosPorCategoriaSegments(y=S.month.y, m=S.month.m){
   const totals = {};
   fixasAtivasNoMes(y,m).forEach(f=> totals[f.categoria]=(totals[f.categoria]||0)+Number(f.valor||0));
   txInMonth(S.data.transacoes.filter(t=>t.tipo==='variavel'&&bankMatches(t.banco,t.accountId)), y, m).forEach(t=> totals[t.categoria]=(totals[t.categoria]||0)+Number(t.valor||0));
-  assinaturasAtivasNoMes(y,m).forEach(a=> totals[a.categoria]=(totals[a.categoria]||0)+Number(a.valor||0));
+  const assinaturaPeriod=monthKey(y,m);
+  assinaturasAtivasNoMes(y,m).filter(a=>!assinaturaTemDespesaNoMes(a.assinaturaId||a.id,assinaturaPeriod)).forEach(a=> totals[a.categoria]=(totals[a.categoria]||0)+Number(a.valor||0));
   return Object.keys(totals).map(k=>({label:k, value:totals[k], color:catColor(k)}));
 }
 function gastosPorCartaoSegments(y=S.month.y, m=S.month.m){

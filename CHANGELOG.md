@@ -1,3 +1,11 @@
+## V6.27.0 — Assinaturas e despesas integradas
+- Assinaturas por conta agora aparecem em **Despesa variável** como **Em aberto** antes do vencimento e viram **Pago** quando a cobrança é processada.
+- Assinaturas no crédito entram imediatamente no cartão selecionado e também aparecem em **Despesa variável**, sem duplicar o total mensal.
+- O formulário de **Despesa fixa** recebeu o mesmo fluxo visual da variável: Carteira, Conta, Reserva ou Crédito, além de **Pago/Em aberto**.
+- Ao desligar Reservas, a opção **Reserva** some completamente dos formulários de lançamento.
+- A categoria de uma parcela muda automaticamente entre as listas de **Despesa variável** e **Despesa fixa** conforme o tipo escolhido.
+- Pagamentos e estornos de despesas fixas ficaram idempotentes e protegidos contra duplicidade.
+
 ## V6.26.0 — Atualização visual de lançamentos e reservas
 
 - Despesas variáveis passam a aceitar status Pago ou Em aberto sem depender da forma de pagamento.

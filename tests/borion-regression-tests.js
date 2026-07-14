@@ -444,7 +444,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const css=fs.readFileSync(path.join(ROOT,'css/styles.css'),'utf8');
-    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.27\.1/);
+    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.27\.2/);
     assert.match(sw,/js\/20-smartphone-mode\.js/);
     assert.match(css,/html\[data-interface-mode="smartphone"\] \.smart-bottom-nav/);
     assert.match(css,/\.smart-quick-grid/); assert.match(css,/\.smart-launch-modal/);
@@ -508,7 +508,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const src=fs.readFileSync(path.join(ROOT,'js/21-smartphone-history.js'),'utf8');
-    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.27\.1/);
+    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.27\.2/);
     assert.match(sw,/js\/21-smartphone-history\.js/);
     assert.match(src,/GUARD_DEPTH:8/);
     assert.match(src,/BACK_BURST_MS:650/);
@@ -572,7 +572,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const src=fs.readFileSync(path.join(ROOT,'js/22-mobile-experience.js'),'utf8');
-    assert.match(index,/js\/22-mobile-experience\.js\?v=6\.27\.1/);
+    assert.match(index,/js\/22-mobile-experience\.js\?v=6\.27\.2/);
     assert.match(sw,/js\/22-mobile-experience\.js/);
     assert.match(src,/visualViewport/);
     assert.match(src,/navigator\.vibrate/);
@@ -851,11 +851,11 @@ async function testAsync(name, fn){
     const fs=require('fs');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     assert.match(sw,/23-profile-import-review\.js/);
-    assert.match(sw,/v6-27-1-fixed-payment-sync/);
+    assert.match(sw,/v6-27-2-system-integrity-audit/);
   });
 
   const failures=results.filter(r=>r.status==='FAIL');
-  const report={generatedAt:new Date().toISOString(),appVersion:'6.27.1',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
+  const report={generatedAt:new Date().toISOString(),appVersion:'6.27.2',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
   fs.writeFileSync(path.join(__dirname,'regression-results.json'),JSON.stringify(report,null,2));
   for(const r of results){
     console.log(`${r.status==='PASS'?'✓':'✗'} ${r.name}`);

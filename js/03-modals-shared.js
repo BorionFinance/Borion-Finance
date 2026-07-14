@@ -193,6 +193,11 @@ function openChoiceModal({title, sub, choices}){
 }
 
 /* ------- shared: inline "quick create category" wiring for select elements ------- */
+function orderedCategories(typeKey){
+  const raw=((S.data.categorias&&S.data.categorias[typeKey])||[]).slice();
+  if(!(window.OrderPreferences&&OrderPreferences.applyOrder))return raw;
+  return OrderPreferences.applyOrder('cat_'+typeKey,raw.map(nome=>({id:nome,nome}))).map(x=>x.nome);
+}
 function wireQuickCategory(selectEl, boxEl, inputEl, addBtnEl, typeKey){
   selectEl.onchange = ()=>{
     if(selectEl.value==='__new__'){ boxEl.classList.remove('hidden'); inputEl.focus(); }
@@ -206,7 +211,7 @@ function wireQuickCategory(selectEl, boxEl, inputEl, addBtnEl, typeKey){
       setCategoryColor(typeKey, name, baseCatColor(name));
       saveCurrentData();
     }
-    selectEl.innerHTML = S.data.categorias[typeKey].map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('') + `<option value="__new__">➕ Criar nova categoria...</option>`;
+    selectEl.innerHTML = orderedCategories(typeKey).map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('') + `<option value="__new__">➕ Criar nova categoria...</option>`;
     selectEl.value = name;
     boxEl.classList.add('hidden');
     inputEl.value='';
@@ -214,7 +219,7 @@ function wireQuickCategory(selectEl, boxEl, inputEl, addBtnEl, typeKey){
   };
 }
 function categorySelectHTML(idPrefix, typeKey, selected){
-  const cats = S.data.categorias[typeKey];
+  const cats = orderedCategories(typeKey);
   const opts = cats.map(c=>`<option value="${esc(c)}" ${selected===c?'selected':''}>${esc(c)}</option>`).join('');
   return `
     <div class="field">

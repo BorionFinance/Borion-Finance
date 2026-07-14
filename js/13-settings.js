@@ -32,9 +32,9 @@ function renderSettings(){
   else if(S.settingsTab==='categories') content = renderSettingsCategories();
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.24.6 • Exclusão limpa de assinaturas</div><footer class="app-release-footer" aria-label="Informações do Borion">
-<div><strong>Versão:</strong> 6.24.6</div>
-<div><strong>Lançamento:</strong> 07/07/2026</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.26.0 • Lançamentos, reservas e categorias</div><footer class="app-release-footer" aria-label="Informações do Borion">
+<div><strong>Versão:</strong> 6.26.0</div>
+<div><strong>Lançamento:</strong> 13/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
 </footer></div>`;
@@ -81,22 +81,22 @@ function renderSettingsDashboard(){
 }
 function renderSettingsCategories(){
   ensureCategoryColors();
-  const catBlock = (typeKey, typeLabel) => {
-    const list = (S.data.categorias && S.data.categorias[typeKey]) ? S.data.categorias[typeKey] : [];
-    const tags = list.map(c=>`
-      <span class="cat-tag cat-tag-manage" style="--cat-color:${esc(categoryColor(typeKey,c))}">
-        <span class="cat-dot"></span>
-        <span class="cat-tag-name">${esc(c)}</span>
-        <input type="color" class="cat-color-inline" value="${esc(categoryColor(typeKey,c))}" title="Cor da categoria" onchange="Settings.setCategoryColor(${jsArg(typeKey)},${jsArg(c)},this.value)">
-        <button class="cat-mini-btn" onclick="Settings.renameCategory(${jsArg(typeKey)},${jsArg(c)})" title="Renomear">✎</button>
-        <button class="cat-mini-btn danger" onclick="Settings.deleteCategory(${jsArg(typeKey)},${jsArg(c)})" title="Excluir">&times;</button>
-      </span>`).join('');
-    return `<div class="cat-manage-group cat-panel"><h4>${esc(typeLabel)}</h4><p class="desc">Uma categoria pode ser usada em vários lançamentos. A cor aparece nas etiquetas e facilita bater o olho.</p><div class="cat-tag-list">${tags||'<span class="desc">Nenhuma categoria ainda.</span>'}</div><button class="btn-outline btn-sm" onclick="Settings.addCategory(${jsArg(typeKey)})">+ Nova categoria</button></div>`;
+  const catBlock=(typeKey,typeLabel)=>{
+    const orderType='cat_'+typeKey;
+    const raw=(S.data.categorias&&S.data.categorias[typeKey])?S.data.categorias[typeKey]:[];
+    const wrapped=raw.map((nome,createdIndex)=>({id:nome,nome,createdIndex}));
+    const ordered=window.OrderPreferences?OrderPreferences.applyOrder(orderType,wrapped):wrapped;
+    const naturalIds=ordered.map(x=>x.id);
+    const organizing=!!(window.OrderPreferences&&OrderPreferences.active&&OrderPreferences.activeType===orderType);
+    const tags=ordered.map(item=>{const c=item.nome;return `<span class="cat-tag cat-tag-manage ${organizing?'category-order-row':''}" data-order-id="${esc(c)}" style="--cat-color:${esc(categoryColor(typeKey,c))}">
+      <span class="cat-dot"></span><span class="cat-tag-name">${esc(c)}</span>
+      ${organizing?OrderPreferences.reorderRowControlsHTML(orderType,c,c,naturalIds):`<input type="color" class="cat-color-inline" value="${esc(categoryColor(typeKey,c))}" title="Cor da categoria" onchange="Settings.setCategoryColor(${jsArg(typeKey)},${jsArg(c)},this.value)"><button class="cat-mini-btn" onclick="Settings.renameCategory(${jsArg(typeKey)},${jsArg(c)})" title="Renomear">✎</button><button class="cat-mini-btn danger" onclick="Settings.deleteCategory(${jsArg(typeKey)},${jsArg(c)})" title="Excluir">&times;</button>`}
+    </span>`;}).join('');
+    return `<div class="cat-manage-group cat-panel"><div class="category-panel-head"><div><h4>${esc(typeLabel)}</h4><p class="desc">Escolha A–Z, Z–A, recentes, antigas ou uma ordem personalizada.</p></div>${window.OrderPreferences?OrderPreferences.sortSelectHTML(orderType):''}</div><div class="cat-tag-list" data-order-list="${orderType}">${tags||'<span class="desc">Nenhuma categoria ainda.</span>'}</div>${organizing?'':`<button class="btn-outline btn-sm" onclick="Settings.addCategory(${jsArg(typeKey)})">+ Nova categoria</button>`}</div>`;
   };
-  return `
-    <div class="settings-section settings-hero-section"><h3>Categorias</h3><p class="desc">Receitas, despesas fixas e despesas variáveis agora têm cor própria. Se uma categoria já estiver vinculada a lançamentos, o Borion bloqueia a exclusão para não bagunçar seu histórico.</p></div>
-    <div class="settings-categories-grid">${catBlock('receita','Receitas')}${catBlock('fixa','Despesas fixas')}${catBlock('variavel','Despesas variáveis')}</div>`;
+  return `<div class="settings-section settings-hero-section"><h3>Categorias</h3><p class="desc">As categorias mantêm suas cores e agora também podem ser ordenadas por perfil. A mesma ordem aparece nos seletores de lançamentos e assinaturas.</p></div><div class="settings-categories-grid">${catBlock('receita','Receitas')}${catBlock('fixa','Despesas fixas')}${catBlock('variavel','Despesas variáveis')}</div>`;
 }
+
 function renderBudgetSummaryPersonalization(){
   if(typeof budgetSummaryPreferences!=='function') return '';
   const pref=budgetSummaryPreferences();
@@ -515,6 +515,7 @@ function categoryUsageDetails(typeKey, name){
     add('despesas variáveis', (S.data.transacoes||[]).filter(t=>t.tipo==='variavel' && t.categoria===name).length);
     add('parcelas de cartão', (S.data.cartoes||[]).reduce((n,card)=>n+((card.parcelas||[]).filter(p=>p.categoria===name).length),0));
     add('boletos', (S.data.boletos||[]).filter(b=>b.categoria===name).length);
+    add('assinaturas', (S.data.assinaturas||[]).filter(a=>a.categoria===name).length);
     add('cheques emitidos', (S.data.cheques&&S.data.cheques.items||[]).filter(c=>c.tipo==='emitido' && c.categoria===name).length);
   }
   return {total, parts};

@@ -1,3 +1,13 @@
+## V6.26.0 — Atualização visual de lançamentos e reservas
+
+- Despesas variáveis passam a aceitar status Pago ou Em aberto sem depender da forma de pagamento.
+- Novo fluxo de pagamento por Carteira, Conta, Reserva ou Crédito, com campos condicionais e local da compra.
+- Receita recebe a origem Rendimento.
+- Reservas ganham lembrete na Agenda, transferência direta entre reservas e aba própria em Lançamentos.
+- Nova assinatura usa categorias variáveis; categorias ganham A–Z, Z–A, recentes, antigas e ordem personalizada.
+- Compras no crédito registram loja, data completa e dia de entrada na fatura.
+- Regras de edição, exclusão e estorno reforçadas para preservar saldos.
+
 ## V6.25.1 — Correção do filtro de bancos
 
 - O filtro superior agora exibe somente instituições financeiras reais.

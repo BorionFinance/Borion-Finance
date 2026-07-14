@@ -444,7 +444,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const css=fs.readFileSync(path.join(ROOT,'css/styles.css'),'utf8');
-    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.24\.6/);
+    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.26\.0/);
     assert.match(sw,/js\/20-smartphone-mode\.js/);
     assert.match(css,/html\[data-interface-mode="smartphone"\] \.smart-bottom-nav/);
     assert.match(css,/\.smart-quick-grid/); assert.match(css,/\.smart-launch-modal/);
@@ -508,7 +508,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const src=fs.readFileSync(path.join(ROOT,'js/21-smartphone-history.js'),'utf8');
-    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.24\.6/);
+    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.26\.0/);
     assert.match(sw,/js\/21-smartphone-history\.js/);
     assert.match(src,/GUARD_DEPTH:8/);
     assert.match(src,/BACK_BURST_MS:650/);
@@ -572,7 +572,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const src=fs.readFileSync(path.join(ROOT,'js/22-mobile-experience.js'),'utf8');
-    assert.match(index,/js\/22-mobile-experience\.js\?v=6\.24\.6/);
+    assert.match(index,/js\/22-mobile-experience\.js\?v=6\.26\.0/);
     assert.match(sw,/js\/22-mobile-experience\.js/);
     assert.match(src,/visualViewport/);
     assert.match(src,/navigator\.vibrate/);
@@ -617,11 +617,11 @@ async function testAsync(name, fn){
   test('45 — Rodapé técnico preserva lançamento original e autoria, atualizando apenas a versão',()=>{
     const src=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
     const backup=fs.readFileSync(path.join(ROOT,'js/02-backup-local.js'),'utf8');
-    assert.match(src,/<strong>Versão:<\/strong> 6\.24\.6/);
-    assert.match(src,/<strong>Lançamento:<\/strong> 07\/07\/2026/);
+    assert.match(src,/<strong>Versão:<\/strong> 6\.26\.0/);
+    assert.match(src,/<strong>Lançamento:<\/strong> 13\/07\/2026/);
     assert.match(src,/Desenvolvido por <strong>Pedro Bardella<\/strong>/);
     assert.match(src,/© 2026 Pedro Bardella\. Todos os direitos reservados\./);
-    assert.match(backup,/BORION_APP_VERSION = '6\.24\.6'/);
+    assert.match(backup,/BORION_APP_VERSION = '6\.26\.0'/);
   });
 
 
@@ -650,6 +650,50 @@ async function testAsync(name, fn){
     assert.strictEqual(run(ctx,'OrderPreferences.getReservaColumns()'),4);
     run(ctx,"OrderPreferences.setActive(true,'reservas'); OrderPreferences.setReservaColumns(2); OrderPreferences.cancelAll();");
     assert.strictEqual(run(ctx,'OrderPreferences.getReservaColumns()'),4);
+  });
+
+
+  test('52 — Despesa variável em aberto não mexe no saldo e Pago aplica/estorna exatamente uma vez',()=>{
+    const c=createContext();
+    load(c,'js/00-utils.js'); load(c,'js/01-storage-data-state.js'); load(c,'js/05-calculations-charts.js'); load(c,'js/09-patrimony-goals.js'); load(c,'js/07-budget.js');
+    const out=run(c,`(()=>{S.data=migrateData(emptyData());const a={id:'acc-status',accountKind:'bank',active:true,nome:'Conta teste',saldoInicial:1000};S.data.contas.push(a);const tx={id:'tx-status',tipo:'variavel',nome:'Compra',data:'2026-07-13',categoria:'Outro',valor:125,accountId:a.id,banco:a.nome,origemPagamento:'conta',formaPagamento:'Pix',statusPagamento:'Em aberto'};S.data.transacoes.push(tx);const aberto=contaSaldoAtual(a);const pagoOk=setVariavelStatus(tx,'Pago');const pago=contaSaldoAtual(a);const abertoOk=setVariavelStatus(tx,'Em aberto');const estornado=contaSaldoAtual(a);return {aberto,pagoOk,pago,abertoOk,estornado,status:tx.statusPagamento};})()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{aberto:1000,pagoOk:true,pago:875,abertoOk:true,estornado:1000,status:'Em aberto'});
+  });
+
+  test('53 — Transferência entre reservas gera saída e entrada vinculadas e reversíveis',()=>{
+    const c=createContext();
+    load(c,'js/00-utils.js'); load(c,'js/01-storage-data-state.js'); load(c,'js/05-calculations-charts.js'); load(c,'js/09-patrimony-goals.js');
+    const out=run(c,`(()=>{S.data=migrateData(emptyData());const a={id:'ra',nome:'Origem',valorAtual:500},b={id:'rb',nome:'Destino',valorAtual:100};S.data.reservas.boxes=[a,b];const id='tr-1',out={id:'m1',reservaTransferId:id,boxId:a.id,tipo:'Envio para outra reserva',valor:150},inn={id:'m2',reservaTransferId:id,boxId:b.id,tipo:'Recebimento de outra reserva',valor:150};Reservas.applyMoveEffect(out);Reservas.applyMoveEffect(inn);const depois=[a.valorAtual,b.valorAtual];Reservas.reverseMoveEffect(out);Reservas.reverseMoveEffect(inn);return {depois,antes:[a.valorAtual,b.valorAtual],positive:Reservas.POSITIVE_TYPES.includes(inn.tipo),negative:Reservas.NEGATIVE_TYPES.includes(out.tipo)};})()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{depois:[350,250],antes:[500,100],positive:true,negative:true});
+  });
+
+  test('54 — Atualização visual contém todos os novos campos e integrações solicitados',()=>{
+    const budget=fs.readFileSync(path.join(ROOT,'js/07-budget.js'),'utf8');
+    const reservas=fs.readFileSync(path.join(ROOT,'js/09-patrimony-goals.js'),'utf8');
+    const settings=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
+    const subs=fs.readFileSync(path.join(ROOT,'js/19-subscriptions.js'),'utf8');
+    assert.match(budget,/Local da compra/); assert.match(budget,/data-value="carteira"/); assert.match(budget,/data-value="conta"/); assert.match(budget,/data-value="reserva"/); assert.match(budget,/data-value="credito"/);
+    assert.match(budget,/Em aberto registra a despesa sem retirar dinheiro/); assert.match(budget,/Entre reservas/); assert.match(budget,/diaEntrada:diaCompra/); assert.match(budget,/Rendimento e receita própria contam como renda/);
+    assert.match(reservas,/Gerar lembrete/); assert.match(reservas,/Enviar para outra reserva/); assert.match(reservas,/Recebimento de outra reserva/);
+    assert.match(settings,/cat_receita|cat_/); assert.match(settings,/Escolha A–Z, Z–A, recentes, antigas ou uma ordem personalizada/);
+    assert.match(subs,/orderedCategories\('variavel'\)/);
+  });
+
+  test('55 — Ordem das categorias aceita A–Z, Z–A, recentes, antigas e personalizada por perfil',()=>{
+    const c=createContext();
+    load(c,'js/00-utils.js');
+    run(c,"function readJSON(k,f){try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}} function writeJSON(k,v){localStorage.setItem(k,JSON.stringify(v));} S={currentProfile:{id:'perfil-cat'},data:{}};");
+    load(c,'js/18-order-preferences.js');
+    const out=run(c,`(()=>{const items=[{id:'Mercado',nome:'Mercado'},{id:'Academia',nome:'Academia'},{id:'Viagem',nome:'Viagem'}];OrderPreferences.setSortMode('cat_variavel','az');const az=OrderPreferences.applyOrder('cat_variavel',items).map(x=>x.id);OrderPreferences.setSortMode('cat_variavel','za');const za=OrderPreferences.applyOrder('cat_variavel',items).map(x=>x.id);OrderPreferences.setSortMode('cat_variavel','recent');const recent=OrderPreferences.applyOrder('cat_variavel',items).map(x=>x.id);OrderPreferences.setSortMode('cat_variavel','old');const old=OrderPreferences.applyOrder('cat_variavel',items).map(x=>x.id);OrderPreferences.saveOrderLocal('cat_variavel',['Viagem','Mercado','Academia']);OrderPreferences.setSortMode('cat_variavel','manual');const manual=OrderPreferences.applyOrder('cat_variavel',items).map(x=>x.id);return {az,za,recent,old,manual};})()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{az:['Academia','Mercado','Viagem'],za:['Viagem','Mercado','Academia'],recent:['Viagem','Academia','Mercado'],old:['Mercado','Academia','Viagem'],manual:['Viagem','Mercado','Academia']});
+  });
+
+
+  test('56 — Rendimento entra na Receita do mês sem transformar reembolso ou repasse em renda',()=>{
+    const c=createContext();
+    load(c,'js/00-utils.js'); load(c,'js/01-storage-data-state.js'); load(c,'js/05-calculations-charts.js');
+    const out=run(c,`(()=>{S.data=migrateData(emptyData());S.month={y:2026,m:6};S.data.transacoes=[{id:'r1',tipo:'receita',data:'2026-07-01',valor:100,origem:'propria',banco:''},{id:'r2',tipo:'receita',data:'2026-07-02',valor:25,origem:'rendimento',banco:''},{id:'r3',tipo:'receita',data:'2026-07-03',valor:40,origem:'reembolso',banco:''},{id:'r4',tipo:'receita',data:'2026-07-04',valor:60,origem:'repasse',banco:''}];return {renda:receitaMes(),extras:receitaExtraMes()};})()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{renda:125,extras:100});
   });
 
   test('Código completo — todos os JavaScript passam na validação sintática',()=>{
@@ -735,11 +779,11 @@ async function testAsync(name, fn){
     const fs=require('fs');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     assert.match(sw,/23-profile-import-review\.js/);
-    assert.match(sw,/v6-24-6-subscription-delete-clean/);
+    assert.match(sw,/v6-26-0-visual-launch-reserve-update/);
   });
 
   const failures=results.filter(r=>r.status==='FAIL');
-  const report={generatedAt:new Date().toISOString(),appVersion:'6.24.6',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
+  const report={generatedAt:new Date().toISOString(),appVersion:'6.26.0',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
   fs.writeFileSync(path.join(__dirname,'regression-results.json'),JSON.stringify(report,null,2));
   for(const r of results){
     console.log(`${r.status==='PASS'?'✓':'✗'} ${r.name}`);

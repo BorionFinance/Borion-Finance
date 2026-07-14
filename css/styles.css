@@ -2331,3 +2331,19 @@ html[data-theme="light"] .import-current-row.will-delete{border-color:rgba(220,3
 .summary-pref-row:active{cursor:grabbing}.summary-pref-row label{font-weight:750}.summary-drag{color:var(--gold-bright);font-size:18px;text-align:center}.summary-pref-actions{display:flex;gap:5px}.summary-pref-actions button:disabled{opacity:.3;cursor:not-allowed}
 .budget-summary-cards{align-items:stretch}
 @media(max-width:760px){.reserve-report-evolution-row{grid-template-columns:1fr 1fr}.reserve-report-name{grid-column:1/-1}.summary-pref-row{grid-template-columns:24px 1fr auto}}
+
+
+/* V6.26 — lançamento visual, lembrete de reserva e ordenação de categorias */
+.payment-source-toggle{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.payment-source-toggle .seg-btn{min-height:42px}
+.payment-source-panel{margin:8px 0 14px;padding:12px;border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,.025)}
+.payment-source-panel.hidden{display:none!important}
+.reserve-reminder-box{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:14px;padding:13px 14px;border:1px solid rgba(201,164,92,.35);border-radius:14px;background:rgba(201,164,92,.07)}
+.reserve-reminder-box .btn-outline.active{border-color:var(--gold-bright);color:var(--gold-bright)}
+.category-panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
+.category-panel-head h4{margin:0 0 3px}
+.category-order-row{display:flex!important;width:100%;justify-content:space-between;align-items:center;gap:8px}
+.category-order-row .order-controls{margin-left:auto}
+.cat-tag-list[data-order-list^="cat_"]{display:flex;flex-direction:column;align-items:stretch;gap:8px}
+.cat-tag-list[data-order-list^="cat_"] .cat-tag:not(.category-order-row){width:max-content;max-width:100%}
+@media(max-width:720px){.payment-source-toggle{grid-template-columns:repeat(2,minmax(0,1fr))}.reserve-reminder-box,.category-panel-head{align-items:stretch;flex-direction:column}.category-panel-head .order-sort-wrap{width:100%}.category-panel-head .order-sort-select{width:100%}}

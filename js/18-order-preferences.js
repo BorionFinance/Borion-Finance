@@ -17,7 +17,10 @@ const ORDER_TYPES = {
   modules: { label: 'Módulos do menu' },
   contas:  { label: 'Bancos e contas' },
   cartoes: { label: 'Cartões' },
-  reservas:{ label: 'Reservas e cofrinhos' }
+  reservas:{ label: 'Reservas e cofrinhos' },
+  cat_receita:{ label: 'Categorias de receita' },
+  cat_fixa:{ label: 'Categorias de despesa fixa' },
+  cat_variavel:{ label: 'Categorias de despesa variável' }
 };
 
 const OrderPreferences = {

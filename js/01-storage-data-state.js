@@ -31,9 +31,10 @@ const FONT_STACKS = {
 const FONT_LABELS = { default:'Padrão', elegante:'Elegante (serifada)', moderna:'Moderna', arredondada:'Arredondada', mono:'Monoespaçada' };
 
 /* Tipos de origem de receita: separa dinheiro próprio de reembolso/repasse de terceiros. */
-const TX_ORIGEM_LABELS = { propria:'Receita própria', reembolso:'Reembolso recebido', repasse:'Repasse de terceiros' };
-const TX_ORIGEM_OPTIONS = ['Receita própria','Reembolso recebido','Repasse de terceiros'];
+const TX_ORIGEM_LABELS = { propria:'Receita própria', rendimento:'Rendimento', reembolso:'Reembolso recebido', repasse:'Repasse de terceiros' };
+const TX_ORIGEM_OPTIONS = ['Receita própria','Rendimento','Reembolso recebido','Repasse de terceiros'];
 function txOrigemToKey(label){
+  if(label==='Rendimento') return 'rendimento';
   if(label==='Reembolso recebido') return 'reembolso';
   if(label==='Repasse de terceiros') return 'repasse';
   return 'propria';
@@ -481,6 +482,10 @@ function migrateData(d){
     // V5.36.0 — forma de pagamento das despesas (dinheiro/pix/débito). Compras no crédito
     // não viram transação aqui — elas passam a existir como parcela vinculada ao cartão.
     if(t.tipo==='variavel' && t.formaPagamento==null) t.formaPagamento='Dinheiro';
+    // V6.26 — toda despesa variável possui estado explícito. Dados antigos continuam pagos,
+    // preservando exatamente os saldos que já existiam antes da atualização.
+    if(t.tipo==='variavel' && !['Pago','Em aberto'].includes(t.statusPagamento)) t.statusPagamento='Pago';
+    if(t.tipo==='variavel' && t.localCompra==null) t.localCompra=t.local||'';
     // V6.0 — despesa variável agora pode ser paga direto de uma Reserva, sem passar por
     // Receita. origemPagamento indica de onde saiu o dinheiro ('conta' = fluxo normal via
     // banco/carteira/cartão, 'reserva' = pagamento direto de uma reserva/cofrinho).
@@ -914,7 +919,7 @@ function saldoBancoNome(bn){
 function txContaDelta(tx){
   if(!tx||!tx.accountId) return 0;
   if(tx.tipo==='receita') return (Number(tx.valor)||0)-(Number(tx.reservaValor)||0);
-  if(tx.tipo==='variavel'&&tx.origemPagamento!=='reserva'&&tx.formaPagamento!=='Crédito') return -(Number(tx.valor)||0);
+  if(tx.tipo==='variavel'&&tx.statusPagamento!=='Em aberto'&&tx.origemPagamento!=='reserva'&&tx.formaPagamento!=='Crédito') return -(Number(tx.valor)||0);
   return 0;
 }
 function applyTxSaldoEffect(tx){const d=txContaDelta(tx);if(d)return adjustLiquidez(tx.accountId,d);return true;}

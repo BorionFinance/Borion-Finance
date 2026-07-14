@@ -510,7 +510,7 @@ function renderReservasPanel(){
     const positive = Reservas.POSITIVE_TYPES.includes(m.tipo);
     const negative = Reservas.NEGATIVE_TYPES.includes(m.tipo);
     const isAdjust = m.tipo==='Ajuste manual';
-    const linked = m.despesaTransacaoId ? ' <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Despesa</span>' : (m.transferenciaId ? ' <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Transferência</span>' : '');
+    const linked = m.despesaTransacaoId ? ' <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Despesa</span>' : (m.reservaTransferId ? ' <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Entre reservas</span>' : (m.transferenciaId ? ' <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Transferência</span>' : ''));
     return `<tr><td>${reservaFmtDate(m.data)}</td><td>${esc(box?box.nome:'Reserva removida')}</td><td>${esc(m.tipo)}</td><td>${esc(m.banco||'')}</td><td class="${positive||isAdjust?'val-pos':negative?'val-neg':''}">${positive?'+ ':negative?'- ':''}${brl(m.valor)}</td><td>${esc(m.descricao||'')}${linked}</td><td style="text-align:right;white-space:nowrap;"><button class="ledit" onclick="Reservas.editMove('${m.id}')">✎</button><button class="ledit danger-mini" onclick="Reservas.deleteMove('${m.id}')">×</button></td></tr>`;
   }).join('');
   return `<div class="panel-box reservas-panel">
@@ -529,6 +529,7 @@ const Reservas = {
     const r = isEdit ? S.data.reservas.boxes.find(x=>x.id===id) : {nome:'', banco:'', valorAtual:0, valorMeta:0, prazo:'', categoria:'Reserva', status:'Ativa', cor:'#c9a45c', corValor:'#e8c98a', obs:'', metaId:null};
     const metaExistente = (isEdit && r.metaId) ? S.data.metas.find(mt=>mt.id===r.metaId) : null;
     let metaAtiva = !!metaExistente;
+    let gerarLembretePendente = false;
     let metaEmoji = (metaExistente && metaExistente.emoji) || '◇';
     const metaEmojiBtns = ()=>EMOJI_PALETTE.map(e=>`<button type="button" class="emoji-opt ${metaEmoji===e?'active':''}" data-e="${e}">${e}</button>`).join('');
     const metaExtraHTML = `
@@ -541,7 +542,8 @@ const Reservas = {
         <div class="field"><label>Ícone</label><div class="emoji-picker" id="rz_meta_emoji_picker">${metaEmojiBtns()}</div></div>
         <div class="field"><label>Prazo (opcional)</label><input type="month" id="rz_meta_prazo" value="${metaExistente&&metaExistente.prazo?esc(metaExistente.prazo.slice(0,7)):''}"/></div>
         <div class="field"><label>Cor da meta</label><input type="color" id="rz_meta_cor" value="${metaExistente&&metaExistente.cor?esc(metaExistente.cor):'#c9a45c'}"/></div>
-      </div>`;
+      </div>
+      <div class="reserve-reminder-box"><div><strong>Lembrete da data alvo</strong><p class="modal-sub" style="margin:3px 0 0;">Cria uma anotação na Agenda usando o nome e a data alvo desta reserva.</p></div><button type="button" class="btn-outline btn-sm" id="rz_generate_reminder">Gerar lembrete</button></div>`;
     openModal({title:isEdit?'Editar reserva':'Nova reserva', sub:'Reservas são dinheiro separado por objetivo: não são despesa nem receita, apenas organização interna do patrimônio.', fields:[
       {key:'nome',label:'Nome da reserva',type:'text',placeholder:'Ex: Reserva de emergência'},
       accountSelectField('reserva', r.accountId||r.banco,{key:'accountId'}),
@@ -558,6 +560,7 @@ const Reservas = {
       S.data.reservas.boxes = S.data.reservas.boxes.filter(x=>x.id!==id);
       S.data.reservas.moves = S.data.reservas.moves.filter(m=>m.boxId!==id);
       if(r.metaId) S.data.metas = S.data.metas.filter(mt=>mt.id!==r.metaId);
+      if(r.agendaReminderId){ S.data.agenda=(S.data.agenda||[]).filter(a=>a.id!==r.agendaReminderId); S.data.notificacoes=(S.data.notificacoes||[]).filter(n=>n.lembreteId!==r.agendaReminderId); }
       saveCurrentData(); closeModal(); renderView();
     }:null,
     onSave(v){
@@ -583,12 +586,29 @@ const Reservas = {
         S.data.metas = S.data.metas.filter(mt=>mt.id!==boxRef.metaId);
         boxRef.metaId = null;
       }
-      saveCurrentData(); closeModal(); renderView(); toast(isEdit?'Reserva atualizada.':'Reserva criada.');
+      if(gerarLembretePendente){
+        const alvo=boxRef.prazo||'';
+        if(alvo){
+          let lembrete=boxRef.agendaReminderId?(S.data.agenda||[]).find(a=>a.id===boxRef.agendaReminderId):null;
+          if(!lembrete){ lembrete={id:uid(),serieId:'',serieIndex:0,pago:false,origem:'reserva',reservaId:boxRef.id}; (S.data.agenda||(S.data.agenda=[])).push(lembrete); boxRef.agendaReminderId=lembrete.id; }
+          Object.assign(lembrete,{titulo:'Reserva: '+boxRef.nome,data:alvo,pago:false,origem:'reserva',reservaId:boxRef.id});
+        }
+      }
+      saveCurrentData(); closeModal(); renderView(); if(gerarLembretePendente&&typeof Notifs!=='undefined')Notifs.refresh(); toast(gerarLembretePendente?'Reserva salva e lembrete criado na Agenda.':(isEdit?'Reserva atualizada.':'Reserva criada.'));
     }});
     attachMoneyMask(document.getElementById('rz_meta_valor'), metaExistente?metaExistente.valorMeta:0);
     const metaFieldsWrap = document.getElementById('rz_meta_fields');
     const metaToggle = document.getElementById('rz_meta_ativa');
     if(metaToggle) metaToggle.onchange = ()=>{ if(metaFieldsWrap) metaFieldsWrap.classList.toggle('hidden', !metaToggle.checked); };
+    const reminderBtn=document.getElementById('rz_generate_reminder');
+    if(reminderBtn) reminderBtn.onclick=()=>{
+      const nomeEl=document.getElementById('mf_nome'), prazoEl=document.getElementById('mf_prazo');
+      const nome=(nomeEl&&nomeEl.value||'').trim(), prazo=prazoEl&&prazoEl.value;
+      if(!prazo){ toast('Selecione a data alvo da reserva antes de gerar o lembrete.'); return; }
+      if(!nome){ toast('Digite o nome da reserva antes de gerar o lembrete.'); return; }
+      gerarLembretePendente=true; reminderBtn.textContent='Lembrete preparado ✓'; reminderBtn.classList.add('active');
+      toast('Lembrete preparado. Salve a reserva para enviá-lo à Agenda.');
+    };
     const metaPicker = document.getElementById('rz_meta_emoji_picker');
     if(metaPicker){
       metaPicker.querySelectorAll('.emoji-opt').forEach(btn=>{
@@ -600,44 +620,48 @@ const Reservas = {
       });
     }
   },
-  move(boxId){
-    const boxes = (S.data.reservas.boxes||[]).filter(r=>bankMatches(r.banco));
-    if(!boxes.length){ toast('Crie uma reserva primeiro.'); return; }
-    const labels = boxes.map(r=>`${r.nome}${r.banco?' · '+r.banco:''}`);
-    const selectedBox = (boxId && boxes.find(r=>r.id===boxId)) || boxes[0];
-    const selectedLabel = `${selectedBox.nome}${selectedBox.banco?' · '+selectedBox.banco:''}`;
-    openModal({title:'Movimentar reserva', sub:'Reserve, resgate ou registre rendimento manual de cada reserva. Reserva não é despesa; resgate não é receita.', fields:[
-      {key:'boxLabel',label:'Reserva',type:'select',options:labels,default:selectedLabel},
-      {key:'tipo',label:'Tipo de movimentação',type:'select',options:['Reservar','Resgatar','Rendimento','Ajuste manual'],default:'Reservar'},
+  move(boxId, initialType){
+    const boxes=(S.data.reservas.boxes||[]).filter(r=>bankMatches(r.banco));
+    if(!boxes.length){toast('Crie uma reserva primeiro.');return;}
+    const options=boxes.map(r=>({value:r.id,label:`${r.nome}${r.banco?' · '+r.banco:''}`}));
+    const selectedBox=(boxId&&boxes.find(r=>r.id===boxId))||boxes[0];
+    const tipoInicial=initialType||'Reservar';
+    openModal({title:'Movimentar reserva',sub:'Reserve, resgate, registre rendimento ou envie dinheiro de uma reserva para outra.',fields:[
+      {key:'boxId',label:'Reserva de origem',type:'select',options,default:selectedBox.id},
+      {key:'tipo',label:'Tipo de movimentação',type:'select',options:['Reservar','Resgatar','Rendimento','Ajuste manual','Enviar para outra reserva'],default:tipoInicial},
+      {key:'destinoBoxId',label:'Reserva que receberá o dinheiro',type:'select',options,default:(boxes.find(r=>r.id!==selectedBox.id)||selectedBox).id,visibleWhen:{key:'tipo',value:'Enviar para outra reserva'}},
       {key:'data',label:'Data',type:'date',default:todayISO()},
       {key:'valor',label:'Valor',type:'money'},
-      {key:'descricao',label:'Descrição',type:'text',placeholder:'Ex: Separei parte da receita do mês ou rendimento Mercado Pago'},
-    ], onSave(v){
-      const idx = labels.indexOf(v.boxLabel);
-      const bx = boxes[idx>=0?idx:0];
-      if(!bx){ toast('Reserva não encontrada.'); return; }
-      const valor = Number(v.valor)||0;
-      if(valor<=0){ toast('Digite um valor maior que zero.'); return; }
-      if(v.tipo==='Resgatar' && !reservaTemSaldo(bx, valor)){ showReservaInsuficienteModal(bx, valor); return; }
-      const saldoAntes = Number(bx.valorAtual||0);
-      if(v.tipo==='Reservar' || v.tipo==='Rendimento') bx.valorAtual = saldoAntes + valor;
-      else if(v.tipo==='Resgatar') bx.valorAtual = Math.max(0, saldoAntes - valor);
-      else if(v.tipo==='Ajuste manual') bx.valorAtual = valor;
-      syncMetaFromReserva(bx);
-      S.data.reservas.moves.push({id:uid(), boxId:bx.id, tipo:v.tipo, data:v.data||todayISO(), valor, banco:bx.banco||'', descricao:v.descricao||'', saldoAntes, saldoDepois:Number(bx.valorAtual||0), createdAt:Date.now()});
-      saveCurrentData(); closeModal(); renderView(); toast('Movimentação registrada.');
+      {key:'descricao',label:'Descrição',type:'text',placeholder:'Ex: Separei parte da receita ou transferi entre objetivos'}
+    ],onSave(v){
+      const bx=boxes.find(r=>r.id===v.boxId);if(!bx){toast('Reserva de origem não encontrada.');return;}
+      const valor=Number(v.valor)||0;if(valor<=0){toast('Digite um valor maior que zero.');return;}
+      if(v.tipo==='Enviar para outra reserva'){
+        const destino=boxes.find(r=>r.id===v.destinoBoxId);if(!destino){toast('Escolha a reserva que receberá o dinheiro.');return;}
+        if(destino.id===bx.id){toast('A reserva de origem e a de destino precisam ser diferentes.');return;}
+        if(!reservaTemSaldo(bx,valor)){showReservaInsuficienteModal(bx,valor);return;}
+        const transferId=uid(),data=v.data||todayISO(),descricao=v.descricao||`Transferência de ${bx.nome} para ${destino.nome}`;
+        const out={id:uid(),reservaTransferId:transferId,boxId:bx.id,tipo:'Envio para outra reserva',data,valor,banco:bx.banco||'',descricao,origemBoxId:bx.id,destinoBoxId:destino.id,createdAt:Date.now()};
+        const inn={id:uid(),reservaTransferId:transferId,boxId:destino.id,tipo:'Recebimento de outra reserva',data,valor,banco:destino.banco||'',descricao,origemBoxId:bx.id,destinoBoxId:destino.id,createdAt:Date.now()};
+        out.relatedMoveId=inn.id;inn.relatedMoveId=out.id;
+        Reservas.applyMoveEffect(out);Reservas.applyMoveEffect(inn);S.data.reservas.moves.push(out,inn);
+        saveCurrentData();closeModal();renderView();toast('Transferência entre reservas registrada com entrada e saída.');return;
+      }
+      if(v.tipo==='Resgatar'&&!reservaTemSaldo(bx,valor)){showReservaInsuficienteModal(bx,valor);return;}
+      const mv={id:uid(),boxId:bx.id,tipo:v.tipo,data:v.data||todayISO(),valor,banco:bx.banco||'',descricao:v.descricao||'',createdAt:Date.now()};
+      Reservas.applyMoveEffect(mv);S.data.reservas.moves.push(mv);saveCurrentData();closeModal();renderView();toast('Movimentação registrada.');
     }});
   },
   findMove(id){ return (S.data.reservas&&S.data.reservas.moves||[]).find(m=>m.id===id); },
   /* V6.0 — tipos que aumentam o saldo da reserva vs. tipos que diminuem. 'Pagamento direto'
      é uma despesa paga direto da reserva (nunca vira Receita); 'Transferência enviada'/
      'Transferência recebida' vêm da tela genérica de Transferências (Cartões e Contas). */
-  POSITIVE_TYPES: ['Reservar','Rendimento','Receita direta','Transferência recebida'],
+  POSITIVE_TYPES: ['Reservar','Rendimento','Receita direta','Transferência recebida','Recebimento de outra reserva'],
   /* V6.1 — 'Pagamento de despesa fixa' segue exatamente o mesmo mecanismo já usado por
      'Pagamento direto' (despesa variável paga direto da reserva): aparece no extrato,
      some do saldo, e é revertido via Reservas.reverseMoveEffect quando a despesa fixa
      volta a pendente ou é excluída. */
-  NEGATIVE_TYPES: ['Resgatar','Pagamento direto','Pagamento de despesa fixa','Transferência enviada'],
+  NEGATIVE_TYPES: ['Resgatar','Pagamento direto','Pagamento de despesa fixa','Transferência enviada','Envio para outra reserva'],
   reverseMoveEffect(mv){
     if(!mv) return;
     const bx = (S.data.reservas.boxes||[]).find(r=>r.id===mv.boxId);
@@ -662,9 +686,48 @@ const Reservas = {
     mv.banco = bx.banco||mv.banco||'';
     syncMetaFromReserva(bx);
   },
+  transferPair(transferId){ return (S.data.reservas.moves||[]).filter(m=>m.reservaTransferId===transferId); },
+  editTransfer(transferId){
+    const pair=Reservas.transferPair(transferId);if(pair.length<2){toast('Transferência incompleta ou não encontrada.');return;}
+    const out=pair.find(m=>m.tipo==='Envio para outra reserva'),inn=pair.find(m=>m.tipo==='Recebimento de outra reserva');if(!out||!inn)return;
+    const boxes=S.data.reservas.boxes||[],options=boxes.map(r=>({value:r.id,label:`${r.nome}${r.banco?' · '+r.banco:''}`}));
+    openModal({title:'Editar transferência entre reservas',sub:'A saída e a entrada serão atualizadas juntas para manter os dois saldos sincronizados.',fields:[
+      {key:'origemBoxId',label:'Reserva de origem',type:'select',options,default:out.boxId},
+      {key:'destinoBoxId',label:'Reserva de destino',type:'select',options,default:inn.boxId},
+      {key:'data',label:'Data',type:'date',default:out.data||todayISO()},
+      {key:'valor',label:'Valor',type:'money',default:out.valor},
+      {key:'descricao',label:'Descrição',type:'text',default:out.descricao||''}
+    ],saveLabel:'Salvar transferência',onSave(v){
+      const origem=boxes.find(r=>r.id===v.origemBoxId),destino=boxes.find(r=>r.id===v.destinoBoxId),valor=Number(v.valor)||0;
+      if(!origem||!destino){toast('Escolha reservas válidas.');return;}if(origem.id===destino.id){toast('Origem e destino precisam ser diferentes.');return;}if(valor<=0){toast('Digite um valor maior que zero.');return;}
+      const oldDestino=boxes.find(r=>r.id===inn.boxId);
+      if(oldDestino && !reservaTemSaldo(oldDestino,Number(inn.valor)||0)){
+        showReservaInsuficienteModal(oldDestino,Number(inn.valor)||0);
+        toast('Não é possível editar: parte do valor recebido já foi utilizada na reserva de destino.');
+        return;
+      }
+      Reservas.reverseMoveEffect(out);Reservas.reverseMoveEffect(inn);
+      if(!reservaTemSaldo(origem,valor)){
+        Reservas.applyMoveEffect(out);Reservas.applyMoveEffect(inn);
+        showReservaInsuficienteModal(origem,valor);return;
+      }
+      Object.assign(out,{boxId:origem.id,tipo:'Envio para outra reserva',data:v.data||todayISO(),valor,banco:origem.banco||'',descricao:v.descricao||'',origemBoxId:origem.id,destinoBoxId:destino.id,editedAt:Date.now()});
+      Object.assign(inn,{boxId:destino.id,tipo:'Recebimento de outra reserva',data:v.data||todayISO(),valor,banco:destino.banco||'',descricao:v.descricao||'',origemBoxId:origem.id,destinoBoxId:destino.id,editedAt:Date.now()});
+      Reservas.applyMoveEffect(out);Reservas.applyMoveEffect(inn);saveCurrentData();closeModal();renderView();toast('Transferência atualizada.');
+    }});
+  },
+  deleteTransfer(transferId){
+    const pair=Reservas.transferPair(transferId);if(!pair.length)return;
+    openConfirmModal({title:'Excluir transferência entre reservas',text:'A saída e a entrada serão removidas juntas, devolvendo os dois saldos ao estado anterior.',confirmLabel:'Excluir transferência',cancelLabel:'Cancelar',variant:'danger',onConfirm(){
+      const entrada=pair.find(m=>m.tipo==='Recebimento de outra reserva'),destino=entrada&&(S.data.reservas.boxes||[]).find(r=>r.id===entrada.boxId);
+      if(destino&&!reservaTemSaldo(destino,Number(entrada.valor)||0)){showReservaInsuficienteModal(destino,Number(entrada.valor)||0);toast('Não é possível excluir: parte do valor transferido já foi utilizada na reserva de destino.');return;}
+      const snapshot=JSON.parse(JSON.stringify(S.data));pair.forEach(m=>Reservas.reverseMoveEffect(m));S.data.reservas.moves=(S.data.reservas.moves||[]).filter(m=>m.reservaTransferId!==transferId);saveCurrentData();renderView();showUndoToast('Transferência excluída.',()=>{S.data=snapshot;saveCurrentData();renderView();});
+    }});
+  },
   editMove(id){
     const mv = Reservas.findMove(id);
     if(!mv){ toast('Movimentação não encontrada.'); return; }
+    if(mv.reservaTransferId){ Reservas.editTransfer(mv.reservaTransferId); return; }
     /* V6.0 — movimentações geradas automaticamente por uma despesa (Pagamento direto) ou por
        uma transferência só podem ser editadas pela origem, para nunca dessincronizar os dois
        lados do vínculo (mesmo padrão já usado por compras de cartão/boleto em Despesas). */
@@ -709,6 +772,7 @@ const Reservas = {
   deleteMove(id){
     const mv = Reservas.findMove(id);
     if(!mv) return;
+    if(mv.reservaTransferId){ Reservas.deleteTransfer(mv.reservaTransferId); return; }
     if(mv.despesaTransacaoId){ toast('Esta movimentação vem de uma despesa paga direto da reserva — edite ou exclua pela despesa em Lançamentos.'); S.view='budget'; S.budgetTab='variavel'; renderApp(); return; }
     if(mv.despesaFixaId){ toast('Esta movimentação vem de uma despesa fixa paga com a reserva — edite ou exclua pela despesa fixa em Lançamentos.'); S.view='budget'; S.budgetTab='fixa'; renderApp(); return; }
     if(mv.transferenciaId){ toast('Esta movimentação vem de uma transferência — edite ou exclua em Cartões e Contas → Transferências.'); S.view='cards'; renderApp(); return; }

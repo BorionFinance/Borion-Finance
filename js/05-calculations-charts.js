@@ -51,8 +51,8 @@ function fixaOcorrenciaStatus(f, mesKey){
 }
 function fixaMes(y=S.month.y, m=S.month.m){ return sumBy(fixasAtivasNoMes(y,m),'valor'); }
 function variavelMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='variavel'&&bankMatches(t.banco,t.accountId)), y, m),'valor'); }
-/* Receita do mês = só dinheiro próprio (origem 'propria'). Reembolso/repasse de terceiros não contam como renda. */
-function receitaMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&(t.origem==null||t.origem==='propria')&&bankMatches(t.banco,t.accountId)), y, m),'valor'); }
+/* Receita do mês = dinheiro próprio + rendimentos. Reembolso/repasse de terceiros não contam como renda. */
+function receitaMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&(t.origem==null||t.origem==='propria'||t.origem==='rendimento')&&bankMatches(t.banco,t.accountId)), y, m),'valor'); }
 /* Entradas que não são renda própria: reembolsos recebidos + repasses de terceiros (ex: alguém te manda dinheiro para pagar uma conta). */
 function receitaExtraMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&(t.origem==='reembolso'||t.origem==='repasse')&&bankMatches(t.banco,t.accountId)), y, m),'valor'); }
 function reembolsosMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&t.origem==='reembolso'&&bankMatches(t.banco,t.accountId)), y, m),'valor'); }
@@ -172,7 +172,7 @@ function linkParcelaToDespesa(cartao, parcela){
   } else {
     parcela.despesaTransacaoIds = createParcelaDespesaVariavel({
       nome, categoria, valorParcela, totalParcelas, startMonth, banco:cartao.banco||'', formaPagamento:'Crédito',
-      extra:{viaCartaoId:cartao.id, viaParcelaId:parcela.id}
+      extra:{viaCartaoId:cartao.id, viaParcelaId:parcela.id, localCompra:parcela.local||'', statusPagamento:parcela.statusPagamento==='Em aberto'?'Em aberto':'Pago', diaEntrada:parcela.diaEntrada||1}
     });
     parcela.despesaTransacaoId = parcela.despesaTransacaoIds[0] || null; // compatibilidade com dados antigos
     parcela.despesaFixaId = null;

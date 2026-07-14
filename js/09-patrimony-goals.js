@@ -64,31 +64,26 @@ function convertStandaloneMetasToReservas(){
 }
 
 function renderPatrimony(){
-  const liq = liquidezTotal(), bens = bensTotal(), invest = investAtualTotal(), reservas = reservasTotal(), divDebt = computeCardsDebt(), div = divDebt.total;
-  const total = liq+reservas+bens+invest-div;
-  const composicaoTotal = liq+reservas+bens+invest;
-  const segs = patrimonioComposicaoSegments();
-
-  const saldoContasRows = saldoContasDetalhe();
-  const liqRows = saldoContasRows.map(l=>`
-    <div class="list-row"><span class="lname">${esc(l.nome)}${l.isCarteira?' <span style="color:var(--muted);font-weight:400;">(dinheiro físico)</span>':''}</span><span class="lval">${brl(l.valor)}</span>${l.tipo==='conta' ? `<button class="ledit" onclick="Cards.editConta('${l.contaId}')" title="Editar conta">✎</button>` : `<button class="ledit" onclick="Patr.editLiquidez('${l.id}')" title="Editar ativo">✎</button>`}</div>`).join('');
-  const liqEmpty = !saldoContasRows.length
-    ? `<div class="empty-note">Nenhuma conta bancária cadastrada ainda.</div><button class="btn-outline btn-sm" style="margin-top:8px;" onclick="Patr.goAddConta()">+ Adicionar conta</button>`
-    : '';
-  const bensRows = S.data.bens.filter(b=>bankMatches(b.banco,b.accountId)).map(b=>`
-    <div class="list-row"><span class="lname">${esc(b.nome)}</span><span class="lval">${brl(b.valor)}</span><button class="ledit" onclick="Patr.editBem('${b.id}')">✎</button></div>`).join('');
-  const dividasDetail = divDebt.detail;
-  const divRows = dividasDetail.map(d=>{
-    const tipo = d.tipoDivida==='boleto' ? 'Boleto' : 'Cartão';
-    const origem = d.tipoDivida==='boleto' ? (d.banco || d.local || 'Boleto') : d.cartao;
-    return `<div class="list-row">
-      <span class="lname">${esc(d.descricao)} <span class="lmeta">*${esc(tipo)}* ${esc(origem||'')} · ${d.atualCalc} de ${d.parcelaTotal}</span></span>
-      <span class="lval">${brl(d.restante)}</span>
-    </div>`;
-  }).join('');
-  const dividasCollapsed = S.patrView.dividasCollapsed;
-  const reservasCollapsed = S.patrView.reservasCollapsed !== false;
-
+  const liq=liquidezTotal(),bens=bensTotal(),invest=investAtualTotal(),reservas=reservasTotal(),divDebt=computeCardsDebt(),div=divDebt.total;
+  const total=liq+reservas+bens+invest-div,composicaoTotal=liq+reservas+bens+invest,segs=patrimonioComposicaoSegments();
+  const saldoContasRows=saldoContasDetalhe();
+  const liqRows=saldoContasRows.map(l=>`<div class="list-row"><span class="lname">${esc(l.nome)}${l.isCarteira?' <span style="color:var(--muted);font-weight:400;">(dinheiro físico)</span>':''}</span><span class="lval">${brl(l.valor)}</span>${l.tipo==='conta'?`<button class="ledit" onclick="Cards.editConta('${l.contaId}')" title="Editar conta">✎</button>`:`<button class="ledit" onclick="Patr.editLiquidez('${l.id}')" title="Editar ativo">✎</button>`}</div>`).join('');
+  const liqEmpty=!saldoContasRows.length?`<div class="empty-note">Nenhuma conta bancária cadastrada ainda.</div><button class="btn-outline btn-sm" style="margin-top:8px;" onclick="Patr.goAddConta()">+ Adicionar conta</button>`:'';
+  const bensRows=S.data.bens.filter(b=>bankMatches(b.banco,b.accountId)).map(b=>`<div class="list-row"><span class="lname">${esc(b.nome)}</span><span class="lval">${brl(b.valor)}</span><button class="ledit" onclick="Patr.editBem('${b.id}')">✎</button></div>`).join('');
+  const divRows=divDebt.detail.map(d=>{const tipo=d.tipoDivida==='boleto'?'Boleto':'Cartão',origem=d.tipoDivida==='boleto'?(d.banco||d.local||'Boleto'):d.cartao;return `<div class="list-row"><span class="lname">${esc(d.descricao)} <span class="lmeta">*${esc(tipo)}* ${esc(origem||'')} · ${d.atualCalc} de ${d.parcelaTotal}</span></span><span class="lval">${brl(d.restante)}</span></div>`;}).join('');
+  const dividasCollapsed=S.patrView.dividasCollapsed,reservasCollapsed=S.patrView.reservasCollapsed!==false;
+  const modules=[
+    {id:'composicao',label:'Composição do patrimônio',html:`<div class="panel-box"><div class="panel-title">Composição do patrimônio</div>${renderDonut(segs,composicaoTotal?'100%':'0%','do total')}<div class="list-row" style="margin-top:6px;font-weight:800;"><span>Total bruto</span><span>${brl(composicaoTotal)}</span></div><div class="list-row" style="font-weight:800;"><span>Patrimônio total líquido</span><span>${brl(total)}</span></div></div>`},
+    {id:'contas',label:'Saldo em contas',html:`<div class="panel-box"><div class="toolbar"><div class="toolbar-left" style="color:#22c55e">SALDO EM CONTAS</div><button class="btn-outline" onclick="Patr.goAddConta()">+ Adicionar conta</button></div>${liqRows}${liqEmpty}</div>`},
+    {id:'metas',label:'Metas de patrimônio',html:`<div class="panel-box"><div class="toolbar"><div class="toolbar-left">◇ Metas de patrimônio</div>${reservasEnabled()?`<button class="btn-outline btn-sm" onclick="Nav.go('reservas')">Criar em uma reserva</button>`:`<button class="btn-outline btn-sm" onclick="Metas.add()">+ Adicionar meta</button>`}</div><p style="font-size:11px;color:var(--muted-2);margin:-6px 0 10px;">${reservasEnabled()?'Com Reserva ativa, as metas ficam vinculadas aos Cofrinhos e são editadas dentro de cada reserva.':'Com Reserva desativada, estas metas são independentes: você pode adicionar, editar e excluir. Ao ativar Reserva novamente, cada meta será convertida em um Cofrinho.'}</p>${renderMetasList()}</div>`},
+    {id:'bens',label:'Bens',html:`<div class="panel-box"><div class="toolbar"><div class="toolbar-left" style="color:#3b6bf0">BENS</div><button class="btn-outline" onclick="Patr.addBem()">+ Adicionar</button></div>${bensRows||'<div class="empty-note">Nenhum item ainda.</div>'}</div>`},
+    ...(reservasEnabled()?[{id:'reservas',label:'Reservas',html:renderReservasResumoPanel(reservas,reservasCollapsed)},{id:'rendimentos_reservas',label:'Rendimento das reservas',html:renderReservaRendimentosPanel(S.patrView.reservaRendimentosCollapsed!==false)}]:[]),
+    {id:'dividas',label:'Dívidas',html:`<div class="panel-box"><div class="toolbar"><div class="toolbar-left" style="display:flex;align-items:center;gap:8px;color:#ef4444;"><button class="collapse-toggle-btn" onclick="Patr.toggleDividas()" title="${dividasCollapsed?'Maximizar':'Minimizar'}" style="color:#ef4444;">${dividasCollapsed?'▸':'▾'}</button><span>DÍVIDAS (cartões e boletos, ${monthLabel(S.month.y,S.month.m)})</span></div>${dividasCollapsed?`<span style="font-weight:800;color:#ef4444;">TOTAL: ${brl(div)}</span>`:''}</div>${dividasCollapsed?'':(divRows||'<div class="empty-note">Nenhuma dívida de cartão ou boleto ativa neste mês.</div>')}${dividasCollapsed?'':'<p style="font-size:11px;color:var(--muted-2);margin-top:8px;">Gerencie compras, parcelas e boletos na aba “Cartões e Contas”.</p>'}</div>`}
+  ];
+  const ordered=window.OrderPreferences?OrderPreferences.applyOrder('patrimony_modules',modules,{idKey:'id',labelKey:'label'}):modules;
+  const organizing=!!(window.OrderPreferences&&OrderPreferences.active&&OrderPreferences.activeType==='patrimony_modules');
+  const naturalIds=ordered.map(m=>m.id),columns=window.OrderPreferences?OrderPreferences.workingPatrimonyColumns():2;
+  const moduleHTML=ordered.map((m,i)=>`<div class="patrimony-module-slot ${organizing?'organizing':''}" data-order-id="${esc(m.id)}">${organizing?`<div class="patrimony-slot-toolbar"><span>MÓDULO ${String(i+1).padStart(2,'0')}</span>${OrderPreferences.reorderRowControlsHTML('patrimony_modules',m.id,m.label,naturalIds)}</div>`:''}${m.html}</div>`).join('');
   return `
     <div class="cards-row">
       <div class="card hero-green"><div class="clabel">Patrimônio total</div><div class="cval">${brl(total)}</div></div>
@@ -98,46 +93,9 @@ function renderPatrimony(){
       ${investmentsEnabled()?`<div class="card"><div class="clabel">${tagBadgeHTML('investimentos','INVESTIMENTOS')}</div><div class="cval">${brl(invest)}</div></div>`:''}
       <div class="card"><div class="clabel">${tagBadgeHTML('dividas','DÍVIDAS')}</div><div class="cval" style="color:${iconColor('dividas')}">${brl(div)}</div></div>
     </div>
-    <div class="grid2b">
-      <div style="display:flex;flex-direction:column;gap:18px;">
-        <div class="panel-box">
-          <div class="panel-title">Composição do patrimônio</div>
-          ${renderDonut(segs, composicaoTotal? '100%':'0%', 'do total')}
-          <div class="list-row" style="margin-top:6px;font-weight:800;"><span>Total bruto</span><span>${brl(composicaoTotal)}</span></div>
-          <div class="list-row" style="font-weight:800;"><span>Patrimônio total líquido</span><span>${brl(total)}</span></div>
-        </div>
-        <div class="panel-box">
-          <div class="toolbar"><div class="toolbar-left" style="color:#3b6bf0">BENS</div><button class="btn-outline" onclick="Patr.addBem()">+ Adicionar</button></div>
-          ${bensRows || '<div class="empty-note">Nenhum item ainda.</div>'}
-        </div>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:18px;">
-        <div class="panel-box">
-          <div class="toolbar"><div class="toolbar-left" style="color:#22c55e">SALDO EM CONTAS</div><button class="btn-outline" onclick="Patr.goAddConta()">+ Adicionar conta</button></div>
-          ${liqRows}${liqEmpty}
-        </div>
-        ${reservasEnabled()?renderReservasResumoPanel(reservas, reservasCollapsed):''}
-        ${reservasEnabled()?renderReservaRendimentosPanel(S.patrView.reservaRendimentosCollapsed!==false):''}
-        <div class="panel-box">
-          <div class="toolbar">
-            <div class="toolbar-left" style="display:flex;align-items:center;gap:8px;color:#ef4444;">
-              <button class="collapse-toggle-btn" onclick="Patr.toggleDividas()" title="${dividasCollapsed?'Maximizar':'Minimizar'}" style="color:#ef4444;">${dividasCollapsed?'▸':'▾'}</button>
-              <span>DÍVIDAS (cartões e boletos, ${monthLabel(S.month.y,S.month.m)})</span>
-            </div>
-            ${dividasCollapsed?`<span style="font-weight:800;color:#ef4444;">TOTAL: ${brl(div)}</span>`:''}
-          </div>
-          ${dividasCollapsed ? '' : (divRows || '<div class="empty-note">Nenhuma dívida de cartão ou boleto ativa neste mês.</div>')}
-          ${dividasCollapsed ? '' : '<p style="font-size:11px;color:var(--muted-2);margin-top:8px;">Gerencie compras, parcelas e boletos na aba "Cartões e Contas".</p>'}
-        </div>
-      </div>
-      <div class="panel-box">
-        <div class="toolbar"><div class="toolbar-left">◇ Metas de patrimônio</div>${reservasEnabled()?`<button class="btn-outline btn-sm" onclick="Nav.go('reservas')">Criar em uma reserva</button>`:`<button class="btn-outline btn-sm" onclick="Metas.add()">+ Adicionar meta</button>`}</div>
-        <p style="font-size:11px;color:var(--muted-2);margin:-6px 0 10px;">${reservasEnabled()
-          ? 'Com Reserva ativa, as metas ficam vinculadas aos Cofrinhos e são editadas dentro de cada reserva.'
-          : 'Com Reserva desativada, estas metas são independentes: você pode adicionar, editar e excluir. Ao ativar Reserva novamente, cada meta será convertida em um Cofrinho sem apagar os Cofrinhos antigos.'}</p>
-        ${renderMetasList()}
-      </div>
-    </div>
+    <div class="toolbar patrimony-organize-toolbar"><div class="toolbar-left">Organização do patrimônio</div>${window.OrderPreferences?OrderPreferences.sortSelectHTML('patrimony_modules'):''}</div>
+    ${organizing&&window.OrderPreferences?OrderPreferences.patrimonyLayoutControlsHTML():''}
+    <div class="patrimony-modules-grid ${organizing?'patrimony-grid-organizer':''}" data-order-list="patrimony_modules" style="--patrimony-columns:${columns};">${moduleHTML}</div>
   `;
 }
 
@@ -510,7 +468,7 @@ function renderReservasPanel(){
     const positive = Reservas.POSITIVE_TYPES.includes(m.tipo);
     const negative = Reservas.NEGATIVE_TYPES.includes(m.tipo);
     const isAdjust = m.tipo==='Ajuste manual';
-    const linked = m.despesaTransacaoId ? ' <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Despesa</span>' : (m.reservaTransferId ? ' <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Entre reservas</span>' : (m.transferenciaId ? ' <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Transferência</span>' : ''));
+    const linked = m.despesaTransacaoId ? ' <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Despesa</span>' : (m.reservaTransferId ? ' <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Transferência entre reservas</span>' : (m.transferenciaId ? ' <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Transferência</span>' : ''));
     return `<tr><td>${reservaFmtDate(m.data)}</td><td>${esc(box?box.nome:'Reserva removida')}</td><td>${esc(m.tipo)}</td><td>${esc(m.banco||'')}</td><td class="${positive||isAdjust?'val-pos':negative?'val-neg':''}">${positive?'+ ':negative?'- ':''}${brl(m.valor)}</td><td>${esc(m.descricao||'')}${linked}</td><td style="text-align:right;white-space:nowrap;"><button class="ledit" onclick="Reservas.editMove('${m.id}')">✎</button><button class="ledit danger-mini" onclick="Reservas.deleteMove('${m.id}')">×</button></td></tr>`;
   }).join('');
   return `<div class="panel-box reservas-panel">
@@ -621,41 +579,17 @@ const Reservas = {
     }
   },
   move(boxId, initialType){
-    const boxes=(S.data.reservas.boxes||[]).filter(r=>bankMatches(r.banco));
-    if(!boxes.length){toast('Crie uma reserva primeiro.');return;}
-    const options=boxes.map(r=>({value:r.id,label:`${r.nome}${r.banco?' · '+r.banco:''}`}));
-    const selectedBox=(boxId&&boxes.find(r=>r.id===boxId))||boxes[0];
-    const tipoInicial=initialType||'Reservar';
-    openModal({title:'Movimentar reserva',sub:'Reserve, resgate, registre rendimento ou envie dinheiro de uma reserva para outra.',fields:[
-      {key:'boxId',label:'Reserva de origem',type:'select',options,default:selectedBox.id},
-      {key:'tipo',label:'Tipo de movimentação',type:'select',options:['Reservar','Resgatar','Rendimento','Ajuste manual','Enviar para outra reserva'],default:tipoInicial},
-      {key:'destinoBoxId',label:'Reserva que receberá o dinheiro',type:'select',options,default:(boxes.find(r=>r.id!==selectedBox.id)||selectedBox).id,visibleWhen:{key:'tipo',value:'Enviar para outra reserva'}},
-      {key:'data',label:'Data',type:'date',default:todayISO()},
-      {key:'valor',label:'Valor',type:'money'},
-      {key:'descricao',label:'Descrição',type:'text',placeholder:'Ex: Separei parte da receita ou transferi entre objetivos'}
-    ],onSave(v){
-      const bx=boxes.find(r=>r.id===v.boxId);if(!bx){toast('Reserva de origem não encontrada.');return;}
-      const valor=Number(v.valor)||0;if(valor<=0){toast('Digite um valor maior que zero.');return;}
-      if(v.tipo==='Enviar para outra reserva'){
-        const destino=boxes.find(r=>r.id===v.destinoBoxId);if(!destino){toast('Escolha a reserva que receberá o dinheiro.');return;}
-        if(destino.id===bx.id){toast('A reserva de origem e a de destino precisam ser diferentes.');return;}
-        if(!reservaTemSaldo(bx,valor)){showReservaInsuficienteModal(bx,valor);return;}
-        const transferId=uid(),data=v.data||todayISO(),descricao=v.descricao||`Transferência de ${bx.nome} para ${destino.nome}`;
-        const out={id:uid(),reservaTransferId:transferId,boxId:bx.id,tipo:'Envio para outra reserva',data,valor,banco:bx.banco||'',descricao,origemBoxId:bx.id,destinoBoxId:destino.id,createdAt:Date.now()};
-        const inn={id:uid(),reservaTransferId:transferId,boxId:destino.id,tipo:'Recebimento de outra reserva',data,valor,banco:destino.banco||'',descricao,origemBoxId:bx.id,destinoBoxId:destino.id,createdAt:Date.now()};
-        out.relatedMoveId=inn.id;inn.relatedMoveId=out.id;
-        Reservas.applyMoveEffect(out);Reservas.applyMoveEffect(inn);S.data.reservas.moves.push(out,inn);
-        saveCurrentData();closeModal();renderView();toast('Transferência entre reservas registrada com entrada e saída.');return;
-      }
-      if(v.tipo==='Resgatar'&&!reservaTemSaldo(bx,valor)){showReservaInsuficienteModal(bx,valor);return;}
-      const mv={id:uid(),boxId:bx.id,tipo:v.tipo,data:v.data||todayISO(),valor,banco:bx.banco||'',descricao:v.descricao||'',createdAt:Date.now()};
-      Reservas.applyMoveEffect(mv);S.data.reservas.moves.push(mv);saveCurrentData();closeModal();renderView();toast('Movimentação registrada.');
-    }});
+    if(!(S.data.reservas&&S.data.reservas.boxes||[]).length){ toast('Crie uma reserva primeiro.'); return; }
+    if(window.Cards&&typeof Cards.addTransferencia==='function'){
+      Cards.addTransferencia({originBoxId:boxId||null,initialType:initialType||null});
+      return;
+    }
+    toast('A central de transferências está indisponível.');
   },
   findMove(id){ return (S.data.reservas&&S.data.reservas.moves||[]).find(m=>m.id===id); },
   /* V6.0 — tipos que aumentam o saldo da reserva vs. tipos que diminuem. 'Pagamento direto'
      é uma despesa paga direto da reserva (nunca vira Receita); 'Transferência enviada'/
-     'Transferência recebida' vêm da tela genérica de Transferências (Cartões e Contas). */
+     'Transferência recebida' vêm da central de Transferências em Lançamentos. */
   POSITIVE_TYPES: ['Reservar','Rendimento','Receita direta','Transferência recebida','Recebimento de outra reserva'],
   /* V6.1 — 'Pagamento de despesa fixa' segue exatamente o mesmo mecanismo já usado por
      'Pagamento direto' (despesa variável paga direto da reserva): aparece no extrato,
@@ -733,7 +667,7 @@ const Reservas = {
        lados do vínculo (mesmo padrão já usado por compras de cartão/boleto em Despesas). */
     if(mv.despesaTransacaoId){ toast('Esta movimentação vem de uma despesa paga direto da reserva — edite ou exclua pela despesa em Lançamentos.'); S.view='budget'; S.budgetTab='variavel'; renderApp(); return; }
     if(mv.despesaFixaId){ toast('Esta movimentação vem de uma despesa fixa paga com a reserva — edite ou exclua pela despesa fixa em Lançamentos.'); S.view='budget'; S.budgetTab='fixa'; renderApp(); return; }
-    if(mv.transferenciaId){ toast('Esta movimentação vem de uma transferência — edite ou exclua em Cartões e Contas → Transferências.'); S.view='cards'; renderApp(); return; }
+    if(mv.transferenciaId){ toast('Esta movimentação vem de uma transferência — edite ou exclua em Lançamentos → Transferências.'); S.view='budget'; S.budgetTab='reserva_transferencias'; renderApp(); return; }
     const boxes = (S.data.reservas.boxes||[]).filter(r=>bankMatches(r.banco));
     const labels = boxes.map(r=>`${r.nome}${r.banco?' · '+r.banco:''}`);
     const curBox = boxes.find(r=>r.id===mv.boxId) || boxes[0];
@@ -775,7 +709,7 @@ const Reservas = {
     if(mv.reservaTransferId){ Reservas.deleteTransfer(mv.reservaTransferId); return; }
     if(mv.despesaTransacaoId){ toast('Esta movimentação vem de uma despesa paga direto da reserva — edite ou exclua pela despesa em Lançamentos.'); S.view='budget'; S.budgetTab='variavel'; renderApp(); return; }
     if(mv.despesaFixaId){ toast('Esta movimentação vem de uma despesa fixa paga com a reserva — edite ou exclua pela despesa fixa em Lançamentos.'); S.view='budget'; S.budgetTab='fixa'; renderApp(); return; }
-    if(mv.transferenciaId){ toast('Esta movimentação vem de uma transferência — edite ou exclua em Cartões e Contas → Transferências.'); S.view='cards'; renderApp(); return; }
+    if(mv.transferenciaId){ toast('Esta movimentação vem de uma transferência — edite ou exclua em Lançamentos → Transferências.'); S.view='budget'; S.budgetTab='reserva_transferencias'; renderApp(); return; }
     openConfirmModal({
       title:'Excluir movimentação',
       text:'Excluir esta movimentação da reserva? O saldo da reserva será recalculado. Você poderá desfazer logo em seguida.',

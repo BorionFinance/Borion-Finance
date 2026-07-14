@@ -33,7 +33,7 @@ function renderBudget(){
   // V6.1 — aba "Central": consulta unificada de todas as movimentações do perfil (recursos
   // à parte, não toca nas abas Receita/Despesa fixa/Despesa variável já existentes abaixo).
   if(S.budgetTab==='central') return renderCentralLancamentos();
-  if(S.budgetTab==='reserva_transferencias') return reservasEnabled()?renderReservaTransfersTab():(S.budgetTab='central',renderCentralLancamentos());
+  if(S.budgetTab==='reserva_transferencias') return renderTransferenciasTab();
   // V6.22 — aba "Assinaturas": mesma ideia, view própria, não mexe nas abas já existentes.
   if(S.budgetTab==='assinaturas') return renderAssinaturas();
   const rec = receitaMes(), desp = despesasMes(), inv = investirPlanejado();
@@ -154,7 +154,7 @@ function renderBudget(){
       <button class="tab-btn ${tab==='fixa'?'active':''}" onclick="Budget.tab('fixa')">Despesa fixa</button>
       <button class="tab-btn ${tab==='variavel'?'active':''}" onclick="Budget.tab('variavel')">Despesa variável</button>
       <button class="tab-btn" onclick="Assinaturas.tab()">Assinaturas</button>
-      ${reservasEnabled()?`<button class="tab-btn" onclick="Budget.tab('reserva_transferencias')">Entre reservas</button>`:''}
+      <button class="tab-btn" onclick="Budget.tab('reserva_transferencias')">Transferências</button>
       <button class="tab-btn" onclick="Budget.tab('central')">⌕ Central</button>
     </div>
     <div class="grid2">
@@ -197,14 +197,44 @@ function reservaTransferGroups(){
     return {id,pair,saida,entrada,origem,destino,data:(saida&&saida.data)||(entrada&&entrada.data)||'',valor:Number((saida&&saida.valor)||(entrada&&entrada.valor))||0,descricao:(saida&&saida.descricao)||(entrada&&entrada.descricao)||''};
   }).sort((a,b)=>String(b.data).localeCompare(String(a.data)));
 }
-function renderReservaTransfersTab(){
-  const groups=reservaTransferGroups();
-  const total=groups.reduce((sum,g)=>sum+g.valor,0);
-  const rows=groups.map(g=>`<tr><td>${g.data?reservaFmtDate(g.data):'—'}</td><td>${esc(g.origem?g.origem.nome:'Reserva removida')}</td><td>→</td><td>${esc(g.destino?g.destino.nome:'Reserva removida')}</td><td>${brl(g.valor)}</td><td>${esc(g.descricao||'Transferência entre reservas')}</td><td class="tbl-actions"><button onclick="Reservas.editTransfer('${g.id}')">✎</button><button onclick="Reservas.deleteTransfer('${g.id}')">×</button></td></tr>`).join('');
-  return `<div class="cards-row"><div class="card hero-gold"><div class="clabel">MOVIMENTADO ENTRE RESERVAS</div><div class="cval">${brl(total)}</div></div><div class="card"><div class="clabel">TRANSFERÊNCIAS</div><div class="cval">${groups.length}</div></div></div>
-  <div class="tabs"><button class="tab-btn" onclick="Budget.tab('receita')">Receita</button><button class="tab-btn" onclick="Budget.tab('fixa')">Despesa fixa</button><button class="tab-btn" onclick="Budget.tab('variavel')">Despesa variável</button><button class="tab-btn" onclick="Assinaturas.tab()">Assinaturas</button><button class="tab-btn active">Entre reservas</button><button class="tab-btn" onclick="Budget.tab('central')">⌕ Central</button></div>
-  <div class="panel-box"><div class="toolbar"><div class="toolbar-left">Movimentações entre reservas</div><button class="btn-outline" onclick="Reservas.move(null,'Enviar para outra reserva')">+ Nova transferência</button></div><p class="modal-sub">Cada transferência gera automaticamente uma saída na reserva de origem e uma entrada na reserva de destino, com o mesmo vínculo.</p>${rows?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Origem</th><th></th><th>Destino</th><th>Valor</th><th>Descrição</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="empty-note">Nenhuma movimentação entre reservas ainda.</div>'}</div>`;
+function transferenciaFilterKey(t){
+  if(!t) return 'outras';
+  if(t.kind==='rendimento_reserva'||t.kind==='ajuste_reserva') return 'outras';
+  const origem=t.origemTipo||'conta',destino=t.destinoTipo||'conta';
+  if(origem==='conta'&&(t.origemAccountId||t.origemId)===CARTEIRA_CONTA_ID&&destino==='conta') return 'carteira_conta';
+  if(origem==='conta'&&destino==='conta') return 'conta_conta';
+  if(origem==='conta'&&destino==='reserva') return 'conta_reserva';
+  if(origem==='reserva'&&destino==='reserva') return 'reserva_reserva';
+  if(origem==='reserva'&&destino==='conta') return 'reserva_conta';
+  return 'outras';
 }
+function transferenciaDisplayNames(t){
+  if(t.kind==='rendimento_reserva') return {origem:t.origemNome||'Reserva',destino:'Rendimento'};
+  if(t.kind==='ajuste_reserva') return {origem:t.origemNome||'Reserva',destino:'Ajuste da própria reserva'};
+  return {origem:t.origemNome||accountNameSnapshot(t.origemAccountId||t.origemId)||'Origem',destino:t.destinoNome||accountNameSnapshot(t.destinoAccountId||t.destinoId)||'Destino'};
+}
+function renderTransferenciasTab(){
+  const filter=S.transferFilter||'todos';
+  const generic=(S.data.transferencias||[]).slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))||Number(b.createdAt||0)-Number(a.createdAt||0));
+  const legacy=reservaTransferGroups().map(g=>({legacy:true,id:g.id,data:g.data,valor:g.valor,descricao:g.descricao,origemNome:g.origem?g.origem.nome:'Reserva removida',destinoNome:g.destino?g.destino.nome:'Reserva removida',filterKey:'reserva_reserva'}));
+  const all=generic.concat(legacy).sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))||Number(b.createdAt||0)-Number(a.createdAt||0));
+  const visible=all.filter(t=>filter==='todos'||(t.filterKey||transferenciaFilterKey(t))===filter);
+  const total=visible.reduce((sum,t)=>sum+(Number(t.valor)||0),0);
+  const rows=visible.map(t=>{
+    const names=t.legacy?{origem:t.origemNome,destino:t.destinoNome}:transferenciaDisplayNames(t);
+    const type=t.filterKey||transferenciaFilterKey(t);
+    const typeLabel=({carteira_conta:'Carteira → Conta',conta_conta:'Conta → Conta',conta_reserva:'Conta → Reserva',reserva_conta:'Reserva → Conta',reserva_reserva:'Reserva → Reserva',outras:t.kind==='rendimento_reserva'?'Rendimento':t.kind==='ajuste_reserva'?'Ajuste manual':'Movimentação'})[type]||'Movimentação';
+    const actions=t.legacy
+      ? `<button onclick="Reservas.editTransfer('${t.id}')" title="Editar transferência antiga">✎</button><button onclick="Reservas.deleteTransfer('${t.id}')" title="Excluir">×</button>`
+      : `<button onclick="Cards.editTransferencia('${t.id}')" title="Editar transferência">✎</button>`;
+    return `<tr><td>${t.data?reservaFmtDate(t.data):'—'}</td><td>${esc(names.origem)}</td><td>→</td><td>${esc(names.destino)}</td><td><span class="cat-pill">${esc(typeLabel)}</span></td><td>${brl(t.valor)}</td><td>${esc(t.descricao||'')}</td><td class="tbl-actions">${actions}</td></tr>`;
+  }).join('');
+  const filterOptions=[['todos','Todas'],['carteira_conta','Carteira → Conta'],['conta_conta','Conta → Conta'],['conta_reserva','Conta → Reserva'],['reserva_reserva','Reserva → Reserva']];
+  return `<div class="cards-row"><div class="card hero-gold"><div class="clabel">VALOR MOVIMENTADO</div><div class="cval">${brl(total)}</div></div><div class="card"><div class="clabel">TRANSFERÊNCIAS</div><div class="cval">${visible.length}</div></div></div>
+  <div class="tabs"><button class="tab-btn" onclick="Budget.tab('receita')">Receita</button><button class="tab-btn" onclick="Budget.tab('fixa')">Despesa fixa</button><button class="tab-btn" onclick="Budget.tab('variavel')">Despesa variável</button><button class="tab-btn" onclick="Assinaturas.tab()">Assinaturas</button><button class="tab-btn active">Transferências</button><button class="tab-btn" onclick="Budget.tab('central')">⌕ Central</button></div>
+  <div class="panel-box"><div class="toolbar"><div class="toolbar-left">Transferências</div><div class="toolbar-right central-toolbar-actions"><select class="order-sort-select" onchange="Budget.setTransferFilter(this.value)">${filterOptions.map(([v,l])=>`<option value="${v}" ${filter===v?'selected':''}>${l}</option>`).join('')}</select><button class="btn-outline" onclick="Cards.addTransferencia()">+ Nova transferência</button></div></div><p class="modal-sub">Movimente dinheiro entre Carteira, Contas e Reservas sem registrar receita ou despesa. As regras de vínculo das Reservas são aplicadas automaticamente.</p>${rows?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Origem</th><th></th><th>Destino</th><th>Tipo</th><th>Valor</th><th>Descrição</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="empty-note">Nenhuma transferência encontrada neste filtro.</div>'}</div>`;
+}
+function renderReservaTransfersTab(){ return renderTransferenciasTab(); }
 
 /* =========================================================================================
    V6.1 — "Central" de Lançamentos: consulta unificada de receitas, despesas fixas,
@@ -373,7 +403,7 @@ function renderCentralLancamentos(){
       <button class="tab-btn" onclick="Budget.tab('fixa')">Despesa fixa</button>
       <button class="tab-btn" onclick="Budget.tab('variavel')">Despesa variável</button>
       <button class="tab-btn" onclick="Assinaturas.tab()">Assinaturas</button>
-      ${reservasEnabled()?`<button class="tab-btn" onclick="Budget.tab('reserva_transferencias')">Entre reservas</button>`:''}
+      <button class="tab-btn" onclick="Budget.tab('reserva_transferencias')">Transferências</button>
       <button class="tab-btn active">⌕ Central</button>
     </div>
     <div class="panel-box">
@@ -487,6 +517,7 @@ function openCentralFilterModal(){
 
 const Budget = {
   tab(t){ S.budgetTab=t; renderView(); },
+  setTransferFilter(value){ S.transferFilter=value||'todos'; renderView(); },
   add(){
     if(S.budgetTab==='fixa') openFixaModal(null);
     else openTransactionModal({type:S.budgetTab});
@@ -496,17 +527,35 @@ const Budget = {
       const f = S.data.fixas.find(x=>x.id===id);
       /* V5.39.0 — despesa fixa espelhada de uma compra no cartão: edita/remove pela
          compra no cartão, pra nunca dessincronizar os dois lados do vínculo. */
-      if(f && (f.viaParcelaId || f.viaBoletoId)){
-        toast(f.viaParcelaId ? 'Essa despesa fixa vem de uma compra no cartão — edite ou remova em Cartões e Contas.' : 'Essa despesa fixa vem de um boleto — edite ou remova em Cartões e Contas.');
-        S.view='cards'; renderApp();
+      if(f && f.viaParcelaId){
+        const cartao=(S.data.cartoes||[]).find(c=>c.id===f.viaCartaoId)||(S.data.cartoes||[]).find(c=>(c.parcelas||[]).some(p=>p.id===f.viaParcelaId));
+        const parcela=cartao&&(cartao.parcelas||[]).find(p=>p.id===f.viaParcelaId);
+        if(cartao&&parcela&&window.Cards&&typeof Cards.editParcela==='function'){
+          Cards.editParcela(cartao.id,parcela.id);
+          return;
+        }
+        toast('A compra vinculada ao cartão não foi encontrada.');
+        return;
+      }
+      if(f && f.viaBoletoId){
+        toast('Essa despesa fixa vem de um boleto — edite ou remova em Cartões e Contas.');
         return;
       }
       openFixaModal(f);
     } else {
       const t = S.data.transacoes.find(x=>x.id===id);
-      if(t && (t.viaParcelaId || t.viaBoletoId)){
-        toast(t.viaParcelaId ? 'Essa despesa vem de uma compra no cartão — edite ou remova em Cartões e Contas.' : 'Essa despesa vem de um boleto — edite ou remova em Cartões e Contas.');
-        S.view='cards'; renderApp();
+      if(t && t.viaParcelaId){
+        const cartao=(S.data.cartoes||[]).find(c=>c.id===t.viaCartaoId)||(S.data.cartoes||[]).find(c=>(c.parcelas||[]).some(p=>p.id===t.viaParcelaId));
+        const parcela=cartao&&(cartao.parcelas||[]).find(p=>p.id===t.viaParcelaId);
+        if(cartao&&parcela&&window.Cards&&typeof Cards.editParcela==='function'){
+          Cards.editParcela(cartao.id,parcela.id);
+          return;
+        }
+        toast('A compra vinculada ao cartão não foi encontrada.');
+        return;
+      }
+      if(t && t.viaBoletoId){
+        toast('Essa despesa vem de um boleto — edite ou remova em Cartões e Contas.');
         return;
       }
       openTransactionModal({type:t.tipo, existing:t});
@@ -969,7 +1018,9 @@ function openTransactionModal({type, existing}){
   const reservaBoxes=reservaBoxesForLancamento();
   const carteira=getCarteiraConta();
   const linkedBox=isReceita&&isEdit&&existing.reservaBoxId?reservaBoxes.find(r=>r.id===existing.reservaBoxId):null;
-  const initialDestino=isReceita&&isEdit&&existing.reservaMoveId?(existing.destinoModo||((Number(existing.reservaValor)||0)<(Number(existing.valor)||0)?'Dividir entre conta e reserva':'Direto para reserva')):'Conta livre';
+  const initialDestino=isReceita&&isEdit
+    ? (existing.reservaMoveId?((Number(existing.reservaValor)||0)<(Number(existing.valor)||0)?'dividir':'reserva'):(existing.accountId===CARTEIRA_CONTA_ID?'carteira':'conta'))
+    : 'conta';
   const reservaOptions=reservaBoxes.map(r=>`<option value="${esc(r.id)}" ${((isEdit&&existing.reservaOrigemId===r.id)||(linkedBox&&linkedBox.id===r.id))?'selected':''}>${esc(reservaBoxLabel(r))}</option>`).join('');
   const initialPaymentSource=isDespesaVariavel&&isEdit
     ? (existing.origemPagamento==='reserva'?'reserva':(existing.formaPagamento==='Crédito'?'credito':(existing.formaPagamento==='Dinheiro'?'carteira':'conta')))
@@ -979,6 +1030,8 @@ function openTransactionModal({type, existing}){
   const accounts=accountSelectOptions({excludeCarteira:true});
   const cards=cardSelectOptions();
   const selectedAccount=isEdit?(existing.accountId||resolveAccountId(existing.banco,{includeArchived:true})):((accounts[0]||{}).value||'');
+  const receitaSelectedAccount=(selectedAccount&&selectedAccount!==CARTEIRA_CONTA_ID)?selectedAccount:((accounts[0]||{}).value||'');
+  const receitaOrigemInicial=isReceita&&isEdit?(existing.origem||'propria'):'propria';
 
   const variablePaymentHTML=isDespesaVariavel?`
     <div class="field"><label>De onde será pago</label>
@@ -1017,24 +1070,60 @@ function openTransactionModal({type, existing}){
     <p class="modal-sub" style="margin:4px 0 0;">Em aberto registra a despesa sem retirar dinheiro da conta ou da reserva.</p></div>`:'';
 
   const receitaFieldsHTML=isReceita?`
-    <div class="field"><label>Onde a receita entra</label><select id="tm_banco">${accountSelectOptions().map(o=>`<option value="${esc(o.value)}" ${isEdit&&(existing.accountId||resolveAccountId(existing.banco,{includeArchived:true}))===o.value?'selected':''}>${esc(o.label)}</option>`).join('')}</select></div>
-    <div class="field"><label>Origem da receita</label><select id="tm_origem">${TX_ORIGEM_OPTIONS.map(o=>`<option ${txOrigemToKey(o)===(isEdit?(existing.origem||'propria'):'propria')?'selected':''}>${esc(o)}</option>`).join('')}</select><p class="modal-sub" style="margin:4px 0 0;">Rendimento e receita própria contam como renda. Reembolso e repasse de terceiros não entram na Receita do mês.</p></div>
-    ${reservasEnabled()?`<div class="reserve-destination-box"><div class="field"><label>Destino da receita</label><select id="tm_destino"><option ${initialDestino==='Conta livre'?'selected':''}>Conta livre</option><option ${initialDestino==='Direto para reserva'?'selected':''}>Direto para reserva</option><option>Dividir entre conta e reserva</option></select></div><div id="tm_reserva_fields" class="reserve-destination-fields hidden">${reservaBoxes.length?`<div class="field"><label>Reserva vinculada</label><select id="tm_reserva_box">${reservaOptions}</select></div><div class="field"><label>Valor que vai para reserva</label><input type="text" inputmode="numeric" id="tm_reserva_valor" class="money-input" placeholder="0,00"/></div>`:'<p class="modal-sub">Crie uma reserva primeiro.</p>'}</div></div>`:''}`:'';
+    <div class="field"><label>Origem da receita</label>
+      <div class="segmented-toggle payment-source-toggle revenue-origin-toggle" id="tm_origem_group">
+        <button type="button" class="seg-btn ${receitaOrigemInicial==='propria'?'active':''}" data-value="propria">Receita própria</button>
+        <button type="button" class="seg-btn ${receitaOrigemInicial==='rendimento'?'active':''}" data-value="rendimento">Rendimento</button>
+        <button type="button" class="seg-btn ${receitaOrigemInicial==='reembolso'?'active':''}" data-value="reembolso">Reembolso recebido</button>
+        <button type="button" class="seg-btn ${receitaOrigemInicial==='repasse'?'active':''}" data-value="repasse">Repasse de terceiros</button>
+      </div><input type="hidden" id="tm_origem" value="${receitaOrigemInicial}"/>
+      <p class="modal-sub" style="margin:4px 0 0;">Receita própria e rendimento contam como renda. Reembolso e repasse de terceiros não entram na Receita do mês.</p>
+    </div>
+    <div class="field"><label>Onde a receita entra</label>
+      <div class="segmented-toggle payment-source-toggle revenue-destination-toggle" id="tm_receita_destino_group">
+        <button type="button" class="seg-btn ${initialDestino==='carteira'?'active':''}" data-value="carteira">Carteira</button>
+        <button type="button" class="seg-btn ${initialDestino==='conta'?'active':''}" data-value="conta">Conta</button>
+        ${reservasEnabled()?`<button type="button" class="seg-btn ${initialDestino==='reserva'?'active':''}" data-value="reserva" ${reservaBoxes.length?'':'disabled title="Crie uma reserva primeiro"'}>Reserva</button>`:''}
+        ${reservasEnabled()?`<button type="button" class="seg-btn seg-btn-wide ${initialDestino==='dividir'?'active':''}" data-value="dividir" ${reservaBoxes.length?'':'disabled title="Crie uma reserva primeiro"'}>Dividir entre Conta e Reserva</button>`:''}
+      </div><input type="hidden" id="tm_receita_destino" value="${initialDestino}"/>
+    </div>
+    <div id="tm_receita_carteira_fields" class="payment-source-panel ${initialDestino==='carteira'?'':'hidden'}"><div class="info-box">A receita entra automaticamente na <b>Carteira</b>, como dinheiro em espécie.</div></div>
+    <div id="tm_receita_conta_fields" class="payment-source-panel ${initialDestino==='conta'?'':'hidden'}"><div class="field"><label>Conta que receberá</label><select id="tm_receita_conta">${accounts.length?accounts.map(o=>`<option value="${esc(o.value)}" ${o.value===receitaSelectedAccount?'selected':''}>${esc(o.label)}</option>`).join(''):'<option value="">Cadastre uma conta bancária</option>'}</select></div></div>
+    ${reservasEnabled()?`<div id="tm_receita_reserva_fields" class="payment-source-panel reserve-destination-box ${initialDestino==='reserva'?'':'hidden'}"><div class="field"><label>Reserva que receberá</label><select id="tm_receita_reserva_box">${reservaOptions||'<option value="">Nenhuma reserva disponível</option>'}</select></div><p class="modal-sub reserve-hint">O vínculo com a conta da reserva é aplicado automaticamente.</p></div>`:''}
+    ${reservasEnabled()?`<div id="tm_receita_dividir_fields" class="payment-source-panel reserve-destination-box ${initialDestino==='dividir'?'':'hidden'}">
+      <div class="field"><label>Conta que receberá</label><select id="tm_receita_dividir_conta">${accounts.length?accounts.map(o=>`<option value="${esc(o.value)}" ${o.value===receitaSelectedAccount?'selected':''}>${esc(o.label)}</option>`).join(''):'<option value="">Cadastre uma conta bancária</option>'}</select></div>
+      <div class="field"><label>Reserva que receberá</label><select id="tm_receita_dividir_reserva">${reservaOptions||'<option value="">Nenhuma reserva disponível</option>'}</select></div>
+      <div class="field"><label>Quanto vai para a conta (R$)</label><input type="text" inputmode="numeric" id="tm_conta_valor" class="money-input" placeholder="0,00"/></div>
+      <div class="field"><label>Quanto vai para a reserva (R$)</label><input type="text" inputmode="numeric" id="tm_reserva_valor" class="money-input" placeholder="0,00"/></div>
+      <p class="modal-sub reserve-hint">Os dois valores precisam somar exatamente o valor total da receita.</p>
+    </div>`:''}`:'';
 
-  const box=el(`<div class="modal-overlay"><div class="modal-box">
-    <div class="modal-head"><h2>${isEdit?'Editar':'Adicionar'} lançamento</h2><button id="tm_close">&times;</button></div>
+  const modalTitle=isEdit
+    ? (isReceita?'Editar receita':(isDespesaVariavel?'Editar despesa variável':'Editar lançamento'))
+    : (isReceita?'Adicionar receita':(isDespesaVariavel?'Adicionar despesa variável':'Adicionar lançamento'));
+  const fieldsHTML=isReceita?`
+    <div class="field"><label>Nome</label><input type="text" id="tm_nome" value="${isEdit?esc(existing.nome):''}"/></div>
+    ${categorySelectHTML('tm',type,isEdit?existing.categoria:null)}
+    <div class="field"><label id="tm_valor_label">Valor (R$)</label><input type="text" inputmode="numeric" id="tm_valor" class="money-input" placeholder="0,00"/></div>
+    <div class="field"><label>Data</label><input type="date" id="tm_data" value="${isEdit?existing.data:monthKey(S.month.y,S.month.m)+'-01'}"/></div>
+    ${receitaFieldsHTML}`:`
     <div class="field"><label>Nome</label><input type="text" id="tm_nome" value="${isEdit?esc(existing.nome):''}"/></div>
     ${isDespesaVariavel?`<div class="field"><label>Local da compra</label><input type="text" id="tm_local" value="${isEdit?esc(existing.localCompra||existing.local||''):''}" placeholder="Ex: Mercado, farmácia, loja..."/></div>`:''}
     <div class="field"><label>Data</label><input type="date" id="tm_data" value="${isEdit?existing.data:monthKey(S.month.y,S.month.m)+'-01'}"/></div>
     ${categorySelectHTML('tm',type,isEdit?existing.categoria:null)}
     <div class="field"><label id="tm_valor_label">Valor (R$)</label><input type="text" inputmode="numeric" id="tm_valor" class="money-input" placeholder="0,00"/></div>
-    ${variablePaymentHTML}${receitaFieldsHTML}
+    ${variablePaymentHTML}`;
+
+  const box=el(`<div class="modal-overlay"><div class="modal-box">
+    <div class="modal-head"><h2>${modalTitle}</h2><button id="tm_close">&times;</button></div>
+    ${fieldsHTML}
     <div class="row-btns"><button class="btn btn-primary btn-block" id="tm_save">${isEdit?'Salvar':'Adicionar'}</button></div>
     ${isEdit?'<div class="row-btns" style="margin-top:8px;"><button class="btn btn-danger btn-block" id="tm_delete">Excluir</button></div>':''}
   </div></div>`);
   $('#modal-root').innerHTML='';$('#modal-root').appendChild(box);attachModalGuard(box);$('#tm_close').onclick=closeModal;
   attachMoneyMask($('#tm_valor'),isEdit?existing.valor:0);
-  if(isReceita&&$('#tm_reserva_valor')) attachMoneyMask($('#tm_reserva_valor'),isEdit?(existing.reservaValor||existing.valor||0):0);
+  if(isReceita&&$('#tm_conta_valor')) attachMoneyMask($('#tm_conta_valor'),isEdit?Math.max(0,(Number(existing.valor)||0)-(Number(existing.reservaValor)||0)):0);
+  if(isReceita&&$('#tm_reserva_valor')) attachMoneyMask($('#tm_reserva_valor'),isEdit?(existing.reservaValor||0):0);
   wireQuickCategory($('#tm_categoria'),$('#tm_newcat_box'),$('#tm_newcat_input'),$('#tm_newcat_add'),type);
 
   function wireSegmented(groupId,inputId,onChange){
@@ -1046,9 +1135,21 @@ function openTransactionModal({type, existing}){
     const label=$('#tm_valor_label');if(label)label.textContent=source==='credito'?'Valor total da compra (R$)':'Valor (R$)';
     updateCreditoParcelPreview();
   }
+  function syncRevenueDestinationUI(source){
+    ['carteira','conta','reserva','dividir'].forEach(k=>{const node=$('#tm_receita_'+k+'_fields');if(node)node.classList.toggle('hidden',source!==k);});
+    if(source==='dividir') syncRevenueSplitFromTotal();
+  }
+  function syncRevenueSplitFromTotal(){
+    if(!isReceita||!$('#tm_conta_valor')||!$('#tm_reserva_valor'))return;
+    const total=parseInt(($('#tm_valor')&&$('#tm_valor').dataset.cents)||'0',10);
+    const conta=parseInt($('#tm_conta_valor').dataset.cents||'0',10),reserva=parseInt($('#tm_reserva_valor').dataset.cents||'0',10);
+    if(conta+reserva===0&&total>0){$('#tm_conta_valor').dataset.cents=String(total);$('#tm_conta_valor').value=(total/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
+  }
   wireSegmented('#tm_pagamento_origem_group','#tm_pagamento_origem',syncPaymentSourceUI);
   wireSegmented('#tm_conta_forma_group','#tm_conta_forma');
   wireSegmented('#tm_status_group','#tm_status');
+  wireSegmented('#tm_origem_group','#tm_origem');
+  wireSegmented('#tm_receita_destino_group','#tm_receita_destino',syncRevenueDestinationUI);
   function updateCreditoParcelPreview(){
     const tipo=$('#tm_credito_tipo'),wrap=$('#tm_parcelas_wrap'),preview=$('#tm_parcela_preview');
     if(!tipo)return;if(wrap)wrap.classList.toggle('hidden',tipo.value!=='parcelado');
@@ -1058,13 +1159,9 @@ function openTransactionModal({type, existing}){
   }
   if($('#tm_credito_tipo'))$('#tm_credito_tipo').onchange=updateCreditoParcelPreview;
   if($('#tm_parcelas'))$('#tm_parcelas').oninput=updateCreditoParcelPreview;
-  if($('#tm_valor'))$('#tm_valor').addEventListener('input',()=>{updateCreditoParcelPreview();syncReserveDestinationUI();});
-  function syncReserveDestinationUI(){
-    if(!isReceita||!$('#tm_destino'))return;const dest=$('#tm_destino').value,fields=$('#tm_reserva_fields');if(fields)fields.classList.toggle('hidden',dest==='Conta livre');
-    const rv=$('#tm_reserva_valor');if(rv){if(dest==='Direto para reserva'){rv.disabled=true;const cents=parseInt($('#tm_valor').dataset.cents||'0',10);rv.dataset.cents=String(cents);rv.value=(cents/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}else rv.disabled=false;}
-  }
-  if($('#tm_destino')){$('#tm_destino').onchange=syncReserveDestinationUI;syncReserveDestinationUI();}
+  if($('#tm_valor'))$('#tm_valor').addEventListener('input',()=>{updateCreditoParcelPreview();syncRevenueSplitFromTotal();});
   if(isDespesaVariavel)syncPaymentSourceUI(initialPaymentSource);
+  if(isReceita)syncRevenueDestinationUI(initialDestino);
 
   $('#tm_save').onclick=()=>{
     const nome=$('#tm_nome').value.trim()||'Sem nome',data=$('#tm_data').value||monthKey(S.month.y,S.month.m)+'-01',categoria=$('#tm_categoria').value;
@@ -1107,11 +1204,28 @@ function openTransactionModal({type, existing}){
       saveCurrentData();closeModal();renderView();toast(isEdit?'Despesa atualizada.':(status==='Pago'?'Despesa lançada como paga.':'Despesa lançada em aberto.'));return;
     }
 
-    const accountId=requireAccountId($('#tm_banco').value,'Toda receita precisa de uma conta ativa vinculada.');if(!accountId)return;
-    const banco=accountNameSnapshot(accountId),origem=txOrigemToKey($('#tm_origem').value);let reservaBox=null,reservaValor=0,destino='Conta livre';
-    if($('#tm_destino')){destino=$('#tm_destino').value;if(destino!=='Conta livre'){reservaBox=reservaBoxes.find(r=>r.id===$('#tm_reserva_box').value);if(!reservaBox){alert('Escolha uma reserva válida.');return;}reservaValor=destino==='Direto para reserva'?valor:parseInt($('#tm_reserva_valor').dataset.cents||'0',10)/100;if(reservaValor<=0||reservaValor>valor){alert('O valor destinado à reserva precisa ser maior que zero e não pode passar do valor da receita.');return;}}}
-    let tx;if(!commitAtomic(()=>{if(isEdit){reverseTxSaldoEffect(existing);removeLinkedReservaMoveFromTransaction(existing);}if(isEdit){Object.assign(existing,{nome,data,categoria,valor,accountId,banco,origem,reservaValor:0,destinoModo:'Conta livre'});tx=existing;}else{tx={id:uid(),tipo:'receita',nome,data,categoria,valor,accountId,banco,origem};S.data.transacoes.push(tx);}if(reservaBox){tx.destinoModo=destino;createLinkedReservaMoveFromTransaction(tx,reservaBox,reservaValor);}if(!applyTxSaldoEffect(tx))throw new Error('Conta inválida para aplicar saldo.');}))return;
-    saveCurrentData();closeModal();renderView();toast(isEdit?'Lançamento atualizado.':(reservaBox?'Receita adicionada e enviada para reserva.':'Receita adicionada.'));
+    const destino=$('#tm_receita_destino').value;
+    let accountId=null,reservaBox=null,reservaValor=0,destinoModo='Conta livre';
+    if(destino==='carteira'){
+      accountId=requireAccountId(CARTEIRA_CONTA_ID,'A Carteira precisa estar disponível.');if(!accountId)return;
+    }else if(destino==='conta'){
+      accountId=requireAccountId($('#tm_receita_conta').value,'Escolha a conta que receberá a receita.');if(!accountId)return;
+    }else if(destino==='reserva'){
+      reservaBox=reservaBoxes.find(r=>r.id===$('#tm_receita_reserva_box').value);if(!reservaBox){alert('Escolha uma reserva válida.');return;}
+      accountId=requireAccountId(reservaBox.accountId||resolveAccountId(reservaBox.banco,{includeArchived:false}),'A conta vinculada a esta reserva não está disponível.');if(!accountId)return;
+      reservaValor=valor;destinoModo='Direto para reserva';
+    }else if(destino==='dividir'){
+      accountId=requireAccountId($('#tm_receita_dividir_conta').value,'Escolha a conta que receberá parte da receita.');if(!accountId)return;
+      reservaBox=reservaBoxes.find(r=>r.id===$('#tm_receita_dividir_reserva').value);if(!reservaBox){alert('Escolha uma reserva válida.');return;}
+      const contaValor=parseInt($('#tm_conta_valor').dataset.cents||'0',10)/100;
+      reservaValor=parseInt($('#tm_reserva_valor').dataset.cents||'0',10)/100;
+      if(contaValor<=0||reservaValor<=0){alert('Informe um valor maior que zero para a conta e para a reserva.');return;}
+      if(Math.round((contaValor+reservaValor)*100)!==Math.round(valor*100)){alert('O valor da conta e o valor da reserva precisam somar exatamente o total da receita.');return;}
+      destinoModo='Dividir entre conta e reserva';
+    }
+    const banco=accountNameSnapshot(accountId),origem=$('#tm_origem').value||'propria';
+    let tx;if(!commitAtomic(()=>{if(isEdit){reverseTxSaldoEffect(existing);removeLinkedReservaMoveFromTransaction(existing);}const payload={nome,data,categoria,valor,accountId,banco,origem,reservaValor:0,destinoModo:'Conta livre'};if(isEdit){Object.assign(existing,payload);tx=existing;}else{tx=Object.assign({id:uid(),tipo:'receita'},payload);S.data.transacoes.push(tx);}if(reservaBox){tx.destinoModo=destinoModo;createLinkedReservaMoveFromTransaction(tx,reservaBox,reservaValor);}if(!applyTxSaldoEffect(tx))throw new Error('Conta inválida para aplicar saldo.');}))return;
+    saveCurrentData();closeModal();renderView();toast(isEdit?'Receita atualizada.':(reservaBox?'Receita adicionada com destino aplicado.':'Receita adicionada.'));
   };
   if(isEdit)$('#tm_delete').onclick=()=>{const idx=S.data.transacoes.findIndex(x=>x.id===existing.id);if(idx<0)return;const snapshot=JSON.parse(JSON.stringify(S.data));reverseTxSaldoEffect(existing);removeLinkedReservaMoveFromTransaction(existing);removeLinkedReservaWithdrawalFromDespesa(existing);S.data.transacoes.splice(idx,1);saveCurrentData();closeModal();renderView();showUndoToast('Lançamento excluído.',()=>{S.data=snapshot;saveCurrentData();renderView();});};
 }

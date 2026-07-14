@@ -2347,3 +2347,20 @@ html[data-theme="light"] .import-current-row.will-delete{border-color:rgba(220,3
 .cat-tag-list[data-order-list^="cat_"]{display:flex;flex-direction:column;align-items:stretch;gap:8px}
 .cat-tag-list[data-order-list^="cat_"] .cat-tag:not(.category-order-row){width:max-content;max-width:100%}
 @media(max-width:720px){.payment-source-toggle{grid-template-columns:repeat(2,minmax(0,1fr))}.reserve-reminder-box,.category-panel-head{align-items:stretch;flex-direction:column}.category-panel-head .order-sort-wrap{width:100%}.category-panel-head .order-sort-select{width:100%}}
+
+/* V6.28.0 — organização personalizada dos módulos do Patrimônio */
+.patrimony-organize-toolbar{margin:2px 0 12px;}
+.patrimony-modules-grid{display:grid;grid-template-columns:repeat(var(--patrimony-columns,2),minmax(0,1fr));gap:18px;align-items:start;}
+.patrimony-module-slot{min-width:0;display:flex;flex-direction:column;gap:8px;}
+.patrimony-module-slot>.panel-box{height:100%;margin:0;}
+.patrimony-module-slot.organizing{padding:8px;border:1px dashed rgba(201,164,92,.42);border-radius:18px;background:rgba(201,164,92,.035);}
+.patrimony-slot-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:34px;padding:0 4px;color:var(--muted);font-size:9px;font-weight:900;letter-spacing:.08em;}
+.patrimony-slot-toolbar .order-controls{margin-left:auto;}
+.patrimony-grid-organizer .patrimony-module-slot{cursor:grab;transition:border-color .16s ease,background-color .16s ease,transform .16s ease;}
+.patrimony-grid-organizer .patrimony-module-slot:active{cursor:grabbing;}
+.patrimony-grid-organizer .patrimony-module-slot.order-dragging{opacity:.62;border-color:var(--gold-bright);transform:scale(.992);}
+.patrimony-layout-organizer{margin-bottom:12px;}
+.seg-btn-wide{grid-column:1/-1;}
+@media(max-width:1050px){.patrimony-modules-grid{gap:14px;}}
+@media(max-width:760px){.patrimony-modules-grid{grid-template-columns:1fr!important;}.patrimony-organize-toolbar{align-items:stretch;}.patrimony-organize-toolbar .order-sort-wrap{width:100%;}.patrimony-organize-toolbar .order-sort-select{width:100%;}}
+.patrimony-grid-organizer .patrimony-module-slot.patrimony-slot-target{border-color:var(--gold-bright);background:rgba(201,164,92,.10);box-shadow:0 0 0 2px rgba(201,164,92,.10);}

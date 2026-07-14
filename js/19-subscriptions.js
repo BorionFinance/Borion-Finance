@@ -12,12 +12,16 @@ function assinaturaDiaClamped(rule, mesKey){
 function assinaturaDataVencimento(rule, mesKey){ return mesKey+'-'+pad2(assinaturaDiaClamped(rule,mesKey)); }
 function assinaturaTodayISO(){ return todayISO(); }
 function assinaturaRuleSnapshot(source){
+  const origemPagamento=source.origemPagamento || (source.formaPagamento==='Crédito'?'cartao':(source.reservaId?'reserva':(source.accountId===CARTEIRA_CONTA_ID?'carteira':'conta')));
   return {
-    nome:source.nome||'Assinatura', categoria:source.categoria||'Outro', tipo:source.tipo==='anual'?'anual':'mensal',
-    valor:Math.round((Number(source.valor)||0)*100)/100, diaVencimento:Math.min(31,Math.max(1,Number(source.diaVencimento)||1)),
+    nome:source.nome||'Assinatura', local:source.local||'', categoria:source.categoria||'Outro', categoriaTipo:source.categoriaTipo==='fixa'?'fixa':'variavel',
+    tipo:source.tipo==='anual'?'anual':'mensal', valor:Math.round((Number(source.valor)||0)*100)/100,
+    diaVencimento:Math.min(31,Math.max(1,Number(source.diaVencimento)||1)),
     mesVencimento:source.tipo==='anual'?Math.max(0,Number(source.mesVencimento)||0):null,
-    formaPagamento:source.formaPagamento==='Crédito'?'Crédito':(source.formaPagamento||'Pix'),
-    accountId:source.accountId||null, banco:source.banco||accountNameSnapshot(source.accountId)||'', cartaoId:source.cartaoId||null
+    origemPagamento,
+    formaPagamento:origemPagamento==='cartao'?'Crédito':(origemPagamento==='carteira'?'Dinheiro':(source.formaPagamento||'Pix')),
+    accountId:origemPagamento==='carteira'?CARTEIRA_CONTA_ID:(source.accountId||null),
+    banco:source.banco||accountNameSnapshot(source.accountId)||'', cartaoId:source.cartaoId||null, reservaId:source.reservaId||null
   };
 }
 function assinaturaEnsureModel(a){
@@ -115,12 +119,14 @@ function assinaturaFindLinkedTx(rec){
 function assinaturaEnsureAccountTx(rec){
   let tx=assinaturaFindLinkedTx(rec);
   const paid=!!(rec.balanceApplied||['paga','cobrada'].includes(rec.status));
-  const accountId=resolveAccountId(rec.accountId,{includeArchived:true});
+  const isReserva=rec.origemPagamento==='reserva';
+  const accountId=isReserva?null:resolveAccountId(rec.accountId,{includeArchived:true});
   const payload={
-    tipo:'variavel',nome:rec.nome||'Assinatura',data:rec.dueDate||rec.data||rec.period+'-01',
+    tipo:'variavel',nome:rec.nome||'Assinatura',localCompra:rec.local||'',data:rec.dueDate||rec.data||rec.period+'-01',
     categoria:rec.categoria||'Outro',valor:Number(rec.valor)||0,accountId:accountId||rec.accountId||null,
-    banco:accountNameSnapshot(accountId||rec.accountId,rec.banco||''),formaPagamento:rec.formaPagamento||'Pix',
-    origemPagamento:'conta',statusPagamento:paid?'Pago':'Em aberto',viaAssinaturaId:rec.assinaturaId||null,
+    banco:isReserva?(rec.banco||''):accountNameSnapshot(accountId||rec.accountId,rec.banco||''),
+    formaPagamento:isReserva?null:(rec.formaPagamento||'Pix'),origemPagamento:isReserva?'reserva':(rec.origemPagamento||'conta'),
+    reservaOrigemId:isReserva?(rec.reservaId||null):null,statusPagamento:paid?'Pago':'Em aberto',viaAssinaturaId:rec.assinaturaId||null,
     assinaturaCobrancaId:rec.id
   };
   if(tx){Object.assign(tx,payload);rec.transacaoId=tx.id;return false;}
@@ -137,7 +143,7 @@ function assinaturaEnsureCreditPurchase(rec){
     return false;
   }
   const valor=Math.round((Number(rec.valor)||0)*100)/100;
-  const p={id:uid(),descricao:rec.nome||'Assinatura',local:'',categoria:rec.categoria||'Outro',valorParcela:valor,parcelaTotal:1,dataCompra:rec.period,diaEntrada:Number(String(rec.dueDate||'').slice(8,10))||1,apareceDespesas:true,despesaTipo:'variavel',statusPagamento:'Pago',despesaTransacaoId:null,despesaTransacaoIds:[],despesaFixaId:null,viaAssinaturaId:rec.assinaturaId,assinaturaCobrancaId:rec.id};
+  const p={id:uid(),descricao:rec.nome||'Assinatura',local:rec.local||'',categoria:rec.categoria||'Outro',valorParcela:valor,parcelaTotal:1,dataCompra:rec.period,diaEntrada:Number(String(rec.dueDate||'').slice(8,10))||1,apareceDespesas:true,despesaTipo:'variavel',statusPagamento:'Pago',despesaTransacaoId:null,despesaTransacaoIds:[],despesaFixaId:null,viaAssinaturaId:rec.assinaturaId,assinaturaCobrancaId:rec.id};
   if(!Array.isArray(card.parcelas))card.parcelas=[];
   card.parcelas.push(p);linkParcelaToDespesa(card,p);
   rec.cartaoId=card.id;rec.parcelaId=p.id;rec.transacaoId=p.despesaTransacaoId;rec.status='cobrada';rec.processedAt=Date.now();rec.lastError='';
@@ -149,7 +155,10 @@ function assinaturaRemovePendingMaterialization(rec){
   const ref=assinaturaParcelaRef(rec);
   if(ref){unlinkParcelaFromDespesa(ref.parcela);ref.card.parcelas=ref.card.parcelas.filter(p=>p.id!==ref.parcela.id);changed=true;}
   const tx=assinaturaFindLinkedTx(rec);
-  if(tx){S.data.transacoes=S.data.transacoes.filter(t=>t.id!==tx.id);changed=true;}
+  if(tx){
+    if(tx.reservaOrigemMoveId&&typeof removeLinkedReservaWithdrawalFromDespesa==='function') removeLinkedReservaWithdrawalFromDespesa(tx);
+    S.data.transacoes=S.data.transacoes.filter(t=>t.id!==tx.id);changed=true;
+  }
   rec.parcelaId=null;rec.transacaoId=null;rec.balanceApplied=false;
   return changed;
 }
@@ -222,14 +231,27 @@ const Assinaturas={
   chargeOccurrence(rec){
     rec.attemptCount=(Number(rec.attemptCount)||0)+1; rec.lastAttemptAt=Date.now();
     const valor=Math.round((Number(rec.valor)||0)*100)/100;
-    if(rec.formaPagamento==='Crédito'){
+    if(rec.formaPagamento==='Crédito'||rec.origemPagamento==='cartao'){
       return assinaturaEnsureCreditPurchase(rec);
+    }
+    if(rec.origemPagamento==='reserva'){
+      const box=((S.data.reservas&&S.data.reservas.boxes)||[]).find(r=>r.id===rec.reservaId);
+      if(!box){rec.status='falhou';rec.lastError='Reserva inexistente ou removida.';return true;}
+      const tx=assinaturaFindLinkedTx(rec)||null;
+      if(!tx){rec.status='falhou';rec.lastError='Lançamento vinculado à assinatura não foi encontrado.';return true;}
+      if(!rec.balanceApplied){
+        if(!reservaTemSaldo(box,valor)){rec.status='falhou';rec.lastError='Saldo insuficiente na reserva '+box.nome+'.';return true;}
+        createLinkedReservaWithdrawalFromDespesa(tx,box,valor);rec.balanceApplied=true;
+      }
+      tx.statusPagamento='Pago';tx.origemPagamento='reserva';tx.reservaOrigemId=box.id;tx.accountId=null;tx.banco=box.banco||'';tx.formaPagamento=null;
+      rec.reservaId=box.id;rec.banco=box.banco||'';rec.status='cobrada';rec.processedAt=Date.now();rec.lastError='';
+      return true;
     }
     const accountId=resolveAccountId(rec.accountId,{includeArchived:false});
     if(!accountId){rec.status='falhou';rec.lastError='Conta bancária inexistente, arquivada ou inválida.';return true;}
     const tx=assinaturaFindLinkedTx(rec)||null;
     if(!rec.balanceApplied){ adjustLiquidez(accountId,-valor);rec.balanceApplied=true; }
-    if(tx){tx.statusPagamento='Pago';tx.accountId=accountId;tx.banco=accountNameSnapshot(accountId,rec.banco);tx.formaPagamento=rec.formaPagamento||'Pix';}
+    if(tx){tx.statusPagamento='Pago';tx.accountId=accountId;tx.banco=accountNameSnapshot(accountId,rec.banco);tx.formaPagamento=rec.formaPagamento||'Pix';tx.origemPagamento=rec.origemPagamento||'conta';}
     rec.accountId=accountId;rec.banco=accountNameSnapshot(accountId,rec.banco);rec.status='cobrada';rec.processedAt=Date.now();rec.lastError='';
     return true;
   },
@@ -241,28 +263,52 @@ const Assinaturas={
   openForm(existing){
     const isEdit=!!existing;if(existing)assinaturaEnsureModel(existing);
     const currentKey=monthKey(S.month.y,S.month.m), currentRule=isEdit?(assinaturaVersionFor(existing,currentKey)||existing):{};
-    const cats=typeof orderedCategories==='function'?orderedCategories('variavel'):((S.data.categorias&&S.data.categorias.variavel)||['Outro']);
-    const accountOpts=accountSelectOptions(), cardOpts=cardSelectOptions();
+    const fixedCats=typeof orderedCategories==='function'?orderedCategories('fixa'):((S.data.categorias&&S.data.categorias.fixa)||[]);
+    const variableCats=typeof orderedCategories==='function'?orderedCategories('variavel'):((S.data.categorias&&S.data.categorias.variavel)||['Outro']);
+    const categoryOpts=[
+      ...fixedCats.map(c=>({value:'fixa::'+c,label:'Despesas Fixas · '+c})),
+      ...variableCats.map(c=>({value:'variavel::'+c,label:'Despesas Variáveis · '+c}))
+    ];
+    if(!categoryOpts.length) categoryOpts.push({value:'variavel::Outro',label:'Despesas Variáveis · Outro'});
+    const accountOpts=accountSelectOptions({excludeCarteira:true}), cardOpts=cardSelectOptions();
+    const reserveBoxes=reservasEnabled()?(S.data.reservas&&S.data.reservas.boxes||[]).filter(r=>bankMatches(r.banco)):[];
+    const reserveOpts=reserveBoxes.map(r=>({value:r.id,label:reservaBoxLabel(r)}));
+    const inferredOrigin=currentRule.origemPagamento || (currentRule.formaPagamento==='Crédito'?'cartao':(currentRule.reservaId?'reserva':(currentRule.accountId===CARTEIRA_CONTA_ID?'carteira':'conta')));
+    const currentCategoryValue=(currentRule.categoriaTipo==='fixa'?'fixa':'variavel')+'::'+(currentRule.categoria||'Outro');
     const fields=[
-      {key:'tipo',label:'Periodicidade',type:'segmented',options:[{value:'mensal',label:'Mensal'},{value:'anual',label:'Anual'}],default:currentRule.tipo||'mensal'},
+      {key:'tipo',label:'Mensal / Anual',type:'segmented',options:[{value:'mensal',label:'Mensal'},{value:'anual',label:'Anual'}],default:currentRule.tipo||'mensal'},
       {key:'nome',label:'Nome',type:'text',default:currentRule.nome||''},
-      {key:'categoria',label:'Categoria',type:'select',options:cats,default:currentRule.categoria||cats[0]},
-      {key:'valorMensal',label:'Valor mensal (R$)',type:'money',default:currentRule.tipo==='mensal'?currentRule.valor:0,visibleWhen:{key:'tipo',value:'mensal'}},
-      {key:'valorAnual',label:'Valor anual (R$)',type:'money',default:currentRule.tipo==='anual'?currentRule.valor:0,visibleWhen:{key:'tipo',value:'anual'}},
+      {key:'local',label:'Local',type:'text',default:currentRule.local||'',placeholder:'Ex: Netflix, academia, aplicativo'},
+      {key:'categoriaEscolhida',label:'Categoria',type:'select',options:categoryOpts,default:categoryOpts.some(o=>o.value===currentCategoryValue)?currentCategoryValue:categoryOpts[0].value},
+      {key:'valorMensal',label:'Valor mensal',type:'money',default:currentRule.tipo==='mensal'?currentRule.valor:0,visibleWhen:{key:'tipo',value:'mensal'}},
+      {key:'valorAnual',label:'Valor anual',type:'money',default:currentRule.tipo==='anual'?currentRule.valor:0,visibleWhen:{key:'tipo',value:'anual'}},
       {key:'dia',label:'Dia do vencimento',type:'select',options:Array.from({length:31},(_,i)=>String(i+1)),default:String(currentRule.diaVencimento||1)},
       {key:'mes',label:'Mês do vencimento',type:'select',options:MONTHS.slice(),default:MONTHS[currentRule.mesVencimento||0],visibleWhen:{key:'tipo',value:'anual'}},
-      {key:'origem',label:'Origem do pagamento',type:'segmented',options:[{value:'conta',label:'Conta'},{value:'cartao',label:'Cartão de crédito'}],default:currentRule.formaPagamento==='Crédito'?'cartao':'conta'},
-      {key:'forma',label:'Forma de pagamento',type:'select',options:['Dinheiro','Pix','Débito'],default:currentRule.formaPagamento&&currentRule.formaPagamento!=='Crédito'?currentRule.formaPagamento:'Pix',visibleWhen:{key:'origem',value:'conta'}},
-      {key:'accountId',label:'Banco/Conta',type:'select',options:accountOpts.length?accountOpts:[{value:'',label:'Cadastre uma conta em Cartões e Contas'}],default:currentRule.accountId||'',visibleWhen:{key:'origem',value:'conta'}},
+      {key:'origem',label:'De onde será pago',type:'segmented',options:[{value:'carteira',label:'Carteira'},{value:'conta',label:'Conta'},...(reservasEnabled()?[{value:'reserva',label:'Reserva'}]:[]),{value:'cartao',label:'Crédito'}],default:inferredOrigin==='reserva'&&!reservasEnabled()?'conta':inferredOrigin},
+      {key:'accountId',label:'Conta',type:'select',options:accountOpts.length?accountOpts:[{value:'',label:'Cadastre uma conta em Cartões e Contas'}],default:currentRule.accountId&&currentRule.accountId!==CARTEIRA_CONTA_ID?currentRule.accountId:'',visibleWhen:{key:'origem',value:'conta'}},
+      {key:'forma',label:'Forma de pagamento',type:'select',options:['Pix','Débito'],default:['Pix','Débito'].includes(currentRule.formaPagamento)?currentRule.formaPagamento:'Pix',visibleWhen:{key:'origem',value:'conta'}},
+      {key:'reservaId',label:'Reserva',type:'select',options:reserveOpts.length?reserveOpts:[{value:'',label:'Cadastre uma reserva primeiro'}],default:currentRule.reservaId||'',visibleWhen:{key:'origem',value:'reserva'}},
       {key:'cartaoId',label:'Cartão de crédito',type:'select',options:cardOpts.length?cardOpts:[{value:'',label:'Cadastre um cartão em Cartões e Contas'}],default:currentRule.cartaoId||'',visibleWhen:{key:'origem',value:'cartao'}}
     ];
-    openModal({title:isEdit?'Editar assinatura':'Nova assinatura',sub:isEdit?'A alteração vale do mês selecionado em diante. Ocorrências consolidadas mantêm a fotografia original.':'Cadastre a regra recorrente; o saldo só muda quando a cobrança vencer e for processada.',fields,saveLabel:'Salvar assinatura',onDelete:isEdit?()=>{this.remove(existing.id);return false;}:null,deleteLabel:'Excluir assinatura',onSave:v=>{
+    openModal({title:isEdit?'Editar assinatura':'Adicionar assinatura',sub:isEdit?'A alteração vale do mês selecionado em diante. Ocorrências consolidadas mantêm a fotografia original.':'Cadastre a regra recorrente; o saldo só muda quando a cobrança vencer e for processada.',fields,saveLabel:'Salvar assinatura',onDelete:isEdit?()=>{this.remove(existing.id);return false;}:null,deleteLabel:'Excluir assinatura',onSave:v=>{
       const nome=(v.nome||'').trim();if(!nome){alert('Dê um nome para a assinatura.');return;}
       const tipo=v.tipo==='anual'?'anual':'mensal',valor=Number(tipo==='anual'?v.valorAnual:v.valorMensal)||0;if(valor<=0){alert('Digite um valor maior que zero.');return;}
-      const isCard=v.origem==='cartao';
-      const accountId=isCard?null:requireAccountId(v.accountId,'Escolha uma conta bancária ativa.');if(!isCard&&!accountId)return;
-      const card=isCard?(S.data.cartoes||[]).find(c=>c.id===v.cartaoId):null;if(isCard&&!card){alert('Escolha um cartão de crédito válido.');return;}
-      const payload={nome,categoria:v.categoria||'Outro',tipo,valor,diaVencimento:Math.min(31,Math.max(1,parseInt(v.dia,10)||1)),mesVencimento:tipo==='anual'?Math.max(0,MONTHS.indexOf(v.mes)):null,formaPagamento:isCard?'Crédito':(v.forma||'Pix'),accountId,banco:isCard?'':accountNameSnapshot(accountId),cartaoId:isCard?card.id:null};
+      const origem=['carteira','conta','reserva','cartao'].includes(v.origem)?v.origem:'conta';
+      let accountId=null,card=null,reserva=null,banco='',formaPagamento='Pix';
+      if(origem==='carteira'){
+        accountId=requireAccountId(CARTEIRA_CONTA_ID,'A Carteira precisa estar disponível.');if(!accountId)return;banco=accountNameSnapshot(accountId);formaPagamento='Dinheiro';
+      }else if(origem==='conta'){
+        accountId=requireAccountId(v.accountId,'Escolha uma conta bancária ativa.');if(!accountId)return;banco=accountNameSnapshot(accountId);formaPagamento=v.forma||'Pix';
+      }else if(origem==='reserva'){
+        reserva=reserveBoxes.find(r=>r.id===v.reservaId);if(!reserva){alert('Escolha uma reserva válida.');return;}banco=reserva.banco||'';formaPagamento='Reserva';
+      }else{
+        card=(S.data.cartoes||[]).find(c=>c.id===v.cartaoId);if(!card){alert('Escolha um cartão de crédito válido.');return;}formaPagamento='Crédito';
+      }
+      const categoryRaw=String(v.categoriaEscolhida||'variavel::Outro');
+      const separator=categoryRaw.indexOf('::');
+      const categoriaTipo=separator>=0&&categoryRaw.slice(0,separator)==='fixa'?'fixa':'variavel';
+      const categoria=separator>=0?categoryRaw.slice(separator+2):categoryRaw;
+      const payload={nome,local:(v.local||'').trim(),categoria:categoria||'Outro',categoriaTipo,tipo,valor,diaVencimento:Math.min(31,Math.max(1,parseInt(v.dia,10)||1)),mesVencimento:tipo==='anual'?Math.max(0,MONTHS.indexOf(v.mes)):null,origemPagamento:origem,formaPagamento,accountId,banco,cartaoId:card?card.id:null,reservaId:reserva?reserva.id:null};
       if(isEdit){
         const version=Object.assign({id:uid(),effectiveFrom:currentKey,createdAt:Date.now()},payload);
         existing.versions=(existing.versions||[]).filter(x=>x.effectiveFrom!==currentKey);existing.versions.push(version);existing.versions.sort((a,b)=>a.effectiveFrom.localeCompare(b.effectiveFrom));Object.assign(existing,payload);
@@ -326,10 +372,11 @@ function renderAssinaturas(){
   const rows=list.slice().sort((a,b)=>(a.nome||'').localeCompare(b.nome||'','pt-BR')).map(a=>{
     const key=monthKey(S.month.y,S.month.m),r=assinaturaVersionFor(a,key)||a,paused=a.status==='pausada';
     const card=r.formaPagamento==='Crédito'?(S.data.cartoes||[]).find(c=>c.id===r.cartaoId):null,account=r.accountId?accountById(r.accountId,{includeArchived:true}):null;
-    const source=r.formaPagamento==='Crédito'?('Cartão: '+(card?card.banco:'cartão removido')):(r.formaPagamento+' · '+(account?account.nome:(r.banco||'conta removida')));
+    const reserve=r.reservaId?((S.data.reservas&&S.data.reservas.boxes)||[]).find(x=>x.id===r.reservaId):null;
+    const source=r.origemPagamento==='reserva'?('Reserva: '+(reserve?reserve.nome:'reserva removida')):(r.origemPagamento==='carteira'?'Carteira':(r.formaPagamento==='Crédito'?('Cartão: '+(card?card.banco:'cartão removido')):(r.formaPagamento+' · '+(account?account.nome:(r.banco||'conta removida')))));
     const next=assinaturaProximaCobranca(a), occ=assinaturaCobrancaFor(a.id,key), status=paused?'Pausada':occ?assinaturaOccurrenceStatusLabel(occ.status):'Ativa';
     const retry=occ&&occ.status==='falhou'?`<button class="btn-outline btn-sm" onclick="Assinaturas.retry('${occ.id}')">Tentar novamente</button>`:'';
     return `<div class="card-entity" style="${paused?'opacity:.65;':''}"><div class="card-entity-head"><div class="cehl"><div class="bank-badge" style="background:${catColor(r.nome)}">${esc((r.nome||'?')[0])}</div><div class="info"><div>${esc(r.nome)} <span class="cat-pill"><span class="dot" style="background:${catColor(r.categoria)}"></span>${esc(r.categoria)}</span> <span class="cat-pill">${status}</span></div><div>${brl(r.valor)}${r.tipo==='mensal'?'/mês':'/ano'} · ${r.tipo==='mensal'?'dia '+r.diaVencimento:'dia '+r.diaVencimento+' de '+MONTHS[r.mesVencimento||0]} · ${esc(source)}${next?' · Próxima: '+next.slice(8,10)+'/'+next.slice(5,7)+'/'+next.slice(0,4):''}${occ&&occ.lastError?' · '+esc(occ.lastError):''}</div></div></div><div style="display:flex;gap:8px;flex-wrap:wrap;">${retry}<button class="btn-outline btn-sm" onclick="${paused?`Assinaturas.resume('${a.id}')`:`Assinaturas.pause('${a.id}')`}">${paused?'Ativar':'Pausar'}</button><button class="btn-outline btn-sm" onclick="Assinaturas.edit('${a.id}')">✎ Editar</button><button class="btn-outline btn-sm" onclick="Assinaturas.remove('${a.id}')">Excluir</button></div></div></div>`;
   }).join('');
-  return `<div class="cards-row"><div class="card"><div class="clabel">${tagBadgeHTML('despesas','ASSINATURAS ATIVAS (MENSAL)')}</div><div class="cval">${brl(total)}</div></div></div><div class="tabs"><button class="tab-btn" onclick="Budget.tab('receita')">Receita</button><button class="tab-btn" onclick="Budget.tab('fixa')">Despesa fixa</button><button class="tab-btn" onclick="Budget.tab('variavel')">Despesa variável</button><button class="tab-btn active" onclick="Assinaturas.tab()">Assinaturas</button>${reservasEnabled()?`<button class="tab-btn" onclick="Budget.tab('reserva_transferencias')">Entre reservas</button>`:''}<button class="tab-btn" onclick="Budget.tab('central')">⌕ Central</button></div><div class="panel-box"><div class="toolbar"><div class="toolbar-left">Assinaturas</div><button class="btn-outline" onclick="Assinaturas.add()">+ Adicionar</button></div>${rows||'<div class="empty-note">Nenhuma assinatura cadastrada ainda.</div>'}<p style="font-size:11px;color:var(--muted-2);margin-top:10px;">Previsões futuras aparecem no mês, mas somente ocorrências cobradas/pagas alteram saldo. Excluir remove o cadastro completamente; pagamentos já realizados permanecem apenas como registros financeiros.</p></div>`;
+  return `<div class="cards-row"><div class="card"><div class="clabel">${tagBadgeHTML('despesas','ASSINATURAS ATIVAS (MENSAL)')}</div><div class="cval">${brl(total)}</div></div></div><div class="tabs"><button class="tab-btn" onclick="Budget.tab('receita')">Receita</button><button class="tab-btn" onclick="Budget.tab('fixa')">Despesa fixa</button><button class="tab-btn" onclick="Budget.tab('variavel')">Despesa variável</button><button class="tab-btn active" onclick="Assinaturas.tab()">Assinaturas</button><button class="tab-btn" onclick="Budget.tab('reserva_transferencias')">Transferências</button><button class="tab-btn" onclick="Budget.tab('central')">⌕ Central</button></div><div class="panel-box"><div class="toolbar"><div class="toolbar-left">Assinaturas</div><button class="btn-outline" onclick="Assinaturas.add()">+ Adicionar</button></div>${rows||'<div class="empty-note">Nenhuma assinatura cadastrada ainda.</div>'}<p style="font-size:11px;color:var(--muted-2);margin-top:10px;">Previsões futuras aparecem no mês, mas somente ocorrências cobradas/pagas alteram saldo. Excluir remove o cadastro completamente; pagamentos já realizados permanecem apenas como registros financeiros.</p></div>`;
 }

@@ -89,7 +89,7 @@ function boletoParcelaStatus(b, y=S.month.y, m=S.month.m){
   const selYM = monthKey(y,m);
   const inicio = b.dataInicio || b.dataCompra || monthKey(y,m);
   const atual = monthDiffYM(selYM, inicio) + 1;
-  const ativoStatus = !['Quitado','Cancelado'].includes(b.status||'Ativo');
+  const ativoStatus = !['Pago','Quitado','Cancelado'].includes(b.status||'Em Aberto');
   return { ativo: ativoStatus && atual>=1 && atual<=Number(b.parcelaTotal||1), atual };
 }
 

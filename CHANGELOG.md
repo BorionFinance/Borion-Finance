@@ -1,3 +1,14 @@
+## V6.28.0 — Fluxos financeiros integrados e personalização persistente
+
+- Receita ganhou formulário próprio, origem em botões e destino em Carteira, Conta, Reserva ou divisão entre Conta e Reserva.
+- Assinaturas passam a reutilizar categorias fixas/variáveis e o mesmo seletor de pagamento por Carteira, Conta, Reserva ou Crédito.
+- Transferências foram centralizadas em Lançamentos, com uma única janela também usada pelas Reservas e regras de vínculo entre conta e cofrinho.
+- A página antiga de Transferências foi removida de Cartões e Contas.
+- Editar despesa de cartão em Lançamentos abre a mesma janela Editar Parcela do cartão.
+- Boletos receberam ordem revisada, origem Carteira/Conta, status Em Aberto/Pago/Cancelado e categorias dinâmicas.
+- Ordem lateral e de módulos passou a ser persistida no perfil. Patrimônio ganhou arrastar, reordenar e escolha de 1, 2 ou 3 colunas.
+- Validação final: **88/88 testes regressivos** e **214/214 verificações de integridade** aprovados.
+
 ## V6.27.4 — Botões compactos em faturas e boletos
 
 - Remove a seção duplicada **Despesas vinculadas às contas** da tela Cartões e Contas.

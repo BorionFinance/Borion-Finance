@@ -18,6 +18,7 @@ const ORDER_TYPES = {
   contas:  { label: 'Bancos e contas' },
   cartoes: { label: 'Cartões' },
   reservas:{ label: 'Reservas e cofrinhos' },
+  patrimony_modules:{ label: 'Módulos do patrimônio' },
   cat_receita:{ label: 'Categorias de receita' },
   cat_fixa:{ label: 'Categorias de despesa fixa' },
   cat_variavel:{ label: 'Categorias de despesa variável' }
@@ -29,6 +30,7 @@ const OrderPreferences = {
   controlSelection: {},// seleção visual temporária dos menus; vazia = mostra sempre o rótulo neutro ORDEM
   pending: {},         // {tipo: [ids...]} — mudanças feitas desde que o modo foi ligado, ainda não salvas
   pendingReservaColumns: null, // 2, 3 ou 4 — só é confirmado ao clicar em OK
+  pendingPatrimonyColumns: null, // 1, 2 ou 3 — só é confirmado ao clicar em OK
   _hydrated: {},        // {escopoDoPerfil: true} — evita buscar na nuvem mais de uma vez por perfil
 
   /* ---------------- Escopo: conta + perfil ---------------- */
@@ -38,31 +40,39 @@ const OrderPreferences = {
   storageKey(type){ return 'borion_order_' + this.effectiveUserId() + '_' + this.effectiveProfileId() + '_' + type; },
   modeStorageKey(type){ return 'borion_ordermode_' + this.effectiveUserId() + '_' + this.effectiveProfileId() + '_' + type; },
   reservaColumnsStorageKey(){ return 'borion_reserva_columns_' + this.effectiveUserId() + '_' + this.effectiveProfileId(); },
+  patrimonyColumnsStorageKey(){ return 'borion_patrimony_columns_' + this.effectiveUserId() + '_' + this.effectiveProfileId(); },
   pendingCloudKey(type){ return 'borion_orderpending_' + this.profileScopeKey() + '_' + type; },
 
-  /* ---------------- Leitura/gravação local ---------------- */
+  /* ---------------- Leitura/gravação local + perfil ---------------- */
+  profilePreferenceRoot(create=false){
+    if(typeof S==='undefined'||!S.data) return null;
+    if(create&&!S.data.uiPreferences) S.data.uiPreferences={};
+    if(create&&!S.data.uiPreferences.orderPreferences) S.data.uiPreferences.orderPreferences={orders:{},sortModes:{},reservaColumns:3,patrimonyColumns:2};
+    const root=S.data.uiPreferences&&S.data.uiPreferences.orderPreferences;
+    if(root&&create){if(!root.orders)root.orders={};if(!root.sortModes)root.sortModes={};}
+    return root||null;
+  },
   getSavedOrder(type){
-    const v = readJSON(this.storageKey(type), []);
-    return Array.isArray(v) ? v : [];
+    const root=this.profilePreferenceRoot(false),profileValue=root&&root.orders&&root.orders[type];
+    if(Array.isArray(profileValue)) return profileValue.slice();
+    const v=readJSON(this.storageKey(type),[]);return Array.isArray(v)?v:[];
   },
-  saveOrderLocal(type, ids){ writeJSON(this.storageKey(type), Array.isArray(ids) ? ids : []); },
-  clampReservaColumns(value){ const n=Number(value); return [2,3,4].includes(n) ? n : 3; },
-  getReservaColumns(){ return this.clampReservaColumns(readJSON(this.reservaColumnsStorageKey(), 3)); },
-  workingReservaColumns(){ return (this.active && this.activeType==='reservas' && this.pendingReservaColumns!=null) ? this.clampReservaColumns(this.pendingReservaColumns) : this.getReservaColumns(); },
-  saveReservaColumnsLocal(value){ writeJSON(this.reservaColumnsStorageKey(), this.clampReservaColumns(value)); },
-  setReservaColumns(value){
-    if(!(this.active && this.activeType==='reservas')) return;
-    this.pendingReservaColumns=this.clampReservaColumns(value);
-    this.notify();
+  saveOrderLocal(type,ids){
+    const safe=Array.isArray(ids)?ids.slice():[];writeJSON(this.storageKey(type),safe);
+    const root=this.profilePreferenceRoot(true);if(root)root.orders[type]=safe.slice();
   },
-  getSortMode(type){
-    const v = readJSON(this.modeStorageKey(type), 'manual');
-    return ['manual','az','za','recent','old'].includes(v) ? v : 'manual';
-  },
-  setSortMode(type, mode){
-    writeJSON(this.modeStorageKey(type), mode);
-    this.notify();
-  },
+  clampReservaColumns(value){const n=Number(value);return [2,3,4].includes(n)?n:3;},
+  clampPatrimonyColumns(value){const n=Number(value);return [1,2,3].includes(n)?n:2;},
+  getReservaColumns(){const root=this.profilePreferenceRoot(false);return this.clampReservaColumns(root&&root.reservaColumns!=null?root.reservaColumns:readJSON(this.reservaColumnsStorageKey(),3));},
+  getPatrimonyColumns(){const root=this.profilePreferenceRoot(false);return this.clampPatrimonyColumns(root&&root.patrimonyColumns!=null?root.patrimonyColumns:readJSON(this.patrimonyColumnsStorageKey(),2));},
+  workingReservaColumns(){return (this.active&&this.activeType==='reservas'&&this.pendingReservaColumns!=null)?this.clampReservaColumns(this.pendingReservaColumns):this.getReservaColumns();},
+  workingPatrimonyColumns(){return (this.active&&this.activeType==='patrimony_modules'&&this.pendingPatrimonyColumns!=null)?this.clampPatrimonyColumns(this.pendingPatrimonyColumns):this.getPatrimonyColumns();},
+  saveReservaColumnsLocal(value){const safe=this.clampReservaColumns(value);writeJSON(this.reservaColumnsStorageKey(),safe);const root=this.profilePreferenceRoot(true);if(root)root.reservaColumns=safe;},
+  savePatrimonyColumnsLocal(value){const safe=this.clampPatrimonyColumns(value);writeJSON(this.patrimonyColumnsStorageKey(),safe);const root=this.profilePreferenceRoot(true);if(root)root.patrimonyColumns=safe;},
+  setReservaColumns(value){if(!(this.active&&this.activeType==='reservas'))return;this.pendingReservaColumns=this.clampReservaColumns(value);this.notify();},
+  setPatrimonyColumns(value){if(!(this.active&&this.activeType==='patrimony_modules'))return;this.pendingPatrimonyColumns=this.clampPatrimonyColumns(value);this.notify();},
+  getSortMode(type){const root=this.profilePreferenceRoot(false);const profileValue=root&&root.sortModes&&root.sortModes[type];const v=profileValue||readJSON(this.modeStorageKey(type),'manual');return ['manual','az','za','recent','old'].includes(v)?v:'manual';},
+  setSortMode(type,mode){writeJSON(this.modeStorageKey(type),mode);const root=this.profilePreferenceRoot(true);if(root)root.sortModes[type]=mode;if(typeof saveCurrentData==='function')saveCurrentData();this.notify();},
 
   /* Ordem "de trabalho": se o modo Organizar está ligado e o usuário já mexeu nessa lista
      nesta sessão, usa o rascunho em memória (pending); senão usa a ordem salva. */
@@ -134,12 +144,12 @@ const OrderPreferences = {
     else newIdx = Math.max(0, Math.min(ids.length-1, idx+direction));
     if(newIdx===idx) return;
     this.pending[type] = this.arrayMove(ids, idx, newIdx);
-    writeJSON(this.modeStorageKey(type), 'manual');
+    writeJSON(this.modeStorageKey(type),'manual');const root=this.profilePreferenceRoot(true);if(root)root.sortModes[type]='manual';
     this.notify();
   },
   reorderFromDom(type, idsInDomOrder){
     this.pending[type] = idsInDomOrder.slice();
-    writeJSON(this.modeStorageKey(type), 'manual');
+    writeJSON(this.modeStorageKey(type),'manual');const root=this.profilePreferenceRoot(true);if(root)root.sortModes[type]='manual';
     this.notify();
   },
 
@@ -149,33 +159,24 @@ const OrderPreferences = {
     this.activeType = this.active ? (type || null) : null;
     this.pending = {};
     this.pendingReservaColumns = null;
+    this.pendingPatrimonyColumns = null;
     if(!this.active) this.controlSelection = {};
     this.notify();
   },
   toggleActive(){ this.setActive(!this.active); },
   saveAll(){
-    const types = Object.keys(this.pending);
-    types.forEach(type=>{
-      const ids = this.pending[type];
-      this.saveOrderLocal(type, ids);
-      this.syncToCloud(type, ids);
-    });
-    if(this.pendingReservaColumns!=null){
-      const cols=this.clampReservaColumns(this.pendingReservaColumns);
-      this.saveReservaColumnsLocal(cols);
-      this.syncPreferenceToCloud('reservas_columns', cols);
-    }
-    this.pending = {};
-    this.pendingReservaColumns = null;
-    this.active = false;
-    this.activeType = null;
-    this.controlSelection = {};
-    this.notify();
-    if(typeof toast==='function') toast('Organização salva com sucesso.');
+    const types=Object.keys(this.pending);
+    types.forEach(type=>{const ids=this.pending[type];this.saveOrderLocal(type,ids);this.syncToCloud(type,ids);});
+    if(this.pendingReservaColumns!=null){const cols=this.clampReservaColumns(this.pendingReservaColumns);this.saveReservaColumnsLocal(cols);this.syncPreferenceToCloud('reservas_columns',cols);}
+    if(this.pendingPatrimonyColumns!=null){const cols=this.clampPatrimonyColumns(this.pendingPatrimonyColumns);this.savePatrimonyColumnsLocal(cols);this.syncPreferenceToCloud('patrimony_columns',cols);}
+    if(typeof saveCurrentData==='function')saveCurrentData();
+    this.pending={};this.pendingReservaColumns=null;this.pendingPatrimonyColumns=null;this.active=false;this.activeType=null;this.controlSelection={};this.notify();
+    if(typeof toast==='function')toast('Organização salva com sucesso.');
   },
   cancelAll(){
     this.pending = {};
     this.pendingReservaColumns = null;
+    this.pendingPatrimonyColumns = null;
     this.active = false;
     this.activeType = null;
     this.controlSelection = {};
@@ -187,11 +188,10 @@ const OrderPreferences = {
     delete this.pending[type];
     writeJSON(this.modeStorageKey(type), 'manual');
     this.syncToCloud(type, []);
-    if(type==='reservas'){
-      localStorage.removeItem(this.reservaColumnsStorageKey());
-      this.pendingReservaColumns=null;
-      this.syncPreferenceToCloud('reservas_columns', 3);
-    }
+    const root=this.profilePreferenceRoot(true);if(root){delete root.orders[type];delete root.sortModes[type];}
+    if(type==='reservas'){localStorage.removeItem(this.reservaColumnsStorageKey());this.pendingReservaColumns=null;this.saveReservaColumnsLocal(3);this.syncPreferenceToCloud('reservas_columns',3);}
+    if(type==='patrimony_modules'){localStorage.removeItem(this.patrimonyColumnsStorageKey());this.pendingPatrimonyColumns=null;this.savePatrimonyColumnsLocal(2);this.syncPreferenceToCloud('patrimony_columns',2);}
+    if(typeof saveCurrentData==='function')saveCurrentData();
   },
   resetAllVisible(types){
     (types || Object.keys(ORDER_TYPES)).forEach(t=>this.resetType(t));
@@ -229,7 +229,7 @@ const OrderPreferences = {
   clearPendingCloud(type){ try{ localStorage.removeItem(this.pendingCloudKey(type)); }catch(e){} },
   retryPendingCloudSync(){
     if(!(window.CloudStorage && CloudStorage.user && navigator.onLine)) return;
-    [...Object.keys(ORDER_TYPES),'reservas_columns'].forEach(type=>{
+    [...Object.keys(ORDER_TYPES),'reservas_columns','patrimony_columns'].forEach(type=>{
       const pend = readJSON(this.pendingCloudKey(type), null);
       if(!pend) return;
       if(Object.prototype.hasOwnProperty.call(pend,'value')) this.syncPreferenceToCloud(type, pend.value);
@@ -254,16 +254,13 @@ const OrderPreferences = {
       let changed = false;
       data.forEach(row=>{
         if(!row || !row.preference_key) return;
-        if(row.preference_key==='reservas_columns'){
-          const localKey=this.reservaColumnsStorageKey();
-          if(localStorage.getItem(localKey)==null){ this.saveReservaColumnsLocal(row.preference_value); changed=true; }
-          return;
-        }
+        if(row.preference_key==='reservas_columns'){const localKey=this.reservaColumnsStorageKey();if(localStorage.getItem(localKey)==null){this.saveReservaColumnsLocal(row.preference_value);changed=true;}return;}
+        if(row.preference_key==='patrimony_columns'){const localKey=this.patrimonyColumnsStorageKey();if(localStorage.getItem(localKey)==null){this.savePatrimonyColumnsLocal(row.preference_value);changed=true;}return;}
         if(!Array.isArray(row.preference_value)) return;
         const localKey = this.storageKey(row.preference_key);
         if(localStorage.getItem(localKey)==null){ this.saveOrderLocal(row.preference_key, row.preference_value); changed = true; }
       });
-      if(changed) this.notify();
+      if(changed){if(typeof saveCurrentData==='function')saveCurrentData();this.notify();}
     }catch(e){ console.warn('[BORION_ORDER][HYDRATE_WARN]', e); }
   },
 
@@ -287,11 +284,12 @@ const OrderPreferences = {
       bar.className = 'order-mode-banner';
       document.body.appendChild(bar);
     }
-    const isReservaGrid=this.activeType==='reservas' && !(typeof isSmartphoneMode==='function' && isSmartphoneMode());
+    const isReservaGrid=this.activeType==='reservas'&&!(typeof isSmartphoneMode==='function'&&isSmartphoneMode());
+    const isPatrimonyGrid=this.activeType==='patrimony_modules';
     bar.innerHTML = `
       <div class="omb-text">
-        <strong>${isReservaGrid?'Organização visual das Reservas ativa.':'Modo de organização ativo.'}</strong>
-        <span>${isReservaGrid?'Escolha 2, 3 ou 4 colunas e arraste os Cofrinhos entre os slots.':'Arraste os itens ou use as setas para definir a ordem desejada.'}</span>
+        <strong>${isReservaGrid?'Organização visual das Reservas ativa.':(isPatrimonyGrid?'Organização visual do Patrimônio ativa.':'Modo de organização ativo.')}</strong>
+        <span>${isReservaGrid?'Escolha 2, 3 ou 4 colunas e arraste os Cofrinhos entre os slots.':(isPatrimonyGrid?'Escolha 1, 2 ou 3 colunas e arraste os módulos do Patrimônio.':'Arraste os itens ou use as setas para definir a ordem desejada.')}</span>
       </div>
       <div class="omb-actions">
         <button class="btn-outline btn-sm" id="omb_reset" type="button">Restaurar ordem padrão</button>
@@ -346,6 +344,14 @@ const OrderPreferences = {
       <div class="reserva-column-picker"><span>COLUNAS</span>${[2,3,4].map(n=>`<button type="button" class="reserva-column-btn ${current===n?'active':''}" data-reserva-columns="${n}" aria-pressed="${current===n?'true':'false'}" title="Usar ${n} colunas">${n}</button>`).join('')}</div>
     </div>`;
   },
+  patrimonyLayoutControlsHTML(){
+    if(!(this.active&&this.activeType==='patrimony_modules'))return '';
+    const current=this.workingPatrimonyColumns();
+    return `<div class="reserva-layout-organizer patrimony-layout-organizer" role="group" aria-label="Quantidade de colunas do Patrimônio">
+      <div class="reserva-layout-copy"><strong>Organização do Patrimônio</strong><span>Arraste os módulos e escolha a quantidade de colunas.</span></div>
+      <div class="reserva-column-picker"><span>COLUNAS</span>${[1,2,3].map(n=>`<button type="button" class="reserva-column-btn ${current===n?'active':''}" data-patrimony-columns="${n}" aria-pressed="${current===n?'true':'false'}" title="Usar ${n} colunas">${n}</button>`).join('')}</div>
+    </div>`;
+  },
   reservaSlotHandleHTML(slotNumber, label){
     return `<div class="reserva-slot-toolbar"><span class="reserva-slot-label">SLOT ${String(slotNumber).padStart(2,'0')}</span><span class="reserva-slot-help">Arraste para mover</span><button type="button" class="order-handle reserva-slot-handle" title="Arrastar ${esc(label||'Cofrinho')} para outro slot" aria-label="Arrastar ${esc(label||'Cofrinho')} para outro slot">${this.handleSVG()}</button></div>`;
   },
@@ -379,7 +385,7 @@ const OrderPreferences = {
 
   /* ---------------- Painel "Organizar módulos e itens" (Configurações → Personalização) ---------------- */
   renderModulesOrganizePanel(){
-    const active = this.active;
+    const active=this.active&&(!this.activeType||this.activeType==='modules');
     const navList = (typeof NAV!=='undefined') ? NAV : [];
     const ordered = this.applyOrder('modules', navList, {idKey:'key', labelKey:'label'});
     const naturalIds = ordered.map(n=>n.key);
@@ -401,7 +407,7 @@ const OrderPreferences = {
             <h3>Organizar módulos e itens</h3>
             <p class="desc">Ative para reordenar os módulos do menu lateral e os itens de bancos, cartões e reservas — por arraste ou pelas setas. Desativado, o Borion funciona normalmente e nada pode ser movido sem querer.</p>
           </div>
-          <button class="toggle-switch ${active?'on':''}" onclick="OrderPreferences.toggleActive()" aria-label="${active?'Desativar':'Ativar'} modo de organização"><span></span></button>
+          <button class="toggle-switch ${active?'on':''}" onclick="OrderPreferences.setActive(!(${active?'true':'false'}),'modules')" aria-label="${active?'Desativar':'Ativar'} modo de organização"><span></span></button>
         </div>
         ${active?`<div class="order-active-hint">Modo de organização ativo. Arraste os itens ou use as setas para definir a ordem desejada. Este modo também vale nas telas de Cartões e Contas e Reserva — use os botões no rodapé da tela para salvar, cancelar ou restaurar.</div>`:''}
         <div class="order-list" data-order-list="modules">${rows}</div>
@@ -443,6 +449,7 @@ document.addEventListener('change', function(e){
       OrderPreferences.activeType = null;
       OrderPreferences.pending = {};
       OrderPreferences.pendingReservaColumns = null;
+      OrderPreferences.pendingPatrimonyColumns = null;
     }
   }
   OrderPreferences.setSortMode(type, mode);
@@ -471,12 +478,21 @@ document.addEventListener('click', function(e){
   e.preventDefault();
   OrderPreferences.setReservaColumns(Number(btn.getAttribute('data-reserva-columns')));
 });
+document.addEventListener('click',function(e){
+  const btn=e.target.closest('[data-patrimony-columns]');if(!btn)return;e.preventDefault();
+  OrderPreferences.setPatrimonyColumns(Number(btn.getAttribute('data-patrimony-columns')));
+});
 window.addEventListener('online', function(){ try{ OrderPreferences.retryPendingCloudSync(); }catch(e){} });
 
 /* ---------------- Arrastar (Pointer Events nativos — sem biblioteca) ----------------
    Os listeners de pointermove/pointerup só existem durante um arraste ativo e são sempre
    removidos ao soltar, então não há acúmulo de listeners entre uma reorganização e outra. */
 document.addEventListener('pointerdown', function(e){
+  const patrimonySlot=e.target.closest('.patrimony-grid-organizer > .patrimony-module-slot[data-order-id]');
+  const patrimonyContainer=patrimonySlot&&patrimonySlot.closest('[data-order-list="patrimony_modules"]');
+  if(patrimonySlot&&patrimonyContainer&&!e.target.closest('button:not(.order-handle),a,input,select,textarea')){
+    e.preventDefault();borionStartPatrimonySlotDrag(patrimonySlot,patrimonyContainer,e);return;
+  }
   const organizerSlot=e.target.closest('.reserva-grid-organizer > .reserva-slot[data-order-id]');
   const organizerContainer=organizerSlot && organizerSlot.closest('[data-order-list="reservas"]');
   if(organizerSlot && organizerContainer && !e.target.closest('button:not(.order-handle),a,input,select,textarea')){
@@ -493,6 +509,29 @@ document.addEventListener('pointerdown', function(e){
   if(container.classList.contains('reserva-grid-organizer')) borionStartReservaSlotDrag(row, container, e);
   else borionStartOrderDrag(handle, row, container, e);
 });
+function borionStartPatrimonySlotDrag(slot,container,startEvent){
+  if(!(OrderPreferences.active&&OrderPreferences.activeType==='patrimony_modules'))return;
+  const pointerId=startEvent.pointerId;let target=null;
+  slot.classList.add('order-dragging');container.classList.add('order-dragging-active');
+  function clearTarget(){if(target)target.classList.remove('patrimony-slot-target');target=null;}
+  function onMove(ev){
+    if(ev.pointerId!==pointerId)return;
+    const hit=document.elementFromPoint(ev.clientX,ev.clientY);
+    const next=hit&&hit.closest?hit.closest('.patrimony-grid-organizer > .patrimony-module-slot[data-order-id]'):null;
+    if(next&&next!==slot&&next.closest('[data-order-list="patrimony_modules"]')===container){if(target!==next){clearTarget();target=next;target.classList.add('patrimony-slot-target');}}else clearTarget();
+  }
+  function finish(ev){
+    if(ev.pointerId!==pointerId)return;
+    document.removeEventListener('pointermove',onMove);document.removeEventListener('pointerup',finish);document.removeEventListener('pointercancel',cancel);
+    if(target){const marker=document.createComment('patrimony-slot-swap');slot.parentNode.insertBefore(marker,slot);target.parentNode.insertBefore(slot,target);marker.parentNode.insertBefore(target,marker);marker.remove();}
+    const ids=Array.from(container.querySelectorAll(':scope > .patrimony-module-slot[data-order-id]')).map(x=>x.getAttribute('data-order-id'));
+    OrderPreferences.pending.patrimony_modules=ids;writeJSON(OrderPreferences.modeStorageKey('patrimony_modules'),'manual');const root=OrderPreferences.profilePreferenceRoot(true);if(root)root.sortModes.patrimony_modules='manual';
+    cleanup();OrderPreferences.notify();
+  }
+  function cancel(ev){if(ev.pointerId!==pointerId)return;document.removeEventListener('pointermove',onMove);document.removeEventListener('pointerup',finish);document.removeEventListener('pointercancel',cancel);cleanup();}
+  function cleanup(){clearTarget();slot.classList.remove('order-dragging');container.classList.remove('order-dragging-active');}
+  document.addEventListener('pointermove',onMove,{passive:false});document.addEventListener('pointerup',finish);document.addEventListener('pointercancel',cancel);
+}
 function borionStartReservaSlotDrag(slot, container, startEvent){
   if(!(OrderPreferences.active && OrderPreferences.activeType==='reservas')) return;
   const pointerId=startEvent.pointerId;

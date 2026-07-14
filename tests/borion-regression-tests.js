@@ -444,7 +444,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const css=fs.readFileSync(path.join(ROOT,'css/styles.css'),'utf8');
-    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.27\.4/);
+    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.28\.0/);
     assert.match(sw,/js\/20-smartphone-mode\.js/);
     assert.match(css,/html\[data-interface-mode="smartphone"\] \.smart-bottom-nav/);
     assert.match(css,/\.smart-quick-grid/); assert.match(css,/\.smart-launch-modal/);
@@ -508,7 +508,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const src=fs.readFileSync(path.join(ROOT,'js/21-smartphone-history.js'),'utf8');
-    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.27\.4/);
+    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.28\.0/);
     assert.match(sw,/js\/21-smartphone-history\.js/);
     assert.match(src,/GUARD_DEPTH:8/);
     assert.match(src,/BACK_BURST_MS:650/);
@@ -572,7 +572,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const src=fs.readFileSync(path.join(ROOT,'js/22-mobile-experience.js'),'utf8');
-    assert.match(index,/js\/22-mobile-experience\.js\?v=6\.27\.4/);
+    assert.match(index,/js\/22-mobile-experience\.js\?v=6\.28\.0/);
     assert.match(sw,/js\/22-mobile-experience\.js/);
     assert.match(src,/visualViewport/);
     assert.match(src,/navigator\.vibrate/);
@@ -617,11 +617,11 @@ async function testAsync(name, fn){
   test('45 — Rodapé técnico preserva lançamento original e autoria, atualizando apenas a versão',()=>{
     const src=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
     const backup=fs.readFileSync(path.join(ROOT,'js/02-backup-local.js'),'utf8');
-    assert.match(src,/<strong>Versão:<\/strong> 6\.27\.4/);
+    assert.match(src,/<strong>Versão:<\/strong> 6\.28\.0/);
     assert.match(src,/<strong>Lançamento:<\/strong> 14\/07\/2026/);
     assert.match(src,/Desenvolvido por <strong>Pedro Bardella<\/strong>/);
     assert.match(src,/© 2026 Pedro Bardella\. Todos os direitos reservados\./);
-    assert.match(backup,/BORION_APP_VERSION = '6\.27\.4'/);
+    assert.match(backup,/BORION_APP_VERSION = '6\.28\.0'/);
   });
 
 
@@ -670,11 +670,12 @@ async function testAsync(name, fn){
   test('54 — Atualização visual contém todos os novos campos e integrações solicitados',()=>{
     const budget=fs.readFileSync(path.join(ROOT,'js/07-budget.js'),'utf8');
     const reservas=fs.readFileSync(path.join(ROOT,'js/09-patrimony-goals.js'),'utf8');
+    const cards=fs.readFileSync(path.join(ROOT,'js/10-cards-accounts.js'),'utf8');
     const settings=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
     const subs=fs.readFileSync(path.join(ROOT,'js/19-subscriptions.js'),'utf8');
     assert.match(budget,/Local da compra/); assert.match(budget,/data-value="carteira"/); assert.match(budget,/data-value="conta"/); assert.match(budget,/data-value="reserva"/); assert.match(budget,/data-value="credito"/);
-    assert.match(budget,/Em aberto registra a despesa sem retirar dinheiro/); assert.match(budget,/Entre reservas/); assert.match(budget,/diaEntrada:diaCompra/); assert.match(budget,/Rendimento e receita própria contam como renda/);
-    assert.match(reservas,/Gerar lembrete/); assert.match(reservas,/Enviar para outra reserva/); assert.match(reservas,/Recebimento de outra reserva/);
+    assert.match(budget,/Em aberto registra a despesa sem retirar dinheiro/); assert.match(budget,/Transferências/); assert.match(budget,/diaEntrada:diaCompra/); assert.match(budget,/Receita própria e rendimento contam como renda/);
+    assert.match(reservas,/Gerar lembrete/); assert.match(cards,/Enviar para outra reserva/); assert.match(cards,/reservaAction:'enviar'/);
     assert.match(settings,/cat_receita|cat_/); assert.match(settings,/Escolha A–Z, Z–A, recentes, antigas ou uma ordem personalizada/);
     assert.match(subs,/orderedCategories\('variavel'\)/);
   });
@@ -804,6 +805,106 @@ async function testAsync(name, fn){
     assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{paid:{saldo:850,t1:'Pago',t2:'Pago',faturas:1},undone:{saldo:1000,t1:'Em aberto',t2:'Pago',faturas:0}});
   });
 
+  test('69 — Receita usa a nova ordem, origens e destinos com divisão Conta + Reserva',()=>{
+    const budget=fs.readFileSync(path.join(ROOT,'js/07-budget.js'),'utf8');
+    const start=budget.indexOf("const receitaFieldsHTML=");
+    const end=budget.indexOf("const box=el(",start);
+    const block=budget.slice(start,end);
+    assert.match(block,/Adicionar receita|Origem da receita/);
+    ['Receita própria','Rendimento','Reembolso recebido','Repasse de terceiros','Carteira','Conta','Reserva','Dividir entre Conta e Reserva'].forEach(label=>assert.ok(block.includes(label),label));
+    const fieldsStart=block.indexOf("const fieldsHTML=isReceita");
+    const fields=block.slice(fieldsStart);
+    const order=['<label>Nome</label>',"categorySelectHTML('tm',type",'<label id="tm_valor_label">Valor (R$)</label>','<label>Data</label>','${receitaFieldsHTML}'].map(x=>fields.indexOf(x));
+    assert.ok(order.every(x=>x>=0),JSON.stringify(order));
+    assert.deepStrictEqual(order.slice().sort((a,b)=>a-b),order);
+    assert.match(budget,/destino==='dividir'/);
+    assert.match(budget,/contaValor\+reservaValor/);
+  });
+
+  test('70 — Transferências ficam centralizadas em Lançamentos e usam uma única janela também nas Reservas',()=>{
+    const budget=fs.readFileSync(path.join(ROOT,'js/07-budget.js'),'utf8');
+    const cards=fs.readFileSync(path.join(ROOT,'js/10-cards-accounts.js'),'utf8');
+    const reservas=fs.readFileSync(path.join(ROOT,'js/09-patrimony-goals.js'),'utf8');
+    const cardsView=cards.slice(0,cards.indexOf('const Cards'));
+    assert.match(budget,/function renderTransferenciasTab\(\)/);
+    ['Carteira → Conta','Conta → Conta','Conta → Reserva','Reserva → Reserva'].forEach(label=>assert.ok(budget.includes(label),label));
+    assert.match(budget,/Cards\.addTransferencia\(\)/);
+    assert.doesNotMatch(cardsView,/toolbar-left">Transferências/);
+    assert.match(reservas,/Cards\.addTransferencia\(\{originBoxId/);
+    assert.match(cards,/Resgatar/); assert.match(cards,/Rendimento/); assert.match(cards,/Ajuste manual/); assert.match(cards,/Enviar para outra reserva/);
+    assert.match(cards,/filter\(r=>boxAccountId\(r\)===accountId\)/);
+  });
+
+  test('71 — Editar despesa do cartão em Lançamentos abre exatamente Cards.editParcela',()=>{
+    const budget=fs.readFileSync(path.join(ROOT,'js/07-budget.js'),'utf8');
+    assert.ok((budget.match(/Cards\.editParcela\(cartao\.id,parcela\.id\)/g)||[]).length>=2);
+    assert.doesNotMatch(budget,/Não é possível editar.*cartão/);
+  });
+
+  test('72 — Assinatura reutiliza categorias fixas e variáveis e origem Carteira, Conta, Reserva ou Crédito',()=>{
+    const subs=fs.readFileSync(path.join(ROOT,'js/19-subscriptions.js'),'utf8');
+    const start=subs.indexOf('openForm(existing){');
+    const block=subs.slice(start,subs.indexOf('render(){',start));
+    assert.match(block,/Adicionar assinatura/);
+    ['Mensal / Anual','Nome','Local','Categoria','Valor mensal','Dia do vencimento','De onde será pago'].forEach(label=>assert.ok(block.includes(label),label));
+    ['Carteira','Conta','Reserva','Crédito'].forEach(label=>assert.ok(block.includes(label),label));
+    assert.match(block,/orderedCategories\('fixa'\)/);
+    assert.match(block,/orderedCategories\('variavel'\)/);
+    assert.match(subs,/origemPagamento==='reserva'/);
+  });
+
+  test('73 — Boleto usa Carteira ou Conta, status padronizado e categoria dinâmica fixa/variável',()=>{
+    const cards=fs.readFileSync(path.join(ROOT,'js/10-cards-accounts.js'),'utf8');
+    const start=cards.indexOf('editBoleto(id){');
+    const block=cards.slice(start,cards.indexOf('/* Marca a parcela',start));
+    ['Descrição do boleto','Para quem / Empresa','Origem do pagamento','Categoria','Valor de cada boleto','Quantidade de boletos','Mês do primeiro boleto','Dia de vencimento','Status','Observação','Aparecer também em Despesas'].forEach(label=>assert.ok(block.includes(label),label));
+    assert.match(block,/value:'carteira'/); assert.match(block,/value:'conta'/);
+    assert.doesNotMatch(block,/value:'credito'/);
+    assert.match(block,/\['Em Aberto','Pago','Cancelado'\]/);
+    assert.match(block,/wireParcelaCategoriaPorTipo/);
+  });
+
+  test('74 — Ordem do menu e módulos fica no perfil; Patrimônio aceita arrastar e 1, 2 ou 3 colunas',()=>{
+    const order=fs.readFileSync(path.join(ROOT,'js/18-order-preferences.js'),'utf8');
+    const patrimony=fs.readFileSync(path.join(ROOT,'js/09-patrimony-goals.js'),'utf8');
+    const css=fs.readFileSync(path.join(ROOT,'css/styles.css'),'utf8');
+    assert.match(order,/S\.data\.uiPreferences\.orderPreferences/);
+    assert.match(order,/patrimony_modules/);
+    assert.match(order,/patrimonyColumns/);
+    assert.match(order,/\[1,2,3\]/);
+    assert.match(order,/borionStartPatrimonySlotDrag/);
+    assert.match(patrimony,/data-order-list="patrimony_modules"/);
+    ['Composição do patrimônio','Saldo em contas','Metas de patrimônio','Bens','Reservas','Rendimento das reservas','Dívidas'].forEach(label=>assert.ok(patrimony.includes(label),label));
+    assert.match(css,/--patrimony-columns/);
+  });
+
+  test('75 — Transferências aplicam e revertem saldos nos seis fluxos financeiros',()=>{
+    const c=createContext();
+    load(c,'js/00-utils.js');load(c,'js/01-storage-data-state.js');load(c,'js/05-calculations-charts.js');load(c,'js/09-patrimony-goals.js');load(c,'js/10-cards-accounts.js');
+    run(c,"todayISO=()=> '2026-07-14'; toast=()=>{};");
+    const out=run(c,`(()=>{
+      function setup(){S.data=migrateData(emptyData());const wallet=S.data.contas.find(a=>a.id===CARTEIRA_CONTA_ID);wallet.saldoInicial=500;const a={id:'acc-a',accountKind:'bank',active:true,nome:'Conta A',saldoInicial:1000},b={id:'acc-b',accountKind:'bank',active:true,nome:'Conta B',saldoInicial:200};S.data.contas.push(a,b);const ra={id:'res-a',nome:'Reserva A',accountId:a.id,banco:a.nome,valorAtual:300},rb={id:'res-b',nome:'Reserva B',accountId:b.id,banco:b.nome,valorAtual:100};S.data.reservas.boxes=[ra,rb];return {wallet,a,b,ra,rb};}
+      let x=setup(),t={id:'t1',kind:'transferencia',origemTipo:'conta',origemId:CARTEIRA_CONTA_ID,origemAccountId:CARTEIRA_CONTA_ID,destinoTipo:'conta',destinoId:x.a.id,destinoAccountId:x.a.id,valor:50,data:'2026-07-14'};Cards.applyTransferenciaEffect(t);const carteira=[contaSaldoAtual(x.wallet),contaSaldoAtual(x.a)];Cards.reverseTransferenciaEffect(t);const carteiraBack=[contaSaldoAtual(x.wallet),contaSaldoAtual(x.a)];
+      x=setup();t={id:'t2',kind:'transferencia',origemTipo:'conta',origemId:x.a.id,origemAccountId:x.a.id,destinoTipo:'reserva',destinoId:x.ra.id,valor:100,data:'2026-07-14'};Cards.applyTransferenciaEffect(t);const contaReserva=[contaSaldoAtual(x.a),x.ra.valorAtual];Cards.reverseTransferenciaEffect(t);const contaReservaBack=[contaSaldoAtual(x.a),x.ra.valorAtual];
+      x=setup();t={id:'t3',kind:'transferencia',origemTipo:'reserva',origemId:x.ra.id,destinoTipo:'conta',destinoId:x.a.id,destinoAccountId:x.a.id,reservaAction:'resgatar',valor:80,data:'2026-07-14'};Cards.applyTransferenciaEffect(t);const resgate=[x.ra.valorAtual,contaSaldoAtual(x.a)];Cards.reverseTransferenciaEffect(t);const resgateBack=[x.ra.valorAtual,contaSaldoAtual(x.a)];
+      x=setup();t={id:'t4',kind:'transferencia',origemTipo:'reserva',origemId:x.ra.id,destinoTipo:'reserva',destinoId:x.rb.id,reservaAction:'enviar',valor:70,data:'2026-07-14'};Cards.applyTransferenciaEffect(t);const entreReservas=[x.ra.valorAtual,x.rb.valorAtual];Cards.reverseTransferenciaEffect(t);const entreReservasBack=[x.ra.valorAtual,x.rb.valorAtual];
+      x=setup();t={id:'t5',kind:'rendimento_reserva',origemTipo:'reserva',origemId:x.ra.id,destinoTipo:null,valor:20,data:'2026-07-14'};Cards.applyTransferenciaEffect(t);const rendimento=x.ra.valorAtual;Cards.reverseTransferenciaEffect(t);const rendimentoBack=x.ra.valorAtual;
+      x=setup();t={id:'t6',kind:'ajuste_reserva',origemTipo:'reserva',origemId:x.ra.id,destinoTipo:null,valor:450,data:'2026-07-14'};Cards.applyTransferenciaEffect(t);const ajuste=x.ra.valorAtual;Cards.reverseTransferenciaEffect(t);const ajusteBack=x.ra.valorAtual;
+      return {carteira,carteiraBack,contaReserva,contaReservaBack,resgate,resgateBack,entreReservas,entreReservasBack,rendimento,rendimentoBack,ajuste,ajusteBack};
+    })()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{carteira:[450,1050],carteiraBack:[500,1000],contaReserva:[900,400],contaReservaBack:[1000,300],resgate:[220,1080],resgateBack:[300,1000],entreReservas:[230,170],entreReservasBack:[300,100],rendimento:320,rendimentoBack:300,ajuste:450,ajusteBack:300});
+  });
+
+  test('76 — Ordem e colunas sobrevivem sem localStorage porque ficam gravadas no perfil',()=>{
+    const c=createContext();load(c,'js/00-utils.js');
+    run(c,"function readJSON(k,f){try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v);}catch(e){return f;}} function writeJSON(k,v){localStorage.setItem(k,JSON.stringify(v));} S={currentProfile:{id:'perfil-persistente'},data:{}}; saveCurrentData=()=>true; toast=()=>{};");
+    load(c,'js/18-order-preferences.js');
+    const out=run(c,`(()=>{OrderPreferences.saveOrderLocal('modules',['budget','overview','cards']);OrderPreferences.savePatrimonyColumnsLocal(3);const orderKey=OrderPreferences.storageKey('modules'),colsKey=OrderPreferences.patrimonyColumnsStorageKey();localStorage.removeItem(orderKey);localStorage.removeItem(colsKey);S.data=JSON.parse(JSON.stringify(S.data));return {order:OrderPreferences.getSavedOrder('modules'),columns:OrderPreferences.getPatrimonyColumns(),saved:S.data.uiPreferences.orderPreferences};})()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out.order)),['budget','overview','cards']);
+    assert.strictEqual(out.columns,3);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out.saved.orders.modules)),['budget','overview','cards']);
+  });
+
   test('Código completo — todos os JavaScript passam na validação sintática',()=>{
     const files=fs.readdirSync(path.join(ROOT,'js')).filter(f=>f.endsWith('.js'));
     files.forEach(f=>execFileSync(process.execPath,['--check',path.join(ROOT,'js',f)],{stdio:'pipe'}));
@@ -887,11 +988,11 @@ async function testAsync(name, fn){
     const fs=require('fs');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     assert.match(sw,/23-profile-import-review\.js/);
-    assert.match(sw,/v6-27-4-compact-payment-buttons/);
+    assert.match(sw,/v6-28-0-integrated-financial-flows/);
   });
 
   const failures=results.filter(r=>r.status==='FAIL');
-  const report={generatedAt:new Date().toISOString(),appVersion:'6.27.4',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
+  const report={generatedAt:new Date().toISOString(),appVersion:'6.28.0',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
   fs.writeFileSync(path.join(__dirname,'regression-results.json'),JSON.stringify(report,null,2));
   for(const r of results){
     console.log(`${r.status==='PASS'?'✓':'✗'} ${r.name}`);

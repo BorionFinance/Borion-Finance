@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-07-14T11:54:56.199Z",
-  "appVersion": "6.27.4",
-  "total": 80,
-  "passed": 80,
+  "generatedAt": "2026-07-14T13:33:03.153Z",
+  "appVersion": "6.28.0",
+  "total": 88,
+  "passed": 88,
   "failed": 0,
   "results": [
     {
@@ -283,6 +283,38 @@
     },
     {
       "name": "68 — Pagar fatura sincroniza variáveis e desfazer restaura o estado individual anterior",
+      "status": "PASS"
+    },
+    {
+      "name": "69 — Receita usa a nova ordem, origens e destinos com divisão Conta + Reserva",
+      "status": "PASS"
+    },
+    {
+      "name": "70 — Transferências ficam centralizadas em Lançamentos e usam uma única janela também nas Reservas",
+      "status": "PASS"
+    },
+    {
+      "name": "71 — Editar despesa do cartão em Lançamentos abre exatamente Cards.editParcela",
+      "status": "PASS"
+    },
+    {
+      "name": "72 — Assinatura reutiliza categorias fixas e variáveis e origem Carteira, Conta, Reserva ou Crédito",
+      "status": "PASS"
+    },
+    {
+      "name": "73 — Boleto usa Carteira ou Conta, status padronizado e categoria dinâmica fixa/variável",
+      "status": "PASS"
+    },
+    {
+      "name": "74 — Ordem do menu e módulos fica no perfil; Patrimônio aceita arrastar e 1, 2 ou 3 colunas",
+      "status": "PASS"
+    },
+    {
+      "name": "75 — Transferências aplicam e revertem saldos nos seis fluxos financeiros",
+      "status": "PASS"
+    },
+    {
+      "name": "76 — Ordem e colunas sobrevivem sem localStorage porque ficam gravadas no perfil",
       "status": "PASS"
     },
     {

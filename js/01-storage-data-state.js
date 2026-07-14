@@ -520,7 +520,9 @@ function migrateData(d){
   (d.cheques.items||[]).forEach(ch=>{ if(ch.banco==null) ch.banco=''; });
   (d.boletos||[]).forEach(b=>{
     if(b.banco==null) b.banco='';
-    if(b.status==null) b.status='Ativo';
+    if(b.status==null||b.status==='Ativo') b.status='Em Aberto';
+    if(b.status==='Quitado') b.status='Pago';
+    if(!b.origemPagamento) b.origemPagamento=b.accountId===CARTEIRA_CONTA_ID?'carteira':'conta';
     if(b.parcelaTotal==null) b.parcelaTotal=1;
     if(b.valorParcela==null) b.valorParcela=0;
     if(b.dataInicio==null){ const _ym=todayYM(); b.dataInicio=monthKey(_ym.y,_ym.m); }
@@ -676,7 +678,7 @@ function migrateData(d){
      atual da reserva ou da conta (ela só reclassifica um registro histórico — o saldo que você
      já vê hoje continua exatamente o mesmo antes e depois desta migração). Quando não dá pra
      identificar com segurança, o lançamento antigo é mantido exatamente como estava.
-     Reversível: como nada é apagado, dá pra revisar migradas em Cartões e Contas → Transferências. */
+     Reversível: como nada é apagado, dá pra revisar migradas em Lançamentos → Transferências. */
   (function migrateRetiradaDeReservaParaTransferencia(){
     if(!Array.isArray(d.transacoes) || !d.transacoes.length) return;
     if(!d.reservas || !Array.isArray(d.reservas.boxes) || !d.reservas.boxes.length) return;

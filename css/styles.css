@@ -311,6 +311,16 @@ tbody tr:last-child td{border-bottom:none;}
 .installment-row.muted{opacity:.55;}
 .installment-row button{background:none;border:none;color:var(--muted);padding:5px 7px;border-radius:8px;transition:color .18s ease,background-color .18s ease,transform .18s ease;}
 .installment-row button:hover{color:var(--gold-bright);background:rgba(201,164,92,.10);transform:translateX(2px);}
+/* V6.27.3 — status único entre Lançamentos e Cartões e Contas. */
+.sync-payment-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap;min-width:156px;}
+.sync-payment-toggle{display:inline-flex;align-items:stretch;border:1px solid var(--border);border-radius:9px;overflow:hidden;background:var(--panel-2);white-space:nowrap;}
+.installment-row .sync-payment-toggle .sync-payment-btn{margin:0;border:0;border-radius:0;padding:5px 8px;min-height:28px;font-size:10.5px;font-weight:750;line-height:1;background:transparent;color:var(--muted);transform:none;}
+.installment-row .sync-payment-toggle .sync-payment-btn+.sync-payment-btn{border-left:1px solid var(--border);}
+.installment-row .sync-payment-toggle .sync-payment-btn:not(:disabled):hover{background:rgba(201,164,92,.12);color:var(--gold-bright);transform:none;}
+.installment-row .sync-payment-toggle .sync-payment-btn.active{background:linear-gradient(180deg,var(--gold-bright),var(--gold));color:#0d0a04;cursor:default;opacity:1;}
+.installment-row .sync-payment-toggle .sync-payment-btn.open.active{background:rgba(148,163,184,.18);color:var(--text);}
+.linked-paid-row{color:#22c55e;}
+@media(max-width:760px){.sync-payment-actions{justify-content:flex-start;min-width:0}.sync-payment-toggle{width:100%;max-width:190px}.installment-row .sync-payment-toggle .sync-payment-btn{flex:1;}}
 .card-entity details{margin-top:8px;}
 .card-entity summary{cursor:pointer;font-size:12px;color:var(--muted);padding:8px 0 2px;list-style:none;}
 .card-entity summary::-webkit-details-marker{display:none;}

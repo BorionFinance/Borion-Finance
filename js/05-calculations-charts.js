@@ -135,6 +135,30 @@ function setParcelaCompetenciaPagoManual(cartaoId, parcelaId, competencia, pago)
   return true;
 }
 
+/* V6.27.3 — localiza o lançamento mensal que representa uma parcela vinculada.
+   Cartão, boleto e Lançamentos passam a ler exatamente o mesmo registro de status. */
+function linkedParcelaTransactionForCompetencia(parcelaId, competencia){
+  return (S.data.transacoes||[]).find(t=>t&&t.tipo==='variavel'&&t.viaParcelaId===parcelaId&&String(t.data||'').slice(0,7)===competencia) || null;
+}
+function linkedBoletoTransactionForCompetencia(boletoId, competencia){
+  return (S.data.transacoes||[]).find(t=>t&&t.tipo==='variavel'&&t.viaBoletoId===boletoId&&String(t.data||'').slice(0,7)===competencia) || null;
+}
+function linkedVariableStatus(tx){
+  return tx&&tx.statusPagamento==='Em aberto' ? 'Em aberto' : 'Pago';
+}
+function parcelaDespesaStatus(cartaoId, parcela, competencia){
+  if(!parcela||!parcela.apareceDespesas) return null;
+  if(parcela.despesaTipo==='fixa') return parcelaCompetenciaPaga(cartaoId,parcela,competencia)?'Pago':'Em aberto';
+  const tx=linkedParcelaTransactionForCompetencia(parcela.id,competencia);
+  return tx?linkedVariableStatus(tx):null;
+}
+function boletoDespesaStatus(boleto, competencia){
+  if(!boleto||!boleto.apareceDespesas) return null;
+  if(boleto.despesaTipo==='fixa') return isBoletoCompetenciaPaga(boleto.id,competencia)?'Pago':'Em aberto';
+  const tx=linkedBoletoTransactionForCompetencia(boleto.id,competencia);
+  return tx?linkedVariableStatus(tx):null;
+}
+
 /* Valor restante de uma parcela de cartão a partir do mês selecionado, pulando meses cuja fatura já foi marcada como paga. */
 function parcelaRestanteValor(p, cartaoId, y=S.month.y, m=S.month.m){
   const st = parcelaStatus(p,y,m);
@@ -184,6 +208,12 @@ function createParcelaDespesaVariavel({nome, categoria, valorParcela, totalParce
   return ids;
 }
 function linkParcelaToDespesa(cartao, parcela){
+  const previousStatusByMonth={};
+  if(parcela){
+    (S.data.transacoes||[]).filter(t=>t&&t.viaParcelaId===parcela.id&&t.tipo==='variavel').forEach(t=>{
+      previousStatusByMonth[String(t.data||'').slice(0,7)]=linkedVariableStatus(t);
+    });
+  }
   unlinkParcelaFromDespesa(parcela);
   if(!parcela || !parcela.apareceDespesas) return;
   const nome = parcela.descricao || 'Compra no cartão';
@@ -211,10 +241,21 @@ function linkParcelaToDespesa(cartao, parcela){
       extra:{viaCartaoId:cartao.id, viaParcelaId:parcela.id, localCompra:parcela.local||'', statusPagamento:parcela.statusPagamento==='Em aberto'?'Em aberto':'Pago', diaEntrada:parcela.diaEntrada||1, viaAssinaturaId:parcela.viaAssinaturaId||null, assinaturaCobrancaId:parcela.assinaturaCobrancaId||null}
     });
     parcela.despesaTransacaoId = parcela.despesaTransacaoIds[0] || null; // compatibilidade com dados antigos
+    parcela.despesaTransacaoIds.forEach(id=>{
+      const tx=(S.data.transacoes||[]).find(t=>t.id===id);
+      const competencia=tx&&String(tx.data||'').slice(0,7);
+      if(tx&&previousStatusByMonth[competencia])tx.statusPagamento=previousStatusByMonth[competencia];
+    });
     parcela.despesaFixaId = null;
   }
 }
 function linkBoletoToDespesa(boleto){
+  const previousStatusByMonth={};
+  if(boleto){
+    (S.data.transacoes||[]).filter(t=>t&&t.viaBoletoId===boleto.id&&t.tipo==='variavel').forEach(t=>{
+      previousStatusByMonth[String(t.data||'').slice(0,7)]=linkedVariableStatus(t);
+    });
+  }
   unlinkBoletoFromDespesa(boleto);
   if(!boleto || !boleto.apareceDespesas) return;
   const nome = boleto.descricao || 'Boleto';
@@ -235,6 +276,13 @@ function linkBoletoToDespesa(boleto){
       extra:{viaBoletoId:boleto.id}
     });
     boleto.despesaTransacaoId = boleto.despesaTransacaoIds[0] || null;
+    boleto.despesaTransacaoIds.forEach(id=>{
+      const tx=(S.data.transacoes||[]).find(t=>t.id===id);
+      const competencia=tx&&String(tx.data||'').slice(0,7);
+      if(!tx)return;
+      if(isBoletoCompetenciaPaga(boleto.id,competencia))tx.statusPagamento='Pago';
+      else if(previousStatusByMonth[competencia])tx.statusPagamento=previousStatusByMonth[competencia];
+    });
     boleto.despesaFixaId = null;
   }
 }

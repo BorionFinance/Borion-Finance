@@ -1,3 +1,13 @@
+## V6.27.3 — Pago/Em aberto sincronizado em Cartões e Contas
+- Cartões e Contas passa a exibir os dois botões explícitos **Pago** e **Em aberto** nas compras vinculadas a Despesas, tanto fixas quanto variáveis.
+- Boletos vinculados a Despesas usam o mesmo status de Lançamentos e a baixa real do boleto; pagar ou reabrir atualiza também o saldo da conta.
+- Nova seção **Despesas vinculadas às contas** reúne despesas fixas e variáveis pagas por conta, Carteira ou Reserva, sem duplicar cartão e boleto.
+- Alterações feitas em Lançamentos aparecem imediatamente em Cartões e Contas, e alterações feitas em Cartões e Contas aparecem imediatamente em Lançamentos.
+- Pagar a fatura marca como pagas as despesas variáveis vinculadas daquele mês; desfazer a fatura restaura o estado individual anterior de cada lançamento.
+- Uma despesa vinculada não pode ser reaberta enquanto a fatura inteira da competência estiver paga, evitando contradição contábil.
+- Edição de compra ou boleto preserva o status mensal já definido em vez de recriar tudo como Pago.
+- Validação final: **80/80 testes regressivos** e **214/214 verificações de integridade** aprovados.
+
 ## V6.27.1 — Status sincronizado das despesas fixas
 - O botão **Pago/Em aberto** aparece em toda despesa fixa, inclusive quando veio de cartão ou boleto.
 - Lançamentos e Cartões e Contas leem e alteram o mesmo status mensal, sem cópias divergentes.

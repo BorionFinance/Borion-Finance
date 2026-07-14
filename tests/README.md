@@ -1,4 +1,4 @@
-# Testes de regressão — Borion V6.27.1
+# Testes de regressão — Borion V6.27.3
 
 Execute na raiz do projeto:
 

@@ -444,7 +444,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const css=fs.readFileSync(path.join(ROOT,'css/styles.css'),'utf8');
-    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.27\.2/);
+    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.27\.3/);
     assert.match(sw,/js\/20-smartphone-mode\.js/);
     assert.match(css,/html\[data-interface-mode="smartphone"\] \.smart-bottom-nav/);
     assert.match(css,/\.smart-quick-grid/); assert.match(css,/\.smart-launch-modal/);
@@ -508,7 +508,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const src=fs.readFileSync(path.join(ROOT,'js/21-smartphone-history.js'),'utf8');
-    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.27\.2/);
+    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.27\.3/);
     assert.match(sw,/js\/21-smartphone-history\.js/);
     assert.match(src,/GUARD_DEPTH:8/);
     assert.match(src,/BACK_BURST_MS:650/);
@@ -572,7 +572,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const src=fs.readFileSync(path.join(ROOT,'js/22-mobile-experience.js'),'utf8');
-    assert.match(index,/js\/22-mobile-experience\.js\?v=6\.27\.2/);
+    assert.match(index,/js\/22-mobile-experience\.js\?v=6\.27\.3/);
     assert.match(sw,/js\/22-mobile-experience\.js/);
     assert.match(src,/visualViewport/);
     assert.match(src,/navigator\.vibrate/);
@@ -617,11 +617,11 @@ async function testAsync(name, fn){
   test('45 — Rodapé técnico preserva lançamento original e autoria, atualizando apenas a versão',()=>{
     const src=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
     const backup=fs.readFileSync(path.join(ROOT,'js/02-backup-local.js'),'utf8');
-    assert.match(src,/<strong>Versão:<\/strong> 6\.27\.1/);
-    assert.match(src,/<strong>Lançamento:<\/strong> 13\/07\/2026/);
+    assert.match(src,/<strong>Versão:<\/strong> 6\.27\.3/);
+    assert.match(src,/<strong>Lançamento:<\/strong> 14\/07\/2026/);
     assert.match(src,/Desenvolvido por <strong>Pedro Bardella<\/strong>/);
     assert.match(src,/© 2026 Pedro Bardella\. Todos os direitos reservados\./);
-    assert.match(backup,/BORION_APP_VERSION = '6\.27\.1'/);
+    assert.match(backup,/BORION_APP_VERSION = '6\.27\.3'/);
   });
 
 
@@ -738,7 +738,7 @@ async function testAsync(name, fn){
     const c=createContext();
     load(c,'js/00-utils.js');load(c,'js/01-storage-data-state.js');load(c,'js/05-calculations-charts.js');load(c,'js/09-patrimony-goals.js');load(c,'js/07-budget.js');load(c,'js/10-cards-accounts.js');
     run(c,"todayISO=()=> '2026-07-14'; todayYM=()=>({y:2026,m:6}); toast=()=>{}; renderView=()=>{}; saveCurrentData=()=>true; S.month={y:2026,m:6};");
-    const out=run(c,`(()=>{S.data=migrateData(emptyData());const card={id:'card-sync',banco:'Nubank',limite:1000,parcelas:[],faturasPagas:[]};const p={id:'p-sync',descricao:'Internet',categoria:'Contas Fixas',valorParcela:100,parcelaTotal:1,dataCompra:'2026-07',diaEntrada:10,apareceDespesas:true,despesaTipo:'fixa',despesaTransacaoIds:[],despesaFixaId:null};card.parcelas.push(p);S.data.cartoes.push(card);linkParcelaToDespesa(card,p);const f=S.data.fixas.find(x=>x.id===p.despesaFixaId);const antes=fixaOcorrenciaStatus(f,'2026-07');Budget.toggleFixaPago(f.id);const pago={fixa:fixaOcorrenciaStatus(f,'2026-07'),cartao:parcelaCompetenciaPaga(card.id,p,'2026-07'),html:/Status das despesas fixas/.test(renderCards())&&/PAGO/.test(renderCards())};Cards.toggleParcelaPagamento(card.id,p.id,'2026-07');return {antes,pago,depois:{fixa:fixaOcorrenciaStatus(f,'2026-07'),cartao:parcelaCompetenciaPaga(card.id,p,'2026-07')}};})()`);
+    const out=run(c,`(()=>{S.data=migrateData(emptyData());const card={id:'card-sync',banco:'Nubank',limite:1000,parcelas:[],faturasPagas:[]};const p={id:'p-sync',descricao:'Internet',categoria:'Contas Fixas',valorParcela:100,parcelaTotal:1,dataCompra:'2026-07',diaEntrada:10,apareceDespesas:true,despesaTipo:'fixa',despesaTransacaoIds:[],despesaFixaId:null};card.parcelas.push(p);S.data.cartoes.push(card);linkParcelaToDespesa(card,p);const f=S.data.fixas.find(x=>x.id===p.despesaFixaId);const antes=fixaOcorrenciaStatus(f,'2026-07');Budget.toggleFixaPago(f.id);const pago={fixa:fixaOcorrenciaStatus(f,'2026-07'),cartao:parcelaCompetenciaPaga(card.id,p,'2026-07'),html:/sync-payment-toggle/.test(renderCards())&&/PAGO/.test(renderCards())};Cards.toggleParcelaPagamento(card.id,p.id,'2026-07');return {antes,pago,depois:{fixa:fixaOcorrenciaStatus(f,'2026-07'),cartao:parcelaCompetenciaPaga(card.id,p,'2026-07')}};})()`);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{antes:'Vencido',pago:{fixa:'Pago',cartao:true,html:true},depois:{fixa:'Vencido',cartao:false}});
   });
 
@@ -763,9 +763,42 @@ async function testAsync(name, fn){
     const cards=fs.readFileSync(path.join(ROOT,'js/10-cards-accounts.js'),'utf8');
     assert.ok(!/isLinked\?'':`<button onclick=\"Budget\.toggleFixaPago/.test(budget));
     assert.match(budget,/setParcelaCompetenciaPagoManual/);
-    assert.match(cards,/Status das despesas fixas/);
-    assert.match(cards,/Marcar Pago ou Em aberto em qualquer uma das telas atualiza a outra imediatamente/);
+    assert.match(cards,/Despesas vinculadas às contas/);
+    assert.match(cards,/Os botões Pago e Em aberto usam o mesmo status de Lançamentos/);
+    assert.match(cards,/syncedPaymentButtonsHTML/);
     assert.match(cards,/toggleParcelaPagamento/);
+  });
+
+  test('65 — Despesa variável do cartão usa o mesmo status em Cartões e em Lançamentos',()=>{
+    const c=createContext();
+    load(c,'js/00-utils.js');load(c,'js/01-storage-data-state.js');load(c,'js/05-calculations-charts.js');load(c,'js/09-patrimony-goals.js');load(c,'js/07-budget.js');load(c,'js/10-cards-accounts.js');
+    run(c,"todayISO=()=> '2026-07-14'; todayYM=()=>({y:2026,m:6}); toast=()=>{}; renderView=()=>{}; saveCurrentData=()=>true; S.month={y:2026,m:6};");
+    const out=run(c,`(()=>{S.data=migrateData(emptyData());const card={id:'card-var-sync',banco:'Nubank',limite:1000,parcelas:[],faturasPagas:[]};const p={id:'p-var-sync',descricao:'Compra variável',categoria:'Outro',valorParcela:120,parcelaTotal:1,dataCompra:'2026-07',diaEntrada:10,apareceDespesas:true,despesaTipo:'variavel',statusPagamento:'Em aberto',despesaTransacaoIds:[],despesaFixaId:null};card.parcelas.push(p);S.data.cartoes.push(card);linkParcelaToDespesa(card,p);const tx=linkedParcelaTransactionForCompetencia(p.id,'2026-07');const antes=variavelStatus(tx);Budget.setVariavelPago(tx.id,'Pago');const pago={tx:variavelStatus(tx),card:parcelaDespesaStatus(card.id,p,'2026-07'),html:/Budget\.setVariavelPago/.test(renderCards())&&/sync-payment-toggle/.test(renderCards())};Budget.setVariavelPago(tx.id,'Em aberto');return {antes,pago,depois:{tx:variavelStatus(tx),card:parcelaDespesaStatus(card.id,p,'2026-07')}};})()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{antes:'Em aberto',pago:{tx:'Pago',card:'Pago',html:true},depois:{tx:'Em aberto',card:'Em aberto'}});
+  });
+
+  test('66 — Despesa variável da conta aparece em Cartões e Contas e aplica/estorna o saldo uma vez',()=>{
+    const c=createContext();
+    load(c,'js/00-utils.js');load(c,'js/01-storage-data-state.js');load(c,'js/05-calculations-charts.js');load(c,'js/09-patrimony-goals.js');load(c,'js/07-budget.js');load(c,'js/10-cards-accounts.js');
+    run(c,"todayISO=()=> '2026-07-14'; todayYM=()=>({y:2026,m:6}); toast=()=>{}; renderView=()=>{}; saveCurrentData=()=>true; S.month={y:2026,m:6};");
+    const out=run(c,`(()=>{S.data=migrateData(emptyData());const a={id:'acc-var-sync',accountKind:'bank',active:true,nome:'Inter',saldoInicial:1000};S.data.contas.push(a);const tx={id:'tx-account-sync',tipo:'variavel',nome:'Energia',data:'2026-07-10',categoria:'Casa',valor:100,accountId:a.id,banco:a.nome,formaPagamento:'Pix',origemPagamento:'conta',statusPagamento:'Em aberto'};S.data.transacoes.push(tx);const html=renderCards();Budget.setVariavelPago(tx.id,'Pago');const paid={saldo:contaSaldoAtual(a),status:variavelStatus(tx)};Budget.setVariavelPago(tx.id,'Em aberto');return {html:/Despesas vinculadas às contas/.test(html)&&/Energia/.test(html)&&/sync-payment-toggle/.test(html),paid,open:{saldo:contaSaldoAtual(a),status:variavelStatus(tx)}};})()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{html:true,paid:{saldo:900,status:'Pago'},open:{saldo:1000,status:'Em aberto'}});
+  });
+
+  test('67 — Boleto variável pago ou reaberto sincroniza lançamento e saldo da conta',()=>{
+    const c=createContext();
+    load(c,'js/00-utils.js');load(c,'js/01-storage-data-state.js');load(c,'js/05-calculations-charts.js');load(c,'js/09-patrimony-goals.js');load(c,'js/07-budget.js');load(c,'js/10-cards-accounts.js');
+    run(c,"todayISO=()=> '2026-07-14'; todayYM=()=>({y:2026,m:6}); toast=()=>{}; renderView=()=>{}; saveCurrentData=()=>true; S.month={y:2026,m:6};");
+    const out=run(c,`(()=>{S.data=migrateData(emptyData());const a={id:'acc-bol-sync',accountKind:'bank',active:true,nome:'Conta boleto',saldoInicial:1000};S.data.contas.push(a);const b={id:'bol-var-sync',descricao:'Curso',credor:'Escola',accountId:a.id,banco:a.nome,categoria:'Educação',valorParcela:150,parcelaTotal:1,dataInicio:'2026-07',diaVencimento:20,status:'Ativo',pagamentos:[],apareceDespesas:true,despesaTipo:'variavel'};S.data.boletos.push(b);linkBoletoToDespesa(b);const tx=linkedBoletoTransactionForCompetencia(b.id,'2026-07');tx.statusPagamento='Em aberto';openModal=cfg=>cfg.onSave({accountId:a.id,valor:150,data:'2026-07-14'});Budget.setVariavelPago(tx.id,'Pago');const paid={saldo:contaSaldoAtual(a),status:variavelStatus(tx),pagamentos:b.pagamentos.length,cardStatus:boletoDespesaStatus(b,'2026-07')};Budget.setVariavelPago(tx.id,'Em aberto');return {paid,open:{saldo:contaSaldoAtual(a),status:variavelStatus(tx),pagamentos:b.pagamentos.length,cardStatus:boletoDespesaStatus(b,'2026-07')}};})()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{paid:{saldo:850,status:'Pago',pagamentos:1,cardStatus:'Pago'},open:{saldo:1000,status:'Em aberto',pagamentos:0,cardStatus:'Em aberto'}});
+  });
+
+  test('68 — Pagar fatura sincroniza variáveis e desfazer restaura o estado individual anterior',()=>{
+    const c=createContext();
+    load(c,'js/00-utils.js');load(c,'js/01-storage-data-state.js');load(c,'js/05-calculations-charts.js');load(c,'js/09-patrimony-goals.js');load(c,'js/07-budget.js');load(c,'js/10-cards-accounts.js');
+    run(c,"todayISO=()=> '2026-07-14'; todayYM=()=>({y:2026,m:6}); toast=()=>{}; renderView=()=>{}; saveCurrentData=()=>true; S.month={y:2026,m:6};");
+    const out=run(c,`(()=>{S.data=migrateData(emptyData());const a={id:'acc-fat-sync',accountKind:'bank',active:true,nome:'Conta fatura',saldoInicial:1000};S.data.contas.push(a);const card={id:'card-fat-var',banco:'Cartão teste',limite:2000,parcelas:[],faturasPagas:[]};const p1={id:'p-fat-open',descricao:'Compra aberta',categoria:'Outro',valorParcela:100,parcelaTotal:1,dataCompra:'2026-07',apareceDespesas:true,despesaTipo:'variavel',statusPagamento:'Em aberto'};const p2={id:'p-fat-paid',descricao:'Compra paga',categoria:'Outro',valorParcela:50,parcelaTotal:1,dataCompra:'2026-07',apareceDespesas:true,despesaTipo:'variavel',statusPagamento:'Pago'};card.parcelas.push(p1,p2);S.data.cartoes.push(card);linkParcelaToDespesa(card,p1);linkParcelaToDespesa(card,p2);const t1=linkedParcelaTransactionForCompetencia(p1.id,'2026-07'),t2=linkedParcelaTransactionForCompetencia(p2.id,'2026-07');openModal=cfg=>cfg.onSave({accountId:a.id,valor:150,data:'2026-07-14'});Cards.payFatura(card.id);const paid={saldo:contaSaldoAtual(a),t1:variavelStatus(t1),t2:variavelStatus(t2),faturas:card.faturasPagas.length};Cards.undoFaturaPagamento(card.id,card.faturasPagas[0].id);return {paid,undone:{saldo:contaSaldoAtual(a),t1:variavelStatus(t1),t2:variavelStatus(t2),faturas:card.faturasPagas.length}};})()`);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(out)),{paid:{saldo:850,t1:'Pago',t2:'Pago',faturas:1},undone:{saldo:1000,t1:'Em aberto',t2:'Pago',faturas:0}});
   });
 
   test('Código completo — todos os JavaScript passam na validação sintática',()=>{
@@ -851,11 +884,11 @@ async function testAsync(name, fn){
     const fs=require('fs');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     assert.match(sw,/23-profile-import-review\.js/);
-    assert.match(sw,/v6-27-2-system-integrity-audit/);
+    assert.match(sw,/v6-27-3-payment-status-sync/);
   });
 
   const failures=results.filter(r=>r.status==='FAIL');
-  const report={generatedAt:new Date().toISOString(),appVersion:'6.27.2',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
+  const report={generatedAt:new Date().toISOString(),appVersion:'6.27.3',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
   fs.writeFileSync(path.join(__dirname,'regression-results.json'),JSON.stringify(report,null,2));
   for(const r of results){
     console.log(`${r.status==='PASS'?'✓':'✗'} ${r.name}`);

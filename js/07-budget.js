@@ -512,55 +512,102 @@ const Budget = {
       openTransactionModal({type:t.tipo, existing:t});
     }
   },
-  /* V6.1 — marca/desmarca a ocorrência do MÊS SELECIONADO como paga. Nunca afeta outras
-     ocorrências (outros meses) da mesma despesa fixa — cada mês tem seu próprio estado. */
-  toggleFixaPago(fixaId){
-    const f = S.data.fixas.find(x=>x.id===fixaId);
-    if(!f) return;
-    const mesKey = monthKey(S.month.y,S.month.m);
-    const status = fixaOcorrenciaStatus(f, mesKey);
+  /* V6.27.3 — define explicitamente Pago ou Em aberto usando um único estado mensal.
+     A mesma função é chamada tanto em Lançamentos quanto em Cartões e Contas. */
+  setFixaStatus(fixaId, requestedStatus){
+    const f=(S.data.fixas||[]).find(x=>x.id===fixaId);
+    if(!f)return;
+    const mesKey=monthKey(S.month.y,S.month.m);
+    const atual=fixaOcorrenciaStatus(f,mesKey)==='Pago'?'Pago':'Em aberto';
+    const alvo=requestedStatus==='Pago'?'Pago':'Em aberto';
+    if(atual===alvo){toast(alvo==='Pago'?'Esta despesa já está paga.':'Esta despesa já está em aberto.');return;}
 
-    /* V6.27.1 — cartão, boleto e Lançamentos usam o mesmo estado mensal. */
     if(f.viaParcelaId){
       const cartao=(S.data.cartoes||[]).find(c=>c.id===f.viaCartaoId);
       const parcela=cartao&&(cartao.parcelas||[]).find(p=>p.id===f.viaParcelaId);
       if(!cartao||!parcela){toast('A compra vinculada ao cartão não foi encontrada.');return;}
-      if(status==='Pago'&&isFaturaPaga(cartao.id,mesKey)){
+      if(alvo==='Em aberto'&&isFaturaPaga(cartao.id,mesKey)){
         toast('Esta despesa está paga porque a fatura inteira foi paga. Desfaça o pagamento da fatura em Cartões e Contas para reabrir.');
         return;
       }
-      if(!setParcelaCompetenciaPagoManual(cartao.id,parcela.id,mesKey,status!=='Pago')){toast('Não foi possível atualizar a parcela vinculada.');return;}
-      saveCurrentData();renderView();toast(status==='Pago'?'Despesa fixa voltou para em aberto no cartão e em Lançamentos.':'Despesa fixa marcada como paga no cartão e em Lançamentos.');
+      if(!setParcelaCompetenciaPagoManual(cartao.id,parcela.id,mesKey,alvo==='Pago')){toast('Não foi possível atualizar a parcela vinculada.');return;}
+      saveCurrentData();renderView();toast(alvo==='Pago'?'Despesa fixa marcada como paga no cartão e em Lançamentos.':'Despesa fixa voltou para em aberto no cartão e em Lançamentos.');
       return;
     }
+
     if(f.viaBoletoId){
       const b=(S.data.boletos||[]).find(x=>x.id===f.viaBoletoId);
       if(!b){toast('O boleto vinculado não foi encontrado.');return;}
       const info=boletoParcelaDoMes(b.id,S.month.y,S.month.m);
-      if(status==='Pago'&&info.pagamento){
-        if(window.Cards&&typeof Cards.undoBoletoPagamento==='function') Cards.undoBoletoPagamento(b.id,info.pagamento.id);
-      }else if(status==='Pago'){
-        /* compatibilidade com ocorrência antiga paga diretamente antes do vínculo completo */
+      if(alvo==='Pago'){
+        if(info.paga){saveCurrentData();renderView();return;}
+        if(window.Cards&&typeof Cards.payBoletoParcela==='function') Cards.payBoletoParcela(b.id,mesKey);
+      }else if(info.pagamento&&window.Cards&&typeof Cards.undoBoletoPagamento==='function'){
+        Cards.undoBoletoPagamento(b.id,info.pagamento.id);
+      }else{
+        /* Compatibilidade com ocorrência antiga paga diretamente antes do vínculo completo. */
         undoFixaOcorrencia(f,mesKey);
-      }else if(window.Cards&&typeof Cards.payBoletoParcela==='function') Cards.payBoletoParcela(b.id);
+      }
       return;
     }
-    if(status==='Pago') undoFixaOcorrencia(f, mesKey);
-    else payFixaOcorrencia(f, mesKey);
+
+    if(alvo==='Pago') payFixaOcorrencia(f,mesKey);
+    else undoFixaOcorrencia(f,mesKey);
+  },
+  toggleFixaPago(fixaId){
+    const f=(S.data.fixas||[]).find(x=>x.id===fixaId);
+    if(!f)return;
+    const atual=fixaOcorrenciaStatus(f,monthKey(S.month.y,S.month.m))==='Pago'?'Pago':'Em aberto';
+    Budget.setFixaStatus(fixaId,atual==='Pago'?'Em aberto':'Pago');
+  },
+
+  setVariavelPago(id, requestedStatus){
+    const tx=(S.data.transacoes||[]).find(t=>t.id===id&&t.tipo==='variavel');
+    if(!tx)return;
+    const alvo=requestedStatus==='Pago'?'Pago':'Em aberto';
+    const atual=variavelStatus(tx);
+    if(atual===alvo){toast(alvo==='Pago'?'Esta despesa já está paga.':'Esta despesa já está em aberto.');return;}
+
+    /* Boleto usa o pagamento real da parcela como fonte de verdade. A baixa/estorno do
+       boleto também atualiza este lançamento, evitando dois saldos independentes. */
+    if(tx.viaBoletoId){
+      const b=(S.data.boletos||[]).find(x=>x.id===tx.viaBoletoId);
+      if(!b){toast('O boleto vinculado não foi encontrado.');return;}
+      const competencia=String(tx.data||'').slice(0,7)||monthKey(S.month.y,S.month.m);
+      const parts=competencia.split('-').map(Number);
+      const info=boletoParcelaDoMes(b.id,parts[0]||S.month.y,(parts[1]||S.month.m+1)-1);
+      if(alvo==='Pago'){
+        if(info.paga){tx.statusPagamento='Pago';saveCurrentData();renderView();return;}
+        if(window.Cards&&typeof Cards.payBoletoParcela==='function') Cards.payBoletoParcela(b.id,competencia);
+      }else if(info.pagamento&&window.Cards&&typeof Cards.undoBoletoPagamento==='function'){
+        Cards.undoBoletoPagamento(b.id,info.pagamento.id);
+      }else{
+        tx.statusPagamento='Em aberto';saveCurrentData();renderView();toast('Despesa voltou para em aberto em Boletos e em Lançamentos.');
+      }
+      return;
+    }
+
+    /* Compra no cartão pode ter status individual, mas não pode ficar em aberto enquanto
+       a fatura inteira da competência estiver paga. */
+    if(tx.viaParcelaId){
+      const card=(S.data.cartoes||[]).find(c=>c.id===tx.viaCartaoId);
+      const competencia=String(tx.data||'').slice(0,7)||monthKey(S.month.y,S.month.m);
+      if(alvo==='Em aberto'&&card&&isFaturaPaga(card.id,competencia)){
+        toast('Esta despesa está paga porque a fatura inteira foi paga. Desfaça o pagamento da fatura em Cartões e Contas para reabrir.');
+        return;
+      }
+    }
+
+    const ok=runAtomicFinancialMutation(()=>{if(!setVariavelStatus(tx,alvo))throw new Error('status_nao_alterado');},()=>{});
+    if(!ok)return;
+    saveCurrentData();renderView();toast(alvo==='Pago'?'Despesa marcada como paga.':'Despesa voltou para em aberto.');
   },
   toggleVariavelPago(id){
     const tx=(S.data.transacoes||[]).find(t=>t.id===id&&t.tipo==='variavel');
     if(!tx)return;
-    const novo=variavelStatus(tx)==='Pago'?'Em aberto':'Pago';
-    const ok=runAtomicFinancialMutation(()=>{if(!setVariavelStatus(tx,novo))throw new Error('status_nao_alterado');},()=>{});
-    if(!ok)return;
-    if(tx.viaParcelaId){
-      const card=(S.data.cartoes||[]).find(c=>c.id===tx.viaCartaoId);
-      const parcela=card&&(card.parcelas||[]).find(p=>p.id===tx.viaParcelaId);
-      if(parcela)parcela.statusPagamento=novo;
-    }
-    saveCurrentData();renderView();toast(novo==='Pago'?'Despesa marcada como paga.':'Despesa voltou para em aberto.');
+    Budget.setVariavelPago(id,variavelStatus(tx)==='Pago'?'Em aberto':'Pago');
   },
+
   adjustInvest(){
     const key = monthKey(S.month.y,S.month.m);
     const rec = receitaMes();

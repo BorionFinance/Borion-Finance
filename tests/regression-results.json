@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-14T11:33:30.568Z",
-  "appVersion": "6.27.3",
+  "generatedAt": "2026-07-14T11:54:56.199Z",
+  "appVersion": "6.27.4",
   "total": 80,
   "passed": 80,
   "failed": 0,
@@ -266,7 +266,7 @@
       "status": "PASS"
     },
     {
-      "name": "64 — Botão de despesa fixa não é ocultado por cartão/boleto e Cartões mostra seção sincronizada",
+      "name": "64 — Cartões e boletos usam botão compacto e não exibem seção duplicada de contas",
       "status": "PASS"
     },
     {
@@ -274,11 +274,11 @@
       "status": "PASS"
     },
     {
-      "name": "66 — Despesa variável da conta aparece em Cartões e Contas e aplica/estorna o saldo uma vez",
+      "name": "66 — Despesa direta da conta fica fora da tela de cartões e continua aplicando/estornando saldo em Lançamentos",
       "status": "PASS"
     },
     {
-      "name": "67 — Boleto variável pago ou reaberto sincroniza lançamento e saldo da conta",
+      "name": "67 — Boleto variável pago ou reaberto sincroniza lançamento, saldo e botão compacto",
       "status": "PASS"
     },
     {

@@ -47,18 +47,16 @@ function wireParcelaCategoriaPorTipo(preferredCategory){
   refresh();
 }
 
-/* V6.27.3 — o mesmo seletor Pago/Em aberto aparece em Cartões e Contas e em
-   Lançamentos. O botão ativo fica travado para evitar duplo clique e débito duplicado. */
-function syncedPaymentButtonsHTML(status, paidAction, openAction){
+/* V6.27.4 — Cartões e Contas usa o mesmo botão compacto de Lançamentos:
+   ✔ para marcar como pago e ↺ para voltar para em aberto. O estado continua único e
+   sincronizado; só a apresentação voltou ao formato simples. */
+function compactPaymentPillHTML(status){
   const paid=status==='Pago';
-  return `<div class="sync-payment-toggle" role="group" aria-label="Status do pagamento">
-    <button type="button" class="sync-payment-btn paid ${paid?'active':''}" ${paid?'disabled':`onclick="${paidAction}"`}>Pago</button>
-    <button type="button" class="sync-payment-btn open ${!paid?'active':''}" ${!paid?'disabled':`onclick="${openAction}"`}>Em aberto</button>
-  </div>`;
+  return ` <span class="cheque-status ${paid?'ok':'neutral'}" style="margin-left:5px;">${paid?'PAGO':'EM ABERTO'}</span>`;
 }
-function syncedPaymentPillHTML(status){
+function compactPaymentButtonHTML(status, action, subject='lançamento'){
   const paid=status==='Pago';
-  return `<span class="cheque-status ${paid?'ok':'neutral'}" style="margin-left:5px;">${paid?'PAGO':'EM ABERTO'}</span>`;
+  return `<button type="button" onclick="${action}" title="${paid?'Marcar '+subject+' em aberto':'Marcar '+subject+' como pago'}">${paid?'↺':'✔'}</button>`;
 }
 
 /* ---------------- VIEW: CARDS & ACCOUNTS ---------------- */
@@ -107,29 +105,17 @@ function renderCards(){
       ? `<button type="button" onclick="FaturaSort.toggle('${c.id}')" title="${faturaSortDir==='old'?'Mostrando do mais antigo ao mais recente — toque para inverter':'Mostrando do mais recente ao mais antigo — toque para inverter'}" aria-label="Inverter ordem da fatura">${faturaSortDir==='old' ? '↑' : '↓'}</button>`
       : '';
     const activeRows = active.map(p=>{
-      let paymentStatus=null, paymentControls='';
-      if(p.apareceDespesas){
-        if(p.despesaTipo==='fixa'){
-          const fixa=(S.data.fixas||[]).find(f=>f.id===p.despesaFixaId)||(S.data.fixas||[]).find(f=>f.viaCartaoId===c.id&&f.viaParcelaId===p.id);
-          if(fixa){
-            paymentStatus=fixaOcorrenciaStatus(fixa,fatura.competencia)==='Pago'?'Pago':'Em aberto';
-            paymentControls=syncedPaymentButtonsHTML(paymentStatus,`Budget.setFixaStatus('${fixa.id}','Pago')`,`Budget.setFixaStatus('${fixa.id}','Em aberto')`);
-          }
-        }else{
-          const tx=linkedParcelaTransactionForCompetencia(p.id,fatura.competencia);
-          if(tx){
-            paymentStatus=variavelStatus(tx);
-            paymentControls=syncedPaymentButtonsHTML(paymentStatus,`Budget.setVariavelPago('${tx.id}','Pago')`,`Budget.setVariavelPago('${tx.id}','Em aberto')`);
-          }
-        }
-      }
-      const paymentPill=paymentStatus?syncedPaymentPillHTML(paymentStatus):'';
+      const paymentStatus=parcelaDespesaStatus(c.id,p,fatura.competencia);
+      const paymentPill=paymentStatus?compactPaymentPillHTML(paymentStatus):'';
+      const paymentButton=paymentStatus
+        ? compactPaymentButtonHTML(paymentStatus,`Cards.toggleParcelaPagamento('${c.id}','${p.id}','${fatura.competencia}')`,'esta despesa')
+        : '';
       return `<div class="installment-row">
         <span>${esc(p.descricao)}${p.local?` <span style="color:var(--muted)">(${esc(p.local)})</span>`:''}${p.categoria?` <span class="cat-pill" style="margin-left:4px;"><span class="dot" style="background:${catColor(p.categoria)}"></span>${esc(p.categoria)}</span>`:''}${p.apareceDespesas?` <span class="cat-pill" style="opacity:.85;"><span class="dot" style="background:var(--gold-bright)"></span>Também em Despesas (${p.despesaTipo==='fixa'?'fixa':'variável'})</span>`:''}${paymentPill}</span>
         <span>${brl(p.valorParcela)}/mês</span>
         <span>${p.atual} de ${p.parcelaTotal}</span>
         <span>Dia ${p.diaEntrada || '—'}</span>
-        <span class="sync-payment-actions">${paymentControls}<button onclick="Cards.editParcela('${c.id}','${p.id}')" title="Editar compra">✎</button></span>
+        <span style="display:flex;gap:5px;justify-content:flex-end;">${paymentButton}<button onclick="Cards.editParcela('${c.id}','${p.id}')" title="Editar compra">✎</button></span>
       </div>`;
     }).join('');
     const inactiveRows = inactive.map(p=>{
@@ -143,8 +129,8 @@ function renderCards(){
       </div>`;
     }).join('');
     const faturaHTML = fatura.paga
-      ? `<div class="installment-row" style="color:#22c55e;"><span>Fatura de ${monthLabel(S.month.y,S.month.m)} — <b>PAGA</b></span><span>${brl(fatura.pagamento.valor)}</span><span>via ${esc(fatura.pagamento.banco)}</span><span>${fatura.pagamento.data?fatura.pagamento.data.slice(8,10)+'/'+fatura.pagamento.data.slice(5,7):''}</span><button onclick="Cards.undoFaturaPagamento('${c.id}','${fatura.pagamento.id}')" title="Desfazer pagamento">↺</button></div>`
-      : (fatura.total>0 ? `<div class="installment-row"><span>Fatura de ${monthLabel(S.month.y,S.month.m)}: <b style="color:#ef4444">${brl(fatura.total)}</b></span><span></span><span></span><span></span><button class="btn-outline btn-sm" onclick="Cards.payFatura('${c.id}')" style="width:auto;">Marcar fatura como paga</button></div>` : '');
+      ? `<div class="installment-row" style="color:#22c55e;"><span>Fatura de ${monthLabel(S.month.y,S.month.m)} — <b>PAGA</b></span><span>${brl(fatura.pagamento.valor)}</span><span>via ${esc(fatura.pagamento.banco)}</span><span>${fatura.pagamento.data?fatura.pagamento.data.slice(8,10)+'/'+fatura.pagamento.data.slice(5,7):''}</span><button onclick="Cards.undoFaturaPagamento('${c.id}','${fatura.pagamento.id}')" title="Marcar fatura em aberto">↺</button></div>`
+      : (fatura.total>0 ? `<div class="installment-row"><span>Fatura de ${monthLabel(S.month.y,S.month.m)}: <b style="color:#ef4444">${brl(fatura.total)}</b></span><span></span><span></span><span></span><button onclick="Cards.payFatura('${c.id}')" title="Marcar fatura como paga">✔</button></div>` : '');
     return `
     <div class="card-entity" data-order-id="${esc(c.id)}">
       <div class="card-entity-head">
@@ -170,27 +156,15 @@ function renderCards(){
     const fim = shiftYM(b.dataInicio || monthKey(S.month.y,S.month.m), Number(b.parcelaTotal||1)-1);
     const statusColor = (b.status||'Ativo')==='Quitado' ? '#22c55e' : ((b.status||'Ativo')==='Cancelado' ? '#ef4444' : 'var(--gold-bright)');
     const mesRef = boletoParcelaDoMes(b.id, S.month.y, S.month.m);
-    let linkedStatus=null, linkedControls='';
-    if(b.apareceDespesas&&mesRef.total>0){
-      if(b.despesaTipo==='fixa'){
-        const fixa=(S.data.fixas||[]).find(f=>f.id===b.despesaFixaId)||(S.data.fixas||[]).find(f=>f.viaBoletoId===b.id);
-        if(fixa){
-          linkedStatus=fixaOcorrenciaStatus(fixa,mesRef.competencia)==='Pago'?'Pago':'Em aberto';
-          linkedControls=syncedPaymentButtonsHTML(linkedStatus,`Budget.setFixaStatus('${fixa.id}','Pago')`,`Budget.setFixaStatus('${fixa.id}','Em aberto')`);
-        }
-      }else{
-        const tx=linkedBoletoTransactionForCompetencia(b.id,mesRef.competencia);
-        if(tx){
-          linkedStatus=variavelStatus(tx);
-          linkedControls=syncedPaymentButtonsHTML(linkedStatus,`Budget.setVariavelPago('${tx.id}','Pago')`,`Budget.setVariavelPago('${tx.id}','Em aberto')`);
-        }
-      }
-    }
+    const linkedStatus=mesRef.total>0?boletoDespesaStatus(b,mesRef.competencia):null;
+    const linkedButton=linkedStatus
+      ? compactPaymentButtonHTML(linkedStatus,`Cards.toggleBoletoPagamento('${b.id}','${mesRef.competencia}')`,'este boleto')
+      : '';
     const mesHTML = linkedStatus
-      ? `<div class="installment-row ${linkedStatus==='Pago'?'linked-paid-row':''}"><span>Parcela de ${monthLabel(S.month.y,S.month.m)} — ${syncedPaymentPillHTML(linkedStatus)}</span><span>${brl(mesRef.pagamento?mesRef.pagamento.valor:mesRef.total)}</span><span>${mesRef.pagamento?'via '+esc(mesRef.pagamento.banco):'Vinculada a Lançamentos'}</span><span>${mesRef.pagamento&&mesRef.pagamento.data?mesRef.pagamento.data.slice(8,10)+'/'+mesRef.pagamento.data.slice(5,7):''}</span><span class="sync-payment-actions">${linkedControls}</span></div>`
+      ? `<div class="installment-row ${linkedStatus==='Pago'?'linked-paid-row':''}"><span>Parcela de ${monthLabel(S.month.y,S.month.m)} — ${compactPaymentPillHTML(linkedStatus)}</span><span>${brl(mesRef.pagamento?mesRef.pagamento.valor:mesRef.total)}</span><span>${mesRef.pagamento?'via '+esc(mesRef.pagamento.banco):'Vinculada a Lançamentos'}</span><span>${mesRef.pagamento&&mesRef.pagamento.data?mesRef.pagamento.data.slice(8,10)+'/'+mesRef.pagamento.data.slice(5,7):''}</span><span style="display:flex;justify-content:flex-end;">${linkedButton}</span></div>`
       : (mesRef.paga
-        ? `<div class="installment-row" style="color:#22c55e;"><span>Parcela de ${monthLabel(S.month.y,S.month.m)} — <b>PAGA</b></span><span>${brl(mesRef.pagamento.valor)}</span><span>via ${esc(mesRef.pagamento.banco)}</span><span>${mesRef.pagamento.data?mesRef.pagamento.data.slice(8,10)+'/'+mesRef.pagamento.data.slice(5,7):''}</span><button onclick="Cards.undoBoletoPagamento('${b.id}','${mesRef.pagamento.id}')" title="Desfazer pagamento">↺</button></div>`
-        : (mesRef.total>0 ? `<div class="installment-row"><span>Parcela de ${monthLabel(S.month.y,S.month.m)}: <b style="color:#ef4444">${brl(mesRef.total)}</b></span><span></span><span></span><span></span><button class="btn-outline btn-sm" onclick="Cards.payBoletoParcela('${b.id}')" style="width:auto;">Marcar como paga</button></div>` : ''));
+        ? `<div class="installment-row" style="color:#22c55e;"><span>Parcela de ${monthLabel(S.month.y,S.month.m)} — <b>PAGA</b></span><span>${brl(mesRef.pagamento.valor)}</span><span>via ${esc(mesRef.pagamento.banco)}</span><span>${mesRef.pagamento.data?mesRef.pagamento.data.slice(8,10)+'/'+mesRef.pagamento.data.slice(5,7):''}</span><button onclick="Cards.undoBoletoPagamento('${b.id}','${mesRef.pagamento.id}')" title="Marcar boleto em aberto">↺</button></div>`
+        : (mesRef.total>0 ? `<div class="installment-row"><span>Parcela de ${monthLabel(S.month.y,S.month.m)}: <b style="color:#ef4444">${brl(mesRef.total)}</b></span><span></span><span></span><span></span><button onclick="Cards.payBoletoParcela('${b.id}')" title="Marcar boleto como pago">✔</button></div>` : ''));
     return `
     <div class="card-entity boleto-entity">
       <div class="card-entity-head">
@@ -205,33 +179,6 @@ function renderCards(){
       <div class="installment-row muted"><span>Primeiro boleto: ${shortMonthLabel(b.dataInicio||monthKey(S.month.y,S.month.m))}</span><span>Fim: ${shortMonthLabel(fim)}</span><span>Vencimento</span><span>Dia ${b.diaVencimento||'—'}</span><button onclick="Cards.editBoleto('${b.id}')">✎</button></div>
     </div>`;
   }).join('');
-
-  /* V6.27.3 — despesas pagas diretamente por conta, carteira ou reserva aparecem
-     nesta mesma tela com os dois botões explícitos. Compras de cartão e boletos já têm
-     seus controles dentro dos respectivos blocos, evitando linhas duplicadas. */
-  const competenciaAtual=monthKey(S.month.y,S.month.m);
-  const accountExpenseItems=[];
-  fixasAtivasNoMes(S.month.y,S.month.m).filter(f=>!f.viaParcelaId&&!f.viaBoletoId&&bankMatches(f.banco,f.accountId)).forEach(f=>{
-    const raw=fixaOcorrenciaStatus(f,competenciaAtual);
-    const status=raw==='Pago'?'Pago':'Em aberto';
-    let origem='Conta';
-    if(f.origemPagamento==='reserva'){
-      const r=findReservaBoxById(f.reservaOrigemId); origem='Reserva'+(r?' · '+r.nome:'');
-    }else if(f.formaPagamento==='Dinheiro') origem='Carteira · Dinheiro';
-    else origem=accountNameSnapshot(f.accountId||resolveAccountId(f.banco,{includeArchived:true}),f.banco||f.formaPagamento||'Conta');
-    accountExpenseItems.push({sortKey:String(f.dia||1).padStart(2,'0')+'-f-'+f.id,html:`<div class="installment-row fixed-payment-sync-row"><span>${esc(f.nome)} <span class="cat-pill" style="opacity:.8;">${esc(origem)}</span></span><span>${brl(f.valor)}</span><span>Dia ${f.dia||1}</span><span>${syncedPaymentPillHTML(status)}</span><span class="sync-payment-actions">${syncedPaymentButtonsHTML(status,`Budget.setFixaStatus('${f.id}','Pago')`,`Budget.setFixaStatus('${f.id}','Em aberto')`)}</span></div>`});
-  });
-  (S.data.transacoes||[]).filter(t=>t&&t.tipo==='variavel'&&String(t.data||'').slice(0,7)===competenciaAtual&&!t.viaParcelaId&&!t.viaBoletoId&&bankMatches(t.banco,t.accountId)).forEach(t=>{
-    const status=variavelStatus(t);
-    let origem='Conta';
-    if(t.origemPagamento==='reserva'){
-      const r=findReservaBoxById(t.reservaOrigemId); origem='Reserva'+(r?' · '+r.nome:'');
-    }else if(t.formaPagamento==='Dinheiro') origem='Carteira · Dinheiro';
-    else origem=accountNameSnapshot(t.accountId||resolveAccountId(t.banco,{includeArchived:true}),t.banco||t.formaPagamento||'Conta');
-    const day=String(t.data||'').slice(8,10)||'01';
-    accountExpenseItems.push({sortKey:day+'-v-'+t.id,html:`<div class="installment-row"><span>${esc(t.nome)} <span class="cat-pill" style="opacity:.8;">${esc(origem)}</span></span><span>${brl(t.valor)}</span><span>Dia ${Number(day)||1}</span><span>${syncedPaymentPillHTML(status)}</span><span class="sync-payment-actions">${syncedPaymentButtonsHTML(status,`Budget.setVariavelPago('${t.id}','Pago')`,`Budget.setVariavelPago('${t.id}','Em aberto')`)}</span></div>`});
-  });
-  const accountExpenseRows=accountExpenseItems.sort((a,b)=>a.sortKey.localeCompare(b.sortKey)).map(x=>x.html).join('');
 
   /* V6.0 — Transferências agora podem ter Conta OU Reserva nos dois lados (não é mais só
      conta → conta). origemNome/destinoNome já vêm resolvidos e prontos para exibir; um
@@ -260,10 +207,6 @@ function renderCards(){
     <div class="toolbar" style="margin-top:18px;"><div class="toolbar-left">Boletos</div><button class="btn-outline" onclick="Cards.addBoleto()">+ Adicionar boleto</button></div>
     <p style="font-size:11.5px;color:var(--muted-2);margin:-6px 0 12px;">Use para boletos parcelados, carnês, financiamentos curtos ou cobranças recorrentes. Entram como dívida no patrimônio separado do cartão de crédito.</p>
     ${boletoBlocks || '<div class="empty-note">Nenhum boleto cadastrado ainda.</div>'}
-    <div class="toolbar" style="margin-top:18px;"><div class="toolbar-left">Despesas vinculadas às contas</div></div>
-    <p style="font-size:11.5px;color:var(--muted-2);margin:-6px 0 12px;">Aqui aparecem despesas fixas e variáveis pagas diretamente por conta, carteira ou reserva. Os botões Pago e Em aberto usam o mesmo status de Lançamentos e atualizam as duas telas imediatamente.</p>
-    <div class="installment-row ih"><span>Despesa</span><span>Valor</span><span>Vencimento</span><span>Status</span><span>Ação</span></div>
-    ${accountExpenseRows || '<div class="empty-note">Nenhuma despesa vinculada diretamente às contas neste mês.</div>'}
     <div class="toolbar" style="margin-top:18px;"><div class="toolbar-left">Transferências</div><button class="btn-outline" onclick="Cards.addTransferencia()">+ Nova transferência</button></div>
     <p style="font-size:11.5px;color:var(--muted-2);margin:-6px 0 12px;">Move dinheiro entre contas e reservas (Conta → Reserva, Reserva → Conta, Reserva → Reserva ou Conta → Conta). Nunca é receita nem despesa — só muda onde o dinheiro está guardado, e nunca deixa uma reserva negativa.</p>
     <div class="installment-row ih"><span>De → Para</span><span>Valor</span><span>Data</span><span></span><span></span></div>
@@ -441,8 +384,7 @@ const Cards = {
       saveCurrentData(); renderView(); toast('Pagamento da fatura desfeito.');
     }});
   },
-  /* Compatibilidade com atalhos antigos: encaminha para as mesmas rotinas explícitas
-     usadas pelos novos botões Pago/Em aberto. */
+  /* Botões compactos de cada parcela usam exatamente a mesma rotina de Lançamentos. */
   toggleParcelaPagamento(cartaoId,parcelaId,competencia){
     const c=(S.data.cartoes||[]).find(x=>x.id===cartaoId);
     const p=c&&(c.parcelas||[]).find(x=>x.id===parcelaId);
@@ -453,6 +395,17 @@ const Cards = {
       return;
     }
     const tx=linkedParcelaTransactionForCompetencia(p.id,competencia);
+    if(tx)Budget.toggleVariavelPago(tx.id);
+  },
+  toggleBoletoPagamento(boletoId,competencia){
+    const b=(S.data.boletos||[]).find(x=>x.id===boletoId);
+    if(!b||!b.apareceDespesas)return;
+    if(b.despesaTipo==='fixa'){
+      const f=(S.data.fixas||[]).find(x=>x.id===b.despesaFixaId)||(S.data.fixas||[]).find(x=>x.viaBoletoId===b.id);
+      if(f)Budget.toggleFixaPago(f.id);
+      return;
+    }
+    const tx=linkedBoletoTransactionForCompetencia(b.id,competencia);
     if(tx)Budget.toggleVariavelPago(tx.id);
   },
   addBoleto(){ Cards.editBoleto(null); },

@@ -148,7 +148,8 @@ function linkedVariableStatus(tx){
 }
 function parcelaDespesaStatus(cartaoId, parcela, competencia){
   if(!parcela||!parcela.apareceDespesas) return null;
-  if(parcela.despesaTipo==='fixa') return parcelaCompetenciaPaga(cartaoId,parcela,competencia)?'Pago':'Em aberto';
+  if(parcelaCompetenciaPaga(cartaoId,parcela,competencia)) return 'Pago';
+  if(parcela.despesaTipo==='fixa') return 'Em aberto';
   const tx=linkedParcelaTransactionForCompetencia(parcela.id,competencia);
   return tx?linkedVariableStatus(tx):null;
 }

@@ -1,3 +1,12 @@
+## V6.27.4 — Botões compactos em faturas e boletos
+
+- Remove a seção duplicada **Despesas vinculadas às contas** da tela Cartões e Contas.
+- Restaura o botão simples **✔** para pagar e **↺** para voltar para em aberto.
+- Adiciona o botão compacto em cada compra da fatura que está vinculada a Lançamentos, tanto fixa quanto variável.
+- Mantém o botão compacto na fatura inteira e em cada boleto/parcela do mês.
+- Cartões, boletos e Lançamentos continuam usando o mesmo estado de pagamento, sem criar status paralelo.
+- Pagamento da fatura inteira continua sincronizando os lançamentos vinculados e o desfazimento restaura os estados anteriores.
+
 ## V6.27.3 — Pago/Em aberto sincronizado em Cartões e Contas
 - Cartões e Contas passa a exibir os dois botões explícitos **Pago** e **Em aberto** nas compras vinculadas a Despesas, tanto fixas quanto variáveis.
 - Boletos vinculados a Despesas usam o mesmo status de Lançamentos e a baixa real do boleto; pagar ou reabrir atualiza também o saldo da conta.

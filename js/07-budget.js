@@ -1012,6 +1012,7 @@ function setVariavelStatus(tx, novoStatus){
 }
 
 function openTransactionModal({type, existing}){
+  if(existing&&existing.integrationManaged&&window.BorionInterop){BorionInterop.showManagedInfo(existing);return;} // protected interop ownership
   const isEdit=!!existing;
   const isReceita=type==='receita';
   const isDespesaVariavel=type==='variavel';

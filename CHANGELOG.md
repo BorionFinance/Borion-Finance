@@ -1,3 +1,9 @@
+## V6.29.0 — Interconexões protegidas entre aplicativos
+- Amanda Estética e Marco Iris passam a publicar snapshots financeiros idempotentes para o Borion.
+- Mapeamento explícito por perfil, conta e origem, com ACK de retorno.
+- Reconciliação de criação, edição, pagamento, cancelamento, exclusão e reinstalação sem duplicidade.
+- Camada marcada como protegida para permanecer intacta em futuras atualizações comuns.
+
 ## V6.28.0 — Fluxos financeiros integrados e personalização persistente
 
 - Receita ganhou formulário próprio, origem em botões e destino em Carteira, Conta, Reserva ou divisão entre Conta e Reserva.

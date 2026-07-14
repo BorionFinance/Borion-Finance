@@ -1,0 +1,109 @@
+{
+  "generatedAt": "2026-07-14T18:29:22.961Z",
+  "protocol": "borion.interop.v1",
+  "total": 25,
+  "passed": 25,
+  "failed": 0,
+  "results": [
+    {
+      "name": "Amanda projeta receita paga com perfil-alvo Estética e ID permanente",
+      "status": "PASS"
+    },
+    {
+      "name": "Amanda publica no Drive e aplica ACK Borion → Amanda",
+      "status": "PASS"
+    },
+    {
+      "name": "Marco projeta pagamento parcial como valor realizado e vincula a OS",
+      "status": "PASS"
+    },
+    {
+      "name": "Criação, repetição idempotente e edição atualizam um único lançamento e saldo",
+      "status": "PASS"
+    },
+    {
+      "name": "Receita pendente aguarda e reverte receita anteriormente paga",
+      "status": "PASS"
+    },
+    {
+      "name": "Despesa pendente entra Em aberto sem saldo; paga depois aplica uma única saída",
+      "status": "PASS"
+    },
+    {
+      "name": "Dinheiro é roteado para Carteira, não para conta padrão",
+      "status": "PASS"
+    },
+    {
+      "name": "Cancelamento e exclusão removem lançamento e revertem saldo",
+      "status": "PASS"
+    },
+    {
+      "name": "Snapshot completo limpa registro antigo após reset/reinstalação da origem",
+      "status": "PASS"
+    },
+    {
+      "name": "Perfis permanecem isolados: integração altera somente o destino escolhido",
+      "status": "PASS"
+    },
+    {
+      "name": "Validação rejeita origem errada, duplicidade, adulteração, valor negativo e ID de outra instância",
+      "status": "PASS"
+    },
+    {
+      "name": "Categoria nova é criada com cor sem destruir categorias existentes",
+      "status": "PASS"
+    },
+    {
+      "name": "Mapeamento financeiro mantém campos de auditoria e propriedade da origem",
+      "status": "PASS"
+    },
+    {
+      "name": "Arquivo sem conta de destino válida é rejeitado",
+      "status": "PASS"
+    },
+    {
+      "name": "Publicação local cria Borion_Integracoes e consome ACK da pasta",
+      "status": "PASS"
+    },
+    {
+      "name": "Marco publica snapshot no Google Drive e recebe confirmação",
+      "status": "PASS"
+    },
+    {
+      "name": "Snapshot sem alteração mantém revisão; exclusão incrementa revisão e cria tombstone",
+      "status": "PASS"
+    },
+    {
+      "name": "Camada protegida está carregada antes do boot e incluída nos caches dos três PWAs",
+      "status": "PASS"
+    },
+    {
+      "name": "Normalização cobre Pago, Parcial, Pendente, Atrasado e Cancelado",
+      "status": "PASS"
+    },
+    {
+      "name": "Formas de pagamento preservam Dinheiro, Débito, Crédito e normalizam Pix/Transferência/Boleto",
+      "status": "PASS"
+    },
+    {
+      "name": "Despesa no crédito aparece como Crédito e não reduz saldo bancário imediatamente",
+      "status": "PASS"
+    },
+    {
+      "name": "Receita recebida no cartão entra na conta padrão sem duplicar",
+      "status": "PASS"
+    },
+    {
+      "name": "ACK de outra origem ou outra instalação é ignorado",
+      "status": "PASS"
+    },
+    {
+      "name": "Registro sem ID é ignorado e valor zero não cria lançamento financeiro",
+      "status": "PASS"
+    },
+    {
+      "name": "Despesa atrasada permanece Em aberto e não movimenta o saldo",
+      "status": "PASS"
+    }
+  ]
+}

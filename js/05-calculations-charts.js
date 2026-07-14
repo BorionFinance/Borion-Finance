@@ -44,9 +44,16 @@ function fixaOcorrenciaFor(fixaId, mesKey){
   return (S.data.fixaPagamentos||[]).find(r=>r.fixaId===fixaId && r.mesKey===mesKey) || null;
 }
 function fixaOcorrenciaStatus(f, mesKey){
-  /* Compras espelhadas do cartão não movimentam uma conta diretamente: o estado vem da
-     própria compra e o pagamento real da fatura continua controlado em Cartões e Contas. */
-  if(f && f.viaParcelaId && f.statusPagamento==='Pago') return 'Pago';
+  /* V6.27.1 — o status da despesa fixa é único e compartilhado com Cartões e Contas.
+     Cartão: acompanha o status individual da parcela no mês e também herda o pagamento
+     da fatura inteira. Boleto: acompanha o pagamento da competência. Conta/Carteira/
+     Reserva continuam usando fixaPagamentos. */
+  if(f && f.viaParcelaId){
+    const cartao=(S.data.cartoes||[]).find(c=>c.id===f.viaCartaoId);
+    const parcela=cartao&&(cartao.parcelas||[]).find(p=>p.id===f.viaParcelaId);
+    if(cartao&&parcela&&parcelaCompetenciaPaga(cartao.id,parcela,mesKey)) return 'Pago';
+  }
+  if(f && f.viaBoletoId && isBoletoCompetenciaPaga(f.viaBoletoId,mesKey)) return 'Pago';
   const rec = fixaOcorrenciaFor(f.id, mesKey);
   if(rec && rec.pago) return 'Pago';
   const dueDate = mesKey+'-'+pad2(f.dia||1);
@@ -108,6 +115,26 @@ function boletoPagamentoDe(boletoId, competencia){
   return b.pagamentos.find(p=>p.competencia===competencia) || null;
 }
 
+/* V6.27.1 — pagamento individual de uma compra fixa no cartão por competência.
+   A fatura paga também torna todas as parcelas ativas daquele mês pagas, mas o marcador
+   manual é separado para que desfazer a fatura não apague uma baixa feita individualmente. */
+function parcelaPagamentoIndividualFor(parcela, competencia){
+  if(!parcela || !Array.isArray(parcela.pagamentosIndividuais)) return null;
+  return parcela.pagamentosIndividuais.find(r=>r&&r.competencia===competencia&&r.pago!==false) || null;
+}
+function parcelaCompetenciaPaga(cartaoId, parcela, competencia){
+  return !!(parcelaPagamentoIndividualFor(parcela,competencia) || isFaturaPaga(cartaoId,competencia));
+}
+function setParcelaCompetenciaPagoManual(cartaoId, parcelaId, competencia, pago){
+  const cartao=(S.data.cartoes||[]).find(c=>c.id===cartaoId);
+  const parcela=cartao&&(cartao.parcelas||[]).find(p=>p.id===parcelaId);
+  if(!cartao||!parcela) return false;
+  if(!Array.isArray(parcela.pagamentosIndividuais)) parcela.pagamentosIndividuais=[];
+  parcela.pagamentosIndividuais=parcela.pagamentosIndividuais.filter(r=>r&&r.competencia!==competencia);
+  if(pago) parcela.pagamentosIndividuais.push({id:uid(),competencia,pago:true,data:todayISO(),updatedAt:Date.now()});
+  return true;
+}
+
 /* Valor restante de uma parcela de cartão a partir do mês selecionado, pulando meses cuja fatura já foi marcada como paga. */
 function parcelaRestanteValor(p, cartaoId, y=S.month.y, m=S.month.m){
   const st = parcelaStatus(p,y,m);
@@ -167,7 +194,13 @@ function linkParcelaToDespesa(cartao, parcela){
   /* A despesa espelhada herda o banco/nome do cartão para respeitar o filtro por banco/cartão. */
   if(parcela.despesaTipo==='fixa'){
     const endMonth = shiftYM(startMonth, totalParcelas-1);
-    const f = {id:uid(), nome, localCompra:parcela.local||'', categoria, valor:valorParcela, dia:parcela.diaEntrada||1, startMonth, endMonth:totalParcelas>1?endMonth:startMonth, banco:cartao.banco||'', formaPagamento:'Crédito', statusPagamento:parcela.statusPagamento==='Pago'?'Pago':'Em aberto', viaCartaoId:cartao.id, viaParcelaId:parcela.id, parcelaTotal:totalParcelas};
+    /* statusPagamento era global e marcava todas as parcelas como pagas. Convertemos apenas
+       a competência inicial para o novo marcador mensal compartilhado. */
+    if(parcela.statusPagamento==='Pago'){
+      setParcelaCompetenciaPagoManual(cartao.id,parcela.id,startMonth,true);
+      parcela.statusPagamento='Em aberto';
+    }
+    const f = {id:uid(), nome, localCompra:parcela.local||'', categoria, valor:valorParcela, dia:parcela.diaEntrada||1, startMonth, endMonth:totalParcelas>1?endMonth:startMonth, banco:cartao.banco||'', formaPagamento:'Crédito', viaCartaoId:cartao.id, viaParcelaId:parcela.id, parcelaTotal:totalParcelas};
     S.data.fixas.push(f);
     parcela.despesaFixaId = f.id;
     parcela.despesaTransacaoId = null;

@@ -561,7 +561,30 @@ function migrateData(d){
       if(p.despesaTransacaoId===undefined) p.despesaTransacaoId=null;
       if(p.despesaTransacaoIds===undefined) p.despesaTransacaoIds=[];
       if(p.despesaFixaId===undefined) p.despesaFixaId=null;
+      /* V6.27.1 — baixa mensal individual de compras fixas no cartão. Dados da V6.27.0
+         que usavam status global Pago são convertidos somente para o mês da primeira parcela. */
+      if(!Array.isArray(p.pagamentosIndividuais)) p.pagamentosIndividuais=[];
+      if(p.despesaTipo==='fixa' && p.statusPagamento==='Pago'){
+        const competencia=p.dataCompra||monthKey(todayYM().y,todayYM().m);
+        if(!p.pagamentosIndividuais.some(r=>r&&r.competencia===competencia&&r.pago!==false))
+          p.pagamentosIndividuais.push({id:uid(),competencia,pago:true,data:null,updatedAt:Date.now(),migrado:true});
+        p.statusPagamento='Em aberto';
+      }
     });
+  });
+  /* Alguns backups da V6.27.0 guardaram o Pago no espelho de despesa fixa, não na compra.
+     Transfere esse estado para a parcela correspondente sem marcar os meses seguintes. */
+  (d.fixas||[]).forEach(f=>{
+    if(!f||!f.viaParcelaId||f.statusPagamento!=='Pago') return;
+    const cartao=(d.cartoes||[]).find(c=>c.id===f.viaCartaoId);
+    const parcela=cartao&&(cartao.parcelas||[]).find(p=>p.id===f.viaParcelaId);
+    if(parcela){
+      if(!Array.isArray(parcela.pagamentosIndividuais)) parcela.pagamentosIndividuais=[];
+      const competencia=f.startMonth||parcela.dataCompra||monthKey(todayYM().y,todayYM().m);
+      if(!parcela.pagamentosIndividuais.some(r=>r&&r.competencia===competencia&&r.pago!==false))
+        parcela.pagamentosIndividuais.push({id:uid(),competencia,pago:true,data:null,updatedAt:Date.now(),migrado:true});
+    }
+    f.statusPagamento='Em aberto';
   });
   // V5.39.1 — boletos: vínculo opcional com Orçamento > Despesas (mesmo mecanismo do cartão).
   (d.boletos||[]).forEach(b=>{

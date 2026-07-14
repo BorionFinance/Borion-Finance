@@ -95,15 +95,15 @@ function renderBudget(){
         const statusCls = status==='Pago'?'ok':status==='Vencido'?'bad':'neutral';
         const origemBox = f.origemPagamento==='reserva' ? findReservaBoxById(f.reservaOrigemId) : null;
         const origemPill = f.origemPagamento==='reserva' ? ` <span class="cat-pill" style="background:rgba(240,194,110,.15);color:var(--gold-bright);"><span class="dot" style="background:var(--gold-bright)"></span>◈ Reserva${origemBox?': '+esc(origemBox.nome):' (removida)'}</span>` : '';
-        const isLinked = !!(f.viaParcelaId || f.viaBoletoId);
+        const statusLabel=status==='Pago'?'Pago':(status==='Vencido'?'Em aberto · vencida':'Em aberto');
         return `
         <tr>
           <td>Dia ${f.dia||1}</td>
           <td>${esc(f.nome)}<div style="font-size:10.5px;color:var(--muted)">recorrente desde ${shortMonthLabel(f.startMonth)}</div>${f.viaParcelaId?`<span class="cat-pill" style="opacity:.8;margin-top:3px;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via cartão</span>`:f.viaBoletoId?`<span class="cat-pill" style="opacity:.8;margin-top:3px;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via boleto</span>`:''}${origemPill}</td>
           <td><span class="cat-pill"><span class="dot" style="background:${catColor(f.categoria)}"></span>${esc(f.categoria)}</span></td>
           <td class="val-neg">- ${brl(f.valor)}</td>
-          <td><span class="cheque-status ${statusCls}">${status}</span></td>
-          <td class="tbl-actions">${isLinked?'':`<button onclick="Budget.toggleFixaPago('${f.id}')" title="${status==='Pago'?'Desfazer pagamento':'Marcar como paga'}">${status==='Pago'?'↺':'✔'}</button>`}<button onclick="Budget.edit('${f.id}')">✎</button></td>
+          <td><span class="cheque-status ${statusCls}">${statusLabel}</span></td>
+          <td class="tbl-actions"><button onclick="Budget.toggleFixaPago('${f.id}')" title="${status==='Pago'?'Marcar em aberto':'Marcar como paga'}">${status==='Pago'?'↺':'✔'}</button><button onclick="Budget.edit('${f.id}')">✎</button></td>
         </tr>`;
       }).join('');
       listLength = list.length;
@@ -517,9 +517,34 @@ const Budget = {
   toggleFixaPago(fixaId){
     const f = S.data.fixas.find(x=>x.id===fixaId);
     if(!f) return;
-    if(f.viaParcelaId || f.viaBoletoId){ toast('Essa despesa fixa vem de uma compra no cartão/boleto — o pagamento é controlado em Cartões e Contas.'); return; }
     const mesKey = monthKey(S.month.y,S.month.m);
     const status = fixaOcorrenciaStatus(f, mesKey);
+
+    /* V6.27.1 — cartão, boleto e Lançamentos usam o mesmo estado mensal. */
+    if(f.viaParcelaId){
+      const cartao=(S.data.cartoes||[]).find(c=>c.id===f.viaCartaoId);
+      const parcela=cartao&&(cartao.parcelas||[]).find(p=>p.id===f.viaParcelaId);
+      if(!cartao||!parcela){toast('A compra vinculada ao cartão não foi encontrada.');return;}
+      if(status==='Pago'&&isFaturaPaga(cartao.id,mesKey)){
+        toast('Esta despesa está paga porque a fatura inteira foi paga. Desfaça o pagamento da fatura em Cartões e Contas para reabrir.');
+        return;
+      }
+      if(!setParcelaCompetenciaPagoManual(cartao.id,parcela.id,mesKey,status!=='Pago')){toast('Não foi possível atualizar a parcela vinculada.');return;}
+      saveCurrentData();renderView();toast(status==='Pago'?'Despesa fixa voltou para em aberto no cartão e em Lançamentos.':'Despesa fixa marcada como paga no cartão e em Lançamentos.');
+      return;
+    }
+    if(f.viaBoletoId){
+      const b=(S.data.boletos||[]).find(x=>x.id===f.viaBoletoId);
+      if(!b){toast('O boleto vinculado não foi encontrado.');return;}
+      const info=boletoParcelaDoMes(b.id,S.month.y,S.month.m);
+      if(status==='Pago'&&info.pagamento){
+        if(window.Cards&&typeof Cards.undoBoletoPagamento==='function') Cards.undoBoletoPagamento(b.id,info.pagamento.id);
+      }else if(status==='Pago'){
+        /* compatibilidade com ocorrência antiga paga diretamente antes do vínculo completo */
+        undoFixaOcorrencia(f,mesKey);
+      }else if(window.Cards&&typeof Cards.payBoletoParcela==='function') Cards.payBoletoParcela(b.id);
+      return;
+    }
     if(status==='Pago') undoFixaOcorrencia(f, mesKey);
     else payFixaOcorrencia(f, mesKey);
   },

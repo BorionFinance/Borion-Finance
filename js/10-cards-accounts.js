@@ -92,14 +92,19 @@ function renderCards(){
     const faturaSortBtn = active.length>1
       ? `<button type="button" onclick="FaturaSort.toggle('${c.id}')" title="${faturaSortDir==='old'?'Mostrando do mais antigo ao mais recente — toque para inverter':'Mostrando do mais recente ao mais antigo — toque para inverter'}" aria-label="Inverter ordem da fatura">${faturaSortDir==='old' ? '↑' : '↓'}</button>`
       : '';
-    const activeRows = active.map(p=>`
-      <div class="installment-row">
-        <span>${esc(p.descricao)}${p.local?` <span style="color:var(--muted)">(${esc(p.local)})</span>`:''}${p.categoria?` <span class="cat-pill" style="margin-left:4px;"><span class="dot" style="background:${catColor(p.categoria)}"></span>${esc(p.categoria)}</span>`:''}${p.apareceDespesas?` <span class="cat-pill" style="opacity:.85;"><span class="dot" style="background:var(--gold-bright)"></span>Também em Despesas (${p.despesaTipo==='fixa'?'fixa':'variável'})</span>`:''}</span>
+    const activeRows = active.map(p=>{
+      const fixedLinked=!!(p.apareceDespesas&&p.despesaTipo==='fixa'&&p.despesaFixaId);
+      const paid=fixedLinked&&parcelaCompetenciaPaga(c.id,p,fatura.competencia);
+      const paymentPill=fixedLinked?` <span class="cheque-status ${paid?'ok':'neutral'}" style="margin-left:5px;">${paid?'PAGO':'EM ABERTO'}</span>`:'';
+      const paymentButton=fixedLinked?`<button onclick="Cards.toggleParcelaPagamento('${c.id}','${p.id}','${fatura.competencia}')" title="${paid?'Marcar esta despesa fixa em aberto':'Marcar esta despesa fixa como paga'}">${paid?'↺':'✔'}</button>`:'';
+      return `<div class="installment-row">
+        <span>${esc(p.descricao)}${p.local?` <span style="color:var(--muted)">(${esc(p.local)})</span>`:''}${p.categoria?` <span class="cat-pill" style="margin-left:4px;"><span class="dot" style="background:${catColor(p.categoria)}"></span>${esc(p.categoria)}</span>`:''}${p.apareceDespesas?` <span class="cat-pill" style="opacity:.85;"><span class="dot" style="background:var(--gold-bright)"></span>Também em Despesas (${p.despesaTipo==='fixa'?'fixa':'variável'})</span>`:''}${paymentPill}</span>
         <span>${brl(p.valorParcela)}/mês</span>
         <span>${p.atual} de ${p.parcelaTotal}</span>
         <span>Dia ${p.diaEntrada || '—'}</span>
-        <button onclick="Cards.editParcela('${c.id}','${p.id}')">✎</button>
-      </div>`).join('');
+        <span style="display:flex;gap:5px;justify-content:flex-end;">${paymentButton}<button onclick="Cards.editParcela('${c.id}','${p.id}')">✎</button></span>
+      </div>`;
+    }).join('');
     const inactiveRows = inactive.map(p=>{
       const fim = shiftYM(p.dataCompra, p.parcelaTotal-1);
       return `<div class="installment-row muted">
@@ -156,6 +161,21 @@ function renderCards(){
     </div>`;
   }).join('');
 
+  /* V6.27.1 — espelho operacional das despesas fixas dentro de Cartões e Contas.
+     Os botões chamam a mesma rotina de Lançamentos; portanto não existem dois status. */
+  const fixedStatusRows=fixasAtivasNoMes(S.month.y,S.month.m).map(f=>{
+    const status=fixaOcorrenciaStatus(f,monthKey(S.month.y,S.month.m));
+    const paid=status==='Pago';
+    const label=paid?'Pago':(status==='Vencido'?'Em aberto · vencida':'Em aberto');
+    let origem='Conta';
+    if(f.viaParcelaId){const c=(S.data.cartoes||[]).find(x=>x.id===f.viaCartaoId);origem='Crédito'+(c?' · '+c.banco:'');}
+    else if(f.viaBoletoId)origem='Boleto';
+    else if(f.origemPagamento==='reserva'){const r=findReservaBoxById(f.reservaOrigemId);origem='Reserva'+(r?' · '+r.nome:'');}
+    else if(f.formaPagamento==='Dinheiro')origem='Carteira · Dinheiro';
+    else origem=(f.formaPagamento||'Conta')+(f.banco?' · '+f.banco:'');
+    return `<div class="installment-row fixed-payment-sync-row"><span>${esc(f.nome)} <span class="cat-pill" style="opacity:.8;">${esc(origem)}</span></span><span>${brl(f.valor)}</span><span>Dia ${f.dia||1}</span><span><span class="cheque-status ${paid?'ok':'neutral'}">${label}</span></span><button onclick="Budget.toggleFixaPago('${f.id}')" title="${paid?'Marcar em aberto':'Marcar como paga'}">${paid?'↺':'✔'}</button></div>`;
+  }).join('');
+
   /* V6.0 — Transferências agora podem ter Conta OU Reserva nos dois lados (não é mais só
      conta → conta). origemNome/destinoNome já vêm resolvidos e prontos para exibir; um
      ícone ◈ marca quando a ponta é uma reserva, para diferenciar de banco/conta. */
@@ -183,6 +203,10 @@ function renderCards(){
     <div class="toolbar" style="margin-top:18px;"><div class="toolbar-left">Boletos</div><button class="btn-outline" onclick="Cards.addBoleto()">+ Adicionar boleto</button></div>
     <p style="font-size:11.5px;color:var(--muted-2);margin:-6px 0 12px;">Use para boletos parcelados, carnês, financiamentos curtos ou cobranças recorrentes. Entram como dívida no patrimônio separado do cartão de crédito.</p>
     ${boletoBlocks || '<div class="empty-note">Nenhum boleto cadastrado ainda.</div>'}
+    <div class="toolbar" style="margin-top:18px;"><div class="toolbar-left">Status das despesas fixas</div></div>
+    <p style="font-size:11.5px;color:var(--muted-2);margin:-6px 0 12px;">O status abaixo é o mesmo de Lançamentos. Marcar Pago ou Em aberto em qualquer uma das telas atualiza a outra imediatamente.</p>
+    <div class="installment-row ih"><span>Despesa</span><span>Valor</span><span>Vencimento</span><span>Status</span><span></span></div>
+    ${fixedStatusRows || '<div class="empty-note">Nenhuma despesa fixa ativa neste mês.</div>'}
     <div class="toolbar" style="margin-top:18px;"><div class="toolbar-left">Transferências</div><button class="btn-outline" onclick="Cards.addTransferencia()">+ Nova transferência</button></div>
     <p style="font-size:11.5px;color:var(--muted-2);margin:-6px 0 12px;">Move dinheiro entre contas e reservas (Conta → Reserva, Reserva → Conta, Reserva → Reserva ou Conta → Conta). Nunca é receita nem despesa — só muda onde o dinheiro está guardado, e nunca deixa uma reserva negativa.</p>
     <div class="installment-row ih"><span>De → Para</span><span>Valor</span><span>Data</span><span></span><span></span></div>
@@ -343,6 +367,21 @@ const Cards = {
       c.faturasPagas.splice(idx,1);
       saveCurrentData(); renderView(); toast('Pagamento da fatura desfeito.');
     }});
+  },
+  /* V6.27.1 — baixa individual da parcela fixa. O mesmo registro é lido em Lançamentos.
+     Se a fatura inteira estiver paga, a parcela herda esse estado e só pode ser reaberta
+     desfazendo o pagamento da fatura, para não criar contradição contábil. */
+  toggleParcelaPagamento(cartaoId,parcelaId,competencia){
+    const c=(S.data.cartoes||[]).find(x=>x.id===cartaoId);
+    const p=c&&(c.parcelas||[]).find(x=>x.id===parcelaId);
+    if(!c||!p)return;
+    if(isFaturaPaga(c.id,competencia)){
+      toast('Esta despesa está paga porque a fatura inteira foi paga. Desfaça o pagamento da fatura para reabrir.');
+      return;
+    }
+    const paid=parcelaCompetenciaPaga(c.id,p,competencia);
+    if(!setParcelaCompetenciaPagoManual(c.id,p.id,competencia,!paid)){toast('Não foi possível atualizar a parcela.');return;}
+    saveCurrentData();renderView();toast(paid?'Despesa fixa voltou para em aberto em Cartões e em Lançamentos.':'Despesa fixa marcada como paga em Cartões e em Lançamentos.');
   },
   addBoleto(){ Cards.editBoleto(null); },
   editBoleto(id){

@@ -1,3 +1,11 @@
+## V6.27.1 — Status sincronizado das despesas fixas
+- O botão **Pago/Em aberto** aparece em toda despesa fixa, inclusive quando veio de cartão ou boleto.
+- Lançamentos e Cartões e Contas leem e alteram o mesmo status mensal, sem cópias divergentes.
+- Compras fixas no cartão exibem o estado individual da parcela; pagar a fatura inteira também marca as despesas fixas vinculadas como pagas.
+- Boletos vinculados passam a refletir imediatamente em Lançamentos quando a parcela é paga ou reaberta.
+- Cartões e Contas ganhou uma seção de status das despesas fixas do mês para Conta, Carteira, Reserva, Crédito e Boleto.
+- Migração corrige o antigo status global do cartão, preservando apenas a competência realmente marcada como paga.
+
 ## V6.27.0 — Assinaturas e despesas integradas
 - Assinaturas por conta agora aparecem em **Despesa variável** como **Em aberto** antes do vencimento e viram **Pago** quando a cobrança é processada.
 - Assinaturas no crédito entram imediatamente no cartão selecionado e também aparecem em **Despesa variável**, sem duplicar o total mensal.

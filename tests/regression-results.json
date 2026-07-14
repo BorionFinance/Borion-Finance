@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-07-14T02:42:06.041Z",
-  "appVersion": "6.27.0",
-  "total": 72,
-  "passed": 72,
+  "generatedAt": "2026-07-14T03:26:53.813Z",
+  "appVersion": "6.27.1",
+  "total": 76,
+  "passed": 76,
   "failed": 0,
   "results": [
     {
@@ -251,6 +251,22 @@
     },
     {
       "name": "60 — Formulários novos contêm fluxo visual completo e categoria dinâmica da parcela",
+      "status": "PASS"
+    },
+    {
+      "name": "61 — Cartão e Lançamentos compartilham o mesmo Pago/Em aberto da despesa fixa",
+      "status": "PASS"
+    },
+    {
+      "name": "62 — Fatura paga atualiza Lançamentos e desfazer preserva somente baixas individuais",
+      "status": "PASS"
+    },
+    {
+      "name": "63 — Boleto pago ou reaberto em Cartões e Contas reflete na despesa fixa",
+      "status": "PASS"
+    },
+    {
+      "name": "64 — Botão de despesa fixa não é ocultado por cartão/boleto e Cartões mostra seção sincronizada",
       "status": "PASS"
     },
     {

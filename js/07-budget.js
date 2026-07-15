@@ -7,21 +7,29 @@ const BUDGET_SUMMARY_CARD_DEFS={
 };
 const DEFAULT_BUDGET_SUMMARY_CARDS=['receita','investir','despesas','saldo'];
 
-/* V6.31 — um único componente de ordenação por data para Receita, Despesa fixa,
-   Despesa variável e Transferências. Ele segue o mesmo padrão compacto da seta usada
-   nas faturas: ↑ mostra do mais antigo ao mais recente e ↓ mostra do mais recente ao
-   mais antigo. A preferência é apenas visual e fica isolada por aba. */
+/* V6.32.2 — ordenação compacta e persistente por perfil.
+   O padrão é sempre Mais recente → mais antigo (↓). Cada aba salva a preferência em
+   S.data.uiPreferences, que pertence ao perfil atual e acompanha backup/sincronização. */
 const BudgetDateSort={
+  validTypes:['receita','fixa','variavel','transferencias'],
+  preferenceRoot(create=false){
+    if(!S.data) return null;
+    if(create && (!S.data.uiPreferences || typeof S.data.uiPreferences!=='object')) S.data.uiPreferences={};
+    if(!S.data.uiPreferences) return null;
+    if(create && (!S.data.uiPreferences.budgetDateSort || typeof S.data.uiPreferences.budgetDateSort!=='object')) S.data.uiPreferences.budgetDateSort={};
+    return S.data.uiPreferences.budgetDateSort||null;
+  },
   get(type){
-    if(type==='transferencias') return S.transferDateSort==='desc'?'desc':'asc';
-    const filter=S.filters&&S.filters[type];
-    if(!filter) return 'asc';
-    return filter.dateSort==='desc'?'desc':'asc';
+    const root=this.preferenceRoot(false);
+    const saved=root&&root[type];
+    return saved==='asc'?'asc':'desc';
   },
   toggle(type){
-    const next=this.get(type)==='asc'?'desc':'asc';
-    if(type==='transferencias') S.transferDateSort=next;
-    else if(S.filters&&S.filters[type]) S.filters[type].dateSort=next;
+    if(!this.validTypes.includes(type)) return;
+    const next=this.get(type)==='desc'?'asc':'desc';
+    const root=this.preferenceRoot(true);
+    if(root) root[type]=next;
+    if(typeof saveCurrentData==='function') saveCurrentData();
     renderView();
   },
   compare(type,aDate,bDate,aCreated=0,bCreated=0){
@@ -33,10 +41,56 @@ const BudgetDateSort={
   buttonHTML(type){
     const asc=this.get(type)==='asc';
     const label=asc?'Mais antigo → mais recente':'Mais recente → mais antigo';
-    return `<button type="button" class="btn-outline date-sort-toggle" onclick="Budget.toggleDateSort('${type}')" title="${label}. Clique para inverter." aria-label="Ordenação atual: ${label}. Clique para inverter."><span aria-hidden="true">${asc?'↑':'↓'}</span><span class="date-sort-label">${label}</span></button>`;
+    return `<button type="button" class="date-sort-toggle" onclick="Budget.toggleDateSort('${type}')" title="${label}" aria-label="Ordenação atual: ${label}. Clique para inverter."><span aria-hidden="true">${asc?'↑':'↓'}</span></button>`;
   }
 };
 window.BudgetDateSort=BudgetDateSort;
+
+function budgetLinkedCard(entity){
+  if(!entity) return null;
+  return (S.data.cartoes||[]).find(c=>c.id===entity.viaCartaoId)
+    || (entity.viaParcelaId ? (S.data.cartoes||[]).find(c=>(c.parcelas||[]).some(p=>p.id===entity.viaParcelaId)) : null);
+}
+function budgetExpenseSourceLabel(entity, occurrence=null){
+  if(!entity) return 'Origem não informada';
+  const card=budgetLinkedCard(entity);
+  if(card) return 'Cartão: '+(card.nome||card.banco||'cartão removido');
+  if(entity.viaBoletoId){
+    const boleto=(S.data.boletos||[]).find(b=>b.id===entity.viaBoletoId);
+    return 'Boleto: '+(boleto?(boleto.credor||boleto.descricao||boleto.banco||'boleto'):'boleto removido');
+  }
+  const origem=(occurrence&&occurrence.origemPagamento)||entity.origemPagamento||((entity.accountId===CARTEIRA_CONTA_ID||entity.formaPagamento==='Dinheiro')?'carteira':'conta');
+  if(origem==='reserva'){
+    const reservaId=(occurrence&&occurrence.reservaId)||entity.reservaOrigemId;
+    const box=findReservaBoxById(reservaId);
+    return '◈ Reserva: '+(box?box.nome:'reserva removida');
+  }
+  const accountId=(occurrence&&occurrence.accountId)||entity.accountId||resolveAccountId((occurrence&&occurrence.banco)||entity.banco,{includeArchived:true});
+  const accountName=accountNameSnapshot(accountId,(occurrence&&occurrence.banco)||entity.banco||'conta removida');
+  if(accountId===CARTEIRA_CONTA_ID || entity.formaPagamento==='Dinheiro' || normalizeAccountName(accountName)==='carteira') return 'Carteira';
+  const forma=entity.formaPagamento && !['Crédito','Boleto','Dinheiro'].includes(entity.formaPagamento) ? ' · '+entity.formaPagamento : '';
+  return 'Conta: '+(accountName||'conta removida')+forma;
+}
+function budgetRevenueDestinationLabel(tx){
+  if(!tx) return 'Destino não informado';
+  const accountName=accountNameSnapshot(tx.accountId,tx.banco||'conta removida');
+  const box=tx.reservaBoxId?findReservaBoxById(tx.reservaBoxId):null;
+  const total=Number(tx.valor)||0, reserve=Number(tx.reservaValor)||0;
+  if(box && reserve>0){
+    if(reserve<total || tx.destinoModo==='Dividir entre conta e reserva') return 'Conta: '+accountName+' + Reserva: '+box.nome;
+    return 'Reserva: '+box.nome;
+  }
+  if(tx.accountId===CARTEIRA_CONTA_ID || normalizeAccountName(accountName)==='carteira') return 'Carteira';
+  return 'Conta: '+(accountName||'conta removida');
+}
+function budgetLaunchNameHTML(name, options={}){
+  const local=options.local?`<span class="launch-location-inline">⌂ ${esc(options.local)}</span>`:'';
+  const inline=options.inline?`<span class="launch-destination-inline">${esc(options.inline)}</span>`:'';
+  const source=options.source?`<div class="launch-source-line">${esc(options.source)}</div>`:'';
+  const meta=(options.meta||[]).filter(Boolean).map(x=>`<span class="launch-meta-chip">${esc(x)}</span>`).join('');
+  const recurrence=options.recurrence?`<div class="launch-recurrence">${esc(options.recurrence)}</div>`:'';
+  return `<div class="launch-name-cell"><div class="launch-name-main"><span class="launch-name-text">${esc(name)}</span>${local}${inline}</div>${source}${recurrence}${meta?`<div class="launch-meta-row">${meta}</div>`:''}</div>`;
+}
 function budgetSummaryPreferences(){
   if(!S.data.uiPreferences) S.data.uiPreferences={};
   let p=S.data.uiPreferences.budgetSummary;
@@ -71,7 +125,6 @@ function renderBudget(){
   const saldo = saldoMes();
   const tab = S.budgetTab;
   const filt = S.filters[tab];
-  if(filt && filt.dateSort!=='desc') filt.dateSort='asc';
   const hasDateRange = !!(filt.dataDe && filt.dataAte);
   const hasFilter = !!(filt.busca || filt.categorias.length || hasDateRange);
   let rows='', total=0, segments=[], listLength=0;
@@ -104,14 +157,16 @@ function renderBudget(){
       segments = Object.keys(catTotals).map(k=>({label:k,value:catTotals[k],color:catColor(k)}));
       const list = allEntries.filter(e=>matchesFilter(e.f.nome,e.f.categoria)).sort((a,b)=>{ const ak=(a.f.startMonth||filt.dataDe.slice(0,7))+'-'+pad2(a.f.dia||1), bk=(b.f.startMonth||filt.dataDe.slice(0,7))+'-'+pad2(b.f.dia||1); return BudgetDateSort.compare('fixa',ak,bk,a.f.createdAt,b.f.createdAt); });
       total = list.reduce((a,e)=>a+e.total,0);
-      rows = list.map(e=>`
-        <tr>
+      rows = list.map(e=>{
+        const nameHTML=budgetLaunchNameHTML(e.f.nome,{source:budgetExpenseSourceLabel(e.f),recurrence:'Recorrente desde '+shortMonthLabel(e.f.startMonth)});
+        return `<tr>
           <td>${e.ocorrencias}x</td>
-          <td>${esc(e.f.nome)}<div style="font-size:10.5px;color:var(--muted)">recorrente desde ${shortMonthLabel(e.f.startMonth)}</div>${e.f.viaParcelaId?`<span class="cat-pill" style="opacity:.8;margin-top:3px;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via cartão</span>`:e.f.viaBoletoId?`<span class="cat-pill" style="opacity:.8;margin-top:3px;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via boleto</span>`:''}</td>
+          <td>${nameHTML}</td>
           <td><span class="cat-pill"><span class="dot" style="background:${catColor(e.f.categoria)}"></span>${esc(e.f.categoria)}</span></td>
           <td class="val-neg">- ${brl(e.total)}</td>
-          <td class="tbl-actions"><button onclick="Budget.edit('${e.f.id}')">✎</button></td>
-        </tr>`).join('');
+          <td class="tbl-actions"><div class="launch-actions"><button onclick="Budget.edit('${e.f.id}')" title="Editar despesa fixa">✎</button></div></td>
+        </tr>`;
+      }).join('');
       listLength = list.length;
     } else {
       const allActive = fixasAtivasNoMes(S.month.y,S.month.m);
@@ -125,17 +180,17 @@ function renderBudget(){
       rows = list.map(f=>{
         const status = fixaOcorrenciaStatus(f, mesKeyAtual);
         const statusCls = status==='Pago'?'ok':status==='Vencido'?'bad':'neutral';
-        const origemBox = f.origemPagamento==='reserva' ? findReservaBoxById(f.reservaOrigemId) : null;
-        const origemPill = f.origemPagamento==='reserva' ? ` <span class="cat-pill" style="background:rgba(240,194,110,.15);color:var(--gold-bright);"><span class="dot" style="background:var(--gold-bright)"></span>◈ Reserva${origemBox?': '+esc(origemBox.nome):' (removida)'}</span>` : '';
+        const occurrence=fixaOcorrenciaFor(f.id,mesKeyAtual);
         const statusLabel=status==='Pago'?'Pago':(status==='Vencido'?'Em aberto · vencida':'Em aberto');
+        const nameHTML=budgetLaunchNameHTML(f.nome,{source:budgetExpenseSourceLabel(f,occurrence),recurrence:'Recorrente desde '+shortMonthLabel(f.startMonth)});
         return `
         <tr>
           <td>Dia ${f.dia||1}</td>
-          <td>${esc(f.nome)}<div style="font-size:10.5px;color:var(--muted)">recorrente desde ${shortMonthLabel(f.startMonth)}</div>${f.viaParcelaId?`<span class="cat-pill" style="opacity:.8;margin-top:3px;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via cartão</span>`:f.viaBoletoId?`<span class="cat-pill" style="opacity:.8;margin-top:3px;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via boleto</span>`:''}${origemPill}</td>
+          <td>${nameHTML}</td>
           <td><span class="cat-pill"><span class="dot" style="background:${catColor(f.categoria)}"></span>${esc(f.categoria)}</span></td>
           <td class="val-neg">- ${brl(f.valor)}</td>
           <td><span class="cheque-status ${statusCls}">${statusLabel}</span></td>
-          <td class="tbl-actions"><button onclick="Budget.toggleFixaPago('${f.id}')" title="${status==='Pago'?'Marcar em aberto':'Marcar como paga'}">${status==='Pago'?'↺':'✔'}</button><button onclick="Budget.edit('${f.id}')">✎</button></td>
+          <td class="tbl-actions"><div class="launch-actions"><button onclick="Budget.toggleFixaPago('${f.id}')" title="${status==='Pago'?'Marcar em aberto':'Marcar como paga'}">${status==='Pago'?'↺':'✔'}</button><button onclick="Budget.edit('${f.id}')" title="Editar despesa fixa">✎</button></div></td>
         </tr>`;
       }).join('');
       listLength = list.length;
@@ -155,23 +210,25 @@ function renderBudget(){
     }
     rows = list.map(t=>{
       const origemKey = t.origem||'propria';
-      const origemPill = (tab==='receita' && origemKey!=='propria') ? ` <span class="cat-pill" style="background:rgba(240,194,110,.15);color:var(--gold-bright);"><span class="dot" style="background:var(--gold-bright)"></span>${esc(txOrigemToLabel(origemKey))}</span>` : '';
-      const formaPill = (tab==='variavel' && t.formaPagamento) ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--muted)"></span>${esc(t.formaPagamento)}</span>` : '';
-      const localPill = (tab==='variavel' && (t.localCompra||t.local)) ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--muted)"></span>⌂ ${esc(t.localCompra||t.local)}</span>` : '';
-      const parcelaPill = (tab==='variavel' && Number(t.parcelaTotal||0)>1 && Number(t.parcelaAtual||0)>0) ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>Parcela ${Number(t.parcelaAtual)}/${Number(t.parcelaTotal)}</span>` : '';
-      const viaCartaoPill = t.viaParcelaId ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via cartão</span>` : (t.viaBoletoId ? ` <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Via boleto</span>` : '');
-      const reservaOrigemBox = (tab==='variavel' && t.origemPagamento==='reserva' && t.reservaOrigemId) ? ((S.data.reservas&&S.data.reservas.boxes)||[]).find(r=>r.id===t.reservaOrigemId) : null;
-      const origemReservaPill = (tab==='variavel' && t.origemPagamento==='reserva') ? ` <span class="cat-pill" style="background:rgba(240,194,110,.15);color:var(--gold-bright);"><span class="dot" style="background:var(--gold-bright)"></span>◈ Reserva${reservaOrigemBox?': '+esc(reservaOrigemBox.nome):''}</span>` : '';
+      const meta=[];
+      if(tab==='receita' && origemKey!=='propria') meta.push(txOrigemToLabel(origemKey));
+      if(tab==='variavel' && Number(t.parcelaTotal||0)>1 && Number(t.parcelaAtual||0)>0) meta.push('Parcela '+Number(t.parcelaAtual)+'/'+Number(t.parcelaTotal));
+      const nameHTML=budgetLaunchNameHTML(t.nome,{
+        local:tab==='variavel'?(t.localCompra||t.local||''):'',
+        inline:tab==='receita'?budgetRevenueDestinationLabel(t):'',
+        source:tab==='variavel'?budgetExpenseSourceLabel(t):'',
+        meta
+      });
       const status=tab==='variavel'?variavelStatus(t):'';
       const statusCls=status==='Pago'?'ok':'neutral';
       return `
       <tr>
         <td>${t.data.slice(8,10)}/${t.data.slice(5,7)}</td>
-        <td>${esc(t.nome)}${origemPill}${origemReservaPill}${formaPill}${localPill}${parcelaPill}${viaCartaoPill}</td>
+        <td>${nameHTML}</td>
         <td><span class="cat-pill"><span class="dot" style="background:${catColor(t.categoria)}"></span>${esc(t.categoria)}</span></td>
         <td class="${tab==='receita'?'val-pos':'val-neg'}">${tab==='receita'?'':'- '}${brl(t.valor)}</td>
         ${tab==='variavel'?`<td><span class="cheque-status ${statusCls}">${status}</span></td>`:''}
-        <td class="tbl-actions">${tab==='variavel'?`<button onclick="Budget.toggleVariavelPago('${t.id}')" title="${status==='Pago'?'Marcar em aberto':'Marcar como pago'}">${status==='Pago'?'↺':'✔'}</button>`:''}<button onclick="Budget.edit('${t.id}')">✎</button></td>
+        <td class="tbl-actions"><div class="launch-actions">${tab==='variavel'?`<button onclick="Budget.toggleVariavelPago('${t.id}')" title="${status==='Pago'?'Marcar em aberto':'Marcar como pago'}">${status==='Pago'?'↺':'✔'}</button>`:''}<button onclick="Budget.edit('${t.id}')" title="Editar lançamento">✎</button></div></td>
       </tr>`;}).join('');
     listLength = list.length;
   }
@@ -201,7 +258,7 @@ function renderBudget(){
         </div>
         ${hasDateRange?`<div class="tbl-foot" style="opacity:.85;margin-bottom:6px;"><span>📅 Período: ${periodoLabel}</span><button class="link-btn" style="padding:0;" onclick="Budget.clearPeriodo()">Limpar período</button></div>`:''}
         ${listLength? `
-        <table>
+        <table class="budget-launch-table">
           <thead><tr><th>${tab==='fixa'?fixaColLabel:'Data'}</th><th>Nome</th><th>Categoria</th><th>Valor</th>${((tab==='fixa'&&!hasDateRange)||tab==='variavel')?'<th>Status</th>':''}<th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>

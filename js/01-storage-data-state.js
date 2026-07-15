@@ -294,7 +294,8 @@ function emptyData(){
     assinaturaCobrancas: [],
     /* V6.23.1 — auditoria defensiva da migração para accountId. Não participa de cálculos. */
     accountMigrationReview: [],
-    migrationBackups: []
+    migrationBackups: [],
+    uiPreferences:{budgetDateSort:{receita:'desc',fixa:'desc',variavel:'desc',transferencias:'desc'}}
   };
 }
 function migrateData(d){
@@ -340,6 +341,8 @@ function migrateData(d){
   if(!Array.isArray(d.reservas.monthlyReports)) d.reservas.monthlyReports=[];
   if(!d.uiPreferences || typeof d.uiPreferences!=='object') d.uiPreferences={};
   if(!d.uiPreferences.budgetSummary || !Array.isArray(d.uiPreferences.budgetSummary.order)) d.uiPreferences.budgetSummary={order:['receita','investir','despesas','saldo'],visible:['receita','investir','despesas','saldo']};
+  if(!d.uiPreferences.budgetDateSort || typeof d.uiPreferences.budgetDateSort!=='object') d.uiPreferences.budgetDateSort={};
+  ['receita','fixa','variavel','transferencias'].forEach(k=>{d.uiPreferences.budgetDateSort[k]=d.uiPreferences.budgetDateSort[k]==='asc'?'asc':'desc';});
   /* Mantém apenas o primeiro fechamento válido de cada competência. Isso protege o relatório
      original inclusive após importações/mesclagens antigas que possam ter duplicado arrays. */
   const _reportMonths=new Set();

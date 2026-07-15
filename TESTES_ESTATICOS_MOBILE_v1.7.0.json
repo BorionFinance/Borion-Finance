@@ -1,0 +1,26 @@
+{
+  "versao": "1.7.0",
+  "tipo": "validacao_estatica",
+  "resultado": "aprovado",
+  "verificacoes": {
+    "sintaxe_javascript": true,
+    "sintaxe_service_worker": true,
+    "referencias_html_existentes": true,
+    "arquivos_do_cache_existentes": true,
+    "balanceamento_css": true,
+    "regras_de_negocio_preservadas": true
+  },
+  "recursos_mobile": [
+    "barra inferior com cinco destinos",
+    "safe areas",
+    "viewport dinamico",
+    "tratamento de teclado",
+    "bottom sheets com gesto",
+    "voltar do Android",
+    "restauracao de rolagem",
+    "swipe entre abas principais",
+    "feedback tatil",
+    "estado online e offline",
+    "reducao de movimento"
+  ]
+}

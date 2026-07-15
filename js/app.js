@@ -365,6 +365,9 @@ async function submitOfflineLogin(form){
   await validateLoginPin(form,{offline:true});
   await completeLogin('offline','');
 }
+async function submitTestLogin(){
+  await completeLogin('test','');
+}
 async function lockApp(){
   if(LOCKED)return;
   const shell=$('.app-bg');
@@ -382,36 +385,23 @@ function renderLogin(entry=''){
   stopLockNetwork();
   document.body.classList.add('login-page');
   const p=activeProfile();
-  const hasPin=!!p.pin;
-  $('#root').innerHTML=`<main class="login-screen ${entry==='left'?'screen-enter-left':''}">
-    <button class="login-offline-entry" type="button" data-action="login-offline" title="Acesso local de contingência">Entrar sem login</button>
+  $('#root').innerHTML=`<main class="login-screen marco-login-compact ${entry==='left'?'screen-enter-left':''}">
     <canvas id="lock-network-canvas" class="lock-network-canvas" aria-hidden="true"></canvas>
     <div class="lock-orb lock-orb-one"></div><div class="lock-orb lock-orb-two"></div>
-    <section class="lock-shell">
-      <div class="lock-brand-panel">
-        <div class="lock-brand-top"><img src="assets/marco-symbol.png" alt="Símbolo Marco Iris"><div><h1 class="lock-title">Marco Iris</h1><span class="lock-subtitle">Soluções em Tecnologia</span></div></div>
-        <p class="lock-tagline">Tecnologia que <strong>conecta</strong>, soluções que <strong>transformam</strong>.</p>
-        <div class="lock-feature-row">
-          <div class="lock-feature"><div class="lock-feature-icon">${icon('settings')}</div><div><strong>Suporte técnico</strong><small>Ordens de serviço, diagnósticos, laudos e atendimento especializado.</small></div></div>
-          <div class="lock-feature"><div class="lock-feature-icon">${icon('lock')}</div><div><strong>Segurança e confiabilidade</strong><small>Login Google obrigatório, PIN local e backups recorrentes.</small></div></div>
-          <div class="lock-feature"><div class="lock-feature-icon">${icon('cloud')}</div><div><strong>Soluções em nuvem</strong><small>Fotos, PDFs, anexos e dados organizados no Google Drive.</small></div></div>
-        </div>
+    <section class="marco-compact-login-shell">
+      <div class="marco-compact-brand">
+        <img src="assets/marco-symbol.png" alt="Símbolo Marco Iris">
+        <div><h1>Marco Iris</h1><span>Soluções em Tecnologia</span></div>
       </div>
-      <form class="login-card" data-form="login" autocomplete="on">
-        <div class="login-brand"><div class="user-badge">${icon('clients',42)}</div><h1>Entrar no sistema</h1><p>Acesse o painel técnico para continuar</p></div>
-        <div class="profile-option"><div class="avatar">${esc((p.name||'M')[0])}</div><div class="spacer"><strong>${esc(p.name)}</strong><small>${esc(p.role||'Administrador')}</small></div><span class="profile-lock">${icon('lock')}</span></div>
-        ${hasPin?`<div class="field login-pin-field"><label for="login-pin">PIN de acesso</label><div class="login-input-wrap">${icon('lock')}<input id="login-pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="current-password" placeholder="Digite seu PIN" autofocus required></div></div>`:`<div class="login-open-notice"><strong>Acesso local liberado</strong><span>Este perfil ainda não possui PIN. Você poderá criar um depois em Configurações.</span></div>`}
-        <div class="login-aux"><label class="login-remember"><input type="checkbox" checked disabled> Perfil autorizado</label><span class="login-local-status"><span></span> Google obrigatório</span></div>
-        <button class="btn primary login-enter" type="submit"><span class="google-entry-mark" aria-hidden="true">G</span> Entrar com Google</button>
-        <div class="login-divider">ou</div>
-        <button class="btn secondary" type="button" data-action="set-pin">${icon('lock')} ${hasPin?'Alterar PIN deste perfil':'Criar PIN de acesso'}</button>
-        <p class="login-security-note">A conta Google autorizada é obrigatória. Com PIN ativo, ele funciona como uma segunda proteção.</p>
-      </form>
+      <button class="marco-profile-entry" type="button" data-action="login-test" aria-label="Entrar como ${attr(p.name||'Marco')}">
+        <span class="avatar">${esc((p.name||'M')[0])}</span>
+        <span class="marco-profile-copy"><strong>${esc(p.name||'Marco')}</strong><small>Toque para entrar e testar o aplicativo</small></span>
+        <span class="marco-profile-arrow">${icon('arrow',22)}</span>
+      </button>
+      <div class="marco-test-access-note"><strong>Acesso de teste liberado</strong><span>Temporariamente sem Google, senha ou PIN.</span></div>
     </section>
-    <footer class="lock-footer"><div class="lock-footer-cards"><div class="lock-footer-card"><strong><span class="status-dot-live"></span> Sistema operacional</strong><small>Interface pronta para uso.</small></div><div class="lock-footer-card"><strong>${icon('cloud')} Google Drive e backups</strong><small>Dados e arquivos em pastas separadas.</small></div><div class="lock-footer-card"><strong>${icon('download')} Aplicativo PWA</strong><small>Instalação no computador e celular.</small></div></div><div class="lock-footer-meta"><strong>Marco Iris Tecnologia © 2026</strong><span>v1.6.6</span></div></footer>
   </main>`;
   startLockNetwork();
-  setTimeout(()=>$('#login-pin')?.focus(),120);
 }
 function renderShell(entry=''){
   stopLockNetwork();
@@ -673,6 +663,7 @@ async function handleAction(btn){
   const a=btn.dataset.action;
   try{
     if(a==='login'){await submitLogin(btn.closest('form[data-form="login"]'));return;}
+    if(a==='login-test'){await submitTestLogin();return;}
     if(a==='login-offline'){await submitOfflineLogin($('.login-card[data-form="login"]'));return;}
     if(a==='navigate'){await navigateTo(btn.dataset.view);return;}
     if(a==='toggle-menu'){document.body.classList.toggle('menu-open');return;}
@@ -734,7 +725,7 @@ async function boot(){
   LOCKED=true;
   renderLogin();
   if('serviceWorker' in navigator){
-    navigator.serviceWorker.register('./sw.js?v=1.6.6').then(reg=>reg.update()).catch(e=>console.warn('Service worker:',e));
+    navigator.serviceWorker.register('./sw.js?v=1.7.0').then(reg=>reg.update()).catch(e=>console.warn('Service worker:',e));
   }
   window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();window.__installPrompt=e;});
 }

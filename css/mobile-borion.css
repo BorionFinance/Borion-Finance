@@ -1,0 +1,217 @@
+/* Marco Iris Tecnologia v1.7.1 — camada mobile inspirada no Borion Finance. */
+
+:root{
+  --marco-app-vh:100dvh;
+  --marco-keyboard:0px;
+  --marco-mobile-nav-height:76px;
+  --marco-touch:48px;
+}
+
+html{
+  min-height:100%;
+  -webkit-text-size-adjust:100%;
+  text-size-adjust:100%;
+  background:#03172f;
+}
+body{min-height:100%;overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
+button,a,input,select,textarea{touch-action:manipulation}
+input,select,textarea{font-size:16px}
+
+.marco-network-banner{
+  position:fixed;
+  left:50%;top:max(12px,env(safe-area-inset-top));z-index:10020;
+  display:grid;grid-template-columns:auto 1fr;gap:1px 10px;
+  width:min(calc(100vw - 28px),440px);
+  padding:11px 14px;border-radius:16px;
+  border:1px solid rgba(127,188,249,.18);
+  background:rgba(5,30,59,.96);color:#eff8ff;
+  box-shadow:0 20px 46px rgba(0,8,22,.38);
+  transform:translate3d(-50%,-140%,0);opacity:0;pointer-events:none;
+  transition:transform .24s cubic-bezier(.22,.8,.25,1),opacity .2s ease;
+  backdrop-filter:blur(14px) saturate(120%);
+}
+.marco-network-banner.is-visible{transform:translate3d(-50%,0,0);opacity:1}
+.marco-network-banner .network-dot{grid-row:1/3;align-self:center;width:10px;height:10px;border-radius:50%;background:#ff9a4f;box-shadow:0 0 0 5px rgba(255,154,79,.13)}
+.marco-network-banner.is-online .network-dot{background:#47d89a;box-shadow:0 0 0 5px rgba(71,216,154,.13)}
+.marco-network-banner strong{font-size:13px;line-height:1.2}
+.marco-network-banner small{font-size:11px;color:rgba(216,235,253,.68)}
+
+.mobile-sheet-handle{
+  display:none;width:100%;min-height:26px;padding:9px 0 6px;margin:0;
+  border:0;background:transparent;cursor:grab;touch-action:none;
+}
+.mobile-sheet-handle span{display:block;width:42px;height:5px;margin:auto;border-radius:999px;background:rgba(176,213,246,.28)}
+.mobile-sheet-handle:active{cursor:grabbing}
+.is-touching{transform:scale(.975)!important;transition-duration:70ms!important}
+
+@media(max-width:900px), (pointer:coarse){
+  html.marco-mobile-ui,html.marco-mobile-ui body{width:100%;min-height:var(--marco-app-vh);overflow-x:hidden}
+  body.modal-open{overflow:hidden!important;touch-action:pan-y pinch-zoom!important}
+  body.modal-open #root{pointer-events:none;user-select:none}
+
+  .app-bg,.app-shell,.main{min-height:var(--marco-app-vh)!important}
+  .main{
+    min-width:0!important;
+    padding-bottom:calc(var(--marco-mobile-nav-height) + env(safe-area-inset-bottom))!important;
+    scroll-padding-top:88px;
+    scroll-padding-bottom:calc(var(--marco-mobile-nav-height) + 30px + env(safe-area-inset-bottom));
+    overscroll-behavior-y:contain;
+  }
+  .content{
+    min-width:0!important;
+    padding-bottom:calc(var(--marco-mobile-nav-height) + 30px + env(safe-area-inset-bottom))!important;
+  }
+  .topbar{
+    top:0!important;z-index:55!important;
+    min-height:calc(66px + env(safe-area-inset-top))!important;
+    padding-top:max(8px,env(safe-area-inset-top))!important;
+    padding-left:max(12px,env(safe-area-inset-left))!important;
+    padding-right:max(12px,env(safe-area-inset-right))!important;
+  }
+  .topbar .icon-btn,.mobile-bottom-nav button,.fab{min-width:var(--marco-touch);min-height:var(--marco-touch)}
+  .view-heading{min-width:0}
+  .view-heading h1{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .global-search input{font-size:16px!important}
+
+  .mobile-bottom-nav{
+    position:fixed!important;
+    left:0!important;right:0!important;bottom:0!important;z-index:85!important;
+    display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;
+    align-items:start!important;
+    min-height:calc(var(--marco-mobile-nav-height) + env(safe-area-inset-bottom))!important;
+    padding:7px max(8px,env(safe-area-inset-right)) max(7px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left))!important;
+    border-top:1px solid rgba(120,183,244,.13)!important;
+    background:linear-gradient(180deg,rgba(5,35,68,.94),rgba(3,23,47,.992))!important;
+    box-shadow:0 -14px 38px rgba(0,7,20,.34)!important;
+    backdrop-filter:blur(18px) saturate(125%)!important;
+    -webkit-backdrop-filter:blur(18px) saturate(125%)!important;
+  }
+  .mobile-bottom-nav button{
+    position:relative;display:flex!important;flex-direction:column!important;
+    align-items:center!important;justify-content:center!important;gap:3px!important;
+    min-width:0!important;padding:5px 2px!important;border:0!important;border-radius:15px!important;
+    background:transparent!important;color:#91abc4!important;font:600 10px/1 inherit!important;
+  }
+  .mobile-bottom-nav button::before{
+    content:"";position:absolute;inset:2px 7px;border-radius:13px;
+    background:linear-gradient(145deg,rgba(45,135,229,.24),rgba(27,91,160,.14));
+    opacity:0;transform:scale(.75);
+    transition:opacity .18s ease,transform .22s cubic-bezier(.2,.8,.25,1);
+  }
+  .mobile-bottom-nav button>*{position:relative;z-index:1}
+  .mobile-bottom-nav button.active{color:#82c2ff!important}
+  .mobile-bottom-nav button.active::before{opacity:1;transform:scale(1)}
+  .mobile-bottom-nav button svg{width:22px;height:22px}
+
+  .fab{
+    position:fixed!important;
+    bottom:calc(var(--marco-mobile-nav-height) + 14px + env(safe-area-inset-bottom))!important;
+    z-index:72!important;
+    box-shadow:0 16px 34px rgba(10,104,223,.34)!important;
+  }
+  #toast-root{bottom:calc(var(--marco-mobile-nav-height) + 18px + env(safe-area-inset-bottom))!important}
+
+  .modal-backdrop.mobile-sheet-backdrop{
+    align-items:flex-end!important;justify-content:center!important;
+    padding:max(12px,env(safe-area-inset-top)) 0 0!important;
+    background:rgba(0,8,22,var(--sheet-overlay-opacity,.78))!important;
+    overscroll-behavior:contain;
+  }
+  .modal-backdrop.mobile-sheet-backdrop .modal.mobile-bottom-sheet{
+    width:100%!important;max-width:none!important;
+    max-height:calc(var(--marco-app-vh) - max(12px,env(safe-area-inset-top)))!important;
+    margin:0!important;border-radius:25px 25px 0 0!important;border-bottom:0!important;
+    transform:translate3d(0,var(--sheet-y,24px),0)!important;
+    transform-origin:50% 100%!important;overflow:hidden!important;
+    will-change:transform;touch-action:pan-y;
+  }
+  .modal-backdrop.is-open.mobile-sheet-backdrop .modal.mobile-bottom-sheet{transform:translate3d(0,var(--sheet-y,0),0)!important}
+  .mobile-bottom-sheet.is-sheet-dragging{transition:none!important}
+  .mobile-bottom-sheet.is-sheet-closing{transition:transform .18s ease!important}
+  .mobile-bottom-sheet>.mobile-sheet-handle{display:block;flex:0 0 auto;background:rgba(3,23,47,.98)}
+  .mobile-bottom-sheet>.modal-header{
+    flex:0 0 auto!important;
+    padding-top:7px!important;
+    padding-left:max(16px,env(safe-area-inset-left))!important;
+    padding-right:max(12px,env(safe-area-inset-right))!important;
+  }
+  .mobile-bottom-sheet>.modal-body{
+    flex:1 1 auto!important;min-height:0!important;
+    max-height:calc(var(--marco-app-vh) - 78px - env(safe-area-inset-top))!important;
+    overflow:auto!important;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+    padding-left:max(14px,env(safe-area-inset-left))!important;
+    padding-right:max(14px,env(safe-area-inset-right))!important;
+    padding-bottom:max(18px,env(safe-area-inset-bottom))!important;
+    scroll-padding-bottom:96px;
+  }
+  .mobile-bottom-sheet .form-actions{
+    position:sticky!important;bottom:-1px!important;z-index:4!important;
+    display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important;
+    margin:16px -14px -18px!important;
+    padding:12px max(14px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left))!important;
+    border-top:1px solid rgba(132,195,255,.13)!important;
+    background:linear-gradient(180deg,rgba(5,35,68,.95),rgba(3,23,47,.995))!important;
+    backdrop-filter:blur(14px);
+  }
+  .mobile-bottom-sheet .form-actions .btn{min-height:48px!important;justify-content:center!important}
+  .modal-body .form-grid,.modal-body .grid,.modal-body .detail-grid{grid-template-columns:1fr!important}
+  .modal-body input,.modal-body select,.modal-body textarea{font-size:16px!important;min-height:48px}
+  .modal-body textarea{min-height:100px}
+
+  .toolbar,.toolbar-left,.toolbar-right,.card-header,.section-head{min-width:0;flex-wrap:wrap!important}
+  .toolbar .btn,.toolbar-left .btn,.toolbar-right .btn{min-height:44px}
+  .table-wrap{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+  .card,.list,.view-mode-content{contain:layout style}
+  .list-row:nth-child(n+14),.table tbody tr:nth-child(n+16){content-visibility:auto;contain-intrinsic-size:84px}
+
+  body.keyboard-open .mobile-bottom-nav,body.keyboard-open .fab{opacity:0!important;transform:translateY(120%)!important;pointer-events:none!important}
+  body.keyboard-open .mobile-bottom-sheet .form-actions{padding-bottom:12px!important}
+}
+
+@media(min-width:601px) and (max-width:1000px) and (pointer:coarse){
+  .modal-backdrop.mobile-sheet-backdrop{padding:24px 18px max(18px,env(safe-area-inset-bottom))!important}
+  .modal-backdrop.mobile-sheet-backdrop .modal.mobile-bottom-sheet{
+    width:min(100%,800px)!important;border-radius:26px!important;
+    border-bottom:1px solid rgba(132,195,255,.14)!important;
+  }
+}
+
+@media(max-width:520px){
+  .topbar{gap:7px!important}
+  .topbar .global-search{order:5;flex-basis:100%!important;width:100%!important}
+  .content{padding-left:12px!important;padding-right:12px!important}
+  .mobile-bottom-sheet .form-actions{grid-template-columns:1fr 1.2fr!important}
+}
+
+@media(prefers-reduced-motion:reduce){
+  .marco-network-banner,.mobile-bottom-nav button::before,.mobile-bottom-sheet,.is-touching{transition:none!important}
+}
+
+
+/* v1.7.1 — login compacto e correção de rolagem com um dedo */
+.lock-network-canvas,.lock-orb,.login-screen::before,.login-screen::after{pointer-events:none!important}
+body.login-page .login-screen.marco-login-compact{display:grid!important;place-items:center!important;padding:max(22px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(22px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left))!important;overflow-y:auto!important;touch-action:pan-y pinch-zoom!important}
+.marco-compact-login-shell{position:relative;z-index:3;width:min(100%,470px);display:grid;gap:16px;padding:25px;border:1px solid rgba(138,198,255,.18);border-radius:28px;background:linear-gradient(180deg,rgba(7,28,56,.91),rgba(5,22,45,.97));box-shadow:0 28px 70px rgba(0,8,22,.34)}
+.marco-compact-brand{display:flex;align-items:center;gap:14px;padding:2px 2px 9px}
+.marco-compact-brand img{width:72px;height:60px;object-fit:contain;filter:drop-shadow(0 12px 22px rgba(0,0,0,.25))}
+.marco-compact-brand h1{margin:0;color:#fff;font-size:2rem;letter-spacing:-.04em;line-height:1}
+.marco-compact-brand span{display:block;margin-top:5px;color:#ff9165;font-size:.88rem;font-weight:700}
+.marco-profile-entry{width:100%;min-height:82px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:13px;padding:13px 15px;border:1px solid rgba(138,198,255,.16);border-radius:18px;background:rgba(5,31,61,.82);color:#fff;text-align:left;box-shadow:0 12px 28px rgba(0,8,22,.16);touch-action:manipulation}
+.marco-profile-entry:hover,.marco-profile-entry:focus-visible{background:rgba(8,42,80,.96);border-color:rgba(126,191,255,.34);outline:none}
+.marco-profile-entry .avatar{width:50px;height:50px;display:grid;place-items:center;border-radius:16px;background:linear-gradient(145deg,#0d7eff,#0d65df);font-size:1.25rem;font-weight:800}
+.marco-profile-copy{min-width:0}.marco-profile-copy strong,.marco-profile-copy small{display:block}.marco-profile-copy strong{font-size:1rem}.marco-profile-copy small{margin-top:4px;color:rgba(222,237,255,.62);font-size:.78rem;white-space:normal}.marco-profile-arrow{color:#78bbff}
+.marco-test-access-note{display:grid;gap:3px;padding:11px 13px;border:1px solid rgba(126,191,255,.12);border-radius:14px;background:rgba(5,31,61,.55)}
+.marco-test-access-note strong{font-size:.78rem;color:#90c9ff}.marco-test-access-note span{font-size:.72rem;color:rgba(222,237,255,.58)}
+@media(max-width:900px), (pointer:coarse){
+  html.marco-mobile-ui,html.marco-mobile-ui body,body:not(.modal-open),#root,.app-bg,.app-shell,.main,.content{touch-action:pan-y pinch-zoom!important}
+  body:not(.modal-open){overflow-y:auto!important;-webkit-overflow-scrolling:touch}
+  body.login-page,body.login-page #root,body.login-page .login-screen,body.login-page .login-screen.marco-login-compact{overflow-y:auto!important;touch-action:pan-y pinch-zoom!important;-webkit-overflow-scrolling:touch}
+  .mobile-sheet-backdrop,.mobile-bottom-sheet,.mobile-bottom-sheet>.modal-body{touch-action:pan-y!important}
+  .mobile-bottom-sheet>.modal-body{overflow-y:auto!important;-webkit-overflow-scrolling:touch!important}
+}
+@media(max-width:520px){
+  .marco-compact-login-shell{padding:19px;border-radius:23px}
+  .marco-compact-brand img{width:62px;height:52px}
+  .marco-compact-brand h1{font-size:1.72rem}
+  .marco-profile-entry{min-height:78px;padding:12px}
+}

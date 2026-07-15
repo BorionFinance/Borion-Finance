@@ -1,0 +1,18 @@
+{
+  "app": "Marco Iris Tecnologia",
+  "version": "1.7.1",
+  "date": "2026-07-15",
+  "status": "aprovado_em_validacao_estatica",
+  "checks": {
+    "javascript_syntax": "ok",
+    "json_files": "ok",
+    "index_local_references": "ok",
+    "service_worker_assets": "ok",
+    "css_structure": "ok",
+    "direct_test_access": "ok",
+    "single_finger_modal_scroll": "ok",
+    "mobile_navigation_preserved": "ok",
+    "business_rules_preserved": "ok"
+  },
+  "note": "Entrada sem Google, senha ou PIN habilitada temporariamente para testes."
+}

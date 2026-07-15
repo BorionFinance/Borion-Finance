@@ -2438,7 +2438,7 @@ html[data-theme="light"] .import-current-row.will-delete{border-color:rgba(220,3
 }
 
 /* ========================================================================== 
-   V6.31.0 — revisão geral, saúde financeira e grade dinâmica
+   V6.32.0 — revisão geral, saúde financeira e grade dinâmica
    ========================================================================== */
 .date-sort-toggle{display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:7px 10px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.025);color:var(--text);font-size:12px;font-weight:750;cursor:pointer;transition:.16s ease}
 .date-sort-toggle:hover{border-color:rgba(204,161,96,.6);background:rgba(204,161,96,.06)}

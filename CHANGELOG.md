@@ -1,3 +1,13 @@
+## V6.30.0 — Integrações inteligentes com Vínculos
+- Amanda Estética e Marco Iris Tecnologia ganharam configuração individual com as abas **Conexão** e **Vínculos**.
+- Antes da primeira importação, o Borion lê categorias, tipos, formas de pagamento e status reais do aplicativo de origem.
+- Os Vínculos convertem tipos de lançamento, categorias, origem de receita, formas de pagamento, contas e status para o padrão interno do Borion.
+- Cada registro novo é criado como lançamento nativo e editável; alterações feitas no Borion não voltam para o aplicativo de origem e não são sobrescritas em sincronizações futuras.
+- A duplicidade continua protegida pelo identificador permanente da integração, mesmo após editar nome, valor, categoria, conta ou status no Borion.
+- Excluir um lançamento importado oferece **permitir importar novamente** ou **ignorar permanentemente**.
+- Exclusões e alterações posteriores no aplicativo de origem não apagam lançamentos que já se tornaram nativos no Borion.
+- Validação final: **88/88 testes regressivos** e **10/10 testes específicos da integração inteligente** aprovados.
+
 ## V6.29.0 — Interconexões protegidas entre aplicativos
 - Amanda Estética e Marco Iris passam a publicar snapshots financeiros idempotentes para o Borion.
 - Mapeamento explícito por perfil, conta e origem, com ACK de retorno.

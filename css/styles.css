@@ -2364,3 +2364,75 @@ html[data-theme="light"] .import-current-row.will-delete{border-color:rgba(220,3
 @media(max-width:1050px){.patrimony-modules-grid{gap:14px;}}
 @media(max-width:760px){.patrimony-modules-grid{grid-template-columns:1fr!important;}.patrimony-organize-toolbar{align-items:stretch;}.patrimony-organize-toolbar .order-sort-wrap{width:100%;}.patrimony-organize-toolbar .order-sort-select{width:100%;}}
 .patrimony-grid-organizer .patrimony-module-slot.patrimony-slot-target{border-color:var(--gold-bright);background:rgba(201,164,92,.10);box-shadow:0 0 0 2px rgba(201,164,92,.10);}
+
+/* ==========================================================================
+   V6.30.0 — Integrações inteligentes / aba Vínculos
+   ========================================================================== */
+.interop-settings-page{display:grid;gap:14px}
+.interop-app-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.interop-app-tab{appearance:none;border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:16px;padding:15px 16px;text-align:left;display:grid;gap:5px;cursor:pointer;transition:.18s ease}
+.interop-app-tab:hover{transform:translateY(-1px);border-color:rgba(204,161,96,.55)}
+.interop-app-tab.active{border-color:var(--gold);box-shadow:0 0 0 1px rgba(204,161,96,.18) inset,0 12px 32px rgba(0,0,0,.14)}
+.interop-app-tab span{font-weight:800;font-size:14px}
+.interop-app-tab small{color:var(--muted);font-size:12px}
+.interop-workspace{padding:0;overflow:hidden}
+.interop-workspace-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 20px 13px}
+.interop-workspace-head h3{margin:0 0 4px}
+.interop-workspace-head .desc{margin:0}
+.interop-subtabs{display:flex;gap:4px;padding:0 20px;border-bottom:1px solid var(--border)}
+.interop-subtabs button{appearance:none;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);padding:11px 16px;font-weight:750;cursor:pointer}
+.interop-subtabs button.active{color:var(--text);border-bottom-color:var(--gold)}
+.interop-pane{padding:20px}
+.interop-empty{min-height:190px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;border:1px dashed var(--border);border-radius:16px;padding:24px;background:rgba(255,255,255,.015)}
+.interop-empty h4,.interop-links-intro h4{margin:0;font-size:16px}
+.interop-empty p,.interop-links-intro p{margin:0;color:var(--muted);max-width:720px;line-height:1.55}
+.interop-empty-icon{font-size:34px;color:var(--gold)}
+.interop-actions{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:14px}
+.interop-status-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.interop-status-grid>div{border:1px solid var(--border);border-radius:13px;padding:12px;background:rgba(255,255,255,.02);display:grid;gap:5px}
+.interop-status-grid span{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.interop-status-grid strong{font-size:13px}
+.interop-sync-box{margin-top:12px;line-height:1.6}
+.interop-next-step{margin-top:14px;border:1px solid rgba(204,161,96,.35);background:rgba(204,161,96,.08);border-radius:12px;padding:12px 14px;color:var(--text);font-size:13px}
+.interop-links-pane{display:grid;gap:14px}
+.interop-links-intro{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;padding-bottom:4px}
+.interop-map-section{border:1px solid var(--border);border-radius:16px;padding:15px;background:rgba(255,255,255,.015);display:grid;gap:9px}
+.interop-map-section h5{margin:0;font-size:14px}
+.interop-map-section>p{margin:-3px 0 4px;color:var(--muted);font-size:12px;line-height:1.45}
+.interop-map-row{display:grid;grid-template-columns:minmax(160px,1fr) 34px minmax(220px,1.2fr);gap:10px;align-items:end;border-top:1px solid var(--border);padding-top:10px}
+.interop-map-row:first-of-type{border-top:0}
+.interop-map-row-category,.interop-map-row-payment{grid-template-columns:minmax(150px,1fr) 34px minmax(190px,1.1fr) minmax(190px,1.1fr)}
+.interop-source-value{display:grid;gap:4px;min-height:42px;align-content:center}
+.interop-source-value small,.interop-map-row label small{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.055em;margin-bottom:5px}
+.interop-source-value strong{font-size:13px;word-break:break-word}
+.interop-map-row label{min-width:0}
+.interop-map-row select,.interop-map-row input{width:100%}
+.interop-arrow{text-align:center;color:var(--gold);font-size:18px;padding-bottom:10px}
+.interop-map-empty{color:var(--muted);font-size:12px;padding:8px 0}
+.interop-save-bar{position:sticky;bottom:0;z-index:3;display:flex;justify-content:flex-end;gap:10px;align-items:center;padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--card);box-shadow:0 -10px 24px rgba(0,0,0,.15)}
+.interop-rule-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.interop-rule-grid>div{display:grid;gap:5px;border:1px solid var(--border);border-radius:12px;padding:12px;background:rgba(255,255,255,.015)}
+.interop-rule-grid b{font-size:12px;color:var(--gold)}
+.interop-rule-grid span{font-size:12px;color:var(--muted);line-height:1.45}
+.interop-native-notice{margin-bottom:12px;line-height:1.5}
+.interop-delete-modal{max-width:520px}
+.interop-delete-choice{width:100%;text-align:left;border:1px solid var(--border);background:rgba(255,255,255,.025);color:var(--text);border-radius:14px;padding:14px;margin:0 0 10px;display:grid;gap:5px;cursor:pointer}
+.interop-delete-choice:hover{border-color:rgba(204,161,96,.65);background:rgba(204,161,96,.07)}
+.interop-delete-choice.danger:hover{border-color:rgba(239,68,68,.7);background:rgba(239,68,68,.08)}
+.interop-delete-choice strong{font-size:13px}
+.interop-delete-choice span{color:var(--muted);font-size:12px;line-height:1.45}
+.pill.warn{color:#f0bf63;background:rgba(240,191,99,.12);border-color:rgba(240,191,99,.35)}
+
+@media(max-width:900px){
+  .interop-status-grid,.interop-rule-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .interop-map-row,.interop-map-row-category,.interop-map-row-payment{grid-template-columns:1fr}
+  .interop-arrow{display:none}
+}
+@media(max-width:620px){
+  .interop-app-tabs,.interop-status-grid,.interop-rule-grid{grid-template-columns:1fr}
+  .interop-workspace-head,.interop-links-intro{align-items:flex-start;flex-direction:column}
+  .interop-subtabs{padding:0 12px}
+  .interop-pane{padding:14px}
+  .interop-save-bar{align-items:stretch;flex-direction:column}
+  .interop-save-bar button{width:100%}
+}

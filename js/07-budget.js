@@ -1012,7 +1012,6 @@ function setVariavelStatus(tx, novoStatus){
 }
 
 function openTransactionModal({type, existing}){
-  if(existing&&existing.integrationManaged&&window.BorionInterop){BorionInterop.showManagedInfo(existing);return;} // protected interop ownership
   const isEdit=!!existing;
   const isReceita=type==='receita';
   const isDespesaVariavel=type==='variavel';
@@ -1033,6 +1032,7 @@ function openTransactionModal({type, existing}){
   const selectedAccount=isEdit?(existing.accountId||resolveAccountId(existing.banco,{includeArchived:true})):((accounts[0]||{}).value||'');
   const receitaSelectedAccount=(selectedAccount&&selectedAccount!==CARTEIRA_CONTA_ID)?selectedAccount:((accounts[0]||{}).value||'');
   const receitaOrigemInicial=isReceita&&isEdit?(existing.origem||'propria'):'propria';
+  const importedNotice=isEdit&&existing.integrationAggregateId?`<div class="info-box interop-native-notice"><b>Importado de ${esc(window.BorionInterop?BorionInterop.sourceName(existing.integrationSourceAppId):'aplicativo externo')}.</b> Este lançamento agora é nativo do Borion: você pode editar normalmente e as alterações não voltam para o aplicativo de origem.</div>`:'';
 
   const variablePaymentHTML=isDespesaVariavel?`
     <div class="field"><label>De onde será pago</label>
@@ -1117,6 +1117,7 @@ function openTransactionModal({type, existing}){
 
   const box=el(`<div class="modal-overlay"><div class="modal-box">
     <div class="modal-head"><h2>${modalTitle}</h2><button id="tm_close">&times;</button></div>
+    ${importedNotice}
     ${fieldsHTML}
     <div class="row-btns"><button class="btn btn-primary btn-block" id="tm_save">${isEdit?'Salvar':'Adicionar'}</button></div>
     ${isEdit?'<div class="row-btns" style="margin-top:8px;"><button class="btn btn-danger btn-block" id="tm_delete">Excluir</button></div>':''}
@@ -1173,6 +1174,7 @@ function openTransactionModal({type, existing}){
     if(isDespesaVariavel){
       const source=$('#tm_pagamento_origem').value,status=$('#tm_status').value==='Em aberto'?'Em aberto':'Pago',localCompra=($('#tm_local').value||'').trim();
       if(source==='credito'){
+        const importedSource=isEdit&&window.BorionInterop?BorionInterop.captureImportReference(existing):null;
         const cartao=(S.data.cartoes||[]).find(c=>c.id===$('#tm_cartao').value);if(!cartao){alert('Escolha um cartão de crédito válido.');return;}
         const parcelaTotal=$('#tm_credito_tipo').value==='parcelado'?Math.max(2,Math.round(Number($('#tm_parcelas').value)||2)):1;
         const valorParcela=Math.round((valor/parcelaTotal)*100)/100,diaCompra=Math.max(1,Math.min(31,parseInt(data.slice(8,10),10)||1));
@@ -1180,6 +1182,7 @@ function openTransactionModal({type, existing}){
           if(isEdit){reverseTxSaldoEffect(existing);removeLinkedReservaMoveFromTransaction(existing);removeLinkedReservaWithdrawalFromDespesa(existing);S.data.transacoes=S.data.transacoes.filter(x=>x.id!==existing.id);}
           const p={id:uid(),descricao:nome,local:localCompra,categoria:categoria||'Outro',valorParcela,parcelaTotal,dataCompra:data.slice(0,7),dataCompraCompleta:data,diaEntrada:diaCompra,apareceDespesas:true,despesaTipo:'variavel',statusPagamento:status,despesaTransacaoId:null,despesaTransacaoIds:[],despesaFixaId:null};
           cartao.parcelas.push(p);linkParcelaToDespesa(cartao,p);
+          if(importedSource&&window.BorionInterop)BorionInterop.transferImportReference(existing,p.despesaTransacaoIds||[],S.data);
         }))return;
         saveCurrentData();closeModal();renderView();toast('Compra no crédito lançada com loja e dia de entrada na fatura.');return;
       }
@@ -1228,7 +1231,19 @@ function openTransactionModal({type, existing}){
     let tx;if(!commitAtomic(()=>{if(isEdit){reverseTxSaldoEffect(existing);removeLinkedReservaMoveFromTransaction(existing);}const payload={nome,data,categoria,valor,accountId,banco,origem,reservaValor:0,destinoModo:'Conta livre'};if(isEdit){Object.assign(existing,payload);tx=existing;}else{tx=Object.assign({id:uid(),tipo:'receita'},payload);S.data.transacoes.push(tx);}if(reservaBox){tx.destinoModo=destinoModo;createLinkedReservaMoveFromTransaction(tx,reservaBox,reservaValor);}if(!applyTxSaldoEffect(tx))throw new Error('Conta inválida para aplicar saldo.');}))return;
     saveCurrentData();closeModal();renderView();toast(isEdit?'Receita atualizada.':(reservaBox?'Receita adicionada com destino aplicado.':'Receita adicionada.'));
   };
-  if(isEdit)$('#tm_delete').onclick=()=>{const idx=S.data.transacoes.findIndex(x=>x.id===existing.id);if(idx<0)return;const snapshot=JSON.parse(JSON.stringify(S.data));reverseTxSaldoEffect(existing);removeLinkedReservaMoveFromTransaction(existing);removeLinkedReservaWithdrawalFromDespesa(existing);S.data.transacoes.splice(idx,1);saveCurrentData();closeModal();renderView();showUndoToast('Lançamento excluído.',()=>{S.data=snapshot;saveCurrentData();renderView();});};
+  if(isEdit)$('#tm_delete').onclick=()=>{
+    const performDelete=(integrationMode=null)=>{
+      const idx=S.data.transacoes.findIndex(x=>x.id===existing.id);if(idx<0)return;
+      const snapshot=JSON.parse(JSON.stringify(S.data));
+      if(integrationMode&&window.BorionInterop)BorionInterop.markImportedDeletion(existing,integrationMode,S.data);
+      reverseTxSaldoEffect(existing);removeLinkedReservaMoveFromTransaction(existing);removeLinkedReservaWithdrawalFromDespesa(existing);
+      S.data.transacoes.splice(idx,1);saveCurrentData();closeModal();renderView();
+      const message=integrationMode==='permanent'?'Lançamento excluído e ignorado permanentemente.':(integrationMode==='reimport'?'Lançamento excluído e liberado para nova importação.':'Lançamento excluído.');
+      showUndoToast(message,()=>{S.data=snapshot;saveCurrentData();renderView();});
+    };
+    if(existing.integrationAggregateId&&window.BorionInterop){BorionInterop.openImportedDeleteDialog(existing,performDelete);return;}
+    performDelete();
+  };
 }
 
 /* ---- dedicated modal: recurring fixed expense (despesa fixa) ---- */

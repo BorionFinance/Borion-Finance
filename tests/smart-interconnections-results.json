@@ -1,0 +1,49 @@
+{
+  "generatedAt": "2026-07-15T01:26:37.374Z",
+  "appVersion": "6.30.0",
+  "total": 10,
+  "passed": 10,
+  "failed": 0,
+  "results": [
+    {
+      "name": "Vínculos convertem categoria, forma, conta e origem antes de criar",
+      "status": "PASS"
+    },
+    {
+      "name": "Nova sincronização não sobrescreve edição local nem duplica saldo",
+      "status": "PASS"
+    },
+    {
+      "name": "Edição mantém referência e a referência continua bloqueando duplicidade",
+      "status": "PASS"
+    },
+    {
+      "name": "Excluir e permitir importar novamente libera o ID",
+      "status": "PASS"
+    },
+    {
+      "name": "Excluir e ignorar permanentemente nunca reimporta",
+      "status": "PASS"
+    },
+    {
+      "name": "Exclusão na origem preserva lançamento já nativo no Borion",
+      "status": "PASS"
+    },
+    {
+      "name": "Receita pendente espera e entra uma única vez quando recebida",
+      "status": "PASS"
+    },
+    {
+      "name": "Leitura da origem descobre categorias, status, formas e tipos",
+      "status": "PASS"
+    },
+    {
+      "name": "Interface contém seleção por aplicativo e aba Vínculos",
+      "status": "PASS"
+    },
+    {
+      "name": "Editor de lançamentos não bloqueia importados e oferece exclusão inteligente",
+      "status": "PASS"
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+> **Documento histórico da V6.29.0.** O comportamento atual está descrito em `INTEGRACOES_INTELIGENTES_V6.30.0.md`.
+
 # Borion v6.29.0 — Interconexões de aplicativos
 
 - Nova aba Configurações → Integrações.

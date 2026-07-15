@@ -26,12 +26,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
-    },
-    {
-      "src": "apple-touch-icon.png",
-      "sizes": "180x180",
-      "type": "image/png",
-      "purpose": "any"
     }
   ],
   "id": "./",
@@ -48,5 +42,5 @@
   ],
   "dir": "ltr",
   "lang": "pt-BR",
-  "version": "6.32.0"
+  "version": "6.32.1"
 }

@@ -34,8 +34,8 @@ function renderSettings(){
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
   else if(S.settingsTab==='integrations') content = window.BorionInterop ? BorionInterop.renderSettings() : '<div class="settings-section">Integração indisponível.</div>'; // protected interop seam
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.32.0 • Hub Borion integrado</div><footer class="app-release-footer" aria-label="Informações do Borion">
-<div><strong>Versão:</strong> 6.32.0</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.32.1 • Hub Borion integrado</div><footer class="app-release-footer" aria-label="Informações do Borion">
+<div><strong>Versão:</strong> 6.32.1</div>
 <div><strong>Lançamento:</strong> 14/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -363,7 +363,7 @@ function renderSettingsBackup(){
   const status = cloud ? (cloud.statusLabel ? cloud.statusLabel() : (cloud.statusText || cloud.status || 'Indisponível')) : 'Módulo de nuvem não carregado';
   const pendingTxt = pending ? `Existe sincronização pendente desde ${new Date(pending.savedAt).toLocaleString('pt-BR')}. Motivo: ${esc(pending.reason||'pendente')}` : 'Nenhum dado pendente no cache local.';
   const profileName = S.currentProfile ? S.currentProfile.name : 'Nenhum perfil ativo';
-  const schema = cloud && cloud.schemaError ? `<div class="info-box danger-box"><b>Atenção:</b> ${esc(cloud.schemaError)}<br>Rode o arquivo <b>docs-tecnicos/SUPABASE_V5.34_CLOUD_FOUNDATION.sql</b> no Supabase.</div>` : '';
+  const schema = cloud && cloud.schemaError ? `<div class="info-box danger-box"><b>Atenção:</b> ${esc(cloud.schemaError)}<br>Verifique a configuração das tabelas do Supabase antes de usar o login antigo por e-mail.</div>` : '';
   const consent = window.BackupFS ? BackupFS.hasConsent() : null;
   const consentText = consent ? `Aceito em ${new Date(consent.acceptedAt).toLocaleString('pt-BR')} · modo: ${esc(consent.mode||'backup')}` : 'Ainda não configurado neste dispositivo.';
   return `
@@ -848,7 +848,7 @@ Settings.createCloudBackupNow = async function(type='manual', reason='backup man
     toast('Backup salvo no Supabase: borion_backups.');
     console.log('[BORION_BACKUP][MANUAL_UI][SUCCESS]', row);
   }catch(e){
-    alert((e&&e.message?e.message:String(e))+'\n\nSe aparecer erro de tabela/coluna, rode o SQL docs-tecnicos/SUPABASE_V5.35_BACKUP_SECURITY.sql ou o SQL Cloud Foundation atualizado.');
+    alert((e&&e.message?e.message:String(e))+'\n\nSe aparecer erro de tabela ou coluna, revise a configuração do Supabase usada pelo login antigo por e-mail.');
   }
 };
 /* V6.3.0 — mesma ideia do viewCloudBackups logo abaixo, só que lendo do histórico

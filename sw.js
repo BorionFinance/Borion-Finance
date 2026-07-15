@@ -3,16 +3,16 @@
 // Estratégia: stale-while-revalidate.
 //
 // Ao editar o app e quiser forçar atualização do cache, aumente o número abaixo.
-const CACHE_NAME = 'borion-finance-v6-32-0-general-review';
+const CACHE_NAME = 'borion-finance-v6-32-1-optimized-login';
 
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.json",
   "./css/styles.css",
-  "./css/borion-hub.css?v=6.32.0",
+  "./css/borion-hub.css?v=6.32.1",
   "./js/00-utils.js",
-  "./js/borion-hub.js?v=6.32.0",
+  "./js/borion-hub.js?v=6.32.1",
   "./js/01-storage-data-state.js",
   "./js/01b-storage-provider.js",
   "./js/01c-google-drive-provider.js",
@@ -40,12 +40,10 @@ const ASSETS = [
   "./js/23-profile-import-review.js",
   "./js/24-interconnections.js",
   "./js/25-module-layout.js",
-  "./FUNDO.png",
   "./borion-emblem.png",
   "./borion-full.png",
   "./icon-192.png",
     "./icon-512-maskable.png",
-  "./apple-touch-icon.png",
   "./favicon-32.png",
   "./borion.ico"
 ];

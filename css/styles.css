@@ -41,7 +41,7 @@ body::before{
   content:'';
   position:fixed;
   inset:0;
-  background-image:url('../FUNDO.png');
+  background-image:url('../icon-512-maskable.png');
   background-size:min(42vw, 540px);
   background-position:center 58%;
   background-repeat:no-repeat;
@@ -52,11 +52,11 @@ body::before{
 }
 button{font-family:inherit;cursor:pointer;}
 input,select{font-family:inherit;}
-#root{min-height:100vh;position:relative;z-index:1;}
+#root{min-height:100vh;min-height:100dvh;position:relative;z-index:1;}
 
 /* ---------- GATE (login/profiles) ---------- */
 .gate-wrap{
-  min-height:100vh;display:flex;align-items:center;justify-content:center;
+  min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;
   padding:24px;
   background:
     radial-gradient(circle at 50% 20%, rgba(201,164,92,.13) 0%, rgba(6,10,16,.08) 34%, rgba(6,10,16,.88) 72%),
@@ -1158,7 +1158,8 @@ html[data-theme="light"] .sb-item.active .ic{
 
 
 /* Borion Cloud / Supabase */
-.cloud-login-wrap .gate-box{max-width:440px}
+.cloud-login-wrap{min-height:100vh;min-height:100dvh;overflow-y:auto}
+.cloud-login-wrap .gate-box{max-width:440px;margin-block:auto}
 .cloud-card .gate-info{margin:0 0 14px;color:#34d399;font-size:13px;line-height:1.4}
 .cloud-actions{display:flex;justify-content:center;gap:16px;flex-wrap:wrap;margin-top:14px}
 .cloud-note{margin-top:18px;font-size:12px;line-height:1.45;color:var(--muted);text-align:center;opacity:.86}
@@ -1193,7 +1194,19 @@ html[data-theme="light"] .sb-item.active .ic{
   .settings-tab{white-space:nowrap;scroll-snap-align:start;}
   .version-tag{display:none;}
   .cloud-status{position:fixed!important;left:12px!important;right:12px!important;bottom:calc(76px + env(safe-area-inset-bottom))!important;z-index:90;text-align:center;padding:10px 12px;border-radius:999px;}
-  .cloud-login-wrap{padding:14px!important;align-items:flex-start;padding-top:calc(18px + env(safe-area-inset-top))!important;}
+  .cloud-login-wrap{
+    min-height:100vh;
+    min-height:100dvh;
+    align-items:stretch!important;
+    justify-content:center!important;
+    padding:
+      calc(14px + env(safe-area-inset-top))
+      calc(14px + env(safe-area-inset-right))
+      calc(14px + env(safe-area-inset-bottom))
+      calc(14px + env(safe-area-inset-left))!important;
+    overflow-y:auto;
+  }
+  .cloud-login-wrap .gate-box{margin-block:auto;}
   .cloud-login-wrap .gate-logo{margin-bottom:16px;}
   .cloud-login-wrap .gate-logo img{width:108px;height:108px;}
   .cloud-login-wrap .gate-card{padding:22px 18px;border-radius:18px;}
@@ -2438,7 +2451,7 @@ html[data-theme="light"] .import-current-row.will-delete{border-color:rgba(220,3
 }
 
 /* ========================================================================== 
-   V6.32.0 — revisão geral, saúde financeira e grade dinâmica
+   V6.32.1 — revisão geral, saúde financeira e grade dinâmica
    ========================================================================== */
 .date-sort-toggle{display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:7px 10px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.025);color:var(--text);font-size:12px;font-weight:750;cursor:pointer;transition:.16s ease}
 .date-sort-toggle:hover{border-color:rgba(204,161,96,.6);background:rgba(204,161,96,.06)}

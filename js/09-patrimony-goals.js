@@ -80,10 +80,12 @@ function renderPatrimony(){
     ...(reservasEnabled()?[{id:'reservas',label:'Reservas',html:renderReservasResumoPanel(reservas,reservasCollapsed)},{id:'rendimentos_reservas',label:'Rendimento das reservas',html:renderReservaRendimentosPanel(S.patrView.reservaRendimentosCollapsed!==false)}]:[]),
     {id:'dividas',label:'Dívidas',html:`<div class="panel-box"><div class="toolbar"><div class="toolbar-left" style="display:flex;align-items:center;gap:8px;color:#ef4444;"><button class="collapse-toggle-btn" onclick="Patr.toggleDividas()" title="${dividasCollapsed?'Maximizar':'Minimizar'}" style="color:#ef4444;">${dividasCollapsed?'▸':'▾'}</button><span>DÍVIDAS (cartões e boletos, ${monthLabel(S.month.y,S.month.m)})</span></div>${dividasCollapsed?`<span style="font-weight:800;color:#ef4444;">TOTAL: ${brl(div)}</span>`:''}</div>${dividasCollapsed?'':(divRows||'<div class="empty-note">Nenhuma dívida de cartão ou boleto ativa neste mês.</div>')}${dividasCollapsed?'':'<p style="font-size:11px;color:var(--muted-2);margin-top:8px;">Gerencie compras, parcelas e boletos na aba “Cartões e Contas”.</p>'}</div>`}
   ];
-  const ordered=window.OrderPreferences?OrderPreferences.applyOrder('patrimony_modules',modules,{idKey:'id',labelKey:'label'}):modules;
-  const organizing=!!(window.OrderPreferences&&OrderPreferences.active&&OrderPreferences.activeType==='patrimony_modules');
-  const naturalIds=ordered.map(m=>m.id),columns=window.OrderPreferences?OrderPreferences.workingPatrimonyColumns():2;
-  const moduleHTML=ordered.map((m,i)=>`<div class="patrimony-module-slot ${organizing?'organizing':''}" data-order-id="${esc(m.id)}">${organizing?`<div class="patrimony-slot-toolbar"><span>MÓDULO ${String(i+1).padStart(2,'0')}</span>${OrderPreferences.reorderRowControlsHTML('patrimony_modules',m.id,m.label,naturalIds)}</div>`:''}${m.html}</div>`).join('');
+  const ordered=window.ModuleLayout?ModuleLayout.applyOrder('patrimony_modules',modules,{idKey:'id'}):modules;
+  const organizing=!!(window.ModuleLayout&&ModuleLayout.isActive('patrimony_modules'));
+  const layout=window.ModuleLayout?ModuleLayout.get('patrimony_modules'):{columns:4};
+  const wideModules=new Set(['reservas','dividas']);
+  const moduleHTML=ordered.map(m=>{const defaultW=wideModules.has(m.id)?4:2;return `<div class="module-layout-slot patrimony-module-slot ${organizing?'organizing':''}" data-module-id="${esc(m.id)}" style="${window.ModuleLayout?ModuleLayout.slotStyle('patrimony_modules',m.id,defaultW):'--module-span:'+defaultW+';'}">${window.ModuleLayout?ModuleLayout.slotControlsHTML('patrimony_modules',m.id,m.label,defaultW):''}<div class="module-layout-content">${m.html}</div></div>`;}).join('');
+  if(window.ModuleLayout) ModuleLayout.schedule('patrimony_modules');
   return `
     <div class="cards-row">
       <div class="card hero-green"><div class="clabel">Patrimônio total</div><div class="cval">${brl(total)}</div></div>
@@ -93,9 +95,8 @@ function renderPatrimony(){
       ${investmentsEnabled()?`<div class="card"><div class="clabel">${tagBadgeHTML('investimentos','INVESTIMENTOS')}</div><div class="cval">${brl(invest)}</div></div>`:''}
       <div class="card"><div class="clabel">${tagBadgeHTML('dividas','DÍVIDAS')}</div><div class="cval" style="color:${iconColor('dividas')}">${brl(div)}</div></div>
     </div>
-    <div class="toolbar patrimony-organize-toolbar"><div class="toolbar-left">Organização do patrimônio</div>${window.OrderPreferences?OrderPreferences.sortSelectHTML('patrimony_modules'):''}</div>
-    ${organizing&&window.OrderPreferences?OrderPreferences.patrimonyLayoutControlsHTML():''}
-    <div class="patrimony-modules-grid ${organizing?'patrimony-grid-organizer':''}" data-order-list="patrimony_modules" style="--patrimony-columns:${columns};">${moduleHTML}</div>
+    ${window.ModuleLayout?ModuleLayout.toolbarHTML('patrimony_modules','Organização do patrimônio'):''}
+    <div class="module-layout-grid patrimony-modules-grid ${organizing?'module-grid-organizer':''}" data-module-layout="patrimony_modules" style="--module-columns:${layout.columns};">${moduleHTML}</div>
   `;
 }
 

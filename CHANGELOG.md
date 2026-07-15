@@ -1,3 +1,12 @@
+## V6.31.0 — Revisão geral, saúde financeira e vínculos completos
+- Receita, Despesa fixa, Despesa variável e Transferências usam o mesmo botão de ordenação crescente/decrescente por data; Assinaturas permanece sem esse controle.
+- Saúde Financeira foi refeita com análises Mensal e Anual independentes, pontuação e indicadores de renda, despesas, resultado, patrimônio, liquidez, reservas, rendimentos, dívidas, economia, comprometimento e tendência.
+- Visão Geral e Patrimônio usam uma grade dinâmica compartilhada: arrastar, reorganizar, alterar largura, altura e quantidade de colunas, com preenchimento denso dos espaços livres e persistência por perfil.
+- A aba Vínculos mostra os nomes e valores exatos recebidos da origem, mantém o valor técnico visível quando houver rótulo externo e separa claramente Origem e Destino.
+- Formas de pagamento podem ter regras diferentes para entradas e saídas e apontar para Conta, Carteira ou Reserva.
+- Rendimentos importados diretamente para uma reserva atualizam o Cofrinho e o histórico de Rendimentos das Reservas sem duplicar saldo; despesas pagas por reserva criam a baixa vinculada.
+- Revisão estrutural final: **90/90 testes regressivos**, **13/13 testes específicos das integrações** e **231/231 verificações de integridade** aprovados.
+
 ## V6.30.0 — Integrações inteligentes com Vínculos
 - Amanda Estética e Marco Iris Tecnologia ganharam configuração individual com as abas **Conexão** e **Vínculos**.
 - Antes da primeira importação, o Borion lê categorias, tipos, formas de pagamento e status reais do aplicativo de origem.
@@ -6,7 +15,7 @@
 - A duplicidade continua protegida pelo identificador permanente da integração, mesmo após editar nome, valor, categoria, conta ou status no Borion.
 - Excluir um lançamento importado oferece **permitir importar novamente** ou **ignorar permanentemente**.
 - Exclusões e alterações posteriores no aplicativo de origem não apagam lançamentos que já se tornaram nativos no Borion.
-- Validação final: **88/88 testes regressivos** e **10/10 testes específicos da integração inteligente** aprovados.
+- Validação final: **90/90 testes regressivos** e **10/10 testes específicos da integração inteligente** aprovados.
 
 ## V6.29.0 — Interconexões protegidas entre aplicativos
 - Amanda Estética e Marco Iris passam a publicar snapshots financeiros idempotentes para o Borion.
@@ -23,7 +32,7 @@
 - Editar despesa de cartão em Lançamentos abre a mesma janela Editar Parcela do cartão.
 - Boletos receberam ordem revisada, origem Carteira/Conta, status Em Aberto/Pago/Cancelado e categorias dinâmicas.
 - Ordem lateral e de módulos passou a ser persistida no perfil. Patrimônio ganhou arrastar, reordenar e escolha de 1, 2 ou 3 colunas.
-- Validação final: **88/88 testes regressivos** e **214/214 verificações de integridade** aprovados.
+- Validação final: **90/90 testes regressivos** e **214/214 verificações de integridade** aprovados.
 
 ## V6.27.4 — Botões compactos em faturas e boletos
 

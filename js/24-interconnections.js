@@ -9,8 +9,8 @@
      ======================================================================== */
   const SPEC = Object.freeze({
     schemaVersion: 1,
-    bridgeVersion: '2.0.0',
-    mappingVersion: 1,
+    bridgeVersion: '2.1.0',
+    mappingVersion: 2,
     folderName: 'Borion_Integracoes'
   });
   const SOURCES = Object.freeze({
@@ -88,12 +88,14 @@
   }
   function normalizeDiscovered(input){
     const value = input && typeof input === 'object' ? input : {};
+    const directional = list => (Array.isArray(list) ? list : []).flatMap(item => item && item.direction ? [item] : ['income','expense'].map(direction => Object.assign({}, item || {}, {direction})));
     return {
       directions: Array.isArray(value.directions) ? value.directions : [],
       transactionKinds: Array.isArray(value.transactionKinds) ? value.transactionKinds : [],
       categories: Array.isArray(value.categories) ? value.categories : [],
-      paymentMethods: Array.isArray(value.paymentMethods) ? value.paymentMethods : [],
-      statuses: Array.isArray(value.statuses) ? value.statuses : []
+      paymentMethods: directional(value.paymentMethods),
+      statuses: directional(value.statuses),
+      fields: Array.isArray(value.fields) ? value.fields : []
     };
   }
   function ensureInterop(data){
@@ -239,54 +241,114 @@
 
   function mergeUnique(list, item, identity){
     const key = identity(item);
-    if(!list.some(existing => identity(existing) === key)) list.push(item);
+    const existing = list.find(current => identity(current) === key);
+    if(!existing) list.push(item);
+    else if(item.label && (!existing.label || existing.label === existing.value)) existing.label = item.label;
   }
   function transactionKindValue(record){
     return record.recordType ?? record.entityType ?? record.kind ?? record.type ?? '';
+  }
+  function sourceBag(record){
+    const candidates=[record?.raw,record?.sourceValues,record?.original,record?.source,record?.payload];
+    return candidates.find(value=>value&&typeof value==='object'&&!Array.isArray(value))||{};
+  }
+  function sourceLabel(record, field, fallback){
+    const aliases={
+      category:['categoryLabel','categoriaLabel','sourceCategoryLabel'],
+      paymentMethod:['paymentMethodLabel','formaPagamentoLabel','sourcePaymentMethodLabel'],
+      status:['statusLabel','sourceStatusLabel'],
+      recordType:['recordTypeLabel','typeLabel','tipoLabel','sourceTypeLabel'],
+      direction:['directionLabel','sourceDirectionLabel']
+    };
+    const labels=record?.sourceLabels&&typeof record.sourceLabels==='object'?record.sourceLabels:{};
+    const raw=sourceBag(record);
+    const names=[field].concat(aliases[field]||[]);
+    for(const name of names){
+      if(labels[name]!==undefined&&labels[name]!==null&&String(labels[name]).trim()) return String(labels[name]).trim();
+      if(raw[name]!==undefined&&raw[name]!==null&&String(raw[name]).trim()) return String(raw[name]).trim();
+      if(record?.[name]!==undefined&&record?.[name]!==null&&String(record[name]).trim()&&name!==field) return String(record[name]).trim();
+    }
+    return String(fallback??record?.[field]??'').trim();
+  }
+  function sourceItem(value, record, field, extra={}){
+    const rawValue=String(value??'').trim();
+    return Object.assign({key:mappingKey(rawValue),value:rawValue,label:sourceLabel(record,field,rawValue),field},extra);
+  }
+  function discoverSourceFields(record, discovered){
+    const raw=sourceBag(record);
+    const entries=Object.keys(raw).length?Object.entries(raw):[
+      ['recordType',transactionKindValue(record)],['category',record.category],['paymentMethod',record.paymentMethod],
+      ['status',record.status],['description',record.description],['date',record.date],['amount',record.amount],
+      ['clientName',record.clientName],['externalReference',record.externalReference]
+    ];
+    entries.forEach(([name,value])=>{
+      if(value===undefined||value===null||typeof value==='object') return;
+      mergeUnique(discovered.fields,{key:String(name),sourceName:String(name),sample:String(value),label:sourceLabel(record,String(name),String(name))},item=>item.key);
+    });
   }
   function discoverSnapshot(snapshot, current){
     const discovered = normalizeDiscovered(clone(current || {}));
     snapshot.records.forEach(record => {
       if(!discovered.directions.includes(record.direction)) discovered.directions.push(record.direction);
       const categoryValue = String(record.category || '').trim();
-      mergeUnique(discovered.categories, {
-        key:mappingKey(categoryValue), value:categoryValue, direction:record.direction
-      }, item => `${item.direction}:${item.key}`);
+      mergeUnique(discovered.categories, sourceItem(categoryValue,record,'category',{direction:record.direction}), item => `${item.direction}:${item.key}`);
       const paymentValue = String(record.paymentMethod || '').trim();
-      mergeUnique(discovered.paymentMethods, {
-        key:mappingKey(paymentValue), value:paymentValue
-      }, item => item.key);
+      mergeUnique(discovered.paymentMethods, sourceItem(paymentValue,record,'paymentMethod',{direction:record.direction}), item => `${item.direction}:${item.key}`);
       const statusValue = String(record.status || '').trim();
-      mergeUnique(discovered.statuses, {
-        key:mappingKey(statusValue), value:statusValue
-      }, item => item.key);
+      mergeUnique(discovered.statuses, sourceItem(statusValue,record,'status',{direction:record.direction}), item => `${item.direction}:${item.key}`);
       const kindValue = String(transactionKindValue(record) || '').trim();
-      if(kindValue){
-        mergeUnique(discovered.transactionKinds, {
-          key:mappingKey(kindValue), value:kindValue, direction:record.direction
-        }, item => `${item.direction}:${item.key}`);
-      }
+      if(kindValue) mergeUnique(discovered.transactionKinds, sourceItem(kindValue,record,'recordType',{direction:record.direction}), item => `${item.direction}:${item.key}`);
+      discoverSourceFields(record,discovered);
     });
     discovered.directions.sort();
-    discovered.categories.sort((a,b) => `${a.direction}:${a.value}`.localeCompare(`${b.direction}:${b.value}`, 'pt-BR'));
-    discovered.paymentMethods.sort((a,b) => a.value.localeCompare(b.value, 'pt-BR'));
-    discovered.statuses.sort((a,b) => a.value.localeCompare(b.value, 'pt-BR'));
-    discovered.transactionKinds.sort((a,b) => `${a.direction}:${a.value}`.localeCompare(`${b.direction}:${b.value}`, 'pt-BR'));
+    discovered.categories.sort((a,b) => `${a.direction}:${a.label||a.value}`.localeCompare(`${b.direction}:${b.label||b.value}`, 'pt-BR'));
+    discovered.paymentMethods.sort((a,b) => `${a.direction}:${a.label||a.value}`.localeCompare(`${b.direction}:${b.label||b.value}`, 'pt-BR'));
+    discovered.statuses.sort((a,b) => `${a.direction}:${a.label||a.value}`.localeCompare(`${b.direction}:${b.label||b.value}`, 'pt-BR'));
+    discovered.transactionKinds.sort((a,b) => `${a.direction}:${a.label||a.value}`.localeCompare(`${b.direction}:${b.label||b.value}`, 'pt-BR'));
+    discovered.fields=discovered.fields.slice(0,60).sort((a,b)=>String(a.sourceName).localeCompare(String(b.sourceName),'pt-BR'));
     return discovered;
   }
 
   function accountByIdIn(data, accountId){ return (data.contas || []).find(account => String(account.id) === String(accountId)); }
   function accountName(data, accountId){ return accountByIdIn(data, accountId)?.nome || ''; }
+  function reserveByIdIn(data,reserveId){ return (data.reservas?.boxes||[]).find(box=>String(box.id)===String(reserveId))||null; }
+  function reserveAccountId(data,reserve,config){
+    if(!reserve) return '';
+    if(accountByIdIn(data,reserve.accountId)) return reserve.accountId;
+    const byName=(data.contas||[]).find(account=>normalize(account.nome)===normalize(reserve.banco));
+    if(byName) return byName.id;
+    return accountByIdIn(data,config.accountId)?config.accountId:'';
+  }
+  function normalizeTarget(rule,form){
+    if(rule?.target){
+      const target=String(rule.target);
+      if(target==='__default__'||target==='default') return {kind:'default',id:''};
+      if(target==='__carteira__'||target==='wallet') return {kind:'wallet',id:CARTEIRA_CONTA_ID};
+      if(target.startsWith('account:')) return {kind:'account',id:target.slice(8)};
+      if(target.startsWith('reserve:')) return {kind:'reserve',id:target.slice(8)};
+    }
+    const legacy=rule?.accountId;
+    if(legacy==='__carteira__') return {kind:'wallet',id:CARTEIRA_CONTA_ID};
+    if(legacy&&legacy!=='__default__') return {kind:'account',id:legacy};
+    return {kind:form==='Dinheiro'?'wallet':'default',id:form==='Dinheiro'?CARTEIRA_CONTA_ID:''};
+  }
+  function resolveFinancialTarget(data,config,record){
+    const mapped=record._mappedTarget||{kind:'default',id:''};
+    if(mapped.kind==='reserve'){
+      const reserve=reserveByIdIn(data,mapped.id);
+      return reserve?{kind:'reserve',id:reserve.id,reserve,accountId:reserveAccountId(data,reserve,config)}:null;
+    }
+    const candidate=mapped.kind==='wallet'?CARTEIRA_CONTA_ID:(mapped.kind==='account'?mapped.id:record._mappedAccountId||config.accountId);
+    const account=accountByIdIn(data,candidate);
+    return account?{kind:mapped.kind==='wallet'?'wallet':'account',id:account.id,accountId:account.id,account}:null;
+  }
   function ensureLedger(data, accountId){
     data.liquidez = Array.isArray(data.liquidez) ? data.liquidez : [];
     let ledger = data.liquidez.find(item => item && item.ledgerType === 'account_delta' && String(item.accountId) === String(accountId));
     if(!ledger){
       const account = accountByIdIn(data, accountId);
       if(!account) return null;
-      ledger = {
-        id:'bridge-ledger-' + hash(accountId), accountId, ledgerType:'account_delta',
-        nome:account.nome || 'Conta', banco:account.nome || '', valor:0, createdAt:Date.now()
-      };
+      ledger = {id:'bridge-ledger-' + hash(accountId),accountId,ledgerType:'account_delta',nome:account.nome||'Conta',banco:account.nome||'',valor:0,createdAt:Date.now()};
       data.liquidez.push(ledger);
     }
     return ledger;
@@ -304,7 +366,29 @@
     ledger.valor = Math.round(((Number(ledger.valor) || 0) + Number(delta)) * 100) / 100;
     return true;
   }
+  function applyReserveLink(data,tx){
+    if(!tx) return true;
+    data.reservas ||= {boxes:[],moves:[]};
+    data.reservas.boxes=Array.isArray(data.reservas.boxes)?data.reservas.boxes:[];
+    data.reservas.moves=Array.isArray(data.reservas.moves)?data.reservas.moves:[];
+    if(tx.tipo==='receita'&&tx.reservaBoxId){
+      const box=reserveByIdIn(data,tx.reservaBoxId),value=Number(tx.reservaValor)||0;
+      if(!box||value<=0) return false;
+      if(data.reservas.moves.some(move=>move.transacaoId===tx.id)) return true;
+      const move={id:'bridge-reserve-'+hash(tx.id),boxId:box.id,tipo:tx.origem==='rendimento'?'Rendimento':'Receita direta',data:tx.data,valor:value,banco:box.banco||tx.banco||'',descricao:(tx.origem==='rendimento'?'Rendimento integrado: ':'Receita enviada direto para reserva: ')+(tx.nome||'Sem nome'),origem:'receita',transacaoId:tx.id,createdAt:Date.now()};
+      data.reservas.moves.push(move); box.valorAtual=Math.round(((Number(box.valorAtual)||0)+value)*100)/100; tx.reservaMoveId=move.id; tx.destinoReserva=true; return true;
+    }
+    if(tx.tipo==='variavel'&&tx.origemPagamento==='reserva'&&tx.statusPagamento!=='Em aberto'){
+      const box=reserveByIdIn(data,tx.reservaOrigemId),value=Number(tx.valor)||0;
+      if(!box||value<=0||(Number(box.valorAtual)||0)<value-1e-9) return false;
+      if(data.reservas.moves.some(move=>move.despesaTransacaoId===tx.id)) return true;
+      const move={id:'bridge-reserve-out-'+hash(tx.id),boxId:box.id,tipo:'Pagamento direto',data:tx.data,valor:value,banco:box.banco||'',descricao:'Pagamento direto integrado: '+(tx.nome||'Despesa'),despesaTransacaoId:tx.id,createdAt:Date.now()};
+      data.reservas.moves.push(move); box.valorAtual=Math.round(((Number(box.valorAtual)||0)-value)*100)/100; tx.reservaOrigemMoveId=move.id; return true;
+    }
+    return true;
+  }
   function applyNew(data, tx){
+    if(!applyReserveLink(data,tx)) return false;
     const delta = txDelta(tx);
     return delta ? adjust(data, tx.accountId, delta) : true;
   }
@@ -330,28 +414,23 @@
     const targetType = kindTarget || mappings.directions[direction] || (direction === 'income' ? 'receita' : 'variavel');
     if(targetType === 'ignore') return {skip:true, reason:'Tipo configurado para ignorar'};
 
-    const statusRule = mappings.statuses[mappingKey(record.status)] || 'auto';
+    const statusRule = mappings.statuses[`${direction}:${mappingKey(record.status)}`] || mappings.statuses[mappingKey(record.status)] || 'auto';
     if(statusRule === 'ignore') return {skip:true, reason:'Status configurado para ignorar'};
     const settled = statusRule === 'paid' ? true : (statusRule === 'open' ? false : record.settled === true);
 
     const categorySource = String(record.category || '').trim();
     const category = String(mappings.categories?.[direction]?.[mappingKey(categorySource)] || categorySource || 'Outro').trim() || 'Outro';
     const methodSource = String(record.paymentMethod || '').trim();
-    const paymentRule = mappings.paymentMethods[mappingKey(methodSource)] || {};
+    const paymentRule = mappings.paymentMethods[`${direction}:${mappingKey(methodSource)}`] || mappings.paymentMethods[mappingKey(methodSource)] || {};
     const form = FORMAS_PAGAMENTO.includes(paymentRule.form) ? paymentRule.form : paymentForm(methodSource);
-    let accountId = paymentRule.accountId || '__default__';
-    if(accountId === '__default__') accountId = form === 'Dinheiro' ? CARTEIRA_CONTA_ID : config.accountId;
-    if(accountId === '__carteira__') accountId = CARTEIRA_CONTA_ID;
+    const target=normalizeTarget(paymentRule,form);
+    let accountId=target.kind==='wallet'?CARTEIRA_CONTA_ID:(target.kind==='account'?target.id:config.accountId);
 
     const revenueOrigin = mappings.revenueOrigins[mappingKey(categorySource)] || inferRevenueOrigin(categorySource);
     return Object.assign({}, record, {
-      _borionType: targetType,
-      _mappedCategory: category,
-      _mappedPaymentForm: form,
-      _mappedAccountId: accountId,
-      _mappedRevenueOrigin: revenueOrigin,
-      _mappedSettled: settled,
-      _mappingVersion: SPEC.mappingVersion
+      _borionType: targetType,_mappedCategory: category,_mappedPaymentForm: form,
+      _mappedAccountId: accountId,_mappedTarget:target,_mappedRevenueOrigin: revenueOrigin,
+      _mappedSettled: settled,_mappingVersion: SPEC.mappingVersion
     });
   }
   function ensureCategory(data, type, category){
@@ -366,55 +445,33 @@
     return value;
   }
   function targetAccountId(data, config, record){
-    const accountId = record._mappedAccountId || (paymentForm(record.paymentMethod) === 'Dinheiro' ? CARTEIRA_CONTA_ID : config.accountId);
-    return accountByIdIn(data, accountId) ? accountId : '';
+    const target=resolveFinancialTarget(data,config,record);
+    return target?.accountId||'';
   }
   function makeTransaction(data, config, record){
-    const accountId = targetAccountId(data, config, record);
-    if(!accountId) throw new Error(`A conta vinculada ao campo “${record.paymentMethod || 'sem forma de pagamento'}” não existe mais no Borion.`);
+    const target=resolveFinancialTarget(data,config,record);
+    if(!target) throw new Error(`O destino vinculado ao campo “${record.paymentMethod || 'sem forma de pagamento'}” não existe mais no Borion.`);
     const isIncome = record._borionType === 'receita';
     const category = ensureCategory(data, isIncome ? 'receita' : 'variavel', record._mappedCategory);
+    const amount=Math.round((Number(record.amount)||0)*100)/100;
+    const reserve=target.kind==='reserve'?target.reserve:null;
+    const accountId=reserve?(target.accountId||null):target.accountId;
+    const bank=reserve?(reserve.banco||accountName(data,accountId)):accountName(data,accountId);
     const base = {
-      id:'bridge-' + hash(record.aggregateId),
-      nome:record.description || 'Lançamento integrado',
-      data:record.date || new Date().toISOString().slice(0,10),
-      categoria:category,
-      valor:Math.round((Number(record.amount) || 0) * 100) / 100,
-      accountId,
-      banco:accountName(data, accountId),
-      integrationImported:true,
-      integrationManaged:false,
-      integrationImportMode:'native',
-      integrationAggregateId:record.aggregateId,
-      integrationSourceAppId:config.sourceAppId,
-      integrationEntityId:record.entityId,
-      integrationOriginalFingerprint:record.fingerprint || hash(record),
-      integrationImportedAt:nowIso(),
-      integrationSourceUpdatedAt:record.sourceUpdatedAt || '',
-      integrationExternalReference:record.externalReference || '',
-      integrationClientName:record.clientName || '',
-      integrationNotes:record.notes || '',
-      integrationOriginalCategory:record.category || '',
-      integrationOriginalPaymentMethod:record.paymentMethod || '',
-      integrationOriginalStatus:record.status || '',
-      integrationMappingVersion:SPEC.mappingVersion
+      id:'bridge-' + hash(record.aggregateId),nome:record.description || 'Lançamento integrado',
+      data:record.date || new Date().toISOString().slice(0,10),categoria:category,valor:amount,
+      accountId,banco:bank,integrationImported:true,integrationManaged:false,integrationImportMode:'native',
+      integrationAggregateId:record.aggregateId,integrationSourceAppId:config.sourceAppId,integrationEntityId:record.entityId,
+      integrationOriginalFingerprint:record.fingerprint || hash(record),integrationImportedAt:nowIso(),
+      integrationSourceUpdatedAt:record.sourceUpdatedAt || '',integrationExternalReference:record.externalReference || '',
+      integrationClientName:record.clientName || '',integrationNotes:record.notes || '',
+      integrationOriginalCategory:record.category || '',integrationOriginalPaymentMethod:record.paymentMethod || '',
+      integrationOriginalStatus:record.status || '',integrationOriginalSourceValues:clone(sourceBag(record)),integrationMappingVersion:SPEC.mappingVersion
     };
     if(isIncome){
-      return Object.assign(base, {
-        tipo:'receita',
-        origem:record._mappedRevenueOrigin || 'propria',
-        reservaValor:0,
-        destinoModo:'Conta livre',
-        formaPagamento:record._mappedPaymentForm
-      });
+      return Object.assign(base,{tipo:'receita',origem:record._mappedRevenueOrigin||'propria',reservaValor:reserve?amount:0,destinoModo:reserve?'Direto para reserva':'Conta livre',reservaBoxId:reserve?reserve.id:null,destinoReserva:!!reserve,formaPagamento:record._mappedPaymentForm});
     }
-    return Object.assign(base, {
-      tipo:'variavel',
-      statusPagamento:record._mappedSettled ? 'Pago' : 'Em aberto',
-      origemPagamento:'conta',
-      formaPagamento:record._mappedPaymentForm,
-      localCompra:''
-    });
+    return Object.assign(base,{tipo:'variavel',accountId:reserve?null:accountId,statusPagamento:record._mappedSettled?'Pago':'Em aberto',origemPagamento:reserve?'reserva':'conta',formaPagamento:reserve?null:record._mappedPaymentForm,reservaOrigemId:reserve?reserve.id:null,reservaOrigemMoveId:null,localCompra:''});
   }
 
   function importedState(data, sourceAppId){
@@ -735,13 +792,21 @@
   function paymentOptions(selected){
     return FORMAS_PAGAMENTO.map(value => `<option value="${escHtml(value)}" ${selected === value ? 'selected' : ''}>${escHtml(value)}</option>`).join('');
   }
-  function accountMappingOptions(data, selected, fallbackForm){
-    const selectedValue = selected || '__default__';
-    const options = [
-      ['__default__', fallbackForm === 'Dinheiro' ? 'Automático (Carteira)' : 'Conta padrão da integração'],
-      ['__carteira__','Carteira']
-    ].concat((data.contas || []).filter(account => account && !account.isCarteira && !account.archivedAt && account.active !== false).map(account => [account.id, account.nome || 'Conta']));
-    return options.map(([value,label]) => `<option value="${escHtml(value)}" ${String(selectedValue) === String(value) ? 'selected' : ''}>${escHtml(label)}</option>`).join('');
+  function financialTargetOptions(data, selected, fallbackForm){
+    const selectedValue=String(selected||'__default__');
+    const options=[
+      ['__default__',fallbackForm==='Dinheiro'?'Automático (Carteira)':'Conta padrão da integração'],
+      ['wallet','Carteira']
+    ];
+    (data.contas||[]).filter(account=>account&&!account.isCarteira&&!account.archivedAt&&account.active!==false).forEach(account=>options.push([`account:${account.id}`,`Conta · ${account.nome||'Sem nome'}`]));
+    (data.reservas?.boxes||[]).filter(box=>box&&!box.archivedAt&&box.active!==false).forEach(box=>options.push([`reserve:${box.id}`,`Reserva · ${box.nome||'Sem nome'}${box.banco?' · '+box.banco:''}`]));
+    return options.map(([value,label])=>`<option value="${escHtml(value)}" ${selectedValue===String(value)?'selected':''}>${escHtml(label)}</option>`).join('');
+  }
+  function paymentRuleTarget(rule,form){
+    if(rule?.target) return rule.target;
+    if(rule?.accountId==='__carteira__') return 'wallet';
+    if(rule?.accountId&&rule.accountId!=='__default__') return `account:${rule.accountId}`;
+    return '__default__';
   }
   function revenueOriginOptions(selected){
     const options = [
@@ -770,42 +835,32 @@
     if(!row){
       return `<div class="interop-pane"><div class="interop-empty"><h4>Conecte o aplicativo primeiro</h4><p>Os campos reais da origem precisam ser lidos antes que os vínculos possam ser configurados.</p><button class="btn btn-primary btn-sm" onclick="BorionInterop.setSettingsTab('connection')">Ir para Conexão</button></div></div>`;
     }
-    const c = row.config;
-    const d = normalizeDiscovered(c.discovered);
-    const m = normalizeMappings(c.mappings);
-    const hasFields = d.categories.length || d.paymentMethods.length || d.statuses.length || d.transactionKinds.length || d.directions.length;
-    if(!hasFields){
-      return `<div class="interop-pane"><div class="interop-empty"><h4>Nenhum campo da origem foi lido</h4><p>Use o botão abaixo para analisar o arquivo atual sem importar lançamentos.</p><button class="btn btn-primary btn-sm" onclick="BorionInterop.inspectSource('${sourceAppId}')">Ler campos da origem</button></div></div>`;
-    }
-
-    const directionRows = (d.directions.length ? d.directions : ['income','expense']).map(direction => {
-      const target = m.directions[direction] || (direction === 'income' ? 'receita' : 'variavel');
-      return `<div class="interop-map-row"><div class="interop-source-value"><small>Origem</small><strong>${direction === 'income' ? 'Entrada / Receita' : 'Saída / Despesa'}</strong></div><div class="interop-arrow">→</div><label><small>Tipo no Borion</small><select data-interop-direction="${direction}">${transactionTypeOptions(target)}</select></label></div>`;
+    const c=row.config,d=normalizeDiscovered(c.discovered),m=normalizeMappings(c.mappings);
+    const hasFields=d.categories.length||d.paymentMethods.length||d.statuses.length||d.transactionKinds.length||d.directions.length||d.fields.length;
+    if(!hasFields) return `<div class="interop-pane"><div class="interop-empty"><h4>Nenhum campo da origem foi lido</h4><p>Use o botão abaixo para analisar o arquivo atual sem importar lançamentos.</p><button class="btn btn-primary btn-sm" onclick="BorionInterop.inspectSource('${sourceAppId}')">Ler campos da origem</button></div></div>`;
+    const sourceDisplay=item=>`<strong>${escHtml(displaySourceValue(item.label||item.value))}</strong>${item.label&&item.value&&item.label!==item.value?`<span class="interop-source-code">Valor técnico recebido: ${escHtml(item.value)}</span>`:''}`;
+    const directionRows=(d.directions.length?d.directions:['income','expense']).map(direction=>{
+      const target=m.directions[direction]||(direction==='income'?'receita':'variavel');
+      return `<div class="interop-map-row"><div class="interop-source-value"><small>Origem · direction</small><strong>${direction==='income'?'income — Entrada / Receita':'expense — Saída / Despesa'}</strong></div><div class="interop-arrow">→</div><label><small>Destino · Tipo de lançamento</small><select data-interop-direction="${direction}">${transactionTypeOptions(target)}</select></label></div>`;
     }).join('');
-
-    const kindRows = d.transactionKinds.map(item => {
-      const mapId = `${item.direction}:${item.key}`;
-      const target = m.transactionKinds[mapId] || '';
-      return `<div class="interop-map-row"><div class="interop-source-value"><small>Origem · ${item.direction === 'income' ? 'entrada' : 'saída'}</small><strong>${escHtml(displaySourceValue(item.value))}</strong></div><div class="interop-arrow">→</div><label><small>Tipo no Borion</small><select data-interop-kind="${escHtml(mapId)}"><option value="" ${!target ? 'selected' : ''}>Usar regra geral</option>${transactionTypeOptions(target)}</select></label></div>`;
+    const kindRows=d.transactionKinds.map(item=>{
+      const mapId=`${item.direction}:${item.key}`,target=m.transactionKinds[mapId]||'';
+      return `<div class="interop-map-row"><div class="interop-source-value"><small>Origem · ${escHtml(item.field||'recordType')}</small>${sourceDisplay(item)}</div><div class="interop-arrow">→</div><label><small>Destino · Tipo no Borion</small><select data-interop-kind="${escHtml(mapId)}"><option value="" ${!target?'selected':''}>Usar regra geral</option>${transactionTypeOptions(target)}</select></label></div>`;
     }).join('');
-
-    const categoryRows = d.categories.map(item => {
-      const target = m.categories?.[item.direction]?.[item.key] || item.value || 'Outro';
-      return `<div class="interop-map-row interop-map-row-category"><div class="interop-source-value"><small>Origem · ${item.direction === 'income' ? 'receita' : 'despesa'}</small><strong>${escHtml(displaySourceValue(item.value))}</strong></div><div class="interop-arrow">→</div><label><small>Categoria no Borion</small><input type="text" list="interop-cat-${item.direction}" value="${escHtml(target)}" data-interop-category data-direction="${item.direction}" data-key="${escHtml(item.key)}" placeholder="Categoria do Borion"></label>${item.direction === 'income' ? `<label><small>Origem da receita</small><select data-interop-revenue-origin data-key="${escHtml(item.key)}">${revenueOriginOptions(m.revenueOrigins[item.key] || inferRevenueOrigin(item.value))}</select></label>` : ''}</div>`;
+    const categoryRows=d.categories.map(item=>{
+      const target=m.categories?.[item.direction]?.[item.key]||item.label||item.value||'Outro';
+      return `<div class="interop-map-row interop-map-row-category"><div class="interop-source-value"><small>Origem · ${escHtml(item.field||'category')}</small>${sourceDisplay(item)}</div><div class="interop-arrow">→</div><label><small>Destino · Categoria</small><input type="text" list="interop-cat-${item.direction}" value="${escHtml(target)}" data-interop-category data-direction="${item.direction}" data-key="${escHtml(item.key)}" placeholder="Categoria do Borion"></label>${item.direction==='income'?`<label><small>Destino · Origem da receita</small><select data-interop-revenue-origin data-key="${escHtml(item.key)}">${revenueOriginOptions(m.revenueOrigins[item.key]||inferRevenueOrigin(item.value))}</select></label>`:''}</div>`;
     }).join('');
-
-    const paymentRows = d.paymentMethods.map(item => {
-      const rule = m.paymentMethods[item.key] || {};
-      const form = FORMAS_PAGAMENTO.includes(rule.form) ? rule.form : paymentForm(item.value);
-      return `<div class="interop-map-row interop-map-row-payment"><div class="interop-source-value"><small>Origem</small><strong>${escHtml(displaySourceValue(item.value))}</strong></div><div class="interop-arrow">→</div><label><small>Forma no Borion</small><select data-interop-payment-form data-key="${escHtml(item.key)}">${paymentOptions(form)}</select></label><label><small>Conta / destino</small><select data-interop-payment-account data-key="${escHtml(item.key)}">${accountMappingOptions(row.data, rule.accountId, form)}</select></label></div>`;
+    const paymentRows=d.paymentMethods.map(item=>{
+      const mapId=`${item.direction}:${item.key}`,rule=m.paymentMethods[mapId]||m.paymentMethods[item.key]||{},form=FORMAS_PAGAMENTO.includes(rule.form)?rule.form:paymentForm(item.value),target=paymentRuleTarget(rule,form);
+      return `<div class="interop-map-row interop-map-row-payment"><div class="interop-source-value"><small>Origem · ${escHtml(item.field||'paymentMethod')} · ${item.direction==='income'?'entrada':'saída'}</small>${sourceDisplay(item)}</div><div class="interop-arrow">→</div><label><small>Destino · Forma de pagamento</small><select data-interop-payment-form data-key="${escHtml(mapId)}">${paymentOptions(form)}</select></label><label><small>Destino · Conta, carteira ou reserva</small><select data-interop-payment-target data-key="${escHtml(mapId)}">${financialTargetOptions(row.data,target,form)}</select></label></div>`;
     }).join('');
-
-    const statusRows = d.statuses.map(item => {
-      const target = m.statuses[item.key] || 'auto';
-      return `<div class="interop-map-row"><div class="interop-source-value"><small>Origem</small><strong>${escHtml(displaySourceValue(item.value))}</strong></div><div class="interop-arrow">→</div><label><small>Status no Borion</small><select data-interop-status data-key="${escHtml(item.key)}">${statusOptions(target)}</select></label></div>`;
+    const statusRows=d.statuses.map(item=>{
+      const mapId=`${item.direction}:${item.key}`,target=m.statuses[mapId]||m.statuses[item.key]||'auto';
+      return `<div class="interop-map-row"><div class="interop-source-value"><small>Origem · ${escHtml(item.field||'status')} · ${item.direction==='income'?'entrada':'saída'}</small>${sourceDisplay(item)}</div><div class="interop-arrow">→</div><label><small>Destino · Status no Borion</small><select data-interop-status data-key="${escHtml(mapId)}">${statusOptions(target)}</select></label></div>`;
     }).join('');
-
-    return `<div class="interop-pane interop-links-pane"><div class="interop-links-intro"><div><h4>Conversão de ${escHtml(sourceName(sourceAppId))}</h4><p>Essas regras são aplicadas somente no primeiro recebimento de cada ID. Depois disso, o lançamento fica livre para edição no Borion.</p></div><span class="pill ${c.mappingReady ? 'ok' : 'warn'}">${c.mappingReady ? 'Configurado' : 'Revisão necessária'}</span></div><datalist id="interop-cat-income">${categoryDatalist(row.data, 'income')}</datalist><datalist id="interop-cat-expense">${categoryDatalist(row.data, 'expense')}</datalist><section class="interop-map-section"><h5>Tipos de lançamento</h5><p>Define se entradas e saídas viram Receita, Despesa variável ou não são importadas.</p>${directionRows}${kindRows}</section><section class="interop-map-section"><h5>Categorias e origem da receita</h5><p>Converte as nomenclaturas do aplicativo para as categorias já usadas no Borion.</p>${categoryRows || '<div class="interop-map-empty">Nenhuma categoria encontrada.</div>'}</section><section class="interop-map-section"><h5>Formas de pagamento e contas</h5><p>Escolha a forma equivalente e a conta usada para movimentar o saldo.</p>${paymentRows || '<div class="interop-map-empty">Nenhuma forma de pagamento encontrada.</div>'}</section><section class="interop-map-section"><h5>Status</h5><p>Você pode respeitar o status enviado, forçar Pago/Em aberto ou ignorar determinados estados.</p>${statusRows || '<div class="interop-map-empty">Nenhum status encontrado.</div>'}</section><div class="interop-save-bar"><button class="btn-outline btn-sm" onclick="BorionInterop.inspectSource('${sourceAppId}')">Atualizar campos da origem</button><button class="btn btn-primary" onclick="BorionInterop.saveMappings('${sourceAppId}',{sync:true})">Salvar vínculos e sincronizar</button></div></div>`;
+    const fieldRows=d.fields.map(item=>`<div class="interop-field-preview"><div><small>Campo original</small><strong>${escHtml(item.sourceName)}</strong></div><div><small>Exemplo recebido</small><span>${escHtml(displaySourceValue(item.sample))}</span></div></div>`).join('');
+    return `<div class="interop-pane interop-links-pane"><div class="interop-links-intro"><div><h4>Mapeamento completo de ${escHtml(sourceName(sourceAppId))}</h4><p>À esquerda, o dado permanece exatamente como chegou da origem. À direita, você define como ele será gravado no Borion. As regras valem apenas na primeira importação de cada ID.</p></div><span class="pill ${c.mappingReady?'ok':'warn'}">${c.mappingReady?'Configurado':'Revisão necessária'}</span></div><div class="interop-map-legend"><div class="origin"><small>ORIGEM</small><b>${escHtml(sourceName(sourceAppId))}</b><span>Nome e valor original enviados pelo aplicativo.</span></div><div class="destination"><small>DESTINO</small><b>Borium Finance</b><span>Tipo, categoria, status, forma, conta, carteira ou reserva.</span></div></div><datalist id="interop-cat-income">${categoryDatalist(row.data,'income')}</datalist><datalist id="interop-cat-expense">${categoryDatalist(row.data,'expense')}</datalist><section class="interop-map-section"><h5>Campos detectados na origem</h5><p>Prévia fiel dos nomes e valores presentes no arquivo externo. Nenhuma conversão é aplicada nesta área.</p><div class="interop-field-grid">${fieldRows||'<div class="interop-map-empty">Nenhum campo adicional identificado.</div>'}</div></section><section class="interop-map-section"><h5>Tipos de lançamento</h5><p>Define se cada entrada ou saída vira Receita, Despesa variável ou não é importada.</p>${directionRows}${kindRows}</section><section class="interop-map-section"><h5>Categorias e origem da receita</h5><p>Mapeia cada categoria externa para uma categoria e, nas entradas, para a origem correta da receita.</p>${categoryRows||'<div class="interop-map-empty">Nenhuma categoria encontrada.</div>'}</section><section class="interop-map-section"><h5>Formas de pagamento e destino financeiro</h5><p>Uma mesma forma pode ter regras diferentes para entradas e saídas. Escolha conta, carteira ou reserva; rendimentos enviados a uma reserva aparecem também no histórico de rendimentos.</p>${paymentRows||'<div class="interop-map-empty">Nenhuma forma de pagamento encontrada.</div>'}</section><section class="interop-map-section"><h5>Status</h5><p>Respeite o estado enviado, force Pago/Em aberto ou ignore um estado específico.</p>${statusRows||'<div class="interop-map-empty">Nenhum status encontrado.</div>'}</section><div class="interop-save-bar"><button class="btn-outline btn-sm" onclick="BorionInterop.inspectSource('${sourceAppId}')">Atualizar campos da origem</button><button class="btn btn-primary" onclick="BorionInterop.saveMappings('${sourceAppId}',{sync:true})">Salvar vínculos e sincronizar</button></div></div>`;
   }
 
   function renderSourceWorkspace(sourceAppId){
@@ -850,10 +905,11 @@
       mappings.paymentMethods[key] ||= {};
       mappings.paymentMethods[key].form = select.value;
     });
-    document.querySelectorAll('[data-interop-payment-account]').forEach(select => {
+    document.querySelectorAll('[data-interop-payment-target]').forEach(select => {
       const key = select.dataset.key;
       mappings.paymentMethods[key] ||= {};
-      mappings.paymentMethods[key].accountId = select.value;
+      mappings.paymentMethods[key].target = select.value;
+      delete mappings.paymentMethods[key].accountId;
     });
     document.querySelectorAll('[data-interop-status]').forEach(select => {
       mappings.statuses[select.dataset.key] = select.value;
@@ -963,8 +1019,8 @@
     start,
     __test:{
       hash, stableStringify, ensureInterop, validateSnapshot,
-      discoverSnapshot, mappedRecord, reconcileSnapshot,
-      txDelta, adjust, paymentForm, targetAccountId, makeTransaction,
+      discoverSnapshot, mappedRecord, reconcileSnapshot, sourceLabel, normalizeTarget, resolveFinancialTarget,
+      txDelta, adjust, applyReserveLink, paymentForm, targetAccountId, makeTransaction,
       markImportedDeletion
     }
   });

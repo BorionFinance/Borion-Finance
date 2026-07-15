@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-07-15T01:26:37.138Z",
-  "appVersion": "6.30.0",
-  "total": 88,
-  "passed": 88,
+  "generatedAt": "2026-07-15T02:23:41.417Z",
+  "appVersion": "6.31.0",
+  "total": 90,
+  "passed": 90,
   "failed": 0,
   "results": [
     {
@@ -306,7 +306,7 @@
       "status": "PASS"
     },
     {
-      "name": "74 — Ordem do menu e módulos fica no perfil; Patrimônio aceita arrastar e 1, 2 ou 3 colunas",
+      "name": "74 — Ordem e tamanho dos módulos ficam no perfil; Patrimônio usa grade dinâmica de 2 a 6 colunas",
       "status": "PASS"
     },
     {
@@ -355,6 +355,14 @@
     },
     {
       "name": "V6.24.4 — service worker inclui módulo de revisão de perfis",
+      "status": "PASS"
+    },
+    {
+      "name": "77 — Receita, fixa, variável e transferências compartilham a mesma ordenação por data",
+      "status": "PASS"
+    },
+    {
+      "name": "78 — Saúde Financeira possui análises mensal e anual com indicadores completos",
       "status": "PASS"
     }
   ]

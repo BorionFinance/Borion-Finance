@@ -972,9 +972,9 @@ const S = {
   invMercado: 'BR',
   month: todayYM(),
   filters: {
-    receita:{busca:'',categorias:[],dataDe:'',dataAte:''},
-    fixa:{busca:'',categorias:[],dataDe:'',dataAte:''},
-    variavel:{busca:'',categorias:[],dataDe:'',dataAte:''},
+    receita:{busca:'',categorias:[],dataDe:'',dataAte:'',dateSort:'asc'},
+    fixa:{busca:'',categorias:[],dataDe:'',dataAte:'',dateSort:'asc'},
+    variavel:{busca:'',categorias:[],dataDe:'',dataAte:'',dateSort:'asc'},
     /* V6.1 — filtros da aba "Central" de Lançamentos (consulta unificada de todas as
        movimentações do perfil). Não afeta os filtros das abas Receita/Fixa/Variável acima. */
     central:{tipo:'todos', origem:'todas', reservaId:'', contaId:'', periodo:'todos', dataDe:'', dataAte:'', status:'todos', categoria:'', busca:'', sort:'data_desc'}

@@ -143,6 +143,34 @@ test('Leitura da origem descobre categorias, status, formas e tipos',()=>{
   assert.strictEqual(out.transactionKinds.length,2);
 });
 
+test('Origem preserva rótulo e valor técnico exatamente como enviados',()=>{
+  const out = run(ctx, `(()=>{const record=income({status:'Open',sourceLabels:{status:'Em aberto no Amanda'},raw:{status:'Em aberto no Amanda',category:'Procedimento facial'}});return BorionInterop.__test.discoverSnapshot(snapshot([record]),{});})()`);
+  const status=out.statuses.find(item=>item.direction==='income');
+  assert.strictEqual(status.value,'Open');
+  assert.strictEqual(status.label,'Em aberto no Amanda');
+  assert.ok(out.fields.some(item=>item.sourceName==='status'&&item.sample==='Em aberto no Amanda'));
+});
+
+test('Rendimento vinculado a reserva atualiza Cofrinho e Rendimentos das Reservas uma vez',()=>{
+  const out = run(ctx, `(()=>{const data=testData(),config=testConfig();data.reservas.boxes=[{id:'res-1',nome:'Pessoal',banco:'Conta Principal',accountId:'bank-1',valorAtual:100}];config.mappings.paymentMethods={'income:pix':{form:'Pix',target:'reserve:res-1'}};config.mappings.categories.income={rendimento:'Rendimento'};config.mappings.revenueOrigins={rendimento:'rendimento'};const record=income({category:'Rendimento',amount:25});const result=BorionInterop.__test.reconcileSnapshot(data,config,snapshot([record]));const tx=data.transacoes[0],move=data.reservas.moves[0],ledger=data.liquidez.find(x=>x.accountId==='bank-1');return {created:result.summary.created,reserve:data.reservas.boxes[0].valorAtual,tx,move,ledger:ledger&&ledger.valor};})()`);
+  assert.strictEqual(out.created,1);
+  assert.strictEqual(out.reserve,125);
+  assert.strictEqual(out.tx.reservaValor,25);
+  assert.strictEqual(out.tx.destinoModo,'Direto para reserva');
+  assert.strictEqual(out.move.tipo,'Rendimento');
+  assert.strictEqual(out.ledger,undefined);
+});
+
+test('Despesa paga vinculada a reserva baixa o Cofrinho e cria movimento ligado',()=>{
+  const out = run(ctx, `(()=>{const data=testData(),config=testConfig();data.reservas.boxes=[{id:'res-1',nome:'Pessoal',banco:'Conta Principal',accountId:'bank-1',valorAtual:100}];config.mappings.paymentMethods={'expense:pix':{form:'Pix',target:'reserve:res-1'}};config.mappings.categories.expense={comissao:'Comissões'};config.mappings.statuses={'expense:pago':'paid'};const record=income({aggregateId:'amanda-estetica:inst-1:e1',entityId:'e1',direction:'expense',category:'Comissao',description:'Comissão',amount:40,status:'Pago',settled:true});const result=BorionInterop.__test.reconcileSnapshot(data,config,snapshot([record]));const tx=data.transacoes[0],move=data.reservas.moves[0];return {created:result.summary.created,reserve:data.reservas.boxes[0].valorAtual,tx,move};})()`);
+  assert.strictEqual(out.created,1);
+  assert.strictEqual(out.reserve,60);
+  assert.strictEqual(out.tx.origemPagamento,'reserva');
+  assert.strictEqual(out.tx.accountId,null);
+  assert.strictEqual(out.move.tipo,'Pagamento direto');
+  assert.strictEqual(out.move.despesaTransacaoId,out.tx.id);
+});
+
 test('Interface contém seleção por aplicativo e aba Vínculos',()=>{
   run(ctx,"S.profiles=[];S.currentProfile=null;S.data=null;");
   const html = run(ctx,"BorionInterop.renderSettings()");
@@ -162,7 +190,7 @@ test('Editor de lançamentos não bloqueia importados e oferece exclusão inteli
 
 const failed = results.filter(x=>x.status==='FAIL');
 results.forEach(r=>console.log(`${r.status==='PASS'?'✓':'✗'} ${r.name}${r.error?'\n'+r.error:''}`));
-const report={generatedAt:new Date().toISOString(),appVersion:'6.30.0',total:results.length,passed:results.length-failed.length,failed:failed.length,results};
+const report={generatedAt:new Date().toISOString(),appVersion:'6.31.0',total:results.length,passed:results.length-failed.length,failed:failed.length,results};
 fs.writeFileSync(path.join(__dirname,'smart-interconnections-results.json'),JSON.stringify(report,null,2));
 console.log(`\nResultado: ${report.passed}/${report.total} testes aprovados.`);
 if(failed.length) process.exit(1);

@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-07-15T01:26:37.374Z",
-  "appVersion": "6.30.0",
-  "total": 10,
-  "passed": 10,
+  "generatedAt": "2026-07-15T02:23:49.818Z",
+  "appVersion": "6.31.0",
+  "total": 13,
+  "passed": 13,
   "failed": 0,
   "results": [
     {
@@ -35,6 +35,18 @@
     },
     {
       "name": "Leitura da origem descobre categorias, status, formas e tipos",
+      "status": "PASS"
+    },
+    {
+      "name": "Origem preserva rótulo e valor técnico exatamente como enviados",
+      "status": "PASS"
+    },
+    {
+      "name": "Rendimento vinculado a reserva atualiza Cofrinho e Rendimentos das Reservas uma vez",
+      "status": "PASS"
+    },
+    {
+      "name": "Despesa paga vinculada a reserva baixa o Cofrinho e cria movimento ligado",
       "status": "PASS"
     },
     {

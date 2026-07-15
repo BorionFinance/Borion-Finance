@@ -6,6 +6,37 @@ const BUDGET_SUMMARY_CARD_DEFS={
   patrimonio:{label:'PATRIMÔNIO',colorKey:'patrimonio'}, cofrinhos:{label:'COFRINHOS',colorKey:'reserva'}, variacaoCofrinhos:{label:'VARIAÇÃO DOS COFRINHOS',colorKey:'reserva'}, disponivel:{label:'VALOR DISPONÍVEL',colorKey:'saldo'}
 };
 const DEFAULT_BUDGET_SUMMARY_CARDS=['receita','investir','despesas','saldo'];
+
+/* V6.31 — um único componente de ordenação por data para Receita, Despesa fixa,
+   Despesa variável e Transferências. Ele segue o mesmo padrão compacto da seta usada
+   nas faturas: ↑ mostra do mais antigo ao mais recente e ↓ mostra do mais recente ao
+   mais antigo. A preferência é apenas visual e fica isolada por aba. */
+const BudgetDateSort={
+  get(type){
+    if(type==='transferencias') return S.transferDateSort==='desc'?'desc':'asc';
+    const filter=S.filters&&S.filters[type];
+    if(!filter) return 'asc';
+    return filter.dateSort==='desc'?'desc':'asc';
+  },
+  toggle(type){
+    const next=this.get(type)==='asc'?'desc':'asc';
+    if(type==='transferencias') S.transferDateSort=next;
+    else if(S.filters&&S.filters[type]) S.filters[type].dateSort=next;
+    renderView();
+  },
+  compare(type,aDate,bDate,aCreated=0,bCreated=0){
+    const dir=this.get(type)==='asc'?1:-1;
+    const byDate=String(aDate||'').localeCompare(String(bDate||''));
+    if(byDate) return byDate*dir;
+    return (Number(aCreated||0)-Number(bCreated||0))*dir;
+  },
+  buttonHTML(type){
+    const asc=this.get(type)==='asc';
+    const label=asc?'Mais antigo → mais recente':'Mais recente → mais antigo';
+    return `<button type="button" class="btn-outline date-sort-toggle" onclick="Budget.toggleDateSort('${type}')" title="${label}. Clique para inverter." aria-label="Ordenação atual: ${label}. Clique para inverter."><span aria-hidden="true">${asc?'↑':'↓'}</span><span class="date-sort-label">${label}</span></button>`;
+  }
+};
+window.BudgetDateSort=BudgetDateSort;
 function budgetSummaryPreferences(){
   if(!S.data.uiPreferences) S.data.uiPreferences={};
   let p=S.data.uiPreferences.budgetSummary;
@@ -40,6 +71,7 @@ function renderBudget(){
   const saldo = saldoMes();
   const tab = S.budgetTab;
   const filt = S.filters[tab];
+  if(filt && filt.dateSort!=='desc') filt.dateSort='asc';
   const hasDateRange = !!(filt.dataDe && filt.dataAte);
   const hasFilter = !!(filt.busca || filt.categorias.length || hasDateRange);
   let rows='', total=0, segments=[], listLength=0;
@@ -70,7 +102,7 @@ function renderBudget(){
       const catTotals={};
       allEntries.forEach(e=> catTotals[e.f.categoria]=(catTotals[e.f.categoria]||0)+e.total);
       segments = Object.keys(catTotals).map(k=>({label:k,value:catTotals[k],color:catColor(k)}));
-      const list = allEntries.filter(e=>matchesFilter(e.f.nome,e.f.categoria)).sort((a,b)=>a.f.nome.localeCompare(b.f.nome,'pt-BR'));
+      const list = allEntries.filter(e=>matchesFilter(e.f.nome,e.f.categoria)).sort((a,b)=>{ const ak=(a.f.startMonth||filt.dataDe.slice(0,7))+'-'+pad2(a.f.dia||1), bk=(b.f.startMonth||filt.dataDe.slice(0,7))+'-'+pad2(b.f.dia||1); return BudgetDateSort.compare('fixa',ak,bk,a.f.createdAt,b.f.createdAt); });
       total = list.reduce((a,e)=>a+e.total,0);
       rows = list.map(e=>`
         <tr>
@@ -87,7 +119,7 @@ function renderBudget(){
       allActive.forEach(f=> catTotals[f.categoria]=(catTotals[f.categoria]||0)+Number(f.valor||0));
       segments = Object.keys(catTotals).map(k=>({label:k,value:catTotals[k],color:catColor(k)}));
       let list = hasFilter ? allActive.filter(f=>matchesFilter(f.nome,f.categoria)) : allActive.slice();
-      list.sort((a,b)=>(a.dia||1)-(b.dia||1));
+      list.sort((a,b)=>BudgetDateSort.compare('fixa',monthKey(S.month.y,S.month.m)+'-'+pad2(a.dia||1),monthKey(S.month.y,S.month.m)+'-'+pad2(b.dia||1),a.createdAt,b.createdAt));
       total = sumBy(list,'valor');
       const mesKeyAtual = monthKey(S.month.y,S.month.m);
       rows = list.map(f=>{
@@ -116,7 +148,7 @@ function renderBudget(){
     source.forEach(t=>catTotals[t.categoria]=(catTotals[t.categoria]||0)+Number(t.valor||0));
     segments = Object.keys(catTotals).map(k=>({label:k,value:catTotals[k],color:catColor(k)}));
     let list = hasFilter ? source.filter(t=>matchesFilter(t.nome,t.categoria)) : source.slice();
-    list.sort((a,b)=> a.data<b.data?-1:1);
+    list.sort((a,b)=>BudgetDateSort.compare(tab,a.data,b.data,a.createdAt,b.createdAt));
     total = sumBy(list,'valor');
     if(tab==='receita'){
       list.forEach(t=>{ if(t.origem==null||t.origem==='propria'||t.origem==='rendimento') receitaPropriaTotal+=Number(t.valor)||0; else receitaExtraTotal+=Number(t.valor)||0; });
@@ -163,6 +195,7 @@ function renderBudget(){
           <div class="toolbar-left">${tab==='receita'?'Receita':tab==='fixa'?'Despesas fixas':'Despesas variáveis'}</div>
           <div class="toolbar-right central-toolbar-actions">
             <button class="btn-outline ${filterCount?'filter-active':''}" onclick="Budget.openFilter()">⌕ Filtro${filterCount?' ('+filterCount+')':''}</button>
+            ${BudgetDateSort.buttonHTML(tab)}
             <button class="btn-outline" onclick="Budget.add()">+ Adicionar</button>
           </div>
         </div>
@@ -215,9 +248,9 @@ function transferenciaDisplayNames(t){
 }
 function renderTransferenciasTab(){
   const filter=S.transferFilter||'todos';
-  const generic=(S.data.transferencias||[]).slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))||Number(b.createdAt||0)-Number(a.createdAt||0));
+  const generic=(S.data.transferencias||[]).slice();
   const legacy=reservaTransferGroups().map(g=>({legacy:true,id:g.id,data:g.data,valor:g.valor,descricao:g.descricao,origemNome:g.origem?g.origem.nome:'Reserva removida',destinoNome:g.destino?g.destino.nome:'Reserva removida',filterKey:'reserva_reserva'}));
-  const all=generic.concat(legacy).sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))||Number(b.createdAt||0)-Number(a.createdAt||0));
+  const all=generic.concat(legacy).sort((a,b)=>BudgetDateSort.compare('transferencias',a.data,b.data,a.createdAt,b.createdAt));
   const visible=all.filter(t=>filter==='todos'||(t.filterKey||transferenciaFilterKey(t))===filter);
   const total=visible.reduce((sum,t)=>sum+(Number(t.valor)||0),0);
   const rows=visible.map(t=>{
@@ -232,7 +265,7 @@ function renderTransferenciasTab(){
   const filterOptions=[['todos','Todas'],['carteira_conta','Carteira → Conta'],['conta_conta','Conta → Conta'],['conta_reserva','Conta → Reserva'],['reserva_reserva','Reserva → Reserva']];
   return `<div class="cards-row"><div class="card hero-gold"><div class="clabel">VALOR MOVIMENTADO</div><div class="cval">${brl(total)}</div></div><div class="card"><div class="clabel">TRANSFERÊNCIAS</div><div class="cval">${visible.length}</div></div></div>
   <div class="tabs"><button class="tab-btn" onclick="Budget.tab('receita')">Receita</button><button class="tab-btn" onclick="Budget.tab('fixa')">Despesa fixa</button><button class="tab-btn" onclick="Budget.tab('variavel')">Despesa variável</button><button class="tab-btn" onclick="Assinaturas.tab()">Assinaturas</button><button class="tab-btn active">Transferências</button><button class="tab-btn" onclick="Budget.tab('central')">⌕ Central</button></div>
-  <div class="panel-box"><div class="toolbar"><div class="toolbar-left">Transferências</div><div class="toolbar-right central-toolbar-actions"><select class="order-sort-select" onchange="Budget.setTransferFilter(this.value)">${filterOptions.map(([v,l])=>`<option value="${v}" ${filter===v?'selected':''}>${l}</option>`).join('')}</select><button class="btn-outline" onclick="Cards.addTransferencia()">+ Nova transferência</button></div></div><p class="modal-sub">Movimente dinheiro entre Carteira, Contas e Reservas sem registrar receita ou despesa. As regras de vínculo das Reservas são aplicadas automaticamente.</p>${rows?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Origem</th><th></th><th>Destino</th><th>Tipo</th><th>Valor</th><th>Descrição</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="empty-note">Nenhuma transferência encontrada neste filtro.</div>'}</div>`;
+  <div class="panel-box"><div class="toolbar"><div class="toolbar-left">Transferências</div><div class="toolbar-right central-toolbar-actions">${BudgetDateSort.buttonHTML('transferencias')}<select class="order-sort-select" onchange="Budget.setTransferFilter(this.value)">${filterOptions.map(([v,l])=>`<option value="${v}" ${filter===v?'selected':''}>${l}</option>`).join('')}</select><button class="btn-outline" onclick="Cards.addTransferencia()">+ Nova transferência</button></div></div><p class="modal-sub">Movimente dinheiro entre Carteira, Contas e Reservas sem registrar receita ou despesa. As regras de vínculo das Reservas são aplicadas automaticamente.</p>${rows?`<div class="table-scroll"><table><thead><tr><th>Data</th><th>Origem</th><th></th><th>Destino</th><th>Tipo</th><th>Valor</th><th>Descrição</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="empty-note">Nenhuma transferência encontrada neste filtro.</div>'}</div>`;
 }
 function renderReservaTransfersTab(){ return renderTransferenciasTab(); }
 
@@ -518,6 +551,7 @@ function openCentralFilterModal(){
 const Budget = {
   tab(t){ S.budgetTab=t; renderView(); },
   setTransferFilter(value){ S.transferFilter=value||'todos'; renderView(); },
+  toggleDateSort(type){ BudgetDateSort.toggle(type); },
   add(){
     if(S.budgetTab==='fixa') openFixaModal(null);
     else openTransactionModal({type:S.budgetTab});
@@ -757,14 +791,14 @@ function openFilterModal(tab){
     };
   });
   $('#flt_limpar').onclick = ()=>{
-    S.filters[tab] = {busca:'', categorias:[], dataDe:'', dataAte:''};
+    S.filters[tab] = {busca:'', categorias:[], dataDe:'', dataAte:'', dateSort:BudgetDateSort.get(tab)};
     closeModal(); renderView();
   };
   $('#flt_aplicar').onclick = ()=>{
     const dataDe = $('#flt_data_de').value || '';
     const dataAte = $('#flt_data_ate').value || '';
     if(dataDe && dataAte && dataDe>dataAte){ alert('A data "de" não pode ser depois da data "até".'); return; }
-    S.filters[tab] = { busca: $('#flt_busca').value.trim(), categorias: Array.from(selected), dataDe, dataAte };
+    S.filters[tab] = { busca: $('#flt_busca').value.trim(), categorias: Array.from(selected), dataDe, dataAte, dateSort:BudgetDateSort.get(tab) };
     closeModal(); renderView();
   };
 }

@@ -444,7 +444,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const css=fs.readFileSync(path.join(ROOT,'css/styles.css'),'utf8');
-    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.30\.0/);
+    assert.match(index,/js\/20-smartphone-mode\.js\?v=6\.31\.0/);
     assert.match(sw,/js\/20-smartphone-mode\.js/);
     assert.match(css,/html\[data-interface-mode="smartphone"\] \.smart-bottom-nav/);
     assert.match(css,/\.smart-quick-grid/); assert.match(css,/\.smart-launch-modal/);
@@ -508,7 +508,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const src=fs.readFileSync(path.join(ROOT,'js/21-smartphone-history.js'),'utf8');
-    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.30\.0/);
+    assert.match(index,/js\/21-smartphone-history\.js\?v=6\.31\.0/);
     assert.match(sw,/js\/21-smartphone-history\.js/);
     assert.match(src,/GUARD_DEPTH:8/);
     assert.match(src,/BACK_BURST_MS:650/);
@@ -572,7 +572,7 @@ async function testAsync(name, fn){
     const index=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     const src=fs.readFileSync(path.join(ROOT,'js/22-mobile-experience.js'),'utf8');
-    assert.match(index,/js\/22-mobile-experience\.js\?v=6\.30\.0/);
+    assert.match(index,/js\/22-mobile-experience\.js\?v=6\.31\.0/);
     assert.match(sw,/js\/22-mobile-experience\.js/);
     assert.match(src,/visualViewport/);
     assert.match(src,/navigator\.vibrate/);
@@ -617,11 +617,11 @@ async function testAsync(name, fn){
   test('45 — Rodapé técnico preserva lançamento original e autoria, atualizando apenas a versão',()=>{
     const src=fs.readFileSync(path.join(ROOT,'js/13-settings.js'),'utf8');
     const backup=fs.readFileSync(path.join(ROOT,'js/02-backup-local.js'),'utf8');
-    assert.match(src,/<strong>Versão:<\/strong> 6\.30\.0/);
+    assert.match(src,/<strong>Versão:<\/strong> 6\.31\.0/);
     assert.match(src,/<strong>Lançamento:<\/strong> 14\/07\/2026/);
     assert.match(src,/Desenvolvido por <strong>Pedro Bardella<\/strong>/);
     assert.match(src,/© 2026 Pedro Bardella\. Todos os direitos reservados\./);
-    assert.match(backup,/BORION_APP_VERSION = '6\.30\.0'/);
+    assert.match(backup,/BORION_APP_VERSION = '6\.31\.0'/);
   });
 
 
@@ -864,18 +864,20 @@ async function testAsync(name, fn){
     assert.match(block,/wireParcelaCategoriaPorTipo/);
   });
 
-  test('74 — Ordem do menu e módulos fica no perfil; Patrimônio aceita arrastar e 1, 2 ou 3 colunas',()=>{
-    const order=fs.readFileSync(path.join(ROOT,'js/18-order-preferences.js'),'utf8');
+  test('74 — Ordem e tamanho dos módulos ficam no perfil; Patrimônio usa grade dinâmica de 2 a 6 colunas',()=>{
+    const layout=fs.readFileSync(path.join(ROOT,'js/25-module-layout.js'),'utf8');
     const patrimony=fs.readFileSync(path.join(ROOT,'js/09-patrimony-goals.js'),'utf8');
+    const overview=fs.readFileSync(path.join(ROOT,'js/06-overview.js'),'utf8');
     const css=fs.readFileSync(path.join(ROOT,'css/styles.css'),'utf8');
-    assert.match(order,/S\.data\.uiPreferences\.orderPreferences/);
-    assert.match(order,/patrimony_modules/);
-    assert.match(order,/patrimonyColumns/);
-    assert.match(order,/\[1,2,3\]/);
-    assert.match(order,/borionStartPatrimonySlotDrag/);
-    assert.match(patrimony,/data-order-list="patrimony_modules"/);
+    assert.match(layout,/S\.data\.uiPreferences\.moduleLayouts/);
+    assert.match(layout,/overview_modules/); assert.match(layout,/patrimony_modules/);
+    assert.match(layout,/\[2,3,4,5,6\]/);
+    assert.match(layout,/data-module-drag-handle/);
+    assert.match(layout,/items\[key\]\.w/); assert.match(layout,/items\[key\]\.h/);
+    assert.match(patrimony,/data-module-layout="patrimony_modules"/);
+    assert.match(overview,/data-module-layout="overview_modules"/);
     ['Composição do patrimônio','Saldo em contas','Metas de patrimônio','Bens','Reservas','Rendimento das reservas','Dívidas'].forEach(label=>assert.ok(patrimony.includes(label),label));
-    assert.match(css,/--patrimony-columns/);
+    assert.match(css,/--module-columns/); assert.match(css,/grid-auto-flow:dense/);
   });
 
   test('75 — Transferências aplicam e revertem saldos nos seis fluxos financeiros',()=>{
@@ -988,11 +990,33 @@ async function testAsync(name, fn){
     const fs=require('fs');
     const sw=fs.readFileSync(path.join(ROOT,'sw.js'),'utf8');
     assert.match(sw,/23-profile-import-review\.js/);
-    assert.match(sw,/v6-30-0-smart-integrations/);
+    assert.match(sw,/v6-31-0-general-review/);
+  });
+
+  test('77 — Receita, fixa, variável e transferências compartilham a mesma ordenação por data',()=>{
+    const budget=fs.readFileSync(path.join(ROOT,'js/07-budget.js'),'utf8');
+    const subscriptions=fs.readFileSync(path.join(ROOT,'js/19-subscriptions.js'),'utf8');
+    assert.match(budget,/const BudgetDateSort=/);
+    assert.match(budget,/BudgetDateSort\.buttonHTML\(tab\)/);
+    assert.match(budget,/BudgetDateSort\.buttonHTML\('transferencias'\)/);
+    assert.match(budget,/dateSort:BudgetDateSort\.get\(tab\)/);
+    assert.doesNotMatch(subscriptions,/BudgetDateSort|date-sort-toggle/);
+    const c=createContext();load(c,'js/00-utils.js');load(c,'js/01-storage-data-state.js');load(c,'js/07-budget.js');
+    const out=run(c,`(()=>{S.filters.receita.dateSort='asc';const asc=BudgetDateSort.compare('receita','2026-07-01','2026-07-10')<0;BudgetDateSort.toggle('receita');const desc=BudgetDateSort.compare('receita','2026-07-01','2026-07-10')>0;return {asc,desc,label:BudgetDateSort.buttonHTML('receita')};})()`);
+    assert.strictEqual(out.asc,true);assert.strictEqual(out.desc,true);assert.match(out.label,/Mais recente/);
+  });
+
+  test('78 — Saúde Financeira possui análises mensal e anual com indicadores completos',()=>{
+    const overview=fs.readFileSync(path.join(ROOT,'js/06-overview.js'),'utf8');
+    assert.match(overview,/healthAnalysis\('monthly'\)/);
+    assert.match(overview,/healthAnalysis\('annual'\)/);
+    ['income','expenses','patrimony','available','reserves','yields','debt','trendPct','commitmentPct','debtIncomePct','savingsPct','emergencyMonths'].forEach(field=>assert.ok(overview.includes(field),field));
+    ['SAÚDE MENSAL','SAÚDE ANUAL','Renda comprometida','Dívidas / renda','Percentual economizado','Proteção financeira','Evolução patrimonial','Dívida total'].forEach(label=>assert.ok(overview.includes(label),label));
+    assert.match(overview,/linkedIds\.has\(mv\.transacaoId\)/);
   });
 
   const failures=results.filter(r=>r.status==='FAIL');
-  const report={generatedAt:new Date().toISOString(),appVersion:'6.30.0',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
+  const report={generatedAt:new Date().toISOString(),appVersion:'6.31.0',total:results.length,passed:results.length-failures.length,failed:failures.length,results};
   fs.writeFileSync(path.join(__dirname,'regression-results.json'),JSON.stringify(report,null,2));
   for(const r of results){
     console.log(`${r.status==='PASS'?'✓':'✗'} ${r.name}`);

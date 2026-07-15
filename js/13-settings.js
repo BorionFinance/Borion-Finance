@@ -22,9 +22,8 @@ function renderSettings(){
       ${settingsTabButton('profiles','Perfis')}
       ${settingsTabButton('categories','Categorias')}
       ${settingsTabButton('personalization','Personalização')}
-      ${settingsTabButton('backup','Backups')}
+      ${settingsTabButton('backup','Backup e dados')}
       ${settingsTabButton('integrations','Integrações')}
-      <button id="qb_both" class="btn btn-primary btn-sm settings-quick-backup-btn" onclick="Settings.quickBackupBoth()" title="Cria um backup agora e salva ao mesmo tempo no Google Drive e neste dispositivo">SALVAR DRIVE&amp;LOCAL</button>
     </div>`;
   let content='';
   if(S.settingsTab==='modules') content = renderSettingsModules();
@@ -34,8 +33,8 @@ function renderSettings(){
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
   else if(S.settingsTab==='integrations') content = window.BorionInterop ? BorionInterop.renderSettings() : '<div class="settings-section">Integração indisponível.</div>'; // protected interop seam
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.32.2 • Hub Borion integrado</div><footer class="app-release-footer" aria-label="Informações do Borion">
-<div><strong>Versão:</strong> 6.32.2</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.33.0 • Configurações reorganizadas</div><footer class="app-release-footer" aria-label="Informações do Borion">
+<div><strong>Versão:</strong> 6.33.0</div>
 <div><strong>Lançamento:</strong> 15/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -102,8 +101,40 @@ function renderSettingsCategories(){
 function renderBudgetSummaryPersonalization(){
   if(typeof budgetSummaryPreferences!=='function') return '';
   const pref=budgetSummaryPreferences();
-  const rows=pref.order.map((k,i)=>{ const d=BUDGET_SUMMARY_CARD_DEFS[k], checked=pref.visible.includes(k); return `<div class="summary-pref-row" draggable="true" data-summary-key="${k}" ondragstart="Settings.summaryDragStart(event,'${k}')" ondragover="event.preventDefault()" ondrop="Settings.summaryDrop(event,'${k}')"><span class="summary-drag" title="Arraste para reorganizar">☰</span><label><input type="checkbox" ${checked?'checked':''} onchange="Settings.toggleBudgetSummaryCard('${k}',this.checked)"> ${esc(d.label)}</label><span class="summary-pref-actions"><button class="cat-mini-btn" onclick="Settings.moveBudgetSummaryCard('${k}',-1)" ${i===0?'disabled':''}>↑</button><button class="cat-mini-btn" onclick="Settings.moveBudgetSummaryCard('${k}',1)" ${i===pref.order.length-1?'disabled':''}>↓</button></span></div>`; }).join('');
-  return `<div class="settings-section"><h3>Resumo de Lançamentos</h3><p class="desc">Escolha quais indicadores aparecem no topo de Lançamentos e arraste para mudar a ordem. Esta preferência pertence somente a este perfil financeiro.</p><div class="summary-pref-list">${rows}</div><button class="btn-outline btn-sm" onclick="Settings.resetBudgetSummaryCards()">Restaurar padrão</button></div>`;
+  const organizing=!!Settings._summaryOrganizing;
+  const order=(organizing&&Array.isArray(Settings._summaryDraftOrder)?Settings._summaryDraftOrder:pref.order).slice();
+  const visible=(organizing&&Array.isArray(Settings._summaryDraftVisible)?Settings._summaryDraftVisible:pref.visible).slice();
+  const rows=order.map((k)=>{
+    const d=BUDGET_SUMMARY_CARD_DEFS[k];
+    const checked=visible.includes(k);
+    return `<div class="order-row summary-order-row ${checked?'is-visible':'is-hidden'} ${organizing?'organizing':''}" data-summary-key="${esc(k)}" draggable="${organizing?'true':'false'}" ondragstart="Settings.summaryDragStart(event,'${k}')" ondragend="Settings.summaryDragEnd(event)" ondragover="Settings.summaryDragOver(event)" ondrop="Settings.summaryDrop(event,'${k}')">
+      <div class="order-row-main summary-order-main">
+        <button type="button" class="toggle-switch summary-visibility-toggle ${checked?'on':''}" onclick="Settings.toggleBudgetSummaryCard('${k}',${checked?'false':'true'})" aria-label="${checked?'Ocultar':'Mostrar'} ${esc(d.label)}"><span></span></button>
+        <div class="summary-order-copy"><span class="order-row-label">${esc(d.label)}</span><span>${checked?'Visível no topo de Lançamentos':'Oculto do topo de Lançamentos'}</span></div>
+      </div>
+      ${organizing?`<div class="order-controls summary-order-controls">
+        <button type="button" class="order-handle" title="Arrastar para reordenar" aria-label="Arrastar ${esc(d.label)} para reordenar">${window.OrderPreferences?OrderPreferences.handleSVG():'⋮⋮'}</button>
+        <span class="order-arrow-group">
+          <button type="button" class="order-arrow-btn" onclick="Settings.moveBudgetSummaryCard('${k}','top')" title="Mover para o início" aria-label="Mover ${esc(d.label)} para o início">⤒</button>
+          <button type="button" class="order-arrow-btn" onclick="Settings.moveBudgetSummaryCard('${k}',-1)" title="Mover para cima" aria-label="Mover ${esc(d.label)} para cima">▲</button>
+          <button type="button" class="order-arrow-btn" onclick="Settings.moveBudgetSummaryCard('${k}',1)" title="Mover para baixo" aria-label="Mover ${esc(d.label)} para baixo">▼</button>
+          <button type="button" class="order-arrow-btn" onclick="Settings.moveBudgetSummaryCard('${k}','bottom')" title="Mover para o final" aria-label="Mover ${esc(d.label)} para o final">⤓</button>
+        </span>
+      </div>`:`<span class="order-row-status ${checked?'on':'off'}">${checked?'Visível':'Oculto'}</span>`}
+    </div>`;
+  }).join('');
+  return `<div class="settings-section settings-hero-section order-organize-section summary-organize-section">
+    <div class="order-organize-head">
+      <div><h3>Resumo de Lançamentos</h3><p class="desc">Escolha os indicadores do topo de Lançamentos e organize a ordem com o mesmo padrão usado nos módulos e itens.</p></div>
+      <button class="toggle-switch ${organizing?'on':''}" onclick="Settings.setSummaryOrganizer(!${organizing?'true':'false'})" aria-label="${organizing?'Desativar':'Ativar'} organização do resumo"><span></span></button>
+    </div>
+    ${organizing?'<div class="order-active-hint">Modo de organização ativo. Arraste os indicadores ou use as setas para mover ao início, para cima, para baixo ou para o final. As alterações só entram em vigor ao salvar.</div>':''}
+    <div class="order-list summary-pref-list">${rows}</div>
+    <div class="summary-organizer-actions">
+      <button class="btn-outline btn-sm" onclick="Settings.resetBudgetSummaryCards()">Restaurar padrão</button>
+      ${organizing?'<button class="btn-outline btn-sm" onclick="Settings.cancelBudgetSummaryOrganizer()">Cancelar</button><button class="btn btn-primary btn-sm" onclick="Settings.saveBudgetSummaryOrganizer()">Salvar organização</button>':''}
+    </div>
+  </div>`;
 }
 function renderSettingsPersonalization(){
   const fontOptions = Object.keys(FONT_LABELS).map(k=>`<option value="${k}" ${S.config.font===k?'selected':''}>${esc(FONT_LABELS[k])}</option>`).join('');
@@ -121,11 +152,75 @@ function renderSettingsPersonalization(){
 
 
 const Settings = {
-  toggleBudgetSummaryCard(key,checked){ const p=budgetSummaryPreferences(); p.visible=p.visible.filter(k=>k!==key); if(checked)p.visible.push(key); saveCurrentData(); renderView(); },
-  moveBudgetSummaryCard(key,dir){ const p=budgetSummaryPreferences(), i=p.order.indexOf(key), j=i+dir; if(i<0||j<0||j>=p.order.length)return; [p.order[i],p.order[j]]=[p.order[j],p.order[i]]; saveCurrentData(); renderView(); },
-  summaryDragStart(ev,key){ Settings._summaryDragKey=key; if(ev.dataTransfer){ev.dataTransfer.effectAllowed='move';ev.dataTransfer.setData('text/plain',key);} },
-  summaryDrop(ev,target){ ev.preventDefault(); const source=Settings._summaryDragKey||(ev.dataTransfer&&ev.dataTransfer.getData('text/plain')); if(!source||source===target)return; const p=budgetSummaryPreferences(), from=p.order.indexOf(source), to=p.order.indexOf(target); if(from<0||to<0)return; p.order.splice(from,1); p.order.splice(to,0,source); Settings._summaryDragKey=null; saveCurrentData(); renderView(); },
-  resetBudgetSummaryCards(){ const p=budgetSummaryPreferences(); p.order=Object.keys(BUDGET_SUMMARY_CARD_DEFS); p.visible=DEFAULT_BUDGET_SUMMARY_CARDS.slice(); saveCurrentData(); renderView(); toast('Resumo de Lançamentos restaurado.'); },
+  _summaryOrganizing:false,
+  _summaryDraftOrder:null,
+  _summaryDraftVisible:null,
+  _summaryDragKey:null,
+  setSummaryOrganizer(active){
+    const pref=budgetSummaryPreferences();
+    Settings._summaryOrganizing=!!active;
+    Settings._summaryDraftOrder=active?pref.order.slice():null;
+    Settings._summaryDraftVisible=active?pref.visible.slice():null;
+    Settings._summaryDragKey=null;
+    renderView();
+  },
+  toggleBudgetSummaryCard(key,checked){
+    const pref=budgetSummaryPreferences();
+    const target=Settings._summaryOrganizing?Settings._summaryDraftVisible:pref.visible;
+    const next=target.filter(k=>k!==key);
+    if(checked) next.push(key);
+    if(Settings._summaryOrganizing) Settings._summaryDraftVisible=next;
+    else { pref.visible=next; saveCurrentData(); }
+    renderView();
+  },
+  moveBudgetSummaryCard(key,dir){
+    const pref=budgetSummaryPreferences();
+    const order=(Settings._summaryOrganizing&&Array.isArray(Settings._summaryDraftOrder)?Settings._summaryDraftOrder:pref.order).slice();
+    const i=order.indexOf(key); if(i<0) return;
+    let j=i;
+    if(dir==='top') j=0;
+    else if(dir==='bottom') j=order.length-1;
+    else j=Math.max(0,Math.min(order.length-1,i+Number(dir||0)));
+    if(i===j) return;
+    const moved=order.splice(i,1)[0]; order.splice(j,0,moved);
+    if(Settings._summaryOrganizing) Settings._summaryDraftOrder=order;
+    else { pref.order=order; saveCurrentData(); }
+    renderView();
+  },
+  summaryDragStart(ev,key){
+    if(!Settings._summaryOrganizing){ ev.preventDefault(); return; }
+    Settings._summaryDragKey=key;
+    const row=ev.currentTarget; if(row) row.classList.add('summary-dragging');
+    if(ev.dataTransfer){ ev.dataTransfer.effectAllowed='move'; ev.dataTransfer.setData('text/plain',key); }
+  },
+  summaryDragOver(ev){ if(Settings._summaryOrganizing){ ev.preventDefault(); if(ev.dataTransfer) ev.dataTransfer.dropEffect='move'; } },
+  summaryDragEnd(ev){ if(ev&&ev.currentTarget) ev.currentTarget.classList.remove('summary-dragging'); document.querySelectorAll('.summary-drop-target').forEach(el=>el.classList.remove('summary-drop-target')); Settings._summaryDragKey=null; },
+  summaryDrop(ev,target){
+    if(!Settings._summaryOrganizing) return;
+    ev.preventDefault();
+    const source=Settings._summaryDragKey||(ev.dataTransfer&&ev.dataTransfer.getData('text/plain'));
+    if(!source||source===target) return;
+    const order=Settings._summaryDraftOrder.slice(),from=order.indexOf(source),to=order.indexOf(target);
+    if(from<0||to<0) return;
+    const moved=order.splice(from,1)[0]; order.splice(to,0,moved);
+    Settings._summaryDraftOrder=order; Settings._summaryDragKey=null; renderView();
+  },
+  saveBudgetSummaryOrganizer(){
+    const pref=budgetSummaryPreferences();
+    pref.order=(Settings._summaryDraftOrder||pref.order).slice();
+    pref.visible=(Settings._summaryDraftVisible||pref.visible).slice();
+    Settings._summaryOrganizing=false; Settings._summaryDraftOrder=null; Settings._summaryDraftVisible=null; Settings._summaryDragKey=null;
+    saveCurrentData(); renderView(); toast('Resumo de Lançamentos organizado e salvo.');
+  },
+  cancelBudgetSummaryOrganizer(){
+    Settings._summaryOrganizing=false; Settings._summaryDraftOrder=null; Settings._summaryDraftVisible=null; Settings._summaryDragKey=null;
+    renderView(); toast('Alterações do resumo descartadas.');
+  },
+  resetBudgetSummaryCards(){
+    const order=Object.keys(BUDGET_SUMMARY_CARD_DEFS), visible=DEFAULT_BUDGET_SUMMARY_CARDS.slice();
+    if(Settings._summaryOrganizing){ Settings._summaryDraftOrder=order; Settings._summaryDraftVisible=visible; renderView(); toast('Padrão carregado. Clique em Salvar organização para confirmar.'); return; }
+    const pref=budgetSummaryPreferences(); pref.order=order; pref.visible=visible; saveCurrentData(); renderView(); toast('Resumo de Lançamentos restaurado.');
+  },
   setTab(tab){ S.settingsTab=tab; renderView(); },
   addCategory(typeKey){
     openModal({title:'Nova categoria', fields:[{key:'nome',label:'Nome da categoria',type:'text'}], onSave(v){ if(v.nome && !S.data.categorias[typeKey].includes(v.nome)){ S.data.categorias[typeKey].push(v.nome); saveCurrentData(); } closeModal(); renderView(); }});
@@ -250,6 +345,20 @@ const Settings = {
   quickBackupBoth(){
     return Settings._runQuickBackup('qb_both','SALVAR DRIVE&LOCAL','Salvando...',()=>Settings.manualBackup({targets:'both',reason:'manual_drive_local'}));
   },
+  quickBackupPrimary(mode='drive'){
+    const task = async ()=>{
+      if(mode==='drive') return Settings.manualBackup({targets:'both',reason:'manual_drive_local'});
+      if(mode==='local') return Settings.manualBackup({targets:'local',reason:'manual_local'});
+      const results=await Promise.allSettled([
+        Settings.createCloudBackupNow('manual','backup manual completo'),
+        Settings.manualBackup({targets:'local',reason:'manual_cloud_local'})
+      ]);
+      const failed=results.filter(r=>r.status==='rejected');
+      if(failed.length===results.length) throw failed[0].reason;
+      return results;
+    };
+    return Settings._runQuickBackup('qb_backup_primary','Criar backup completo','Criando backup...',task);
+  },
   toggleCheques(){ if(!S.data.cheques) S.data.cheques={enabled:false,items:[]}; S.data.cheques.enabled=!S.data.cheques.enabled; if(!Array.isArray(S.data.cheques.items)) S.data.cheques.items=[]; saveCurrentData(); if(!S.data.cheques.enabled && S.view==='cheques') S.view='settings'; renderApp(); toast(S.data.cheques.enabled?'Módulo de cheques ativado.':'Módulo de cheques desativado.'); },
   toggleReservas(){
     if(!S.data.modules) S.data.modules=Object.assign({},DEFAULT_MODULES);
@@ -301,81 +410,84 @@ function renderSettingsProfiles(){
         <input type="file" id="pf_avatar_file" accept="image/*" style="display:none" onchange="Settings.readAvatarFile(this)">
       </div>
     </div>
-    <div class="settings-section"><h3>Perfis desta conta (${(S.profiles||[]).length}/5)</h3><p class="desc">Troque entre perfis sem misturar dados. Cada perfil tem armazenamento local e registro separado no Supabase.</p>${profilesRows}<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">${(S.profiles||[]).length<5?`<button class="btn-outline btn-sm" onclick="Settings.createFinancialProfile()">+ Criar perfil</button>`:''}<button class="btn-outline btn-sm" onclick="document.getElementById('import_file').click()">Importar JSON</button></div><input type="file" id="import_file" accept="application/json" style="display:none;"></div>`;
+    <div class="settings-section"><h3>Perfis desta conta (${(S.profiles||[]).length}/5)</h3><p class="desc">Troque entre perfis sem misturar dados. Cada perfil tem armazenamento local e registro separado no Supabase.</p>${profilesRows}<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">${(S.profiles||[]).length<5?`<button class="btn-outline btn-sm" onclick="Settings.createFinancialProfile()">+ Criar perfil</button>`:''}<button class="btn-outline btn-sm" onclick="Settings.setTab('backup')">Importar ou exportar dados</button></div></div>`;
 }
 
 /* V6.14.0 — "Nuvem" e "Backups" eram duas abas separadas, e a de Backups sempre
    mostrava textos do Supabase (nomes de tabela, "Salvar snapshot no Supabase" etc.)
    mesmo pra quem usa Google Drive ou modo local — informação irrelevante e confusa.
    Unificado numa aba só, que mostra só o que é relevante pro modo atual. */
+function backupSyncIconHTML(){
+  return `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7h-5V2"/><path d="M20 7a8 8 0 0 0-13.4-2.4L4 7"/><path d="M4 17h5v5"/><path d="M4 17a8 8 0 0 0 13.4 2.4L20 17"/></svg>`;
+}
+function backupActionCardHTML(icon,title,desc,action,label,variant=''){
+  const buttonId=variant==='primary'?' id="qb_backup_primary"':'';
+  return `<div class="backup-action-card ${variant}"><div class="backup-action-icon">${icon}</div><div class="backup-action-copy"><h4>${esc(title)}</h4><p>${esc(desc)}</p></div><button${buttonId} class="${variant==='primary'?'btn btn-primary':'btn-outline'} btn-sm" onclick="${action}">${esc(label)}</button></div>`;
+}
+function renderBackupImportCard(){
+  return `<div class="settings-section backup-import-section"><div class="backup-section-head"><div><span class="backup-kicker">IMPORTAÇÃO</span><h3>Importar arquivo JSON</h3><p class="desc">Traga um backup completo ou um perfil. Antes de substituir ou mesclar dados, o Borion mostra uma revisão e pede confirmação.</p></div></div><button class="btn-outline btn-sm" onclick="document.getElementById('import_file_cloud').click()">Selecionar arquivo JSON</button><input type="file" id="import_file_cloud" accept="application/json,.json" style="display:none;"></div>`;
+}
+function renderBackupFolderSection(){
+  let block;
+  if(!FS_ACCESS_SUPPORTED) block=`<p class="desc">Este navegador não permite manter uma pasta fixa para cópias automáticas. O download manual em JSON continua disponível.</p>`;
+  else if(BackupFS.needsReconnect) block=`<div class="reconnect-banner"><span>A pasta de backups precisa ser reautorizada após reabrir o app.</span><button class="btn-outline btn-sm" onclick="BackupFS.reconnect()">Reconectar pasta</button></div>`;
+  else if(BackupFS.dirHandle) block=`<div class="backup-folder-status"><div><strong>Pasta local conectada</strong><span>Os arquivos são gravados dentro de Backups_Borion.</span></div><div class="backup-inline-actions"><button class="btn-outline btn-sm" onclick="BackupFS.choose()">Trocar pasta</button><button class="btn-outline btn-sm" onclick="BackupFS.disconnect()">Desconectar</button></div></div>`;
+  else block=`<p class="desc">Opcional: escolha uma pasta deste computador, do Google Drive para computador ou do OneDrive para manter uma cópia adicional fora do navegador.</p><button class="btn-outline btn-sm" onclick="BackupFS.choose()">Escolher pasta</button>`;
+  return `<details class="settings-section backup-advanced"><summary><span>Armazenamento local avançado</span><small>Pasta extra e permissões</small></summary><div class="backup-advanced-body">${block}<div class="info-box">O navegador exige sua autorização para acessar uma pasta. O Borion nunca escolhe uma pasta sozinho.</div></div></details>`;
+}
 function renderSettingsBackup(){
-  const cloud = window.CloudStorage;
-  const user = cloud && cloud.user;
-  const isDrive = !user && window.GoogleDriveProvider && GoogleDriveProvider.isConnected();
-  const isLocal = !user && !isDrive;
-
-  const localBackupsBlock = `
-    <div class="settings-section"><h3>Backups neste dispositivo</h3><p class="desc">Histórico guardado no navegador (IndexedDB). Quando uma pasta local está configurada, o mesmo clique também grava um arquivo JSON dentro de Backups_Borion.</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewLocalBackups()">Ver backups deste dispositivo</button><button id="qb_local" class="btn btn-primary btn-sm" onclick="Settings.quickBackupLocal()">Criar backup agora</button></div></div>`;
-
-  let backupFolderBlock;
-  if(!FS_ACCESS_SUPPORTED) backupFolderBlock = `<p class="desc">Este navegador não permite escolher uma pasta fixa pra backup automático.</p>`;
-  else if(BackupFS.needsReconnect) backupFolderBlock = `<div class="reconnect-banner"><span>A pasta de backups precisa ser reautorizada após reabrir o app.</span><button class="btn-outline btn-sm" onclick="BackupFS.reconnect()">Reconectar pasta</button></div>`;
-  else if(BackupFS.dirHandle) backupFolderBlock = `<div class="gold-box">Pasta local configurada. O Borion salva arquivos dentro da subpasta <b>Backups_Borion</b>.</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;"><button class="btn-outline btn-sm" onclick="BackupFS.choose()">Trocar pasta</button><button class="btn-outline btn-sm" onclick="BackupFS.disconnect()">Desconectar pasta</button></div>`;
-  else backupFolderBlock = `<p class="desc">Escolha uma pasta local (ex: uma pasta sincronizada com Google Drive/OneDrive) pra cópias automáticas extras neste dispositivo.</p><button class="btn btn-primary btn-sm" onclick="BackupFS.choose()">Escolher pasta de backups</button>`;
-  const folderSection = `
-    <div class="settings-section"><h3>Pasta local extra (opcional)</h3>
-      ${backupFolderBlock}
-      <div class="info-box">Por segurança do navegador, o Borion não pode criar uma pasta sozinho sem você autorizar.</div>
-    </div>`;
+  const cloud=window.CloudStorage;
+  const user=cloud&&cloud.user;
+  const isDrive=!user&&window.GoogleDriveProvider&&GoogleDriveProvider.isConnected();
+  const isLocal=!user&&!isDrive;
 
   if(isDrive){
-    const gs = GoogleDriveProvider.getStatus();
-    const conflictBanner = gs.conflict ? `<div class="info-box danger-box"><b>Atenção:</b> existe uma versão mais recente desta conta salva no Google Drive (provavelmente de outro dispositivo). Escolha uma: <button class="btn-outline btn-sm" onclick="GoogleDriveProvider.reload()">Recarregar (usar a versão do Drive)</button> <button class="btn-outline btn-sm" onclick="forceManualSave()">Salvar minha versão agora (Ctrl+S)</button></div>` : '';
-    return `
-    <div class="settings-section settings-hero-section"><h3>Backups e Google Drive</h3><p class="desc">Seus dados sincronizam automaticamente com a pasta compartilhada do Google Drive.</p></div>
-    ${conflictBanner}
-    <div class="settings-section"><h3>Status</h3><p class="desc"><strong>Conta:</strong> ${esc(gs.email||'')}<br><strong>Pasta conectada:</strong> ${esc(gs.folderName||'(não identificada)')} ${gs.folderLink?`<a href="${esc(gs.folderLink)}" target="_blank" rel="noopener">Abrir no Google Drive ↗</a>`:''}<br><strong>Status:</strong> ${gs.conflict?'Conflito — veja acima':gs.pending?'Salvando alterações...':'Tudo sincronizado'}<br><strong>Perfil ativo:</strong> ${esc(S.currentProfile?S.currentProfile.name:'Nenhum')}</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="GoogleDriveProvider.syncNow()">Sincronizar agora</button><button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button><button class="btn-outline btn-sm" onclick="GoogleDriveProvider.disconnect();S.currentProfile=null;S.data=null;CloudAuth.mode='login';CloudAuth.error='';CloudAuth.info='';CloudAuth.emailExpanded=false;CloudAuth.render();">Sair da conta Google</button></div>
-    </div>
-    <div class="settings-section"><h3>Backups no Google Drive</h3><p class="desc">Histórico guardado na pasta <b>backups</b>, dentro da pasta acima. Limpeza automática mantém no máximo ~10GB (mais antigos são apagados — o histórico completo continua no disco local).</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewDriveBackups()">Ver backups no Drive</button><button id="qb_drive" class="btn btn-primary btn-sm" onclick="Settings.quickBackupDrive()">Criar backup agora</button></div></div>
-    ${localBackupsBlock}
-    ${folderSection}
-    <div class="info-box">Se a internet cair, o Borion continua salvando neste dispositivo e envia pro Drive automaticamente quando a conexão voltar.</div>`;
+    const gs=GoogleDriveProvider.getStatus();
+    const syncState=gs.conflict?'Atenção necessária':(gs.pending?'Salvando alterações':'Tudo sincronizado');
+    const conflictBanner=gs.conflict?`<div class="info-box danger-box backup-conflict"><b>Existe uma versão mais recente no Google Drive.</b><span>Isso geralmente acontece quando a conta foi alterada em outro dispositivo.</span><div class="backup-inline-actions"><button class="btn-outline btn-sm" onclick="GoogleDriveProvider.reload()">Usar versão do Drive</button><button class="btn-outline btn-sm" onclick="forceManualSave()">Manter esta versão</button></div></div>`:'';
+    return `<div class="settings-section settings-hero-section backup-hero"><span class="backup-kicker">SEGURANÇA DOS DADOS</span><h3>Backup e sincronização</h3><p class="desc">Uma página única para sincronizar, criar cópias, exportar, importar e restaurar dados.</p></div>
+      ${conflictBanner}
+      <div class="settings-section backup-status-card"><div class="backup-status-main"><div class="backup-status-dot ${gs.conflict?'warning':(gs.pending?'working':'ok')}"></div><div><span class="backup-kicker">GOOGLE DRIVE</span><h3>${esc(syncState)}</h3><p class="desc"><strong>${esc(gs.email||'Conta conectada')}</strong> · ${esc(gs.folderName||'Pasta do Borion')} · Perfil ${esc(S.currentProfile?S.currentProfile.name:'não selecionado')}</p>${gs.folderLink?`<a class="backup-text-link" href="${esc(gs.folderLink)}" target="_blank" rel="noopener">Abrir pasta no Drive ↗</a>`:''}</div></div><button class="backup-sync-icon-btn" onclick="GoogleDriveProvider.syncNow()" title="Sincronizar agora" aria-label="Sincronizar agora">${backupSyncIconHTML()}</button></div>
+      <div class="backup-action-grid">
+        ${backupActionCardHTML('◆','Criar backup completo','Salva a mesma cópia no Google Drive e neste dispositivo.','Settings.quickBackupPrimary(\'drive\')','Criar backup completo','primary')}
+        ${backupActionCardHTML('⇩','Exportar conta completa','Baixa um JSON com todos os perfis e dados desta conta.','Settings.exportProfile()','Exportar JSON')}
+      </div>
+      ${renderBackupImportCard()}
+      <div class="settings-section backup-history-section"><div class="backup-section-head"><div><span class="backup-kicker">HISTÓRICO</span><h3>Ver e restaurar backups</h3><p class="desc">Os históricos ficam separados por destino, sem duplicar o botão de criação.</p></div></div><div class="backup-history-grid"><button class="backup-history-card" onclick="Settings.viewDriveBackups()"><span>Google Drive</span><small>Cópias da pasta backups</small><b>Ver histórico →</b></button><button class="backup-history-card" onclick="Settings.viewLocalBackups()"><span>Este dispositivo</span><small>Cópias guardadas no navegador</small><b>Ver histórico →</b></button></div></div>
+      ${renderBackupFolderSection()}
+      <details class="settings-section backup-advanced account-actions"><summary><span>Conta e acesso</span><small>Ações que não fazem parte do backup diário</small></summary><div class="backup-advanced-body"><button class="btn-outline btn-sm" onclick="GoogleDriveProvider.disconnect();S.currentProfile=null;S.data=null;CloudAuth.mode='login';CloudAuth.error='';CloudAuth.info='';CloudAuth.emailExpanded=false;CloudAuth.render();">Sair da conta Google</button></div></details>`;
   }
 
   if(isLocal){
-    const st = (window.storageProvider ? storageProvider.getStorageStatus() : {profileCount:(S.profiles||[]).length, online:navigator.onLine});
-    return `
-    <div class="settings-section settings-hero-section"><h3>Backups</h3><p class="desc">Você está usando o Borion sem conta — os dados ficam só neste dispositivo.</p></div>
-    <div class="settings-section"><h3>Status</h3><p class="desc"><strong>Modo:</strong> Local (sem conta)<br><strong>Perfis neste dispositivo:</strong> ${st.profileCount||0}<br><strong>Perfil ativo:</strong> ${esc(S.currentProfile?S.currentProfile.name:'Nenhum')}<br><strong>Conexão:</strong> ${st.online?'Online':'Offline'}</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button><button class="btn-outline btn-sm" onclick="document.getElementById('import_file_cloud').click()">Importar JSON</button><button class="btn-outline btn-sm" onclick="Settings.switchToCloudFromSettings()">Entrar com uma conta na nuvem</button></div>
-      <input type="file" id="import_file_cloud" accept="application/json" style="display:none;">
-    </div>
-    ${localBackupsBlock}
-    ${folderSection}
-    <div class="info-box">Entrar com uma conta permite sincronizar entre celular e computador — seus perfis locais continuam aqui e voltam a aparecer se você sair da conta depois.</div>
-    ${renderInstallAppCard()}`;
+    const st=window.storageProvider?storageProvider.getStorageStatus():{profileCount:(S.profiles||[]).length,online:navigator.onLine};
+    return `<div class="settings-section settings-hero-section backup-hero"><span class="backup-kicker">SEGURANÇA DOS DADOS</span><h3>Backup e dados</h3><p class="desc">Você está usando o Borion sem conta. As cópias ficam neste dispositivo e podem ser exportadas em JSON.</p></div>
+      <div class="settings-section backup-status-card"><div class="backup-status-main"><div class="backup-status-dot ok"></div><div><span class="backup-kicker">MODO LOCAL</span><h3>Dados disponíveis neste dispositivo</h3><p class="desc">${st.profileCount||0} perfil(is) · Perfil ${esc(S.currentProfile?S.currentProfile.name:'não selecionado')} · ${st.online?'Online':'Offline'}</p></div></div></div>
+      <div class="backup-action-grid">
+        ${backupActionCardHTML('◆','Criar backup completo','Guarda uma cópia no navegador e baixa o JSON ou grava na pasta configurada.','Settings.quickBackupPrimary(\'local\')','Criar backup completo','primary')}
+        ${backupActionCardHTML('⇩','Exportar conta completa','Baixa um JSON com todos os perfis e dados deste dispositivo.','Settings.exportProfile()','Exportar JSON')}
+      </div>
+      ${renderBackupImportCard()}
+      <div class="settings-section backup-history-section"><div class="backup-section-head"><div><span class="backup-kicker">HISTÓRICO</span><h3>Backups deste dispositivo</h3><p class="desc">Abra o histórico para baixar ou restaurar uma cópia anterior.</p></div></div><button class="backup-history-card single" onclick="Settings.viewLocalBackups()"><span>Este dispositivo</span><small>Backups manuais e automáticos guardados no navegador</small><b>Ver histórico →</b></button></div>
+      ${renderBackupFolderSection()}
+      <details class="settings-section backup-advanced account-actions"><summary><span>Conta e sincronização</span><small>Usar a mesma conta em celular e computador</small></summary><div class="backup-advanced-body"><p class="desc">Entrar com uma conta permite sincronizar entre dispositivos. Seus perfis locais continuam preservados neste navegador.</p><button class="btn-outline btn-sm" onclick="Settings.switchToCloudFromSettings()">Entrar com uma conta</button></div></details>
+      ${renderInstallAppCard()}`;
   }
 
-  // ---- Só chega aqui se realmente estiver logado no Supabase (legado) ----
-  const pending = cloud && cloud.pendingInfo ? cloud.pendingInfo() : null;
-  const last = cloud && cloud.lastSyncAt ? new Date(cloud.lastSyncAt).toLocaleString('pt-BR') : 'Ainda não sincronizou nesta sessão';
-  const status = cloud ? (cloud.statusLabel ? cloud.statusLabel() : (cloud.statusText || cloud.status || 'Indisponível')) : 'Módulo de nuvem não carregado';
-  const pendingTxt = pending ? `Existe sincronização pendente desde ${new Date(pending.savedAt).toLocaleString('pt-BR')}. Motivo: ${esc(pending.reason||'pendente')}` : 'Nenhum dado pendente no cache local.';
-  const profileName = S.currentProfile ? S.currentProfile.name : 'Nenhum perfil ativo';
-  const schema = cloud && cloud.schemaError ? `<div class="info-box danger-box"><b>Atenção:</b> ${esc(cloud.schemaError)}<br>Verifique a configuração das tabelas do Supabase antes de usar o login antigo por e-mail.</div>` : '';
-  const consent = window.BackupFS ? BackupFS.hasConsent() : null;
-  const consentText = consent ? `Aceito em ${new Date(consent.acceptedAt).toLocaleString('pt-BR')} · modo: ${esc(consent.mode||'backup')}` : 'Ainda não configurado neste dispositivo.';
-  return `
-    <div class="settings-section settings-hero-section"><h3>Borion Cloud Foundation</h3><p class="desc">Conta, perfis financeiros, sincronização real, cache local e proteção contra perda de dados.</p></div>
+  const pending=cloud&&cloud.pendingInfo?cloud.pendingInfo():null;
+  const last=cloud&&cloud.lastSyncAt?new Date(cloud.lastSyncAt).toLocaleString('pt-BR'):'Ainda não sincronizou nesta sessão';
+  const status=cloud?(cloud.statusLabel?cloud.statusLabel():(cloud.statusText||cloud.status||'Indisponível')):'Módulo de nuvem não carregado';
+  const profileName=S.currentProfile?S.currentProfile.name:'Nenhum perfil ativo';
+  const schema=cloud&&cloud.schemaError?`<div class="info-box danger-box"><b>Atenção:</b> ${esc(cloud.schemaError)}</div>`:'';
+  const consent=window.BackupFS?BackupFS.hasConsent():null;
+  const consentText=consent?`Aceito em ${new Date(consent.acceptedAt).toLocaleString('pt-BR')}`:'Ainda não configurado neste dispositivo.';
+  return `<div class="settings-section settings-hero-section backup-hero"><span class="backup-kicker">SEGURANÇA DOS DADOS</span><h3>Backup e sincronização</h3><p class="desc">Conta legada Borion Cloud com ações principais organizadas em um único lugar.</p></div>
     ${schema}
-    <div class="settings-section"><h3>Status da nuvem</h3><p class="desc"><strong>Usuário logado:</strong> ${user?esc(user.email||'logado'):'não logado'}<br><strong>Perfil financeiro ativo:</strong> ${esc(profileName)}<br><strong>Status:</strong> ${esc(status)}<br><strong>Última sincronização:</strong> ${esc(last)}<br><strong>Dados pendentes:</strong> ${pendingTxt}</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="cloudForceSync()">Sincronizar agora</button><button class="btn-outline btn-sm" onclick="cloudRunSupabaseDiagnostic()">Diagnóstico Supabase</button><button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button><button class="btn-outline btn-sm" onclick="document.getElementById('import_file_cloud').click()">Importar JSON</button><button class="btn-outline btn-sm" onclick="cloudChangePasswordFromSettings()">Trocar senha da conta/login</button>${user?`<button class="btn-danger btn-sm" onclick="Settings.deleteCloudAccountFlow()">Excluir conta</button>`:''}<button class="btn-outline btn-sm" onclick="cloudLogout()">Sair da conta</button></div><input type="file" id="import_file_cloud" accept="application/json" style="display:none;"></div>
-    <div class="settings-section"><h3>Aceite de proteção de dados</h3><p class="desc"><strong>Status:</strong> ${consentText}</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.showBackupConsent()">Ver termo/configurar proteção</button><button class="btn-outline btn-sm" onclick="Settings.createCloudBackupNow('first_setup','backup criado manualmente pela tela de segurança')">Criar backup inicial agora</button></div></div>
-    <div class="settings-section"><h3>Backups no Supabase</h3><p class="desc">Gera um JSON completo com todos os perfis da conta.</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.createCloudBackupNow('manual','backup manual completo')">Salvar snapshot no Supabase</button><button class="btn-outline btn-sm" onclick="Settings.viewCloudBackups()">Ver backups do Supabase</button></div></div>
-    ${localBackupsBlock}
-    ${folderSection}
-    <div class="info-box">Fluxo: alteração → salva local/offline → marca pendente → envia ao Supabase → limpa pendência.</div>
-    ${user?`<div class="settings-section danger-box"><h3>Excluir conta Borion Cloud</h3><p class="desc">Apaga a conta de login, e-mail, todos os perfis financeiros e todos os dados monetários salvos no Supabase.</p><button class="btn btn-danger btn-sm" onclick="Settings.deleteCloudAccountFlow()">Excluir conta</button></div>`:''}
+    <div class="settings-section backup-status-card"><div class="backup-status-main"><div class="backup-status-dot ${pending?'working':'ok'}"></div><div><span class="backup-kicker">BORION CLOUD</span><h3>${esc(status)}</h3><p class="desc">${esc((user&&user.email)||'Conta conectada')} · Perfil ${esc(profileName)} · Última sincronização ${esc(last)}</p></div></div><button class="backup-sync-icon-btn" onclick="cloudForceSync()" title="Sincronizar agora" aria-label="Sincronizar agora">${backupSyncIconHTML()}</button></div>
+    <div class="backup-action-grid">${backupActionCardHTML('◆','Criar backup completo','Cria uma cópia na nuvem legada e também neste dispositivo.','Settings.quickBackupPrimary(\'cloud\')','Criar backup completo','primary')}${backupActionCardHTML('⇩','Exportar conta completa','Baixa um JSON com todos os perfis da conta.','Settings.exportProfile()','Exportar JSON')}</div>
+    ${renderBackupImportCard()}
+    <div class="settings-section backup-history-section"><div class="backup-section-head"><div><span class="backup-kicker">HISTÓRICO</span><h3>Ver e restaurar backups</h3></div></div><div class="backup-history-grid"><button class="backup-history-card" onclick="Settings.viewCloudBackups()"><span>Borion Cloud</span><small>Snapshots salvos na nuvem legada</small><b>Ver histórico →</b></button><button class="backup-history-card" onclick="Settings.viewLocalBackups()"><span>Este dispositivo</span><small>Cópias guardadas no navegador</small><b>Ver histórico →</b></button></div></div>
+    ${renderBackupFolderSection()}
+    <details class="settings-section backup-advanced account-actions"><summary><span>Conta, proteção e diagnóstico</span><small>Ações avançadas</small></summary><div class="backup-advanced-body"><p class="desc"><strong>Proteção de dados:</strong> ${consentText}</p><div class="backup-inline-actions"><button class="btn-outline btn-sm" onclick="Settings.showBackupConsent()">Ver proteção de dados</button><button class="btn-outline btn-sm" onclick="cloudRunSupabaseDiagnostic()">Diagnóstico</button><button class="btn-outline btn-sm" onclick="cloudChangePasswordFromSettings()">Trocar senha</button><button class="btn-outline btn-sm" onclick="cloudLogout()">Sair da conta</button>${user?'<button class="btn-danger btn-sm" onclick="Settings.deleteCloudAccountFlow()">Excluir conta</button>':''}</div></div></details>
     ${renderInstallAppCard()}`;
 }
 function renderInstallAppCard(){

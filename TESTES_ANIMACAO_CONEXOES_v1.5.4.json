@@ -1,0 +1,10 @@
+{
+  "version": "1.5.4",
+  "checks": {
+    "lock_points_enabled": true,
+    "lock_connections_enabled": true,
+    "adaptive_fps": true,
+    "visibility_pause": true,
+    "cache_version_updated": true
+  }
+}

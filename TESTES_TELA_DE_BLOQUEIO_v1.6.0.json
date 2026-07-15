@@ -1,0 +1,12 @@
+{
+  "version": "1.6.0",
+  "checks": {
+    "smooth_background_without_dividing_line": true,
+    "more_points_and_connections": true,
+    "no_wave_separator": true,
+    "cohesive_lockscreen_palette": true,
+    "adaptive_fps": true,
+    "visibility_pause": true,
+    "cache_updated": true
+  }
+}

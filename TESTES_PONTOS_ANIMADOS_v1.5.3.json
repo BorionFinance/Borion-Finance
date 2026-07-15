@@ -1,0 +1,14 @@
+{
+  "version": "1.5.3",
+  "checks": {
+    "animated_loop": true,
+    "adaptive_fps": true,
+    "visibility_pause": true,
+    "reduced_motion": true,
+    "no_shadow_blur": true,
+    "particle_count_cap": true,
+    "version_footer": true,
+    "cache_version": true
+  },
+  "status": "APROVADO"
+}

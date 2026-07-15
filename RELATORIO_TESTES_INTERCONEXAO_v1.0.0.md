@@ -1,5 +1,3 @@
-> **Relatório histórico da V6.29.0.** A V6.30.0 substituiu a reconciliação espelhada pelo modelo de importação nativa. Consulte `tests/smart-interconnections-results.json` e `INTEGRACOES_INTELIGENTES_V6.30.0.md`.
-
 # Relatório de validação — Borion Interop v1.0.0
 
 **Versões entregues**

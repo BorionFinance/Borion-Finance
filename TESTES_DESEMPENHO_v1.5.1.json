@@ -1,0 +1,33 @@
+{
+  "version": "1.5.1",
+  "result": "PASS",
+  "checks": {
+    "version_files_1_5_1": true,
+    "html_local_assets_exist": true,
+    "no_continuous_canvas_loop": true,
+    "static_lock_canvas_present": true,
+    "navigation_has_no_artificial_wait": true,
+    "search_is_debounced": true,
+    "row_cascade_disabled": true,
+    "backdrop_filters_overridden": true,
+    "modal_theme_preserved": true,
+    "service_worker_cache_updated": true
+  },
+  "html_references": [
+    "manifest.json",
+    "icon-192.png",
+    "apple-touch-icon.png",
+    "css/app.css?v=1.5.1",
+    "js/data/initial-data.js?v=1.5.1",
+    "js/services/storage.js?v=1.5.1",
+    "js/services/google-drive.js?v=1.5.1",
+    "js/services/pdf.js?v=1.5.1",
+    "js/app.js?v=1.5.1"
+  ],
+  "missing_references": [],
+  "continuous_animation_loops": 0,
+  "notes": [
+    "Validação estrutural e de sintaxe concluída.",
+    "O navegador headless deste ambiente não inicializou renderização gráfica; o pacote foi validado por sintaxe, referências, cache e integridade do ZIP."
+  ]
+}

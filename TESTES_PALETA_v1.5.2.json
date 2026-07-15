@@ -1,0 +1,16 @@
+{
+  "version": "1.5.2",
+  "status": "aprovado",
+  "checks": {
+    "topbar_dark_palette": true,
+    "cards_dark_palette": true,
+    "tables_dark_palette": true,
+    "forms_dark_palette": true,
+    "secondary_buttons_blue_palette": true,
+    "primary_buttons_orange_palette": true,
+    "modals_v1_5_0_preserved": true,
+    "performance_overrides_preserved": true,
+    "backdrop_filter_not_reenabled": true,
+    "service_worker_cache_updated": true
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "versao": "1.4.0",
+  "data": "2026-07-14",
+  "validacoes": {
+    "sintaxe_javascript": "aprovada",
+    "render_dashboard": "aprovado",
+    "render_ordens": "aprovado",
+    "filtro_ordens": "presente",
+    "render_agenda": "aprovado",
+    "calendario_celulas": 42,
+    "render_clientes": "aprovado",
+    "render_financeiro": "aprovado",
+    "render_estoque": "aprovado",
+    "render_catalogos": "aprovado",
+    "render_documentos": "aprovado",
+    "render_configuracoes": "aprovado",
+    "modos_persistentes": {
+      "orders": "list",
+      "agenda": "cards",
+      "clients": "list",
+      "finance": "list",
+      "stock": "list",
+      "catalog": "list",
+      "documents": "list"
+    }
+  },
+  "observacao": "A validação de renderização foi executada em runtime JavaScript com DOM simulado. O ambiente de execução bloqueou a abertura de Chromium para inspeção visual automatizada."
+}

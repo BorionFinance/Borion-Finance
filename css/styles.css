@@ -2592,3 +2592,109 @@ html[data-theme="light"] .floating-note-panel{background:linear-gradient(180deg,
 html[data-theme="light"] .floating-note-textarea{background:rgba(255,255,255,.76);border-color:rgba(122,85,29,.14);color:#1f2f40;}
 @media(max-width:980px){.order-option-legend{grid-template-columns:repeat(2,minmax(0,1fr));}.summary-order-row .order-row-main{justify-content:flex-start;}}
 @media(max-width:760px){.interface-mode-row{align-items:stretch;}.interface-segmented{min-width:0;width:100%;}.interface-auto-button{width:100%;}.order-option-legend{grid-template-columns:1fr;}.floating-note-footer{flex-direction:column;align-items:flex-start;}.summary-order-row .order-row-main{min-width:100%;}}
+
+/* ---------- V6.33.5 — Atualização de rendimento pelo saldo total da reserva ---------- */
+.reserva-actions{flex-wrap:wrap;}
+.reserva-actions .reserva-yield-card-btn{
+  color:#8ff0b2;
+  border-color:rgba(34,197,94,.24);
+  background:rgba(34,197,94,.07);
+}
+.reserva-actions .reserva-yield-card-btn:hover{
+  color:#b9f7ce;
+  border-color:rgba(34,197,94,.42);
+  background:rgba(34,197,94,.12);
+  box-shadow:0 8px 18px rgba(10,80,42,.18);
+}
+.reserve-yield-modal{max-width:440px;padding:23px;overflow-x:hidden;}
+.reserve-yield-last{
+  margin:14px 0 12px;
+  padding:12px 13px;
+  border:1px solid rgba(217,180,107,.16);
+  border-radius:13px;
+  background:linear-gradient(180deg,rgba(217,180,107,.065),rgba(255,255,255,.018));
+}
+.reserve-yield-last>span,.reserve-yield-balance>span,.reserve-yield-result>span{
+  display:block;
+  margin-bottom:7px;
+  color:var(--muted);
+  font-size:10.5px;
+  font-weight:850;
+  letter-spacing:.075em;
+  text-transform:uppercase;
+}
+.reserve-yield-last-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.reserve-yield-last-grid>div{
+  min-width:0;
+  padding:9px 10px;
+  border-radius:10px;
+  background:rgba(255,255,255,.035);
+  border:1px solid rgba(255,255,255,.055);
+}
+.reserve-yield-last-grid small{display:block;color:var(--muted);font-size:10.5px;margin-bottom:3px;}
+.reserve-yield-last-grid strong{display:block;color:var(--text);font-size:13px;overflow-wrap:anywhere;}
+.reserve-yield-empty{color:var(--muted);font-size:12.5px;padding:3px 0;}
+.reserve-yield-balance{
+  display:flex;
+  flex-direction:column;
+  margin-bottom:12px;
+  padding:12px 13px;
+  border-radius:13px;
+  border:1px solid rgba(255,255,255,.07);
+  background:rgba(255,255,255,.028);
+}
+.reserve-yield-balance strong{font-size:20px;color:var(--gold-bright);letter-spacing:-.02em;}
+.reserve-yield-balance small{margin-top:3px;color:var(--muted);font-size:11.5px;overflow-wrap:anywhere;}
+.reserve-yield-result{
+  margin-top:13px;
+  padding:14px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.075);
+  background:rgba(255,255,255,.03);
+  transition:border-color .18s ease,background-color .18s ease,transform .18s ease;
+}
+.reserve-yield-result strong{display:block;font-size:22px;line-height:1.15;letter-spacing:-.025em;}
+.reserve-yield-result small{display:block;margin-top:5px;color:var(--muted);font-size:11.5px;line-height:1.35;}
+.reserve-yield-result.positive{border-color:rgba(34,197,94,.24);background:rgba(34,197,94,.075);}
+.reserve-yield-result.positive strong{color:#52d989;}
+.reserve-yield-result.negative{border-color:rgba(239,68,68,.25);background:rgba(239,68,68,.07);}
+.reserve-yield-result.negative strong{color:#fb7777;}
+.reserve-yield-result.neutral strong{color:var(--text);}
+.reserve-yield-error{
+  margin-top:10px;
+  padding:9px 11px;
+  border:1px solid rgba(239,68,68,.24);
+  border-radius:10px;
+  background:rgba(239,68,68,.075);
+  color:#ffaaaa;
+  font-size:11.5px;
+  line-height:1.35;
+}
+.reserve-yield-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;}
+.reserve-yield-actions button{min-height:42px;}
+.reserve-yield-actions button:disabled,.reserve-yield-modal .modal-head button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;}
+html[data-theme="light"] .reserva-actions .reserva-yield-card-btn{color:#147b3d;border-color:rgba(20,123,61,.24);background:rgba(34,197,94,.08);}
+html[data-theme="light"] .reserve-yield-last{background:linear-gradient(180deg,rgba(207,166,84,.12),rgba(255,255,255,.62));border-color:rgba(178,134,45,.22);}
+html[data-theme="light"] .reserve-yield-last-grid>div,html[data-theme="light"] .reserve-yield-balance{background:rgba(122,85,29,.045);border-color:rgba(122,85,29,.12);}
+html[data-theme="light"] .reserve-yield-result{background:rgba(122,85,29,.035);border-color:rgba(122,85,29,.12);}
+html[data-theme="light"] .reserve-yield-result.positive{background:rgba(34,197,94,.08);border-color:rgba(20,123,61,.22);}
+html[data-theme="light"] .reserve-yield-result.negative{background:rgba(239,68,68,.07);border-color:rgba(190,45,45,.20);}
+html[data-theme="light"] .reserve-yield-error{color:#9b2525;background:rgba(239,68,68,.07);border-color:rgba(190,45,45,.20);}
+@media(max-width:620px){
+  .reserve-yield-overlay{
+    align-items:flex-end;
+    padding:10px 10px calc(78px + env(safe-area-inset-bottom));
+  }
+  .reserve-yield-modal{
+    max-width:none;
+    max-height:calc(100dvh - 96px - env(safe-area-inset-bottom));
+    padding:19px 17px 17px;
+    border-radius:18px;
+  }
+  .reserve-yield-last-grid{grid-template-columns:1fr 1fr;}
+  .reserve-yield-actions{position:sticky;bottom:0;padding-top:10px;background:linear-gradient(180deg,transparent 0%,var(--panel) 28%);}
+}
+@media(max-width:380px){
+  .reserve-yield-last-grid,.reserve-yield-actions{grid-template-columns:1fr;}
+  .reserve-yield-modal{padding:17px 15px 15px;}
+}

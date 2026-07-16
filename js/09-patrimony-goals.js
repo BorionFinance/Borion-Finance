@@ -188,7 +188,7 @@ function renderReservaRendimentosPanel(collapsed){
   const rows = rend.rows.map(r=>`
     <div class="list-row reserva-summary-row">
       <span class="lname"><span class="dot" style="background:${esc(r.cor||'var(--gold)')}"></span>${esc(r.nome)} <span class="lmeta">${esc(r.banco||'Sem banco')} · ${monthLabel(S.month.y,S.month.m)}</span></span>
-      <span class="lval val-pos">+ ${brl(r.valor)}</span>
+      <span class="lval">${reservaSignedValue(r.valor)}</span>
     </div>`).join('');
   return `<div class="panel-box reservas-panel reserva-rendimentos-panel">
     <div class="toolbar">
@@ -196,7 +196,7 @@ function renderReservaRendimentosPanel(collapsed){
         <button class="collapse-toggle-btn" onclick="Patr.toggleReservaRendimentos()" title="${collapsed?'Maximizar':'Minimizar'}" style="color:var(--gold-bright);">${collapsed?'▸':'▾'}</button>
         <span>RENDIMENTOS DAS RESERVAS (${monthLabel(S.month.y,S.month.m)})</span>
       </div>
-      <span style="font-weight:900;color:#22c55e;">TOTAL: + ${brl(rend.total)}</span>
+      <span style="font-weight:900;">TOTAL: ${reservaSignedValue(rend.total)}</span>
     </div>
     ${collapsed ? '<p style="font-size:11.5px;color:var(--muted);margin:8px 0 0;">Abra a seta para ver quanto cada reserva rendeu neste mês.</p>' : (rows || '<div class="empty-note">Nenhum rendimento de reserva registrado neste mês.</div>')}
   </div>`;
@@ -211,6 +211,16 @@ function reservaStatusPill(status){
   const s = status || 'Ativa';
   const cls = s==='Concluída'?'ok':(s==='Pausada'?'warn':'neutral');
   return `<span class="cheque-status ${cls}">${esc(s)}</span>`;
+}
+/* V6.33.5 — representação única para entradas, saídas e rendimentos negativos.
+   O valor armazenado permanece assinado; apenas a apresentação usa o módulo para
+   impedir combinações visuais incorretas como "+ -R$ 10,00". */
+function reservaSignedValue(value, options={}){
+  const n = Math.round((Number(value)||0)*100)/100;
+  const cls = n>0?'val-pos':(n<0?'val-neg':'');
+  const sign = n>0?'+ ':(n<0?'- ':'');
+  const html = `${sign}${brl(Math.abs(n))}`;
+  return options.wrap===false ? html : `<span class="${cls}">${html}</span>`;
 }
 
 function renderReservasResumoPanel(total, collapsed){
@@ -258,8 +268,8 @@ function reservaReportSigned(value){
 }
 function reservaMoveDelta(m){
   const v=Number(m&&m.valor)||0;
-  if(['Reservar','Rendimento','Receita direta','Transferência recebida'].includes(m&&m.tipo)) return v;
-  if(['Resgatar','Pagamento direto','Pagamento de despesa fixa','Transferência enviada'].includes(m&&m.tipo)) return -v;
+  if(['Reservar','Rendimento','Receita direta','Transferência recebida','Recebimento de outra reserva'].includes(m&&m.tipo)) return v;
+  if(['Resgatar','Pagamento direto','Pagamento de despesa fixa','Transferência enviada','Envio para outra reserva'].includes(m&&m.tipo)) return -v;
   if(m&&m.tipo==='Ajuste manual' && m.saldoAntes!=null && m.saldoDepois!=null) return (Number(m.saldoDepois)||0)-(Number(m.saldoAntes)||0);
   return 0;
 }
@@ -457,7 +467,7 @@ function renderReservasPanel(){
       <div class="reserva-foot"><span>Meta: ${brl(r.valorMeta)}</span><span>${pct}%</span></div>` : `
       <div class="reserva-foot"><span>Sem meta definida</span><span></span></div>`}
       ${metaHTML}
-      ${reservaGridOrganizer ? OrderPreferences.reservaSlotHandleHTML(boxIndex+1,r.nome) : (showReorder ? OrderPreferences.reorderRowControlsHTML('reservas', r.id, r.nome, boxNaturalIds) : `<div class="reserva-actions"><button onclick="Reservas.move('${r.id}')">Movimentar</button><button onclick="Reservas.viewExtrato('${r.id}')">Ver extrato</button><button onclick="Reservas.edit('${r.id}')">Editar</button></div>`)}
+      ${reservaGridOrganizer ? OrderPreferences.reservaSlotHandleHTML(boxIndex+1,r.nome) : (showReorder ? OrderPreferences.reorderRowControlsHTML('reservas', r.id, r.nome, boxNaturalIds) : `<div class="reserva-actions"><button class="reserva-yield-card-btn" onclick="Reservas.updateRendimento('${r.id}')">+ Rendimento</button><button onclick="Reservas.move('${r.id}')">Movimentar</button><button onclick="Reservas.viewExtrato('${r.id}')">Ver extrato</button><button onclick="Reservas.edit('${r.id}')">Editar</button></div>`)}
     </div>`;
     return reservaGridOrganizer
       ? `<div class="reserva-slot" data-order-id="${esc(r.id)}" data-reserva-slot="${boxIndex+1}">${card}</div>`
@@ -466,11 +476,9 @@ function renderReservasPanel(){
   const orgFilterNotice = orgActive && !canReorderNow ? OrderPreferences.filterBlockedNoticeHTML() : '';
   const moveRows = moves.map(m=>{
     const box = (S.data.reservas.boxes||[]).find(r=>r.id===m.boxId);
-    const positive = Reservas.POSITIVE_TYPES.includes(m.tipo);
-    const negative = Reservas.NEGATIVE_TYPES.includes(m.tipo);
-    const isAdjust = m.tipo==='Ajuste manual';
+    const delta = reservaMoveDelta(m);
     const linked = m.despesaTransacaoId ? ' <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Despesa</span>' : (m.reservaTransferId ? ' <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Transferência entre reservas</span>' : (m.transferenciaId ? ' <span class="cat-pill" style="opacity:.8;"><span class="dot" style="background:var(--gold-bright)"></span>🔗 Transferência</span>' : ''));
-    return `<tr><td>${reservaFmtDate(m.data)}</td><td>${esc(box?box.nome:'Reserva removida')}</td><td>${esc(m.tipo)}</td><td>${esc(m.banco||'')}</td><td class="${positive||isAdjust?'val-pos':negative?'val-neg':''}">${positive?'+ ':negative?'- ':''}${brl(m.valor)}</td><td>${esc(m.descricao||'')}${linked}</td><td style="text-align:right;white-space:nowrap;"><button class="ledit" onclick="Reservas.editMove('${m.id}')">✎</button><button class="ledit danger-mini" onclick="Reservas.deleteMove('${m.id}')">×</button></td></tr>`;
+    return `<tr><td>${reservaFmtDate(m.data)}</td><td>${esc(box?box.nome:'Reserva removida')}</td><td>${esc(m.tipo)}</td><td>${esc(m.banco||'')}</td><td>${reservaSignedValue(delta)}</td><td>${esc(m.descricao||'')}${linked}</td><td style="text-align:right;white-space:nowrap;"><button class="ledit" onclick="Reservas.editMove('${m.id}')">✎</button><button class="ledit danger-mini" onclick="Reservas.deleteMove('${m.id}')">×</button></td></tr>`;
   }).join('');
   return `<div class="panel-box reservas-panel">
     <div class="toolbar"><div class="toolbar-left">◈ <span class="lmeta">Reservado: ${brl(total)}</span></div><div class="reserva-toolbar-actions">${renderReservaReportsControls()}${window.OrderPreferences?OrderPreferences.sortSelectHTML('reservas'):''}<button class="btn-outline" onclick="Reservas.add()">+ Nova reserva</button><button class="btn-outline" onclick="Reservas.move()">+ Movimentação</button></div></div>
@@ -587,6 +595,96 @@ const Reservas = {
     }
     toast('A central de transferências está indisponível.');
   },
+  /* V6.33.5 — o usuário informa o total atual mostrado pela instituição e o Borion
+     calcula a diferença em centavos. O salvamento continua usando exatamente a mesma
+     estrutura de rendimento_reserva e Cards.applyTransferenciaEffect da central normal. */
+  updateRendimento(boxId){
+    const reserve = (S.data.reservas&&S.data.reservas.boxes||[]).find(r=>String(r.id)===String(boxId));
+    if(!reserve){ toast('Reserva não encontrada.'); return; }
+    if(!window.Cards || typeof Cards.applyTransferenciaEffect!=='function'){
+      toast('A mecânica de rendimento está indisponível.'); return;
+    }
+    const rendimentos = (S.data.reservas.moves||[])
+      .filter(m=>String(m.boxId)===String(reserve.id)&&m.tipo==='Rendimento')
+      .slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))||(Number(b.createdAt)||0)-(Number(a.createdAt)||0));
+    const ultimo = rendimentos[0]||null;
+    const saldoAtualCentavos = Math.round((Number(reserve.valorAtual)||0)*100);
+    const lastHTML = ultimo
+      ? `<div class="reserve-yield-last-grid"><div><small>Data</small><strong>${reservaFmtDate(ultimo.data)}</strong></div><div><small>Valor</small><strong>${reservaSignedValue(ultimo.valor)}</strong></div></div>`
+      : '<div class="reserve-yield-empty">Nenhum rendimento registrado</div>';
+    const modal = el(`<div class="modal-overlay reserve-yield-overlay"><div class="modal-box reserve-yield-modal" role="dialog" aria-modal="true" aria-labelledby="reserve_yield_title">
+      <div class="modal-head"><h2 id="reserve_yield_title">Atualizar rendimento</h2><button id="reserve_yield_close" aria-label="Fechar">&times;</button></div>
+      <p class="modal-sub">Informe o valor total que aparece agora na instituição. O Borion calculará somente a diferença sobre o saldo registrado.</p>
+      <section class="reserve-yield-last"><span>Último rendimento</span>${lastHTML}</section>
+      <div class="reserve-yield-balance"><span>Saldo atual registrado</span><strong>${brl(saldoAtualCentavos/100)}</strong><small>${esc(reserve.nome)}${reserve.banco?' · '+esc(reserve.banco):''}</small></div>
+      <div class="field"><label>Data</label><input type="date" id="reserve_yield_date" value="${todayISO()}"/></div>
+      <div class="field"><label>Valor total da reserva</label><input type="text" inputmode="numeric" enterkeyhint="done" autocomplete="off" class="money-input" id="reserve_yield_total" placeholder="0,00"/></div>
+      <div class="reserve-yield-result neutral" id="reserve_yield_result" aria-live="polite"><span>Rendimento</span><strong>R$ 0,00</strong><small>Digite o total atual da reserva.</small></div>
+      <div class="reserve-yield-error hidden" id="reserve_yield_error"></div>
+      <div class="reserve-yield-actions"><button class="btn-outline" id="reserve_yield_cancel" type="button">Cancelar</button><button class="btn btn-primary" id="reserve_yield_update" type="button" disabled>Atualizar</button></div>
+    </div></div>`);
+    $('#modal-root').innerHTML=''; $('#modal-root').appendChild(modal); attachModalGuard(modal);
+    const closeBtn=$('#reserve_yield_close'),cancelBtn=$('#reserve_yield_cancel'),updateBtn=$('#reserve_yield_update');
+    const totalInput=$('#reserve_yield_total'),dateInput=$('#reserve_yield_date'),result=$('#reserve_yield_result'),errorBox=$('#reserve_yield_error');
+    let touched=false,processing=false,differenceCents=0;
+    attachMoneyMask(totalInput,0);
+    const showError=message=>{errorBox.textContent=message||'';errorBox.classList.toggle('hidden',!message);};
+    const refresh=()=>{
+      if(processing)return;
+      const raw=totalInput.dataset.cents;
+      const totalCents=raw==null?NaN:Number(raw);
+      const validTotal=touched&&Number.isFinite(totalCents)&&totalCents>=0;
+      const validReserve=!!(S.data.reservas.boxes||[]).find(r=>String(r.id)===String(reserve.id));
+      const validDate=!!dateInput.value;
+      differenceCents=validTotal?Math.round(totalCents-saldoAtualCentavos):0;
+      result.classList.remove('positive','negative','neutral');
+      if(!validTotal){
+        result.classList.add('neutral');result.querySelector('strong').textContent='R$ 0,00';result.querySelector('small').textContent='Digite o total atual da reserva.';
+      }else{
+        const diff=differenceCents/100;
+        result.classList.add(diff>0?'positive':(diff<0?'negative':'neutral'));
+        result.querySelector('strong').textContent=reservaSignedValue(diff,{wrap:false});
+        result.querySelector('small').textContent=diff>0?'Será lançado como rendimento.':(diff<0?'A diferença negativa será preservada como perda/correção de rendimento.':'O saldo informado já é igual ao saldo registrado.');
+      }
+      updateBtn.disabled=!(validTotal&&validReserve&&validDate&&Number.isFinite(differenceCents));
+      showError(validReserve?'':'A reserva não está mais disponível. Feche a janela e tente novamente.');
+    };
+    totalInput.addEventListener('input',()=>{touched=true;refresh();});
+    dateInput.addEventListener('change',refresh);
+    closeBtn.onclick=cancelBtn.onclick=()=>{if(!processing)closeModal();};
+    updateBtn.onclick=()=>{
+      if(processing||updateBtn.disabled)return;
+      const liveReserve=(S.data.reservas.boxes||[]).find(r=>String(r.id)===String(reserve.id));
+      const totalCents=Number(totalInput.dataset.cents);
+      const data=dateInput.value;
+      if(!liveReserve){showError('Reserva não encontrada. Nenhum saldo foi alterado.');refresh();return;}
+      if(!Number.isFinite(totalCents)||totalCents<0){showError('Informe um valor total válido.');refresh();return;}
+      if(!data){showError('Informe uma data válida.');refresh();return;}
+      const liveSaldoCents=Math.round((Number(liveReserve.valorAtual)||0)*100);
+      const liveDifferenceCents=Math.round(totalCents-liveSaldoCents);
+      if(!Number.isFinite(liveDifferenceCents)){showError('Não foi possível validar o rendimento calculado.');refresh();return;}
+      if(liveDifferenceCents===0){closeModal();toast('Saldo já está atualizado. Nenhum rendimento foi lançado.');return;}
+      processing=true;updateBtn.disabled=true;updateBtn.textContent='Atualizando...';closeBtn.disabled=true;cancelBtn.disabled=true;showError('');
+      const valor=liveDifferenceCents/100;
+      const transferencia={
+        id:uid(),kind:'rendimento_reserva',origemTipo:'reserva',origemId:liveReserve.id,origemAccountId:null,
+        origemNome:liveReserve.nome,destinoTipo:null,destinoId:null,destinoAccountId:null,destinoNome:'Rendimento',
+        reservaAction:'rendimento',valor,data,descricao:valor<0?'Perda/correção de rendimento da reserva':'Rendimento da reserva',
+        origemBanco:liveReserve.banco||'',destinoBanco:'',saldoBase:liveSaldoCents/100,valorTotalInformado:totalCents/100,
+        calculadoPorSaldoTotal:true,createdAt:Date.now()
+      };
+      const ok=runAtomicFinancialMutation(()=>{
+        (S.data.transferencias||(S.data.transferencias=[])).push(transferencia);
+        if(!Cards.applyTransferenciaEffect(transferencia))throw new Error('efeito_rendimento_invalido');
+        const finalCents=Math.round((Number(liveReserve.valorAtual)||0)*100);
+        if(finalCents!==Math.round(totalCents))throw new Error('saldo_final_divergente');
+      },()=>showError('Não foi possível atualizar o rendimento. O saldo anterior foi preservado.'));
+      if(!ok){processing=false;closeBtn.disabled=false;cancelBtn.disabled=false;updateBtn.textContent='Atualizar';refresh();return;}
+      saveCurrentData();closeModal();renderView();toast('Rendimento atualizado com sucesso');
+    };
+    refresh();
+    requestAnimationFrame(()=>{try{totalInput.focus();totalInput.setSelectionRange(totalInput.value.length,totalInput.value.length);}catch(_){}});
+  },
   findMove(id){ return (S.data.reservas&&S.data.reservas.moves||[]).find(m=>m.id===id); },
   /* V6.0 — tipos que aumentam o saldo da reserva vs. tipos que diminuem. 'Pagamento direto'
      é uma despesa paga direto da reserva (nunca vira Receita); 'Transferência enviada'/
@@ -687,7 +785,9 @@ const Reservas = {
     extraHTML:`<div class="row-btns" style="margin-top:8px;"><button class="btn btn-danger-solid btn-block" id="mv_del_btn" type="button">Excluir movimentação</button></div>`,
     onSave(v){
       const valor = Number(v.valor)||0;
-      if(valor<=0){ toast('Digite um valor maior que zero.'); return; }
+      if((v.tipo==='Rendimento'&&valor===0)||(v.tipo!=='Rendimento'&&valor<=0)){
+        toast(v.tipo==='Rendimento'?'O rendimento não pode ser zero.':'Digite um valor maior que zero.'); return;
+      }
       Reservas.reverseMoveEffect(mv);
       const idx = labels.indexOf(v.boxLabel);
       const bx = boxes[idx>=0?idx:0];
@@ -777,21 +877,21 @@ const Reservas = {
       moves = moves.slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||'')));
       let entradas=0, saidas=0;
       moves.forEach(m=>{
-        if(Reservas.POSITIVE_TYPES.includes(m.tipo)) entradas += Number(m.valor)||0;
-        else if(Reservas.NEGATIVE_TYPES.includes(m.tipo)) saidas += Number(m.valor)||0;
+        const delta=reservaMoveDelta(m);
+        if(delta>0)entradas+=delta;
+        else if(delta<0)saidas+=Math.abs(delta);
       });
       $('#rzx_in').textContent = brl(entradas);
       $('#rzx_out').textContent = '- '+brl(saidas).replace('R$ -','R$ ');
       const rows = moves.map(m=>{
-        const positive = Reservas.POSITIVE_TYPES.includes(m.tipo);
-        const negative = Reservas.NEGATIVE_TYPES.includes(m.tipo);
+        const delta = reservaMoveDelta(m);
         const fixaRef = m.despesaFixaId ? (S.data.fixas||[]).find(f=>f.id===m.despesaFixaId) : null;
         const txRef = m.despesaTransacaoId ? (S.data.transacoes||[]).find(t=>t.id===m.despesaTransacaoId) : null;
         const vinculo = fixaRef ? `<button class="link-btn" style="padding:0;" onclick="Reservas.gotoVinculo('fixa','${fixaRef.id}')">🔗 ${esc(fixaRef.nome)}</button>` : (txRef ? `<button class="link-btn" style="padding:0;" onclick="Reservas.gotoVinculo('variavel','${txRef.id}')">🔗 ${esc(txRef.nome)}</button>` : '');
         return `<tr>
           <td>${reservaFmtDate(m.data)}</td>
           <td>${esc(m.tipo)}</td>
-          <td class="${positive?'val-pos':negative?'val-neg':''}">${positive?'+ ':negative?'- ':''}${brl(m.valor)}</td>
+          <td>${reservaSignedValue(delta)}</td>
           <td>${esc(m.descricao||'')}</td>
           <td>${vinculo}</td>
         </tr>`;

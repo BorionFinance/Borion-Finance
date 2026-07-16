@@ -615,8 +615,11 @@ const Cards = {
     $('#tr_save').onclick=()=>{
       const source=$('#tr_source').value,data=$('#tr_data').value||(isEdit?(t.data||''):todayISO()),descricao=($('#tr_descricao').value||'').trim();
       const valor=parseInt($('#tr_valor').dataset.cents||'0',10)/100;
-      const adjustment=source==='reserva'&&$('#tr_reserve_action').value==='ajuste';
-      if((!adjustment&&valor<=0)||(adjustment&&valor<0)){alert(adjustment?'O novo saldo não pode ser negativo.':'Digite um valor maior que zero.');return;}
+      const reserveAction=source==='reserva'&&$('#tr_reserve_action')?$('#tr_reserve_action').value:'';
+      const adjustment=reserveAction==='ajuste',reserveYield=reserveAction==='rendimento';
+      if((adjustment&&valor<0)||(reserveYield&&valor===0)||(!adjustment&&!reserveYield&&valor<=0)){
+        alert(adjustment?'O novo saldo não pode ser negativo.':(reserveYield?'O rendimento não pode ser zero.':'Digite um valor maior que zero.'));return;
+      }
       let obj=null;
       if(source==='carteira'){
         const destinoId=$('#tr_wallet_dest').value;if(!destinoId){alert('Escolha a conta de destino.');return;}

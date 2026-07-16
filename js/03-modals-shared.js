@@ -172,6 +172,35 @@ function openConfirmModal({title, text, confirmLabel, cancelLabel, variant='dang
   $('#cf_confirm').onclick = ()=>{ closeModal(); if(onConfirm) onConfirm(); };
 }
 
+/* ------- V6.33.3 — substitui o alert() nativo do navegador (caixa cinza do sistema
+   operacional) por um modal com a identidade visual do Borion, evitando que qualquer
+   mensagem de validação ou erro quebre a estética dourada/dark do app. Mantém a mesma
+   assinatura alert(msg), então nenhum dos pontos onde alert() já é chamado no app
+   precisa ser reescrito — todos passam a usar o modal automaticamente. Se o modal-root
+   ainda não existir (ex: erro muito cedo no boot), cai de volta no alert nativo. ------- */
+(function(){
+  if(window.__borionAlertPatched) return;
+  window.__borionAlertPatched = true;
+  const nativeAlert = window.alert ? window.alert.bind(window) : function(msg){ console.warn(msg); };
+  window.alert = function(message){
+    const text = message==null ? '' : String(message);
+    if(!document.getElementById('modal-root') || typeof el!=='function'){ nativeAlert(text); return; }
+    const box = el(`
+      <div class="modal-overlay">
+        <div class="modal-box confirm-box confirm-gold">
+          <div class="modal-head"><h2>Aviso</h2><button id="al_close">&times;</button></div>
+          <p class="confirm-text">${esc(text)}</p>
+          <div class="row-btns"><button class="btn btn-primary btn-block" id="al_ok">Entendi</button></div>
+        </div>
+      </div>`);
+    $('#modal-root').innerHTML='';
+    $('#modal-root').appendChild(box);
+    attachModalGuard(box);
+    $('#al_close').onclick = closeModal;
+    $('#al_ok').onclick = closeModal;
+  };
+})();
+
 /* ------- shared: choice modal (e.g. substituir vs mesclar ao importar) ------- */
 function openChoiceModal({title, sub, choices}){
   const btns = choices.map((c,i)=>`<button class="choice-btn ${c.variant==='danger'?'danger':''}" data-i="${i}">${esc(c.label)}${c.desc?`<span class="cb-desc">${esc(c.desc)}</span>`:''}</button>`).join('');

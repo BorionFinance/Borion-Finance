@@ -759,10 +759,17 @@
   function disconnect(sourceAppId){
     const row = findSourceConfig(sourceAppId);
     if(!row) return;
-    if(!confirm(`Desconectar ${sourceName(sourceAppId)}? Os lançamentos já importados continuarão normalmente no Borion.`)) return;
-    delete ensureInterop(row.data).sources[sourceAppId];
-    saveProfileData(row.profile.id, row.data);
-    if(typeof renderView === 'function') renderView();
+    const confirmText = `Desconectar ${sourceName(sourceAppId)}? Os lançamentos já importados continuarão normalmente no Borion.`;
+    const doDisconnect = ()=>{
+      delete ensureInterop(row.data).sources[sourceAppId];
+      saveProfileData(row.profile.id, row.data);
+      if(typeof renderView === 'function') renderView();
+    };
+    if(typeof openConfirmModal==='function'){
+      openConfirmModal({title:'Desconectar integração', text:confirmText, confirmLabel:'Desconectar', cancelLabel:'Cancelar', variant:'danger', onConfirm:doDisconnect});
+    } else if(confirm(confirmText)){
+      doDisconnect();
+    }
   }
 
   function setSettingsSource(sourceAppId){

@@ -995,23 +995,32 @@ window.Settings = Settings;
 /* ================= V6.33.1 — refinamento extra de Configurações, padronização de ordenação
    e bloco flutuante de Anotações persistente entre abas ================= */
 (function(){
-  const SETTINGS_VERSION = '6.33.2';
+  const SETTINGS_VERSION = '6.33.3';
 
   function floatingNotesPrefs(create=false){
-    if(typeof S==='undefined' || !S.data) return {enabled:false,text:'',minimized:true,x:null,y:null};
+    const fallback={enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};
+    if(typeof S==='undefined' || !S.data) return fallback;
     if(create){
       if(!S.data.uiPreferences) S.data.uiPreferences = {};
       if(!S.data.uiPreferences.floatingNotes || typeof S.data.uiPreferences.floatingNotes!=='object'){
-        S.data.uiPreferences.floatingNotes = {enabled:false,text:'',minimized:true,x:null,y:null};
+        S.data.uiPreferences.floatingNotes = {enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};
       }
       const p=S.data.uiPreferences.floatingNotes;
       if(typeof p.enabled!=='boolean') p.enabled=false;
       if(typeof p.text!=='string') p.text='';
       if(typeof p.minimized!=='boolean') p.minimized=true;
-      if(typeof p.x!=='number') p.x=null;
+      /* V6.33.3 — migra a antiga posição livre (x/y solto na tela) para o novo modelo
+         "encostado na borda esquerda ou direita", igual ao botão de atalho flutuante do
+         iPhone: a bolinha nunca fica solta no meio da tela, só sobe/desce colada na lateral. */
+      if(p.side!=='left' && p.side!=='right'){
+        p.side = (typeof p.x==='number' && typeof window!=='undefined' && (p.x + 30) < (window.innerWidth/2)) ? 'left' : 'right';
+      }
       if(typeof p.y!=='number') p.y=null;
+      if(typeof p.panelW!=='number' || p.panelW<200) p.panelW=360;
+      if(typeof p.panelH!=='number' || p.panelH<180) p.panelH=380;
+      delete p.x; // não é mais usado — a posição horizontal agora é sempre "encostada" em um dos lados
     }
-    return (S.data.uiPreferences && S.data.uiPreferences.floatingNotes) || {enabled:false,text:'',minimized:true,x:null,y:null};
+    return (S.data.uiPreferences && S.data.uiPreferences.floatingNotes) || fallback;
   }
 
   function syncIconSVG(){
@@ -1019,6 +1028,9 @@ window.Settings = Settings;
   }
   function notesIconSVG(){
     return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14l4-3h8a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 10h6"/><path d="M9 13h6"/></svg>`;
+  }
+  function resizeGripIconSVG(){
+    return `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><circle cx="18" cy="6" r="1.6"/><circle cx="18" cy="12" r="1.6"/><circle cx="18" cy="18" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="18" r="1.6"/><circle cx="6" cy="18" r="1.6"/></svg>`;
   }
   function phoneIconSVG(){
     return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.3"/><path d="M11 18.5h2"/></svg>`;
@@ -1053,7 +1065,7 @@ window.Settings = Settings;
     else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
     else if(S.settingsTab==='backup') content = renderSettingsBackup();
     else if(S.settingsTab==='integrations') content = window.BorionInterop ? BorionInterop.renderSettings() : '<div class="settings-section">Integração indisponível.</div>';
-    return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. ${SETTINGS_VERSION} • Configurações refinadas</div><footer class="app-release-footer" aria-label="Informações do Borion">
+    return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. ${SETTINGS_VERSION} • Bolha de anotações ajustada</div><footer class="app-release-footer" aria-label="Informações do Borion">
 <div><strong>Versão:</strong> ${SETTINGS_VERSION}</div>
 <div><strong>Lançamento:</strong> 15/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
@@ -1317,19 +1329,31 @@ window.Settings = Settings;
 
   window.FloatingNotes = {
     hostId:'borion_floating_notes_host',
+    bubbleSize:60,
+    edgeGap:14,
+    gap:12,
     saveTimer:null,
-    defaultPosition(){
-      const isMin = floatingNotesPrefs(false).minimized===true;
-      const width = isMin ? 74 : 360;
-      const height = isMin ? 74 : 360;
-      return {x: Math.max(12, window.innerWidth - width - 22), y: Math.max(12, window.innerHeight - height - 22)};
-    },
     prefs(create=false){ return floatingNotesPrefs(create); },
-    ensurePosition(){
+    /* Reserva espaço para não ficar atrás da barra de abas inferior do Smartphone Mode
+       (nem "pra dentro" dela) e respeita a área segura do aparelho. */
+    bottomSafeMargin(){
+      try{
+        const nav=document.querySelector('.smart-bottom-nav');
+        if(nav && getComputedStyle(nav).display!=='none') return nav.getBoundingClientRect().height + 18;
+      }catch(e){}
+      return 18;
+    },
+    topSafeMargin(){ return 16; },
+    clampY(y){
+      const vh=window.innerHeight;
+      const top=this.topSafeMargin(), bottom=this.bottomSafeMargin();
+      const max=Math.max(top, vh - bottom - this.bubbleSize);
+      return Math.min(Math.max(Number(y)||0, top), max);
+    },
+    ensurePrefs(){
       const p=this.prefs(true);
-      if(typeof p.x!=='number' || typeof p.y!=='number'){
-        const pos=this.defaultPosition(); p.x=pos.x; p.y=pos.y;
-      }
+      if(p.side!=='left' && p.side!=='right') p.side='right';
+      p.y = (typeof p.y==='number') ? this.clampY(p.y) : this.clampY(window.innerHeight - this.bottomSafeMargin() - this.bubbleSize - 70);
       return p;
     },
     scheduleSave(silent=true){
@@ -1344,30 +1368,66 @@ window.Settings = Settings;
     toggleMinimize(){ const p=this.prefs(true); p.minimized=!p.minimized; saveCurrentData(); this.render(); },
     openFromBubble(){ const p=this.prefs(true); if(p.minimized){ p.minimized=false; saveCurrentData(); } this.render(); },
     close(){ const p=this.prefs(true); p.enabled=false; saveCurrentData(); this.render(); },
+    /* Decide se o painel abre para cima ou para baixo da bolinha, e qual o tamanho
+       possível, sempre respeitando a viewport — nunca "atravessa" a tela nem invade a
+       barra de abas. */
+    computeLayout(p){
+      const vw=window.innerWidth, vh=window.innerHeight;
+      const topSafe=this.topSafeMargin(), bottomSafe=this.bottomSafeMargin();
+      const maxW=Math.max(300, Math.min(vw - (this.edgeGap*2) - 4, 720));
+      const maxH=Math.max(220, Math.min(vh - topSafe - bottomSafe - this.gap - this.bubbleSize, 800));
+      let panelW=Math.min(Math.max(p.panelW||360, 300), maxW);
+      let panelH=Math.min(Math.max(p.panelH||380, 220), maxH);
+      const spaceBelow = vh - bottomSafe - (p.y + this.bubbleSize) - this.gap;
+      const spaceAbove = p.y - topSafe - this.gap;
+      let openDown;
+      if(panelH <= spaceBelow) openDown=true;
+      else if(panelH <= spaceAbove) openDown=false;
+      else { openDown = spaceBelow >= spaceAbove; panelH = Math.max(200, openDown ? spaceBelow : spaceAbove); }
+      return {panelW, panelH, openDown};
+    },
     render(){
       let host=document.getElementById(this.hostId);
       if(typeof S==='undefined' || !S.currentProfile || !S.data) { if(host) host.remove(); return; }
-      const p=this.ensurePosition();
+      const p=this.ensurePrefs();
       if(!p.enabled){ if(host) host.remove(); return; }
-      if(!host){ host=document.createElement('div'); host.id=this.hostId; document.body.appendChild(host); }
-      host.className='floating-notes-host'+(p.minimized?' is-minimized':' is-open');
-      host.style.left=(p.x||0)+'px';
-      host.style.top=(p.y||0)+'px';
-      host.innerHTML = `
-        <div class="floating-note-panel ${p.minimized?'hidden':''}">
-          <div class="floating-note-header floating-notes-drag-handle">
-            <div class="floating-note-title">${notesIconSVG()}<span>Anotações</span></div>
-            <div class="floating-note-header-actions">
-              <button class="floating-note-icon-btn" onclick="FloatingNotes.save()" title="Salvar anotações">Salvar</button>
-              <button class="floating-note-icon-btn" onclick="FloatingNotes.toggleMinimize()" title="Minimizar">—</button>
+      if(!host){ host=document.createElement('div'); host.id=this.hostId; host.className='floating-notes-host'; document.body.appendChild(host); }
+      host.className='floating-notes-host side-'+p.side+(p.minimized?' is-minimized':' is-open');
+
+      const vh=window.innerHeight;
+      const bubbleStyle=(p.side==='left'?`left:${this.edgeGap}px;right:auto;`:`right:${this.edgeGap}px;left:auto;`)+`top:${p.y}px;`;
+
+      let panelHTML='';
+      if(!p.minimized){
+        const L=this.computeLayout(p);
+        const anchorX = p.side==='left' ? 'left' : 'right';
+        const anchorY = L.openDown ? 'top' : 'bottom';
+        const horiz = anchorX==='left' ? `left:${this.edgeGap}px;right:auto;` : `right:${this.edgeGap}px;left:auto;`;
+        const vert = anchorY==='top' ? `top:${p.y + this.bubbleSize + this.gap}px;bottom:auto;` : `bottom:${vh - p.y + this.gap}px;top:auto;`;
+        const gripCorner={x:anchorX==='left'?'right':'left', y:anchorY==='top'?'bottom':'top'};
+        const gripCursor=(gripCorner.x==='left')===(gripCorner.y==='top') ? 'nwse-resize' : 'nesw-resize';
+        const gripStyle=`${gripCorner.y}:6px;${gripCorner.x}:6px;cursor:${gripCursor};`;
+        panelHTML = `
+          <div class="floating-note-panel" data-anchor-x="${anchorX}" data-anchor-y="${anchorY}" style="${horiz}${vert}width:${L.panelW}px;height:${L.panelH}px;">
+            <div class="floating-note-header floating-notes-drag-handle">
+              <div class="floating-note-title">${notesIconSVG()}<span>Anotações</span></div>
+              <div class="floating-note-header-actions">
+                <button class="floating-note-icon-btn" onclick="FloatingNotes.save()" title="Salvar anotações">Salvar</button>
+                <button class="floating-note-icon-btn" onclick="FloatingNotes.toggleMinimize()" title="Minimizar">—</button>
+              </div>
             </div>
-          </div>
-          <textarea class="floating-note-textarea" placeholder="Anote recados rápidos, pendências, ideias ou observações deste perfil..." oninput="FloatingNotes.onInput(this.value)">${esc(p.text||'')}</textarea>
-          <div class="floating-note-footer"><span>Permanece entre abas e perfis do app enquanto estiver ativado neste perfil.</span><span class="floating-note-drag-tip">Arraste para mover</span></div>
-        </div>
-        <button class="floating-note-bubble floating-notes-drag-handle" onclick="FloatingNotes.openFromBubble()" title="Abrir anotações">${notesIconSVG()}</button>`;
+            <textarea class="floating-note-textarea" placeholder="Anote recados rápidos, pendências, ideias ou observações deste perfil..." oninput="FloatingNotes.onInput(this.value)">${esc(p.text||'')}</textarea>
+            <div class="floating-note-footer"><span>Permanece entre abas e perfis do app enquanto estiver ativado neste perfil.</span><span class="floating-note-drag-tip">Arraste para mover</span></div>
+            <div class="floating-note-resize-grip" style="${gripStyle}" title="Arraste para redimensionar">${resizeGripIconSVG()}</div>
+          </div>`;
+      }
+      host.innerHTML = panelHTML + `<button class="floating-note-bubble floating-notes-drag-handle" style="${bubbleStyle}" onclick="FloatingNotes.openFromBubble()" title="Abrir anotações">${notesIconSVG()}</button>`;
       this.bindDrag(host);
+      this.bindResize(host);
     },
+    /* Arrasta apenas na vertical durante o gesto (feedback fluido); ao soltar, a bolinha
+       sempre "gruda" no lado esquerdo ou direito mais próximo — igual ao botão de atalho
+       flutuante do iPhone — nunca fica solta no meio da tela. */
     bindDrag(host){
       if(!host || host.dataset.dragBound==='1') return;
       host.dataset.dragBound='1';
@@ -1375,30 +1435,79 @@ window.Settings = Settings;
       host.addEventListener('pointerdown',(ev)=>{
         const handle=ev.target.closest('.floating-notes-drag-handle');
         if(!handle) return;
+        if(ev.target.closest('.floating-note-resize-grip')) return;
         if(ev.target.closest('button') && !ev.target.closest('.floating-note-bubble')) return;
         const p=this.prefs(true);
-        active={id:ev.pointerId, startX:ev.clientX, startY:ev.clientY, baseX:Number(p.x)||0, baseY:Number(p.y)||0};
+        active={id:ev.pointerId, startY:ev.clientY, baseY:Number(p.y)||0, lastY:Number(p.y)||0, lastX:ev.clientX, moved:false};
         host.classList.add('dragging');
         try{ handle.setPointerCapture && handle.setPointerCapture(ev.pointerId); }catch(e){}
       });
       window.addEventListener('pointermove',(ev)=>{
         if(!active || ev.pointerId!==active.id) return;
-        const maxX=Math.max(12, window.innerWidth - (host.offsetWidth||360) - 12);
-        const maxY=Math.max(12, window.innerHeight - (host.offsetHeight||360) - 12);
-        const nextX=Math.min(maxX, Math.max(12, active.baseX + (ev.clientX-active.startX)));
-        const nextY=Math.min(maxY, Math.max(12, active.baseY + (ev.clientY-active.startY)));
-        host.style.left=nextX+'px'; host.style.top=nextY+'px';
+        const dy=ev.clientY-active.startY;
+        if(Math.abs(dy)>4 || Math.abs(ev.clientX-active.lastX)>4) active.moved=true;
+        const nextY=this.clampY(active.baseY + dy);
+        active.lastY=nextY; active.lastX=ev.clientX;
+        const bubbleEl=host.querySelector('.floating-note-bubble');
+        if(bubbleEl) bubbleEl.style.top=nextY+'px';
       });
       const endDrag=(ev)=>{
         if(!active || (ev && ev.pointerId!=null && ev.pointerId!==active.id)) return;
         const p=this.prefs(true);
-        p.x=parseFloat(host.style.left)||p.x||0;
-        p.y=parseFloat(host.style.top)||p.y||0;
+        const wasMoved=active.moved;
+        if(wasMoved){
+          p.y=active.lastY;
+          p.side = active.lastX < (window.innerWidth/2) ? 'left' : 'right';
+          try{ saveCurrentData(); }catch(e){}
+        }
         active=null; host.classList.remove('dragging');
-        try{ saveCurrentData(); }catch(e){}
+        if(wasMoved) this.render();
       };
       window.addEventListener('pointerup',endDrag);
       window.addEventListener('pointercancel',endDrag);
+    },
+    /* Redimensiona o painel a partir do canto livre (o oposto de onde ele está ancorado
+       na bolinha), mantendo sempre dentro da tela — permite deixar mais largo/alto. */
+    bindResize(host){
+      if(!host || host.dataset.resizeBound==='1') return;
+      host.dataset.resizeBound='1';
+      let active=null;
+      host.addEventListener('pointerdown',(ev)=>{
+        const grip=ev.target.closest('.floating-note-resize-grip');
+        if(!grip) return;
+        ev.stopPropagation();
+        const panel=host.querySelector('.floating-note-panel');
+        if(!panel) return;
+        active={id:ev.pointerId, startX:ev.clientX, startY:ev.clientY, startW:panel.offsetWidth, startH:panel.offsetHeight, anchorX:panel.dataset.anchorX, anchorY:panel.dataset.anchorY, lastW:panel.offsetWidth, lastH:panel.offsetHeight};
+        panel.classList.add('resizing');
+        try{ grip.setPointerCapture && grip.setPointerCapture(ev.pointerId); }catch(e){}
+      });
+      window.addEventListener('pointermove',(ev)=>{
+        if(!active || ev.pointerId!==active.id) return;
+        const panel=host.querySelector('.floating-note-panel');
+        if(!panel) return;
+        const dx=ev.clientX-active.startX, dy=ev.clientY-active.startY;
+        const maxW=Math.max(300, Math.min(window.innerWidth - (this.edgeGap*2) - 4, 720));
+        const maxH=Math.max(220, Math.min(window.innerHeight - this.topSafeMargin() - this.bottomSafeMargin() - this.gap - this.bubbleSize, 800));
+        let w = active.anchorX==='right' ? active.startW - dx : active.startW + dx;
+        let h = active.anchorY==='top' ? active.startH + dy : active.startH - dy;
+        w=Math.min(Math.max(w, 300), maxW);
+        h=Math.min(Math.max(h, 220), maxH);
+        panel.style.width=w+'px'; panel.style.height=h+'px';
+        active.lastW=w; active.lastH=h;
+      });
+      const endResize=(ev)=>{
+        if(!active || (ev && ev.pointerId!=null && ev.pointerId!==active.id)) return;
+        const p=this.prefs(true);
+        p.panelW=active.lastW; p.panelH=active.lastH;
+        const panel=host.querySelector('.floating-note-panel');
+        if(panel) panel.classList.remove('resizing');
+        active=null;
+        try{ saveCurrentData(); }catch(e){}
+        this.render();
+      };
+      window.addEventListener('pointerup',endResize);
+      window.addEventListener('pointercancel',endResize);
     }
   };
 

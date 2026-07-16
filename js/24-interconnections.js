@@ -130,6 +130,9 @@
     config.discovered = normalizeDiscovered(config.discovered);
     config.mappingReady = config.mappingReady === true;
     config.importMode = 'smart-native';
+    // V6.34 — padrão é excluir automaticamente aqui quando o registro some na
+    // origem; só fica "preserve" se o usuário desligar explicitamente no toggle.
+    config.deletionPolicy = config.deletionPolicy === 'preserve' ? 'preserve' : 'delete';
     return config;
   }
   function profileData(profileId){
@@ -392,6 +395,49 @@
     const delta = txDelta(tx);
     return delta ? adjust(data, tx.accountId, delta) : true;
   }
+  /* V6.34 — EXCLUSÃO SINCRONIZADA COM TRAVA DE SEGURANÇA
+     Assinatura dos campos que o usuário pode editar livremente no Borion depois
+     que o lançamento vira nativo. Guardada no momento da criação e recalculada
+     no momento em que a origem manda excluir: se bater, o lançamento nunca foi
+     tocado manualmente e pode ser excluído com segurança; se não bater, alguém
+     editou esse lançamento no Borion depois da importação e ele é preservado
+     em vez de apagado, mesmo com a exclusão automática ligada. */
+  function editableSnapshotHash(tx){
+    return hash({
+      nome:tx.nome||'', data:tx.data||'', categoria:tx.categoria||'', valor:Number(tx.valor)||0,
+      accountId:tx.accountId||'', banco:tx.banco||'', formaPagamento:tx.formaPagamento||'',
+      statusPagamento:tx.statusPagamento||'', origem:tx.origem||'', origemPagamento:tx.origemPagamento||'',
+      reservaOrigemId:tx.reservaOrigemId||'', reservaBoxId:tx.reservaBoxId||'', destinoReserva:!!tx.destinoReserva
+    });
+  }
+  function reverseReserveLink(data, tx){
+    if(!tx || !data.reservas) return;
+    data.reservas.moves = Array.isArray(data.reservas.moves) ? data.reservas.moves : [];
+    if(tx.reservaMoveId){
+      const idx = data.reservas.moves.findIndex(m => m.id === tx.reservaMoveId);
+      if(idx >= 0){
+        const mv = data.reservas.moves[idx];
+        const box = reserveByIdIn(data, mv.boxId);
+        if(box) box.valorAtual = Math.round(Math.max(0, (Number(box.valorAtual)||0) - (Number(mv.valor)||0)) * 100) / 100;
+        data.reservas.moves.splice(idx, 1);
+      }
+    }
+    if(tx.reservaOrigemMoveId){
+      const idx = data.reservas.moves.findIndex(m => m.id === tx.reservaOrigemMoveId);
+      if(idx >= 0){
+        const mv = data.reservas.moves[idx];
+        const box = reserveByIdIn(data, mv.boxId);
+        if(box) box.valorAtual = Math.round(((Number(box.valorAtual)||0) + (Number(mv.valor)||0)) * 100) / 100;
+        data.reservas.moves.splice(idx, 1);
+      }
+    }
+  }
+  function reverseImportedTransaction(data, tx){
+    reverseReserveLink(data, tx);
+    const delta = txDelta(tx);
+    if(delta) adjust(data, tx.accountId, -delta);
+    data.transacoes = (data.transacoes || []).filter(item => item.id !== tx.id);
+  }
   function paymentForm(method){
     const m = normalize(method);
     if(m.includes('dinheiro')) return 'Dinheiro';
@@ -468,10 +514,11 @@
       integrationOriginalCategory:record.category || '',integrationOriginalPaymentMethod:record.paymentMethod || '',
       integrationOriginalStatus:record.status || '',integrationOriginalSourceValues:clone(sourceBag(record)),integrationMappingVersion:SPEC.mappingVersion
     };
-    if(isIncome){
-      return Object.assign(base,{tipo:'receita',origem:record._mappedRevenueOrigin||'propria',reservaValor:reserve?amount:0,destinoModo:reserve?'Direto para reserva':'Conta livre',reservaBoxId:reserve?reserve.id:null,destinoReserva:!!reserve,formaPagamento:record._mappedPaymentForm});
-    }
-    return Object.assign(base,{tipo:'variavel',accountId:reserve?null:accountId,statusPagamento:record._mappedSettled?'Pago':'Em aberto',origemPagamento:reserve?'reserva':'conta',formaPagamento:reserve?null:record._mappedPaymentForm,reservaOrigemId:reserve?reserve.id:null,reservaOrigemMoveId:null,localCompra:''});
+    const tx = isIncome
+      ? Object.assign(base,{tipo:'receita',origem:record._mappedRevenueOrigin||'propria',reservaValor:reserve?amount:0,destinoModo:reserve?'Direto para reserva':'Conta livre',reservaBoxId:reserve?reserve.id:null,destinoReserva:!!reserve,formaPagamento:record._mappedPaymentForm})
+      : Object.assign(base,{tipo:'variavel',accountId:reserve?null:accountId,statusPagamento:record._mappedSettled?'Pago':'Em aberto',origemPagamento:reserve?'reserva':'conta',formaPagamento:reserve?null:record._mappedPaymentForm,reservaOrigemId:reserve?reserve.id:null,reservaOrigemMoveId:null,localCompra:''});
+    tx.integrationEditGuardHash = editableSnapshotHash(tx);
+    return tx;
   }
 
   function importedState(data, sourceAppId){
@@ -504,17 +551,43 @@
     const incomingIds = new Set(snapshot.records.map(item => item.aggregateId));
     const tombstones = new Set((snapshot.tombstones || []).map(item => item.aggregateId));
 
+    const deletionPolicy = config.deletionPolicy === 'preserve' ? 'preserve' : 'delete';
     tombstones.forEach(aggregateId => {
       const marker = state.records[aggregateId];
       if(marker?.status === 'waiting') delete state.records[aggregateId];
       const nativeTx = findImportedTransaction(data, config.sourceAppId, aggregateId);
+
+      if(!nativeTx){
+        results.push({
+          aggregateId, status:'source_deleted', borionTransactionId:marker?.txId || '',
+          message:'Registro removido na origem antes da importação.'
+        });
+        return;
+      }
+
+      const editedSinceImport = !!nativeTx.integrationEditGuardHash && nativeTx.integrationEditGuardHash !== editableSnapshotHash(nativeTx);
+      if(deletionPolicy === 'delete' && !editedSinceImport){
+        try{
+          reverseImportedTransaction(data, nativeTx);
+          delete state.records[aggregateId];
+          results.push({
+            aggregateId, status:'deleted', borionTransactionId:nativeTx.id,
+            message:'Excluído automaticamente: o registro foi removido na origem.'
+          });
+        }catch(error){
+          results.push({
+            aggregateId, status:'preserved', borionTransactionId:nativeTx.id,
+            message:'Não foi possível excluir automaticamente (' + (error.message || error) + '). Lançamento preservado.'
+          });
+        }
+        return;
+      }
+
       results.push({
-        aggregateId,
-        status:nativeTx || marker?.status === 'imported' ? 'preserved' : 'source_deleted',
-        borionTransactionId:nativeTx?.id || marker?.txId || '',
-        message:nativeTx || marker?.status === 'imported'
-          ? 'O registro foi excluído na origem, mas o lançamento nativo foi preservado no Borion.'
-          : 'Registro removido na origem antes da importação.'
+        aggregateId, status:'preserved', borionTransactionId:nativeTx.id,
+        message:editedSinceImport
+          ? 'O registro foi excluído na origem, mas este lançamento foi editado manualmente no Borion depois da importação — não foi excluído automaticamente.'
+          : 'O registro foi excluído na origem, mas o lançamento nativo foi preservado no Borion (exclusão automática desativada para esta integração).'
       });
     });
 
@@ -600,6 +673,7 @@
     config.lastError = '';
     config.lastResult = {
       created:results.filter(x => x.status === 'created').length,
+      deleted:results.filter(x => x.status === 'deleted').length,
       waiting:results.filter(x => x.status === 'waiting').length,
       unchanged:results.filter(x => x.status === 'unchanged' || x.status === 'preserved').length,
       ignored:results.filter(x => x.status === 'ignored' || x.status === 'ignored_by_rule').length,
@@ -657,7 +731,8 @@
         if(typeof renderView === 'function') renderView();
       }
       if(!silent && typeof toast === 'function'){
-        toast(`${sourceName(sourceAppId)}: ${result.summary.created} novo(s), ${result.summary.unchanged} já importado(s), ${result.summary.waiting} aguardando.`);
+        const deletedPart = result.summary.deleted ? `, ${result.summary.deleted} excluído(s)` : '';
+        toast(`${sourceName(sourceAppId)}: ${result.summary.created} novo(s)${deletedPart}, ${result.summary.unchanged} já importado(s), ${result.summary.waiting} aguardando.`);
       }
       return result;
     }catch(error){
@@ -782,6 +857,18 @@
     uiTab = tab === 'links' ? 'links' : 'connection';
     if(typeof renderView === 'function') renderView();
   }
+  function setDeletionPolicy(sourceAppId, policy){
+    const row = findSourceConfig(sourceAppId);
+    if(!row) return;
+    row.config.deletionPolicy = policy === 'preserve' ? 'preserve' : 'delete';
+    saveProfileData(row.profile.id, row.data);
+    if(typeof toast === 'function'){
+      toast(row.config.deletionPolicy === 'delete'
+        ? 'Exclusão automática ativada: lançamentos removidos na origem serão excluídos aqui (exceto os que você já editou).'
+        : 'Exclusão automática desativada: lançamentos removidos na origem continuarão preservados aqui.');
+    }
+    if(typeof renderView === 'function') renderView();
+  }
 
   function transactionTypeOptions(selected){
     const options = [
@@ -835,7 +922,8 @@
     const c = row.config;
     const r = c.lastResult || {};
     const mappingLabel = c.mappingReady ? '<span class="pill ok">Vínculos configurados</span>' : '<span class="pill warn">Vínculos pendentes</span>';
-    return `<div class="interop-pane"><div class="interop-status-grid"><div><span>Perfil de destino</span><strong>${escHtml(row.profile.name)}</strong></div><div><span>Conta padrão</span><strong>${escHtml(accountName(row.data, c.accountId) || 'Carteira')}</strong></div><div><span>Meio</span><strong>${c.transport === 'drive' ? 'Google Drive' : 'Pasta local'}</strong></div><div><span>Mapeamento</span><strong>${mappingLabel}</strong></div></div><div class="gold-box interop-sync-box"><b>Última sincronização:</b> ${escHtml(dateText(c.lastSyncAt))}<br><span>${Number(r.created || 0)} novo(s) · ${Number(r.unchanged || 0)} já importado(s) · ${Number(r.waiting || 0)} aguardando · ${Number(r.ignored || 0)} ignorado(s)</span>${c.lastError ? `<br><b>Erro:</b> ${escHtml(c.lastError)}` : ''}</div><div class="interop-actions"><button class="btn btn-primary btn-sm" onclick="BorionInterop.syncSource('${sourceAppId}')" ${c.mappingReady ? '' : 'disabled title="Configure os Vínculos primeiro"'}>Sincronizar agora</button><button class="btn-outline btn-sm" onclick="BorionInterop.inspectSource('${sourceAppId}')">Ler campos da origem</button><button class="btn-outline btn-sm" onclick="BorionInterop.setupDialog('${sourceAppId}','${c.transport}')">Reconfigurar conexão</button><button class="btn-outline btn-sm" onclick="BorionInterop.disconnect('${sourceAppId}')">Desconectar</button></div>${!c.mappingReady ? '<div class="interop-next-step"><b>Próximo passo:</b> abra a aba <b>Vínculos</b>, confira as conversões e salve. Só depois os lançamentos serão importados.</div>' : ''}</div>`;
+    const deletionOn = c.deletionPolicy !== 'preserve';
+    return `<div class="interop-pane"><div class="interop-status-grid"><div><span>Perfil de destino</span><strong>${escHtml(row.profile.name)}</strong></div><div><span>Conta padrão</span><strong>${escHtml(accountName(row.data, c.accountId) || 'Carteira')}</strong></div><div><span>Meio</span><strong>${c.transport === 'drive' ? 'Google Drive' : 'Pasta local'}</strong></div><div><span>Mapeamento</span><strong>${mappingLabel}</strong></div></div><div class="gold-box interop-sync-box"><b>Última sincronização:</b> ${escHtml(dateText(c.lastSyncAt))}<br><span>${Number(r.created || 0)} novo(s) · ${Number(r.deleted || 0)} excluído(s) · ${Number(r.unchanged || 0)} já importado(s) · ${Number(r.waiting || 0)} aguardando · ${Number(r.ignored || 0)} ignorado(s)</span>${c.lastError ? `<br><b>Erro:</b> ${escHtml(c.lastError)}` : ''}</div><label class="interop-deletion-toggle"><input type="checkbox" ${deletionOn ? 'checked' : ''} onchange="BorionInterop.setDeletionPolicy('${sourceAppId}', this.checked ? 'delete' : 'preserve')"><span><b>Excluir aqui automaticamente</b> quando o lançamento for removido na origem<br><small>Lançamentos que você já editou manualmente no Borion (categoria, valor, conta...) nunca são excluídos automaticamente, mesmo com isto ligado.</small></span></label><div class="interop-actions"><button class="btn btn-primary btn-sm" onclick="BorionInterop.syncSource('${sourceAppId}')" ${c.mappingReady ? '' : 'disabled title="Configure os Vínculos primeiro"'}>Sincronizar agora</button><button class="btn-outline btn-sm" onclick="BorionInterop.inspectSource('${sourceAppId}')">Ler campos da origem</button><button class="btn-outline btn-sm" onclick="BorionInterop.setupDialog('${sourceAppId}','${c.transport}')">Reconfigurar conexão</button><button class="btn-outline btn-sm" onclick="BorionInterop.disconnect('${sourceAppId}')">Desconectar</button></div>${!c.mappingReady ? '<div class="interop-next-step"><b>Próximo passo:</b> abra a aba <b>Vínculos</b>, confira as conversões e salve. Só depois os lançamentos serão importados.</div>' : ''}</div>`;
   }
 
   function renderLinksTab(sourceAppId, row){
@@ -1018,7 +1106,7 @@
 
   window.BorionInterop = Object.freeze({
     spec:SPEC, sources:SOURCES, sourceName,
-    renderSettings, setSettingsSource, setSettingsTab,
+    renderSettings, setSettingsSource, setSettingsTab, setDeletionPolicy,
     setupDialog, configure, inspectSource, saveMappings,
     syncSource, syncAll, disconnect,
     markImportedDeletion, openImportedDeleteDialog,
@@ -1028,7 +1116,7 @@
       hash, stableStringify, ensureInterop, validateSnapshot,
       discoverSnapshot, mappedRecord, reconcileSnapshot, sourceLabel, normalizeTarget, resolveFinancialTarget,
       txDelta, adjust, applyReserveLink, paymentForm, targetAccountId, makeTransaction,
-      markImportedDeletion
+      markImportedDeletion, editableSnapshotHash, reverseImportedTransaction
     }
   });
 })();

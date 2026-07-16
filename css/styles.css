@@ -2414,6 +2414,10 @@ html[data-theme="light"] .import-current-row.will-delete{border-color:rgba(220,3
 .interop-status-grid span{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
 .interop-status-grid strong{font-size:13px}
 .interop-sync-box{margin-top:12px;line-height:1.6}
+.interop-deletion-toggle{display:flex;align-items:flex-start;gap:11px;margin-top:12px;padding:12px 14px;border:1px solid var(--border);border-radius:13px;background:rgba(255,255,255,.02);cursor:pointer}
+.interop-deletion-toggle input{margin-top:3px;width:17px;height:17px;accent-color:var(--gold);cursor:pointer;flex:none}
+.interop-deletion-toggle span{font-size:12.5px;line-height:1.55;color:var(--text)}
+.interop-deletion-toggle small{color:var(--muted);font-weight:400}
 .interop-next-step{margin-top:14px;border:1px solid rgba(204,161,96,.35);background:rgba(204,161,96,.08);border-radius:12px;padding:12px 14px;color:var(--text);font-size:13px}
 .interop-links-pane{display:grid;gap:14px}
 .interop-links-intro{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;padding-bottom:4px}

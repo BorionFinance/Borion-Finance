@@ -295,7 +295,7 @@ function emptyData(){
     /* V6.23.1 — auditoria defensiva da migração para accountId. Não participa de cálculos. */
     accountMigrationReview: [],
     migrationBackups: [],
-    uiPreferences:{budgetDateSort:{receita:'desc',fixa:'desc',variavel:'desc',transferencias:'desc'}}
+    uiPreferences:{budgetDateSort:{receita:'desc',fixa:'desc',variavel:'desc',transferencias:'desc'},floatingNotes:{enabled:false,text:'',minimized:true,x:null,y:null}}
   };
 }
 function migrateData(d){
@@ -342,6 +342,12 @@ function migrateData(d){
   if(!d.uiPreferences || typeof d.uiPreferences!=='object') d.uiPreferences={};
   if(!d.uiPreferences.budgetSummary || !Array.isArray(d.uiPreferences.budgetSummary.order)) d.uiPreferences.budgetSummary={order:['receita','investir','despesas','saldo'],visible:['receita','investir','despesas','saldo']};
   if(!d.uiPreferences.budgetDateSort || typeof d.uiPreferences.budgetDateSort!=='object') d.uiPreferences.budgetDateSort={};
+  if(!d.uiPreferences.floatingNotes || typeof d.uiPreferences.floatingNotes!=='object') d.uiPreferences.floatingNotes={enabled:false,text:'',minimized:true,x:null,y:null};
+  if(typeof d.uiPreferences.floatingNotes.enabled!=='boolean') d.uiPreferences.floatingNotes.enabled=false;
+  if(typeof d.uiPreferences.floatingNotes.text!=='string') d.uiPreferences.floatingNotes.text='';
+  if(typeof d.uiPreferences.floatingNotes.minimized!=='boolean') d.uiPreferences.floatingNotes.minimized=true;
+  if(typeof d.uiPreferences.floatingNotes.x!=='number') d.uiPreferences.floatingNotes.x=null;
+  if(typeof d.uiPreferences.floatingNotes.y!=='number') d.uiPreferences.floatingNotes.y=null;
   ['receita','fixa','variavel','transferencias'].forEach(k=>{d.uiPreferences.budgetDateSort[k]=d.uiPreferences.budgetDateSort[k]==='asc'?'asc':'desc';});
   /* Mantém apenas o primeiro fechamento válido de cada competência. Isso protege o relatório
      original inclusive após importações/mesclagens antigas que possam ter duplicado arrays. */

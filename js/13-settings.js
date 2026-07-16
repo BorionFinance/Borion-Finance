@@ -34,8 +34,8 @@ function renderSettings(){
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
   else if(S.settingsTab==='integrations') content = window.BorionInterop ? BorionInterop.renderSettings() : '<div class="settings-section">Integração indisponível.</div>'; // protected interop seam
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.33.1 • Configurações refinadas</div><footer class="app-release-footer" aria-label="Informações do Borion">
-<div><strong>Versão:</strong> 6.33.1</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.33.2 • Correção das Anotações</div><footer class="app-release-footer" aria-label="Informações do Borion">
+<div><strong>Versão:</strong> 6.33.2</div>
 <div><strong>Lançamento:</strong> 15/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -995,23 +995,23 @@ window.Settings = Settings;
 /* ================= V6.33.1 — refinamento extra de Configurações, padronização de ordenação
    e bloco flutuante de Anotações persistente entre abas ================= */
 (function(){
-  const SETTINGS_VERSION = '6.33.1';
+  const SETTINGS_VERSION = '6.33.2';
 
   function floatingNotesPrefs(create=false){
-    if(!(window.S && S.data)) return {enabled:false,text:'',minimized:false,x:null,y:null};
+    if(typeof S==='undefined' || !S.data) return {enabled:false,text:'',minimized:true,x:null,y:null};
     if(create){
       if(!S.data.uiPreferences) S.data.uiPreferences = {};
       if(!S.data.uiPreferences.floatingNotes || typeof S.data.uiPreferences.floatingNotes!=='object'){
-        S.data.uiPreferences.floatingNotes = {enabled:false,text:'',minimized:false,x:null,y:null};
+        S.data.uiPreferences.floatingNotes = {enabled:false,text:'',minimized:true,x:null,y:null};
       }
       const p=S.data.uiPreferences.floatingNotes;
       if(typeof p.enabled!=='boolean') p.enabled=false;
       if(typeof p.text!=='string') p.text='';
-      if(typeof p.minimized!=='boolean') p.minimized=false;
+      if(typeof p.minimized!=='boolean') p.minimized=true;
       if(typeof p.x!=='number') p.x=null;
       if(typeof p.y!=='number') p.y=null;
     }
-    return (S.data.uiPreferences && S.data.uiPreferences.floatingNotes) || {enabled:false,text:'',minimized:false,x:null,y:null};
+    return (S.data.uiPreferences && S.data.uiPreferences.floatingNotes) || {enabled:false,text:'',minimized:true,x:null,y:null};
   }
 
   function syncIconSVG(){
@@ -1072,7 +1072,7 @@ window.Settings = Settings;
   Settings.toggleFloatingNotes = function(){
     const p=floatingNotesPrefs(true);
     p.enabled = !(p.enabled===true);
-    if(p.enabled && p.minimized==null) p.minimized=false;
+    if(p.enabled) p.minimized=true;
     saveCurrentData();
     renderView();
     setTimeout(()=>window.FloatingNotes&&FloatingNotes.render(),10);
@@ -1155,8 +1155,6 @@ window.Settings = Settings;
         </div>
         <button class="toggle-switch ${active?'on':''}" onclick="Settings.toggleSummaryOrganize()" aria-label="${active?'Desativar':'Ativar'} organização do Resumo de Lançamentos"><span></span></button>
       </div>
-      <div class="settings-inline-subtitle">Ordenação padrão</div>
-      ${summaryOrderLegend()}
       ${active?'<div class="order-active-hint">Modo de organização ativo. As opções seguem exatamente a mesma ordem do resto do Borion: mover para o início, mover para cima, mover para baixo, mover para o final e arrastar para reordenar.</div>':''}
       <div class="order-list" style="margin-top:12px;">${rows}</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;"><button class="btn-outline btn-sm" onclick="Settings.resetBudgetSummaryCards()">Restaurar padrão</button></div>
@@ -1204,8 +1202,6 @@ window.Settings = Settings;
             </div>
             <button class="toggle-switch ${active?'on':''}" onclick="OrderPreferences.setActive(!(${active?'true':'false'}),'modules')" aria-label="${active?'Desativar':'Ativar'} modo de organização"><span></span></button>
           </div>
-          <div class="settings-inline-subtitle">Ordenação padrão</div>
-          ${summaryOrderLegend()}
           ${active?`<div class="order-active-hint">Modo de organização ativo. O padrão está alinhado em todo o Borion: mover para o início, mover para cima, mover para baixo, mover para o final e arrastar para reordenar.</div>`:''}
           <div class="order-list" data-order-list="modules">${rows}</div>
           ${active?'<p class="desc" style="margin-top:10px;">Um módulo desativado continua aqui para você reorganizar; quando reativado, ele volta na posição definida.</p>':''}
@@ -1350,7 +1346,7 @@ window.Settings = Settings;
     close(){ const p=this.prefs(true); p.enabled=false; saveCurrentData(); this.render(); },
     render(){
       let host=document.getElementById(this.hostId);
-      if(!(window.S && S.currentProfile && S.data)) { if(host) host.remove(); return; }
+      if(typeof S==='undefined' || !S.currentProfile || !S.data) { if(host) host.remove(); return; }
       const p=this.ensurePosition();
       if(!p.enabled){ if(host) host.remove(); return; }
       if(!host){ host=document.createElement('div'); host.id=this.hostId; document.body.appendChild(host); }

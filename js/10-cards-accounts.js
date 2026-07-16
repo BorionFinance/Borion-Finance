@@ -22,7 +22,7 @@ const FaturaSort = {
   /* Chave de data aproximada: mês/ano da 1ª parcela (dataCompra) + dia em que ela entra na
      fatura (diaEntrada), quando existir. É o dado mais preciso disponível por parcela. */
   sortKey(p){
-    return String(p.dataCompra||'') + '-' + String(p.diaEntrada||0).padStart(2,'0');
+    return String(p.dataCompraCompleta || ((p.dataCompra||'') + '-' + String(p.diaEntrada||1).padStart(2,'0')));
   }
 };
 window.FaturaSort = FaturaSort;
@@ -105,11 +105,13 @@ function renderCards(){
       ? `<button type="button" onclick="FaturaSort.toggle('${c.id}')" title="${faturaSortDir==='old'?'Mostrando do mais antigo ao mais recente — toque para inverter':'Mostrando do mais recente ao mais antigo — toque para inverter'}" aria-label="Inverter ordem da fatura">${faturaSortDir==='old' ? '↑' : '↓'}</button>`
       : '';
     const activeRows = active.map(p=>{
-      const paymentStatus=parcelaDespesaStatus(c.id,p,fatura.competencia);
-      const paymentPill=paymentStatus?compactPaymentPillHTML(paymentStatus):'';
-      const paymentButton=paymentStatus
-        ? compactPaymentButtonHTML(paymentStatus,`Cards.toggleParcelaPagamento('${c.id}','${p.id}','${fatura.competencia}')`,'esta despesa')
-        : '';
+      const paymentStatus=parcelaFaturaStatus(c.id,p,fatura.competencia);
+      const paymentPill=compactPaymentPillHTML(paymentStatus);
+      const paymentButton=compactPaymentButtonHTML(
+        paymentStatus,
+        `Cards.toggleParcelaPagamento('${c.id}','${p.id}','${fatura.competencia}')`,
+        p.apareceDespesas?'esta despesa':'este item da fatura'
+      );
       return `<div class="installment-row">
         <span>${esc(p.descricao)}${p.local?` <span style="color:var(--muted)">(${esc(p.local)})</span>`:''}${p.categoria?` <span class="cat-pill" style="margin-left:4px;"><span class="dot" style="background:${catColor(p.categoria)}"></span>${esc(p.categoria)}</span>`:''}${p.apareceDespesas?` <span class="cat-pill" style="opacity:.85;"><span class="dot" style="background:var(--gold-bright)"></span>Também em Despesas (${p.despesaTipo==='fixa'?'fixa':'variável'})</span>`:''}${paymentPill}</span>
         <span>${brl(p.valorParcela)}/mês</span>
@@ -282,13 +284,15 @@ const Cards = {
       {key:'categoria',label:'Categoria',type:'select',options:S.data.categorias.variavel,default:S.data.categorias.variavel[0]},
       {key:'valorParcela',label:'Valor de cada parcela (R$)',type:'money'},
       {key:'parcelaTotal',label:'Total de parcelas (1x = compra à vista neste mês)',type:'number',step:'1',default:1},
-      {key:'dataCompra',label:'Mês da compra (1ª parcela)',type:'month',default:monthKey(S.month.y,S.month.m)},
+      {key:'dataCompra',label:'Data da compra (1ª parcela)',type:'date',default:todayISO()},
       {key:'diaEntrada',label:'Dia do mês que entra na fatura',type:'number',step:'1'},
       {key:'apareceDespesas',label:'Aparecer também em Despesas?',type:'checkbox'},
       {key:'despesaTipo',label:'Aparecer como',type:'segmented',default:'variavel',options:[{value:'variavel',label:'Despesa variável'},{value:'fixa',label:'Despesa fixa'}],visibleWhen:{key:'apareceDespesas',value:true}},
     ], onSave(v){
       const c = S.data.cartoes.find(x=>x.id===cartaoId);
-      const p = {id:uid(), descricao:v.descricao, local:v.local, categoria:v.categoria||'Outro', valorParcela:Number(v.valorParcela)||0, parcelaTotal:Math.max(1,Math.round(v.parcelaTotal)||1), dataCompra:v.dataCompra||monthKey(S.month.y,S.month.m), diaEntrada:v.diaEntrada||null, apareceDespesas:!!v.apareceDespesas, despesaTipo:v.despesaTipo||'variavel', despesaTransacaoId:null, despesaTransacaoIds:[], despesaFixaId:null};
+      const dataCompraCompleta=v.dataCompra||todayISO();
+      const diaCompra=Math.max(1,Math.min(31,Number(v.diaEntrada)||parseInt(dataCompraCompleta.slice(8,10),10)||1));
+      const p = {id:uid(), descricao:v.descricao, local:v.local, categoria:v.categoria||'Outro', valorParcela:Number(v.valorParcela)||0, parcelaTotal:Math.max(1,Math.round(v.parcelaTotal)||1), dataCompra:dataCompraCompleta.slice(0,7), dataCompraCompleta, diaEntrada:diaCompra, apareceDespesas:!!v.apareceDespesas, despesaTipo:v.despesaTipo||'variavel', statusFaturaPorCompetencia:{}, despesaTransacaoId:null, despesaTransacaoIds:[], despesaFixaId:null};
       c.parcelas.push(p);
       linkParcelaToDespesa(c, p);
       saveCurrentData(); closeModal(); renderView();
@@ -305,14 +309,16 @@ const Cards = {
       {key:'categoria',label:'Categoria',type:'select',options:S.data.categorias.variavel},
       {key:'valorParcela',label:'Valor de cada parcela (R$)',type:'money'},
       {key:'parcelaTotal',label:'Total de parcelas',type:'number',step:'1'},
-      {key:'dataCompra',label:'Mês da compra (1ª parcela)',type:'month'},
+      {key:'dataCompra',label:'Data da compra (1ª parcela)',type:'date'},
       {key:'diaEntrada',label:'Dia do mês que entra na fatura',type:'number',step:'1'},
       {key:'apareceDespesas',label:'Aparecer também em Despesas?',type:'checkbox'},
       {key:'despesaTipo',label:'Aparecer como',type:'segmented',options:[{value:'variavel',label:'Despesa variável'},{value:'fixa',label:'Despesa fixa'}],visibleWhen:{key:'apareceDespesas',value:true}},
-    ], values:p,
+    ], values:Object.assign({},p,{dataCompra:p.dataCompraCompleta||(p.dataCompra?(p.dataCompra+'-'+pad2(p.diaEntrada||1)): '')}),
     onDelete(){ unlinkParcelaFromDespesa(p); c.parcelas = c.parcelas.filter(x=>x.id!==parcelaId); saveCurrentData(); closeModal(); renderView(); },
     onSave(v){
-      Object.assign(p,{descricao:v.descricao, local:v.local, categoria:v.categoria||p.categoria||'Outro', valorParcela:Number(v.valorParcela)||0, parcelaTotal:Math.max(1,Math.round(v.parcelaTotal)||1), dataCompra:v.dataCompra||p.dataCompra, diaEntrada:v.diaEntrada||null, apareceDespesas:!!v.apareceDespesas, despesaTipo:v.despesaTipo||'variavel'});
+      const dataCompraCompleta=v.dataCompra||p.dataCompraCompleta||(p.dataCompra?(p.dataCompra+'-'+pad2(p.diaEntrada||1)):'');
+      const diaCompra=Math.max(1,Math.min(31,Number(v.diaEntrada)||parseInt(dataCompraCompleta.slice(8,10),10)||p.diaEntrada||1));
+      Object.assign(p,{descricao:v.descricao, local:v.local, categoria:v.categoria||p.categoria||'Outro', valorParcela:Number(v.valorParcela)||0, parcelaTotal:Math.max(1,Math.round(v.parcelaTotal)||1), dataCompra:dataCompraCompleta.slice(0,7), dataCompraCompleta, diaEntrada:diaCompra, apareceDespesas:!!v.apareceDespesas, despesaTipo:v.despesaTipo||'variavel'});
       linkParcelaToDespesa(c, p);
       saveCurrentData(); closeModal(); renderView();
     }});
@@ -368,17 +374,27 @@ const Cards = {
       saveCurrentData(); renderView(); toast('Pagamento da fatura desfeito.');
     }});
   },
-  /* Botões compactos de cada parcela usam exatamente a mesma rotina de Lançamentos. */
+  /* Para itens integrados, mantém a rotina financeira existente. Para itens sem vínculo,
+     alterna somente o marcador visual salvo na própria parcela. */
   toggleParcelaPagamento(cartaoId,parcelaId,competencia){
     const c=(S.data.cartoes||[]).find(x=>x.id===cartaoId);
     const p=c&&(c.parcelas||[]).find(x=>x.id===parcelaId);
-    if(!c||!p||!p.apareceDespesas)return;
+    if(!c||!p)return;
+    if(!p.apareceDespesas){
+      const atual=parcelaFaturaStatusIndependente(p,competencia);
+      setParcelaFaturaStatusIndependente(p,competencia,atual==='Pago'?'Em aberto':'Pago');
+      saveCurrentData({skipPatrimonioSnapshot:true});renderView();
+      toast(atual==='Pago'?'Item marcado como em aberto somente na fatura.':'Item marcado como pago somente na fatura.');
+      return;
+    }
     if(p.despesaTipo==='fixa'){
-      const f=(S.data.fixas||[]).find(x=>x.id===p.despesaFixaId)||(S.data.fixas||[]).find(x=>x.viaCartaoId===c.id&&x.viaParcelaId===p.id);
+      let f=(S.data.fixas||[]).find(x=>x.id===p.despesaFixaId)||(S.data.fixas||[]).find(x=>x.viaCartaoId===c.id&&x.viaParcelaId===p.id);
+      if(!f){linkParcelaToDespesa(c,p);f=(S.data.fixas||[]).find(x=>x.id===p.despesaFixaId);}
       if(f)Budget.toggleFixaPago(f.id);
       return;
     }
-    const tx=linkedParcelaTransactionForCompetencia(p.id,competencia);
+    let tx=linkedParcelaTransactionForCompetencia(p.id,competencia);
+    if(!tx){linkParcelaToDespesa(c,p);tx=linkedParcelaTransactionForCompetencia(p.id,competencia);}
     if(tx)Budget.toggleVariavelPago(tx.id);
   },
   toggleBoletoPagamento(boletoId,competencia){
@@ -410,7 +426,7 @@ const Cards = {
       {key:'categoria',label:'Categoria',type:'select',options:categorias.length?categorias:['Outro'],default:b.categoria||categorias[0]||'Outro'},
       {key:'valorParcela',label:'Valor de cada boleto',type:'money'},
       {key:'parcelaTotal',label:'Quantidade de boletos',type:'number',step:'1',default:1},
-      {key:'dataInicio',label:'Mês do primeiro boleto',type:'month',default:monthKey(S.month.y,S.month.m)},
+      {key:'dataInicio',label:'Mês do primeiro boleto',type:'month',default:monthKey(todayYM().y,todayYM().m)},
       {key:'diaVencimento',label:'Dia de vencimento',type:'number',step:'1'},
       {key:'status',label:'Status',type:'select',options:['Em Aberto','Pago','Cancelado'],default:normalizedStatus},
       {key:'obs',label:'Observação',type:'text'},
@@ -542,7 +558,7 @@ const Cards = {
         <div id="tr_enviar_fields" class="payment-source-panel reserve-destination-box ${initialReserveAction==='enviar'?'':'hidden'}"><div class="field"><label>Reserva de destino</label><select id="tr_reserve_dest"></select></div></div>
       </div>
 
-      <div class="field"><label>Data</label><input type="date" id="tr_data" value="${esc((t&&t.data)||todayISO())}"/></div>
+      <div class="field"><label>Data</label><input type="date" id="tr_data" value="${esc(isEdit?(t.data||''):todayISO())}"/></div>
       <div class="field"><label id="tr_value_label">${initialReserveAction==='ajuste'&&initialSource==='reserva'?'Novo saldo da reserva (R$)':'Valor (R$)'}</label><input type="text" inputmode="numeric" class="money-input" id="tr_valor" placeholder="0,00"/></div>
       <div class="field"><label>Descrição</label><input type="text" id="tr_descricao" value="${esc((t&&t.descricao)||'')}" placeholder="Ex: transferência para pagamento, resgate ou ajuste"/></div>
       <div class="row-btns"><button class="btn btn-primary btn-block" id="tr_save">${isEdit?'Salvar transferência':'Adicionar transferência'}</button></div>
@@ -597,7 +613,7 @@ const Cards = {
     syncAccountReserveOptions();syncReserveDestinationOptions();syncSourceUI(initialSource);syncAccountDestUI(initialAccountDestType);syncReserveActionUI(initialReserveAction);
 
     $('#tr_save').onclick=()=>{
-      const source=$('#tr_source').value,data=$('#tr_data').value||todayISO(),descricao=($('#tr_descricao').value||'').trim();
+      const source=$('#tr_source').value,data=$('#tr_data').value||(isEdit?(t.data||''):todayISO()),descricao=($('#tr_descricao').value||'').trim();
       const valor=parseInt($('#tr_valor').dataset.cents||'0',10)/100;
       const adjustment=source==='reserva'&&$('#tr_reserve_action').value==='ajuste';
       if((!adjustment&&valor<=0)||(adjustment&&valor<0)){alert(adjustment?'O novo saldo não pode ser negativo.':'Digite um valor maior que zero.');return;}

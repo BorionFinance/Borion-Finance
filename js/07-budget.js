@@ -1197,11 +1197,11 @@ function openTransactionModal({type, existing}){
     <div class="field"><label>Nome</label><input type="text" id="tm_nome" value="${isEdit?esc(existing.nome):''}"/></div>
     ${categorySelectHTML('tm',type,isEdit?existing.categoria:null)}
     <div class="field"><label id="tm_valor_label">Valor (R$)</label><input type="text" inputmode="numeric" id="tm_valor" class="money-input" placeholder="0,00"/></div>
-    <div class="field"><label>Data</label><input type="date" id="tm_data" value="${isEdit?existing.data:monthKey(S.month.y,S.month.m)+'-01'}"/></div>
+    <div class="field"><label>Data</label><input type="date" id="tm_data" value="${isEdit?esc(existing.data||''):todayISO()}"/></div>
     ${receitaFieldsHTML}`:`
     <div class="field"><label>Nome</label><input type="text" id="tm_nome" value="${isEdit?esc(existing.nome):''}"/></div>
     ${isDespesaVariavel?`<div class="field"><label>Local da compra</label><input type="text" id="tm_local" value="${isEdit?esc(existing.localCompra||existing.local||''):''}" placeholder="Ex: Mercado, farmácia, loja..."/></div>`:''}
-    <div class="field"><label>Data</label><input type="date" id="tm_data" value="${isEdit?existing.data:monthKey(S.month.y,S.month.m)+'-01'}"/></div>
+    <div class="field"><label>Data</label><input type="date" id="tm_data" value="${isEdit?esc(existing.data||''):todayISO()}"/></div>
     ${categorySelectHTML('tm',type,isEdit?existing.categoria:null)}
     <div class="field"><label id="tm_valor_label">Valor (R$)</label><input type="text" inputmode="numeric" id="tm_valor" class="money-input" placeholder="0,00"/></div>
     ${variablePaymentHTML}`;
@@ -1257,7 +1257,7 @@ function openTransactionModal({type, existing}){
   if(isReceita)syncRevenueDestinationUI(initialDestino);
 
   $('#tm_save').onclick=()=>{
-    const nome=$('#tm_nome').value.trim()||'Sem nome',data=$('#tm_data').value||monthKey(S.month.y,S.month.m)+'-01',categoria=$('#tm_categoria').value;
+    const nome=$('#tm_nome').value.trim()||'Sem nome',data=$('#tm_data').value||(isEdit?(existing.data||''):todayISO()),categoria=$('#tm_categoria').value;
     if(categoria==='__new__'){alert('Confirme o nome da nova categoria antes de salvar.');return;}
     const valor=parseInt($('#tm_valor').dataset.cents||'0',10)/100;if(valor<=0){alert('Digite um valor maior que zero.');return;}
     const commitAtomic=fn=>runAtomicFinancialMutation(fn,()=>alert('Não foi possível salvar. O lançamento e o saldo anteriores foram preservados.'));
@@ -1271,7 +1271,7 @@ function openTransactionModal({type, existing}){
         const valorParcela=Math.round((valor/parcelaTotal)*100)/100,diaCompra=Math.max(1,Math.min(31,parseInt(data.slice(8,10),10)||1));
         if(!commitAtomic(()=>{
           if(isEdit){reverseTxSaldoEffect(existing);removeLinkedReservaMoveFromTransaction(existing);removeLinkedReservaWithdrawalFromDespesa(existing);S.data.transacoes=S.data.transacoes.filter(x=>x.id!==existing.id);}
-          const p={id:uid(),descricao:nome,local:localCompra,categoria:categoria||'Outro',valorParcela,parcelaTotal,dataCompra:data.slice(0,7),dataCompraCompleta:data,diaEntrada:diaCompra,apareceDespesas:true,despesaTipo:'variavel',statusPagamento:status,despesaTransacaoId:null,despesaTransacaoIds:[],despesaFixaId:null};
+          const p={id:uid(),descricao:nome,local:localCompra,categoria:categoria||'Outro',valorParcela,parcelaTotal,dataCompra:data.slice(0,7),dataCompraCompleta:data,diaEntrada:diaCompra,apareceDespesas:true,despesaTipo:'variavel',statusPagamento:status,statusFaturaPorCompetencia:{},despesaTransacaoId:null,despesaTransacaoIds:[],despesaFixaId:null};
           cartao.parcelas.push(p);linkParcelaToDespesa(cartao,p);
           if(importedSource&&window.BorionInterop)BorionInterop.transferImportReference(existing,p.despesaTransacaoIds||[],S.data);
         }))return;
@@ -1341,6 +1341,9 @@ function openTransactionModal({type, existing}){
 function openFixaModal(existing){
   const isEdit=!!existing;
   const monthKeyNow=monthKey(S.month.y,S.month.m);
+  const fixedDateInitial=isEdit
+    ? (existing.dataCadastro||((existing.startMonth||monthKeyNow)+'-'+pad2(existing.dia||1)))
+    : todayISO();
   const carteira=getCarteiraConta();
   const reservaBoxesFixa=reservaBoxesForLancamento();
   const currentRec=isEdit?fixaOcorrenciaFor(existing.id,monthKeyNow):null;
@@ -1392,12 +1395,12 @@ function openFixaModal(existing){
 
   const box=el(`<div class="modal-overlay"><div class="modal-box">
     <div class="modal-head"><h2>${isEdit?'Editar':'Adicionar'} despesa fixa</h2><button id="fm_close">&times;</button></div>
-    <p class="modal-sub">${isEdit?'Alterações se aplicam a partir de '+monthLabel(S.month.y,S.month.m)+'; meses anteriores mantêm o histórico.':'Essa despesa se repete mensalmente a partir de '+monthLabel(S.month.y,S.month.m)+'. O status Pago/Em aberto abaixo vale apenas para o mês selecionado.'}</p>
+    <p class="modal-sub">${isEdit?'Alterações se aplicam a partir de '+monthLabel(S.month.y,S.month.m)+'; meses anteriores mantêm o histórico.':'Essa despesa se repete mensalmente a partir da data informada. O status Pago/Em aberto abaixo vale para o primeiro mês.'}</p>
     <div class="field"><label>Nome</label><input type="text" id="fm_nome" value="${isEdit?esc(existing.nome):''}"/></div>
     <div class="field"><label>Local da compra</label><input type="text" id="fm_local" value="${isEdit?esc(existing.localCompra||existing.local||''):''}" placeholder="Ex: Academia, aluguel, operadora..."/></div>
     ${categorySelectHTML('fm','fixa',isEdit?existing.categoria:null)}
     <div class="field"><label id="fm_valor_label">Valor mensal (R$)</label><input type="text" inputmode="numeric" id="fm_valor" class="money-input" placeholder="0,00"/></div>
-    <div class="field"><label>Dia do vencimento</label><input type="number" id="fm_dia" min="1" max="31" value="${isEdit?(existing.dia||1):1}"/></div>
+    <div class="field"><label>Data do primeiro vencimento</label><input type="date" id="fm_data" value="${esc(fixedDateInitial)}"/></div>
     ${paymentHTML}
     <div class="row-btns"><button class="btn btn-primary btn-block" id="fm_save">${isEdit?'Salvar':'Adicionar'}</button></div>
     ${isEdit?'<div class="row-btns" style="margin-top:8px;"><button class="btn btn-danger btn-block" id="fm_delete">Remover a partir deste mês</button></div>':''}
@@ -1438,7 +1441,9 @@ function openFixaModal(existing){
     if(categoria==='__new__'){alert('Confirme o nome da nova categoria antes de salvar.');return;}
     const valor=parseInt($('#fm_valor').dataset.cents||'0',10)/100;
     if(valor<=0){alert('Digite um valor maior que zero.');return;}
-    const dia=Math.min(31,Math.max(1,parseInt($('#fm_dia').value,10)||1));
+    const dataCadastro=$('#fm_data').value||fixedDateInitial||todayISO();
+    const dia=Math.min(31,Math.max(1,parseInt(dataCadastro.slice(8,10),10)||1));
+    const newStartMonth=dataCadastro.slice(0,7)||monthKey(todayYM().y,todayYM().m);
     const source=$('#fm_pagamento_origem').value;
     const requestedStatus=$('#fm_status').value==='Pago'?'Pago':'Em aberto';
     const inPlace=isEdit&&existing.startMonth===monthKeyNow;
@@ -1453,7 +1458,7 @@ function openFixaModal(existing){
           refundAndCleanFixaOcorrencias(existing.id,inPlace?null:monthKeyNow);
           if(inPlace)S.data.fixas=S.data.fixas.filter(x=>x.id!==existing.id);else existing.endMonth=monthBeforeKey(monthKeyNow);
         }
-        const p={id:uid(),descricao:nome,local:localCompra,categoria:categoria||'Outro',valorParcela,parcelaTotal,dataCompra:monthKeyNow,diaEntrada:dia,apareceDespesas:true,despesaTipo:'fixa',statusPagamento:requestedStatus,despesaTransacaoId:null,despesaTransacaoIds:[],despesaFixaId:null};
+        const p={id:uid(),descricao:nome,local:localCompra,categoria:categoria||'Outro',valorParcela,parcelaTotal,dataCompra:newStartMonth,dataCompraCompleta:dataCadastro,diaEntrada:dia,apareceDespesas:true,despesaTipo:'fixa',statusPagamento:requestedStatus,statusFaturaPorCompetencia:{},despesaTransacaoId:null,despesaTransacaoIds:[],despesaFixaId:null};
         cartao.parcelas.push(p);linkParcelaToDespesa(cartao,p);
       },()=>alert('Não foi possível salvar a compra no cartão. Os dados anteriores foram preservados.'));
       if(!ok)return;
@@ -1487,7 +1492,7 @@ function openFixaModal(existing){
     let target=null;
     const ok=runAtomicFinancialMutation(()=>{
       if(isEdit&&requestedStatus==='Em aberto'&&currentRec&&currentRec.pago)undoFixaOcorrencia(existing,monthKeyNow,{persist:false,notify:false});
-      const payload={nome,localCompra,categoria,valor,dia,accountId:origemPagamento==='conta'?accountId:null,banco,formaPagamento:origemPagamento==='conta'?formaPagamento:null,origemPagamento,reservaOrigemId:origemPagamento==='reserva'?reservaBox.id:null};
+      const payload={nome,localCompra,categoria,valor,dia,dataCadastro,accountId:origemPagamento==='conta'?accountId:null,banco,formaPagamento:origemPagamento==='conta'?formaPagamento:null,origemPagamento,reservaOrigemId:origemPagamento==='reserva'?reservaBox.id:null};
       if(isEdit){
         const targetId=inPlace?existing.id:uid();
         if(inPlace){Object.assign(existing,payload);target=existing;}
@@ -1497,8 +1502,8 @@ function openFixaModal(existing){
           else if(!fixaOcorrenciaFor(targetId,monthKeyNow)&&!payFixaOcorrencia(target,monthKeyNow,{persist:false,notify:false}))throw new Error('Falha ao aplicar pagamento da despesa fixa.');
         }
       }else{
-        target=Object.assign({id:uid(),startMonth:monthKeyNow,endMonth:null},payload);S.data.fixas.push(target);
-        if(requestedStatus==='Pago'&&!payFixaOcorrencia(target,monthKeyNow,{persist:false,notify:false}))throw new Error('Falha ao aplicar pagamento da despesa fixa.');
+        target=Object.assign({id:uid(),startMonth:newStartMonth,endMonth:null},payload);S.data.fixas.push(target);
+        if(requestedStatus==='Pago'&&!payFixaOcorrencia(target,newStartMonth,{persist:false,notify:false}))throw new Error('Falha ao aplicar pagamento da despesa fixa.');
       }
     },()=>alert('Não foi possível salvar. A despesa fixa e os saldos anteriores foram preservados.'));
     if(!ok)return;

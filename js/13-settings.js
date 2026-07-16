@@ -34,8 +34,8 @@ function renderSettings(){
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
   else if(S.settingsTab==='integrations') content = window.BorionInterop ? BorionInterop.renderSettings() : '<div class="settings-section">Integração indisponível.</div>'; // protected interop seam
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.33.2 • Correção das Anotações</div><footer class="app-release-footer" aria-label="Informações do Borion">
-<div><strong>Versão:</strong> 6.33.2</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.33.4 • Data Atual e Status de Fatura</div><footer class="app-release-footer" aria-label="Informações do Borion">
+<div><strong>Versão:</strong> 6.33.4</div>
 <div><strong>Lançamento:</strong> 15/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -995,7 +995,7 @@ window.Settings = Settings;
 /* ================= V6.33.1 — refinamento extra de Configurações, padronização de ordenação
    e bloco flutuante de Anotações persistente entre abas ================= */
 (function(){
-  const SETTINGS_VERSION = '6.33.3';
+  const SETTINGS_VERSION = '6.33.4';
 
   function floatingNotesPrefs(create=false){
     const fallback={enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};

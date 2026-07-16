@@ -33,9 +33,21 @@ function attachModalGuard(overlay){
   });
 })();
 
+function modalFieldInitialValue(field, values={}){
+  const f=field||{};
+  const hasSavedValue=Object.prototype.hasOwnProperty.call(values||{},f.key);
+  if(hasSavedValue) return values[f.key]==null?'':values[f.key];
+  const hasExplicitDefault=Object.prototype.hasOwnProperty.call(f,'default');
+  if(hasExplicitDefault) return f.default==null?'':f.default;
+  /* V6.33.4 — todo campo de data/mês de um cadastro novo nasce com a data local do
+     dispositivo. Edições continuam usando o valor salvo, inclusive quando ele está vazio. */
+  if(f.type==='date') return todayISO();
+  if(f.type==='month'){ const now=todayYM(); return monthKey(now.y,now.m); }
+  return '';
+}
 function openModal({title, sub, fields, values={}, saveLabel, onSave, onDelete, deleteLabel, extraHTML}){
   const moneyFields=[];
-  function fieldInitialVal(f){ return values[f.key]!=null ? values[f.key] : (f.default!=null?f.default:''); }
+  const fieldInitialVal=f=>modalFieldInitialValue(f,values);
   const body = fields.map(f=>{
     const val = fieldInitialVal(f);
     let fieldHtml;

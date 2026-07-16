@@ -143,7 +143,7 @@ function assinaturaEnsureCreditPurchase(rec){
     return false;
   }
   const valor=Math.round((Number(rec.valor)||0)*100)/100;
-  const p={id:uid(),descricao:rec.nome||'Assinatura',local:rec.local||'',categoria:rec.categoria||'Outro',valorParcela:valor,parcelaTotal:1,dataCompra:rec.period,diaEntrada:Number(String(rec.dueDate||'').slice(8,10))||1,apareceDespesas:true,despesaTipo:'variavel',statusPagamento:'Pago',despesaTransacaoId:null,despesaTransacaoIds:[],despesaFixaId:null,viaAssinaturaId:rec.assinaturaId,assinaturaCobrancaId:rec.id};
+  const p={id:uid(),descricao:rec.nome||'Assinatura',local:rec.local||'',categoria:rec.categoria||'Outro',valorParcela:valor,parcelaTotal:1,dataCompra:rec.period,dataCompraCompleta:rec.dueDate||rec.data||rec.period+'-01',diaEntrada:Number(String(rec.dueDate||'').slice(8,10))||1,apareceDespesas:true,despesaTipo:'variavel',statusPagamento:'Pago',statusFaturaPorCompetencia:{},despesaTransacaoId:null,despesaTransacaoIds:[],despesaFixaId:null,viaAssinaturaId:rec.assinaturaId,assinaturaCobrancaId:rec.id};
   if(!Array.isArray(card.parcelas))card.parcelas=[];
   card.parcelas.push(p);linkParcelaToDespesa(card,p);
   rec.cartaoId=card.id;rec.parcelaId=p.id;rec.transacaoId=p.despesaTransacaoId;rec.status='cobrada';rec.processedAt=Date.now();rec.lastError='';
@@ -279,6 +279,7 @@ const Assinaturas={
       {key:'tipo',label:'Mensal / Anual',type:'segmented',options:[{value:'mensal',label:'Mensal'},{value:'anual',label:'Anual'}],default:currentRule.tipo||'mensal'},
       {key:'nome',label:'Nome',type:'text',default:currentRule.nome||''},
       {key:'local',label:'Local',type:'text',default:currentRule.local||'',placeholder:'Ex: Netflix, academia, aplicativo'},
+      {key:'dataInicio',label:'Data de início',type:'date',default:isEdit?(currentRule.dataInicio||existing.dataInicio||(existing.createdKey?(existing.createdKey+'-'+pad2(currentRule.diaVencimento||existing.diaVencimento||1)) : '')):todayISO()},
       {key:'categoriaEscolhida',label:'Categoria',type:'select',options:categoryOpts,default:categoryOpts.some(o=>o.value===currentCategoryValue)?currentCategoryValue:categoryOpts[0].value},
       {key:'valorMensal',label:'Valor mensal',type:'money',default:currentRule.tipo==='mensal'?currentRule.valor:0,visibleWhen:{key:'tipo',value:'mensal'}},
       {key:'valorAnual',label:'Valor anual',type:'money',default:currentRule.tipo==='anual'?currentRule.valor:0,visibleWhen:{key:'tipo',value:'anual'}},
@@ -308,14 +309,16 @@ const Assinaturas={
       const separator=categoryRaw.indexOf('::');
       const categoriaTipo=separator>=0&&categoryRaw.slice(0,separator)==='fixa'?'fixa':'variavel';
       const categoria=separator>=0?categoryRaw.slice(separator+2):categoryRaw;
-      const payload={nome,local:(v.local||'').trim(),categoria:categoria||'Outro',categoriaTipo,tipo,valor,diaVencimento:Math.min(31,Math.max(1,parseInt(v.dia,10)||1)),mesVencimento:tipo==='anual'?Math.max(0,MONTHS.indexOf(v.mes)):null,origemPagamento:origem,formaPagamento,accountId,banco,cartaoId:card?card.id:null,reservaId:reserva?reserva.id:null};
+      const dataInicio=v.dataInicio||todayISO();
+      const payload={nome,local:(v.local||'').trim(),dataInicio,categoria:categoria||'Outro',categoriaTipo,tipo,valor,diaVencimento:Math.min(31,Math.max(1,parseInt(v.dia,10)||1)),mesVencimento:tipo==='anual'?Math.max(0,MONTHS.indexOf(v.mes)):null,origemPagamento:origem,formaPagamento,accountId,banco,cartaoId:card?card.id:null,reservaId:reserva?reserva.id:null};
       if(isEdit){
         const version=Object.assign({id:uid(),effectiveFrom:currentKey,createdAt:Date.now()},payload);
         existing.versions=(existing.versions||[]).filter(x=>x.effectiveFrom!==currentKey);existing.versions.push(version);existing.versions.sort((a,b)=>a.effectiveFrom.localeCompare(b.effectiveFrom));Object.assign(existing,payload);
         const pending=assinaturaCobrancaFor(existing.id,currentKey);if(pending&&['prevista','vencida','falhou','pausada'].includes(pending.status)){assinaturaRemovePendingMaterialization(pending);Object.assign(pending,assinaturaRuleSnapshot(version),{snapshot:assinaturaRuleSnapshot(version),dueDate:assinaturaDataVencimento(version,currentKey),data:assinaturaDataVencimento(version,currentKey),status:'prevista',lastError:''});}
         toast('Nova versão criada. O passado consolidado foi preservado.');
       }else{
-        const a=Object.assign({id:uid(),status:'ativa',createdKey:currentKey,createdAt:Date.now(),versions:[],activityPeriods:[{from:currentKey,to:null}],pauseHistory:[]},payload);a.versions=[Object.assign({id:uid(),effectiveFrom:currentKey,createdAt:Date.now()},payload)];S.data.assinaturas.push(a);toast('Assinatura criada.');
+        const startKey=dataInicio.slice(0,7)||monthKey(todayYM().y,todayYM().m);
+        const a=Object.assign({id:uid(),status:'ativa',createdKey:startKey,createdAt:Date.now(),versions:[],activityPeriods:[{from:startKey,to:null}],pauseHistory:[]},payload);a.versions=[Object.assign({id:uid(),effectiveFrom:startKey,createdAt:Date.now()},payload)];S.data.assinaturas.push(a);toast('Assinatura criada.');
       }
       saveCurrentData();this.sync();closeModal();renderView();
     }});

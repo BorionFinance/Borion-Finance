@@ -151,7 +151,29 @@ function parcelaDespesaStatus(cartaoId, parcela, competencia){
   if(parcelaCompetenciaPaga(cartaoId,parcela,competencia)) return 'Pago';
   if(parcela.despesaTipo==='fixa') return 'Em aberto';
   const tx=linkedParcelaTransactionForCompetencia(parcela.id,competencia);
-  return tx?linkedVariableStatus(tx):null;
+  return tx?linkedVariableStatus(tx):'Em aberto';
+}
+/* V6.33.4 — itens de fatura sem espelho em Despesas têm um status mensal próprio.
+   Ele é apenas informativo: nunca cria transação, nunca altera saldo e nunca participa
+   de relatórios. O mapa por competência evita que marcar julho altere agosto. */
+function parcelaFaturaStatusIndependente(parcela, competencia){
+  if(!parcela) return 'Em aberto';
+  const map=parcela.statusFaturaPorCompetencia;
+  const raw=map&&typeof map==='object'&&!Array.isArray(map)?map[competencia]:null;
+  return raw==='Pago'||raw==='pago'||raw===true?'Pago':'Em aberto';
+}
+function parcelaFaturaStatus(cartaoId, parcela, competencia){
+  if(!parcela) return 'Em aberto';
+  return parcela.apareceDespesas
+    ? (parcelaDespesaStatus(cartaoId,parcela,competencia)||'Em aberto')
+    : parcelaFaturaStatusIndependente(parcela,competencia);
+}
+function setParcelaFaturaStatusIndependente(parcela, competencia, status){
+  if(!parcela||!competencia) return false;
+  if(!parcela.statusFaturaPorCompetencia||typeof parcela.statusFaturaPorCompetencia!=='object'||Array.isArray(parcela.statusFaturaPorCompetencia))
+    parcela.statusFaturaPorCompetencia={};
+  parcela.statusFaturaPorCompetencia[competencia]=status==='Pago'?'Pago':'Em aberto';
+  return true;
 }
 function boletoDespesaStatus(boleto, competencia){
   if(!boleto||!boleto.apareceDespesas) return null;

@@ -572,6 +572,18 @@ function migrateData(d){
       if(p.despesaTransacaoId===undefined) p.despesaTransacaoId=null;
       if(p.despesaTransacaoIds===undefined) p.despesaTransacaoIds=[];
       if(p.despesaFixaId===undefined) p.despesaFixaId=null;
+      /* V6.33.4 — preserva a data original aproximada de registros antigos e cria o
+         armazenamento independente do status da fatura sem gerar qualquer despesa. */
+      if(!p.dataCompraCompleta && /^\d{4}-(0[1-9]|1[0-2])$/.test(String(p.dataCompra||'')))
+        p.dataCompraCompleta=p.dataCompra+'-'+pad2(Math.max(1,Math.min(31,Number(p.diaEntrada)||1)));
+      if(!p.statusFaturaPorCompetencia||typeof p.statusFaturaPorCompetencia!=='object'||Array.isArray(p.statusFaturaPorCompetencia))
+        p.statusFaturaPorCompetencia={};
+      const _legacyFaturaStatus=p.statusFatura!==undefined?p.statusFatura:p.pagoNaFatura;
+      if(_legacyFaturaStatus!==undefined){
+        const _comp=String(p.dataCompra||'');
+        if(/^\d{4}-(0[1-9]|1[0-2])$/.test(_comp)&&p.statusFaturaPorCompetencia[_comp]===undefined)
+          p.statusFaturaPorCompetencia[_comp]=(_legacyFaturaStatus==='Pago'||_legacyFaturaStatus==='pago'||_legacyFaturaStatus===true)?'Pago':'Em aberto';
+      }
       /* V6.27.1 — baixa mensal individual de compras fixas no cartão. Dados da V6.27.0
          que usavam status global Pago são convertidos somente para o mês da primeira parcela. */
       if(!Array.isArray(p.pagamentosIndividuais)) p.pagamentosIndividuais=[];
@@ -1005,7 +1017,7 @@ function toggleValuesHidden(){
 
 function saveCurrentData(options={}){
   if(S.currentProfile && S.data){
-    recordPatrimonioSnapshot();
+    if(!options.skipPatrimonioSnapshot) recordPatrimonioSnapshot();
     setProfileData(S.currentProfile.id, S.data);
     // V5.34.3 — isolamento entre perfis: o profileId é passado explicitamente
     // (o mesmo que acabou de receber os dados em setProfileData acima), em vez

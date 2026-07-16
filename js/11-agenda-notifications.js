@@ -133,7 +133,7 @@ const Agenda = {
     ensureAgendaViewState();
     openModal({title:'Novo lembrete', sub:'Ex: contas, assinaturas, parcelas com vencimento. Para replicar o mesmo lembrete nos próximos meses, informe quantos meses abaixo (0 = não replicar).', fields:[
       {key:'titulo', label:'Título', type:'text'},
-      {key:'data', label:'Data', type:'date', default: dateStr || (monthKey(S.agendaView.y,S.agendaView.m)+'-01')},
+      {key:'data', label:'Data', type:'date', default: dateStr || todayISO()},
       {key:'mesesReplicar', label:'Quantidade de meses para replicar', type:'number', step:'1', default:0},
     ], onSave(v){
       const qtd = Math.max(0, Math.min(60, Math.round(Number(v.mesesReplicar)||0)));
@@ -153,7 +153,7 @@ const Agenda = {
       {key:'data', label:'Data', type:'date'},
       {key:'mesesReplicar', label:'Quantidade de meses para replicar', type:'number', step:'1', default: agendaFutureCount(a)},
       {key:'pago', label:'Já paga / concluída', type:'checkbox'},
-    ], values:a,
+    ], values:Object.assign({},a,{data:a.data||''}),
     extraHTML:`<div class="agenda-delete-options"><div class="modal-sub" style="margin:4px 0 8px;">Excluir lembrete</div><div class="row-btns"><button class="btn btn-danger btn-block" id="ag_del_one" type="button">Excluir apenas este</button></div>${futureInfo}</div>`,
     onSave(v){
       const wasPago = a.pago;

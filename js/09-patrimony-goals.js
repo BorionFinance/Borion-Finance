@@ -629,7 +629,7 @@ const Reservas = {
     openModal({title:'Editar transferência entre reservas',sub:'A saída e a entrada serão atualizadas juntas para manter os dois saldos sincronizados.',fields:[
       {key:'origemBoxId',label:'Reserva de origem',type:'select',options,default:out.boxId},
       {key:'destinoBoxId',label:'Reserva de destino',type:'select',options,default:inn.boxId},
-      {key:'data',label:'Data',type:'date',default:out.data||todayISO()},
+      {key:'data',label:'Data',type:'date',default:out.data||''},
       {key:'valor',label:'Valor',type:'money',default:out.valor},
       {key:'descricao',label:'Descrição',type:'text',default:out.descricao||''}
     ],saveLabel:'Salvar transferência',onSave(v){
@@ -646,8 +646,9 @@ const Reservas = {
         Reservas.applyMoveEffect(out);Reservas.applyMoveEffect(inn);
         showReservaInsuficienteModal(origem,valor);return;
       }
-      Object.assign(out,{boxId:origem.id,tipo:'Envio para outra reserva',data:v.data||todayISO(),valor,banco:origem.banco||'',descricao:v.descricao||'',origemBoxId:origem.id,destinoBoxId:destino.id,editedAt:Date.now()});
-      Object.assign(inn,{boxId:destino.id,tipo:'Recebimento de outra reserva',data:v.data||todayISO(),valor,banco:destino.banco||'',descricao:v.descricao||'',origemBoxId:origem.id,destinoBoxId:destino.id,editedAt:Date.now()});
+      const dataEditada=v.data||out.data||inn.data||'';
+      Object.assign(out,{boxId:origem.id,tipo:'Envio para outra reserva',data:dataEditada,valor,banco:origem.banco||'',descricao:v.descricao||'',origemBoxId:origem.id,destinoBoxId:destino.id,editedAt:Date.now()});
+      Object.assign(inn,{boxId:destino.id,tipo:'Recebimento de outra reserva',data:dataEditada,valor,banco:destino.banco||'',descricao:v.descricao||'',origemBoxId:origem.id,destinoBoxId:destino.id,editedAt:Date.now()});
       Reservas.applyMoveEffect(out);Reservas.applyMoveEffect(inn);saveCurrentData();closeModal();renderView();toast('Transferência atualizada.');
     }});
   },
@@ -682,7 +683,7 @@ const Reservas = {
       {key:'data',label:'Data',type:'date'},
       {key:'valor',label:'Valor',type:'money'},
       {key:'descricao',label:'Descrição',type:'text'},
-    ], values:Object.assign({}, mv, {boxLabel:curLabel}),
+    ], values:Object.assign({}, mv, {boxLabel:curLabel,data:mv.data||''}),
     extraHTML:`<div class="row-btns" style="margin-top:8px;"><button class="btn btn-danger-solid btn-block" id="mv_del_btn" type="button">Excluir movimentação</button></div>`,
     onSave(v){
       const valor = Number(v.valor)||0;
@@ -695,7 +696,7 @@ const Reservas = {
         showReservaInsuficienteModal(bx, valor);
         return;
       }
-      Object.assign(mv,{boxId:bx.id, tipo:v.tipo, data:v.data||todayISO(), valor, banco:bx.banco||'', descricao:v.descricao||'', editedAt:Date.now()});
+      Object.assign(mv,{boxId:bx.id, tipo:v.tipo, data:v.data||mv.data||'', valor, banco:bx.banco||'', descricao:v.descricao||'', editedAt:Date.now()});
       Reservas.applyMoveEffect(mv);
       saveCurrentData(); closeModal(); renderView(); toast('Movimentação atualizada.');
     }});

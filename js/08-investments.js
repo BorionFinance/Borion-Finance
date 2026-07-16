@@ -52,25 +52,26 @@ function renderInvestments(){
 const Invest = {
   setMercado(m){ S.invMercado=m; renderView(); },
   addCaixa(){
-    openModal({title:'Adicionar em caixa', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor (R$)',type:'money'},bankSelectField(null,'',{key:'accountId'})],
-      onSave(v){ S.data.investimentos.emCaixa.push({id:uid(),nome:v.nome,valor:Number(v.valor)||0,accountId:v.accountId||null,banco:accountNameSnapshot(v.accountId)}); saveCurrentData(); closeModal(); renderView(); }});
+    openModal({title:'Adicionar em caixa', fields:[{key:'nome',label:'Nome',type:'text'},{key:'data',label:'Data',type:'date',default:todayISO()},{key:'valor',label:'Valor (R$)',type:'money'},bankSelectField(null,'',{key:'accountId'})],
+      onSave(v){ S.data.investimentos.emCaixa.push({id:uid(),nome:v.nome,data:v.data||todayISO(),valor:Number(v.valor)||0,accountId:v.accountId||null,banco:accountNameSnapshot(v.accountId)}); saveCurrentData(); closeModal(); renderView(); }});
   },
   editCaixa(id){
     const c = S.data.investimentos.emCaixa.find(x=>x.id===id);
-    openModal({title:'Editar item', fields:[{key:'nome',label:'Nome',type:'text'},{key:'valor',label:'Valor (R$)',type:'money'},bankSelectField(null,c.accountId||c.banco,{key:'accountId'})], values:c,
+    openModal({title:'Editar item', fields:[{key:'nome',label:'Nome',type:'text'},{key:'data',label:'Data',type:'date'},{key:'valor',label:'Valor (R$)',type:'money'},bankSelectField(null,c.accountId||c.banco,{key:'accountId'})], values:Object.assign({},c,{data:c.data||''}),
       onDelete(){ S.data.investimentos.emCaixa = S.data.investimentos.emCaixa.filter(x=>x.id!==id); saveCurrentData(); closeModal(); renderView(); },
-      onSave(v){ Object.assign(c,{nome:v.nome,valor:Number(v.valor)||0,accountId:v.accountId||null,banco:accountNameSnapshot(v.accountId)}); saveCurrentData(); closeModal(); renderView(); }});
+      onSave(v){ Object.assign(c,{nome:v.nome,data:v.data||'',valor:Number(v.valor)||0,accountId:v.accountId||null,banco:accountNameSnapshot(v.accountId)}); saveCurrentData(); closeModal(); renderView(); }});
   },
   addAtivo(){
     openModal({title:'Adicionar ativo', fields:[
       {key:'nome',label:'Nome do ativo',type:'text'},
       {key:'local',label:'Onde está investido (ex: corretora)',type:'text'},
+      {key:'data',label:'Data',type:'date',default:todayISO()},
       {key:'mercado',label:'Mercado',type:'select',options:['BR','US'],default:S.invMercado},
       {key:'investido',label:'Valor investido (R$)',type:'money'},
       {key:'atual',label:'Valor atual (R$)',type:'money'},
       bankSelectField(null,'',{key:'accountId'}),
     ], onSave(v){
-      S.data.investimentos.ativos.push({id:uid(),nome:v.nome,local:v.local,mercado:v.mercado,investido:Number(v.investido)||0,atual:Number(v.atual)||0,accountId:v.accountId||null,banco:accountNameSnapshot(v.accountId)});
+      S.data.investimentos.ativos.push({id:uid(),nome:v.nome,local:v.local,data:v.data||todayISO(),mercado:v.mercado,investido:Number(v.investido)||0,atual:Number(v.atual)||0,accountId:v.accountId||null,banco:accountNameSnapshot(v.accountId)});
       saveCurrentData(); closeModal(); renderView();
     }});
   },
@@ -79,12 +80,13 @@ const Invest = {
     openModal({title:'Editar ativo', fields:[
       {key:'nome',label:'Nome do ativo',type:'text'},
       {key:'local',label:'Onde está investido',type:'text'},
+      {key:'data',label:'Data',type:'date'},
       {key:'mercado',label:'Mercado',type:'select',options:['BR','US']},
       {key:'investido',label:'Valor investido (R$)',type:'money'},
       {key:'atual',label:'Valor atual (R$)',type:'money'},
       bankSelectField(null,a.accountId||a.banco,{key:'accountId'}),
-    ], values:a,
+    ], values:Object.assign({},a,{data:a.data||''}),
     onDelete(){ S.data.investimentos.ativos = S.data.investimentos.ativos.filter(x=>x.id!==id); saveCurrentData(); closeModal(); renderView(); },
-    onSave(v){ Object.assign(a,{nome:v.nome,local:v.local,mercado:v.mercado,investido:Number(v.investido)||0,atual:Number(v.atual)||0,accountId:v.accountId||null,banco:accountNameSnapshot(v.accountId)}); saveCurrentData(); closeModal(); renderView(); }});
+    onSave(v){ Object.assign(a,{nome:v.nome,local:v.local,data:v.data||'',mercado:v.mercado,investido:Number(v.investido)||0,atual:Number(v.atual)||0,accountId:v.accountId||null,banco:accountNameSnapshot(v.accountId)}); saveCurrentData(); closeModal(); renderView(); }});
   }
 };

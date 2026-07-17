@@ -2702,3 +2702,106 @@ html[data-theme="light"] .reserve-yield-error{color:#9b2525;background:rgba(239,
   .reserve-yield-last-grid,.reserve-yield-actions{grid-template-columns:1fr;}
   .reserve-yield-modal{padding:17px 15px 15px;}
 }
+
+
+/* V6.34.1 — correção do estouro de layout nos formulários de Receita/Despesa no mobile */
+.transaction-modal-overlay,
+.transaction-modal{
+  min-width:0;
+  max-width:100%;
+}
+.transaction-modal{
+  overflow-x:hidden;
+  overscroll-behavior-x:none;
+}
+.transaction-modal > *,
+.transaction-modal .field,
+.transaction-modal .mf-conditional,
+.transaction-modal .payment-source-panel,
+.transaction-modal .segmented-toggle{
+  min-width:0;
+  max-width:100%;
+}
+.transaction-modal input,
+.transaction-modal select,
+.transaction-modal textarea,
+.transaction-modal button{
+  min-width:0;
+  max-width:100%;
+}
+.transaction-modal input,
+.transaction-modal select,
+.transaction-modal textarea{
+  width:100%;
+}
+.transaction-modal .segmented-toggle{
+  width:100%;
+}
+.transaction-modal .segmented-toggle .seg-btn{
+  min-width:0;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  word-break:normal;
+  line-height:1.2;
+}
+
+html[data-interface-mode="smartphone"],
+html[data-interface-mode="smartphone"] body,
+html[data-interface-mode="smartphone"] #root,
+html[data-interface-mode="smartphone"] #modal-root{
+  width:100%;
+  max-width:100%;
+  overflow-x:hidden;
+}
+html[data-interface-mode="smartphone"].modal-open,
+html[data-interface-mode="smartphone"].modal-open body{
+  overflow:hidden!important;
+  overscroll-behavior:none;
+}
+html[data-interface-mode="smartphone"] .transaction-modal-overlay{
+  width:100vw;
+  max-width:100vw;
+  overflow:hidden;
+  padding-left:0!important;
+  padding-right:0!important;
+}
+html[data-interface-mode="smartphone"] .transaction-modal.mobile-bottom-sheet{
+  box-sizing:border-box;
+  width:100vw!important;
+  min-width:0!important;
+  max-width:100vw!important;
+  max-height:calc(var(--borion-vh) - max(8px, env(safe-area-inset-top)))!important;
+  overflow-x:hidden!important;
+  overflow-y:auto!important;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
+  touch-action:pan-y;
+  padding-left:max(14px, env(safe-area-inset-left))!important;
+  padding-right:max(14px, env(safe-area-inset-right))!important;
+}
+html[data-interface-mode="smartphone"] .transaction-modal .payment-source-toggle,
+html[data-interface-mode="smartphone"] .transaction-modal .revenue-origin-toggle,
+html[data-interface-mode="smartphone"] .transaction-modal .revenue-destination-toggle{
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+}
+html[data-interface-mode="smartphone"] .transaction-modal .seg-btn-wide{
+  grid-column:1/-1;
+}
+html[data-interface-mode="smartphone"] .transaction-modal .modal-head{
+  min-width:0;
+}
+html[data-interface-mode="smartphone"] .transaction-modal .modal-head h2{
+  min-width:0;
+  overflow-wrap:anywhere;
+}
+@media(max-width:360px){
+  html[data-interface-mode="smartphone"] .transaction-modal.mobile-bottom-sheet{
+    padding-left:12px!important;
+    padding-right:12px!important;
+  }
+  html[data-interface-mode="smartphone"] .transaction-modal .segmented-toggle .seg-btn{
+    padding-left:6px;
+    padding-right:6px;
+    font-size:11.5px;
+  }
+}

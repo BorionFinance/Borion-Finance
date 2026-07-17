@@ -1206,7 +1206,7 @@ function openTransactionModal({type, existing}){
     <div class="field"><label id="tm_valor_label">Valor (R$)</label><input type="text" inputmode="numeric" id="tm_valor" class="money-input" placeholder="0,00"/></div>
     ${variablePaymentHTML}`;
 
-  const box=el(`<div class="modal-overlay"><div class="modal-box">
+  const box=el(`<div class="modal-overlay transaction-modal-overlay"><div class="modal-box transaction-modal">
     <div class="modal-head"><h2>${modalTitle}</h2><button id="tm_close">&times;</button></div>
     ${importedNotice}
     ${fieldsHTML}

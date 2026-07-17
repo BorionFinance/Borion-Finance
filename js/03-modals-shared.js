@@ -1,10 +1,15 @@
 /* Borion Finance — Sistema de modais, formulário genérico e criação rápida de categorias. */
 
 /* ---------------- Modal system (generic CRUD forms) ---------------- */
-function closeModal(){ $('#modal-root').innerHTML=''; }
+function closeModal(){
+  const root=$('#modal-root');
+  if(root) root.innerHTML='';
+  document.documentElement.classList.remove('modal-open');
+}
 
 function attachModalGuard(overlay){
   if(!overlay) return;
+  document.documentElement.classList.add('modal-open');
   overlay.addEventListener('click', e=>{
     if(e.target===overlay){
       e.preventDefault();

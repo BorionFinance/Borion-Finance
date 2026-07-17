@@ -1393,7 +1393,7 @@ function openFixaModal(existing){
     </div><input type="hidden" id="fm_status" value="${initialStatus}"/>
     <p class="modal-sub" style="margin:4px 0 0;">Em aberto cadastra a despesa sem retirar dinheiro. Pago aplica o pagamento somente no mês selecionado.</p></div>`;
 
-  const box=el(`<div class="modal-overlay"><div class="modal-box">
+  const box=el(`<div class="modal-overlay transaction-modal-overlay"><div class="modal-box transaction-modal fixed-expense-modal">
     <div class="modal-head"><h2>${isEdit?'Editar':'Adicionar'} despesa fixa</h2><button id="fm_close">&times;</button></div>
     <p class="modal-sub">${isEdit?'Alterações se aplicam a partir de '+monthLabel(S.month.y,S.month.m)+'; meses anteriores mantêm o histórico.':'Essa despesa se repete mensalmente a partir da data informada. O status Pago/Em aberto abaixo vale para o primeiro mês.'}</p>
     <div class="field"><label>Nome</label><input type="text" id="fm_nome" value="${isEdit?esc(existing.nome):''}"/></div>

@@ -1,15 +1,42 @@
 /* Borion Finance — Sistema de modais, formulário genérico e criação rápida de categorias. */
 
 /* ---------------- Modal system (generic CRUD forms) ---------------- */
+/* V6.34.2 — trava o conteúdo que fica atrás do modal sem bloquear o scroll interno
+   do formulário. Em Smartphone Mode, o body é congelado na posição atual e restaurado
+   ao fechar. Isso evita salto da página, rolagem do fundo e o travamento observado em
+   alguns navegadores Android quando html/body recebiam apenas overflow:hidden. */
+function setModalDocumentState(open){
+  const html=document.documentElement;
+  const body=document.body;
+  if(!html || !body) return;
+  const smartphone=html.getAttribute('data-interface-mode')==='smartphone';
+  if(open){
+    html.classList.add('modal-open');
+    if(!smartphone || body.classList.contains('modal-scroll-locked')) return;
+    const y=Math.max(0,window.scrollY||html.scrollTop||body.scrollTop||0);
+    html.dataset.modalScrollY=String(y);
+    body.style.setProperty('--modal-lock-top',`${-y}px`);
+    body.classList.add('modal-scroll-locked');
+    return;
+  }
+  html.classList.remove('modal-open');
+  if(!body.classList.contains('modal-scroll-locked')) return;
+  const y=Math.max(0,Number(html.dataset.modalScrollY)||0);
+  body.classList.remove('modal-scroll-locked');
+  body.style.removeProperty('--modal-lock-top');
+  delete html.dataset.modalScrollY;
+  requestAnimationFrame(()=>window.scrollTo(0,y));
+}
+
 function closeModal(){
   const root=$('#modal-root');
   if(root) root.innerHTML='';
-  document.documentElement.classList.remove('modal-open');
+  setModalDocumentState(false);
 }
 
 function attachModalGuard(overlay){
   if(!overlay) return;
-  document.documentElement.classList.add('modal-open');
+  setModalDocumentState(true);
   overlay.addEventListener('click', e=>{
     if(e.target===overlay){
       e.preventDefault();
@@ -36,6 +63,26 @@ function attachModalGuard(overlay){
       }
     }
   });
+})();
+
+/* Segurança adicional: qualquer modal legado que seja removido diretamente do
+   #modal-root também libera a trava do body. A troca síncrona de um modal por outro não
+   causa piscar, pois o observer verifica o estado final da fila de mutações. */
+(function wireModalRootUnlock(){
+  if(window.__borionModalRootUnlockWired || typeof MutationObserver==='undefined') return;
+  const install=()=>{
+    const root=document.getElementById('modal-root');
+    if(!root || root.dataset.scrollUnlockObserver==='1') return;
+    root.dataset.scrollUnlockObserver='1';
+    const observer=new MutationObserver(()=>{
+      if(!root.children.length) setModalDocumentState(false);
+    });
+    observer.observe(root,{childList:true});
+    window.__borionModalRootUnlockObserver=observer;
+  };
+  window.__borionModalRootUnlockWired=true;
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',install,{once:true});
+  else install();
 })();
 
 function modalFieldInitialValue(field, values={}){

@@ -13,6 +13,7 @@ const MobileExperience = {
   scrollPositions:new Map(),
   networkHideTimer:null,
   lastHapticAt:0,
+  viewportRaf:0,
 
   isSmart(){
     try{return typeof isSmartphoneMode==='function' && isSmartphoneMode();}
@@ -33,12 +34,21 @@ const MobileExperience = {
 
   setViewportVars(){
     const vv=window.visualViewport;
-    const height=vv?vv.height:window.innerHeight;
-    const offsetTop=vv?vv.offsetTop:0;
-    const keyboard=Math.max(0,window.innerHeight-height-offsetTop);
+    const height=Math.max(1,Math.round(vv?vv.height:window.innerHeight));
+    const offsetTop=Math.max(0,Math.round(vv?vv.offsetTop:0));
+    const keyboard=Math.max(0,Math.round(window.innerHeight-height-offsetTop));
     document.documentElement.style.setProperty('--borion-vh',`${height}px`);
+    document.documentElement.style.setProperty('--borion-vv-top',`${offsetTop}px`);
     document.documentElement.style.setProperty('--borion-keyboard',`${keyboard}px`);
     document.documentElement.classList.toggle('keyboard-open',keyboard>120);
+  },
+
+  requestViewportUpdate(){
+    if(this.viewportRaf) return;
+    this.viewportRaf=requestAnimationFrame(()=>{
+      this.viewportRaf=0;
+      this.setViewportVars();
+    });
   },
 
   showConnectivity(online=navigator.onLine){
@@ -122,6 +132,30 @@ const MobileExperience = {
       handle.innerHTML='<span></span>';
       box.insertBefore(handle,box.firstChild);
     }
+
+    /* O sheet não é mais o próprio elemento rolável. Um contêiner dedicado mantém o
+       gesto vertical estável no Android, inclusive com teclado aberto, inputs e selects. */
+    let scroller=box.querySelector(':scope > .mobile-sheet-scroll');
+    if(!scroller){
+      scroller=document.createElement('div');
+      scroller.className='mobile-sheet-scroll';
+      const movable=Array.from(box.childNodes).filter(node=>node!==handle && node!==scroller);
+      movable.forEach(node=>scroller.appendChild(node));
+      box.appendChild(scroller);
+    }
+
+    /* Impede rolagem da página de fundo quando o gesto começa na área escura, sem
+       cancelar os gestos que começam dentro do conteúdo rolável do formulário. */
+    const eventStartedInsideSheet=e=>{
+      const target=e.target && e.target.nodeType===1 ? e.target : e.target?.parentElement;
+      return !!(target && target.closest('.mobile-bottom-sheet'));
+    };
+    overlay.addEventListener('touchmove',e=>{
+      if(!eventStartedInsideSheet(e) && e.cancelable) e.preventDefault();
+    },{passive:false});
+    overlay.addEventListener('wheel',e=>{
+      if(!eventStartedInsideSheet(e) && e.cancelable) e.preventDefault();
+    },{passive:false});
 
     const markDirty=e=>{
       if(e.target.matches('input,select,textarea')) box.dataset.sheetDirty='1';
@@ -266,10 +300,10 @@ const MobileExperience = {
     this.installModalObserver();
     this.installTouchFeedback();
     this.installAccessibility();
-    window.addEventListener('resize',()=>this.setViewportVars(),{passive:true});
+    window.addEventListener('resize',()=>this.requestViewportUpdate(),{passive:true});
     if(window.visualViewport){
-      visualViewport.addEventListener('resize',()=>this.setViewportVars(),{passive:true});
-      visualViewport.addEventListener('scroll',()=>this.setViewportVars(),{passive:true});
+      visualViewport.addEventListener('resize',()=>this.requestViewportUpdate(),{passive:true});
+      visualViewport.addEventListener('scroll',()=>this.requestViewportUpdate(),{passive:true});
     }
     window.addEventListener('offline',()=>this.showConnectivity(false));
     window.addEventListener('online',()=>this.showConnectivity(true));

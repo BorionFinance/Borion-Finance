@@ -175,7 +175,11 @@ const SmartphoneMode={
     if(window.MobileMenu) MobileMenu.close();
 
     const root=document.getElementById('modal-root');
-    if(root) root.innerHTML=smartSaveReloadModalHTML();
+    if(root){
+      const overlay=el(smartSaveReloadModalHTML());
+      root.replaceChildren(overlay);
+      if(typeof attachModalGuard==='function') attachModalGuard(overlay);
+    }
     const status=()=>document.getElementById('smart_save_reload_status');
     const title=()=>document.getElementById('smart_save_reload_title');
     const closeBtn=()=>document.getElementById('smart_save_reload_close');
@@ -224,7 +228,7 @@ const SmartphoneMode={
       const btn=closeBtn();
       if(btn){
         btn.classList.remove('hidden');
-        btn.onclick=()=>{ if(root) root.innerHTML=''; };
+        btn.onclick=()=>closeModal();
       }
     }
   },

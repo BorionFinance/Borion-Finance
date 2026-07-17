@@ -1,63 +1,142 @@
 /* Borion Finance — Sistema de modais, formulário genérico e criação rápida de categorias. */
 
 /* ---------------- Modal system (generic CRUD forms) ---------------- */
-/* V6.34.2 — trava o conteúdo que fica atrás do modal sem bloquear o scroll interno
-   do formulário. Em Smartphone Mode, o body é congelado na posição atual e restaurado
-   ao fechar. Isso evita salto da página, rolagem do fundo e o travamento observado em
-   alguns navegadores Android quando html/body recebiam apenas overflow:hidden. */
-function setModalDocumentState(open){
+/* V6.34.3 — controle central e defensivo da rolagem global.
+   As classes de bloqueio passam a refletir o DOM real: modal visível e menu lateral
+   realmente aberto. Fechamentos legados, re-renderizações e retorno do BFCache não
+   conseguem mais deixar html/body travados sem uma camada visual correspondente. */
+function borionDocumentScrollTop(){
+  const scrolling=document.scrollingElement;
+  return Math.max(0,Number(scrolling&&scrolling.scrollTop)||Number(window.scrollY)||0);
+}
+
+function borionHasVisibleModal(){
+  const root=document.getElementById('modal-root');
+  return !!(root && root.querySelector('.modal-overlay'));
+}
+
+function borionMobileMenuIsActuallyOpen(){
+  const sidebar=document.querySelector('.sidebar.open');
+  const backdrop=document.querySelector('.mobile-menu-backdrop.show');
+  return !!(sidebar && backdrop && sidebar.isConnected && backdrop.isConnected);
+}
+
+function releaseModalBodyLock({restoreScroll=true}={}){
+  const html=document.documentElement;
+  const body=document.body;
+  if(!html || !body) return;
+  const wasLocked=body.classList.contains('modal-scroll-locked');
+  const savedY=Math.max(0,Number(html.dataset.modalScrollY)||0);
+  body.classList.remove('modal-scroll-locked');
+  body.style.removeProperty('--modal-lock-top');
+  delete html.dataset.modalScrollY;
+  if(wasLocked && restoreScroll){
+    requestAnimationFrame(()=>{
+      const scrolling=document.scrollingElement;
+      if(scrolling) scrolling.scrollTop=savedY;
+      else window.scrollTo(0,savedY);
+    });
+  }
+}
+
+function setModalDocumentState(open,{restoreScroll=true}={}){
   const html=document.documentElement;
   const body=document.body;
   if(!html || !body) return;
   const smartphone=html.getAttribute('data-interface-mode')==='smartphone';
-  if(open){
-    html.classList.add('modal-open');
-    if(!smartphone || body.classList.contains('modal-scroll-locked')) return;
-    const y=Math.max(0,window.scrollY||html.scrollTop||body.scrollTop||0);
+  html.classList.toggle('modal-open',!!open);
+
+  if(open && smartphone){
+    if(body.classList.contains('modal-scroll-locked')) return;
+    const y=borionDocumentScrollTop();
     html.dataset.modalScrollY=String(y);
     body.style.setProperty('--modal-lock-top',`${-y}px`);
     body.classList.add('modal-scroll-locked');
     return;
   }
-  html.classList.remove('modal-open');
-  if(!body.classList.contains('modal-scroll-locked')) return;
-  const y=Math.max(0,Number(html.dataset.modalScrollY)||0);
-  body.classList.remove('modal-scroll-locked');
-  body.style.removeProperty('--modal-lock-top');
-  delete html.dataset.modalScrollY;
-  requestAnimationFrame(()=>window.scrollTo(0,y));
+
+  /* Ao trocar Smartphone -> Pro com modal aberto, o html continua modal-open,
+     porém o body não pode permanecer fixed. */
+  releaseModalBodyLock({restoreScroll});
 }
 
+function syncGlobalScrollLockState({restoreScroll=true,source='sync'}={}){
+  const html=document.documentElement;
+  const body=document.body;
+  if(!html || !body) return {modalOpen:false,mobileMenuOpen:false};
+  const modalOpen=borionHasVisibleModal();
+  const sidebar=document.querySelector('.sidebar');
+  const backdrop=document.querySelector('.mobile-menu-backdrop');
+  const mobileMenuOpen=borionMobileMenuIsActuallyOpen();
+
+  /* Se apenas uma metade do menu sobreviveu a um render/erro, remova também a classe
+     visual órfã. Um backdrop .show sem sidebar continuaria interceptando wheel/touch. */
+  if(!mobileMenuOpen){
+    if(sidebar) sidebar.classList.remove('open');
+    if(backdrop) backdrop.classList.remove('show');
+  }
+
+  setModalDocumentState(modalOpen,{restoreScroll});
+  body.classList.toggle('mobile-menu-open',mobileMenuOpen);
+
+  if(window.BORION_SCROLL_DEBUG===true){
+    const scrolling=document.scrollingElement;
+    console.debug('[SCROLL_LOCK]',{
+      source,modalOpen,mobileMenuOpen,
+      htmlOverflow:getComputedStyle(html).overflowY,
+      bodyOverflow:getComputedStyle(body).overflowY,
+      bodyTouchAction:getComputedStyle(body).touchAction,
+      modalCount:document.querySelectorAll('#modal-root .modal-overlay').length,
+      sidebarOpen:!!document.querySelector('.sidebar.open'),
+      scrollHeight:scrolling&&scrolling.scrollHeight,
+      clientHeight:scrolling&&scrolling.clientHeight,
+      scrollTop:scrolling&&scrolling.scrollTop
+    });
+  }
+  return {modalOpen,mobileMenuOpen};
+}
+window.syncGlobalScrollLockState=syncGlobalScrollLockState;
+
 function closeModal(){
-  const root=$('#modal-root');
-  if(root) root.innerHTML='';
-  setModalDocumentState(false);
+  const root=document.getElementById('modal-root');
+  try{
+    if(root){
+      const current=root.querySelector('.modal-overlay');
+      if(current) current.dispatchEvent(new CustomEvent('borion:modal-closing'));
+      root.replaceChildren();
+    }
+  }finally{
+    syncGlobalScrollLockState({source:'closeModal'});
+  }
 }
 
 function attachModalGuard(overlay){
   if(!overlay) return;
-  setModalDocumentState(true);
-  overlay.addEventListener('click', e=>{
-    if(e.target===overlay){
-      e.preventDefault();
-      e.stopPropagation();
-      const modal = overlay.querySelector('.modal-box');
-      if(modal){
-        modal.classList.remove('modal-nudge');
-        void modal.offsetWidth;
-        modal.classList.add('modal-nudge');
+  if(overlay.dataset.modalGuardAttached!=='1'){
+    overlay.dataset.modalGuardAttached='1';
+    overlay.addEventListener('click', e=>{
+      if(e.target===overlay){
+        e.preventDefault();
+        e.stopPropagation();
+        const modal=overlay.querySelector('.modal-box');
+        if(modal){
+          modal.classList.remove('modal-nudge');
+          void modal.offsetWidth;
+          modal.classList.add('modal-nudge');
+        }
       }
-    }
-  });
+    });
+  }
+  syncGlobalScrollLockState({source:'attachModalGuard'});
 }
 
 (function wireModalEscClose(){
   if(window.__borionModalEscCloseWired) return;
-  window.__borionModalEscCloseWired = true;
-  document.addEventListener('keydown', e=>{
+  window.__borionModalEscCloseWired=true;
+  document.addEventListener('keydown',e=>{
     if(e.key==='Escape'){
-      const root = document.getElementById('modal-root');
-      if(root && root.children.length){
+      const root=document.getElementById('modal-root');
+      if(root && root.querySelector('.modal-overlay')){
         e.preventDefault();
         closeModal();
       }
@@ -65,24 +144,42 @@ function attachModalGuard(overlay){
   });
 })();
 
-/* Segurança adicional: qualquer modal legado que seja removido diretamente do
-   #modal-root também libera a trava do body. A troca síncrona de um modal por outro não
-   causa piscar, pois o observer verifica o estado final da fila de mutações. */
-(function wireModalRootUnlock(){
-  if(window.__borionModalRootUnlockWired || typeof MutationObserver==='undefined') return;
+/* MutationObserver é a rede de segurança para trechos legados que ainda substituem
+   #modal-root diretamente. Ele sincroniza tanto abertura quanto fechamento. */
+(function installGlobalScrollLockReconciliation(){
+  if(window.__borionGlobalScrollReconciliationWired) return;
+  window.__borionGlobalScrollReconciliationWired=true;
+
   const install=()=>{
+    const html=document.documentElement;
+    const body=document.body;
     const root=document.getElementById('modal-root');
-    if(!root || root.dataset.scrollUnlockObserver==='1') return;
-    root.dataset.scrollUnlockObserver='1';
-    const observer=new MutationObserver(()=>{
-      if(!root.children.length) setModalDocumentState(false);
-    });
-    observer.observe(root,{childList:true});
-    window.__borionModalRootUnlockObserver=observer;
+    if(!html || !body) return;
+
+    /* Limpeza de classes órfãs vindas de restauração de página/cache. O estado real é
+       recalculado logo em seguida, portanto bloqueios legítimos são reaplicados. */
+    html.classList.remove('modal-open');
+    body.classList.remove('mobile-menu-open');
+    releaseModalBodyLock({restoreScroll:false});
+
+    if(root && root.dataset.scrollStateObserver!=='1' && typeof MutationObserver!=='undefined'){
+      root.dataset.scrollStateObserver='1';
+      const observer=new MutationObserver(()=>syncGlobalScrollLockState({source:'modalMutation'}));
+      observer.observe(root,{childList:true,subtree:false});
+      window.__borionModalRootScrollObserver=observer;
+    }
+    syncGlobalScrollLockState({restoreScroll:false,source:'initialization'});
   };
-  window.__borionModalRootUnlockWired=true;
+
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',install,{once:true});
   else install();
+
+  window.addEventListener('pageshow',()=>syncGlobalScrollLockState({source:'pageshow'}));
+  window.addEventListener('orientationchange',()=>setTimeout(()=>syncGlobalScrollLockState({source:'orientationchange'}),80),{passive:true});
+  window.addEventListener('blur',()=>syncGlobalScrollLockState({source:'windowBlur'}),{passive:true});
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible') syncGlobalScrollLockState({source:'visibilitychange'});
+  });
 })();
 
 function modalFieldInitialValue(field, values={}){

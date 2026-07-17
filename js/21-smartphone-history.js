@@ -89,8 +89,8 @@ const SmartphoneHistory = {
     if(window.SmartphoneMode && SmartphoneMode.savingAndReloading) return true;
 
     const root=document.getElementById('modal-root');
-    if(root && root.children.length){
-      root.innerHTML='';
+    if(root && root.querySelector('.modal-overlay')){
+      closeModal();
       return true;
     }
 
@@ -153,14 +153,15 @@ const SmartphoneHistory = {
         </div>
       </div>
     </div>`);
-    root.innerHTML='';
-    root.appendChild(box);
+    root.replaceChildren(box);
+    if(typeof attachModalGuard==='function') attachModalGuard(box);
+    box.addEventListener('borion:modal-closing',()=>{ this.exitPromptOpen=false; },{once:true});
 
     const stay=document.getElementById('smart_exit_stay');
     const leave=document.getElementById('smart_exit_confirm');
     if(stay) stay.onclick=()=>{
       this.exitPromptOpen=false;
-      root.innerHTML='';
+      closeModal();
       this.ensureStack();
     };
     if(leave) leave.onclick=()=>this.confirmExit();
@@ -169,7 +170,7 @@ const SmartphoneHistory = {
   confirmExit(){
     this.exitPromptOpen=false;
     const root=document.getElementById('modal-root');
-    if(root) root.innerHTML='';
+    closeModal();
     window.__borionConfirmedExit=true;
     try{
       if(window.ExitSaveGuard) ExitSaveGuard.finalSaveSilently('confirmed_mobile_exit');

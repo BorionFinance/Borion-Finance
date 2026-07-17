@@ -1309,7 +1309,7 @@ html[data-theme="light"] .sb-item.active .ic{
   }
   .sidebar.open .sb-item{animation:navActivate .18s ease;}
   .sb-logo{padding-right:2px;}
-  body.mobile-menu-open{overflow:hidden;touch-action:none;}
+  body.mobile-menu-open{overflow:hidden;touch-action:none;overscroll-behavior:none;}
   .topbar-title-row{width:100%;align-items:center;}
   .topbar-title{flex:1;}
 }
@@ -2212,7 +2212,7 @@ html[data-interface-mode="pro"] .reserva-grid.reserva-layout-custom::-webkit-scr
   position:relative;min-width:0;height:100%;padding:28px 7px 7px;border-radius:20px;
   border:1px dashed rgba(217,180,107,.28);background:rgba(217,180,107,.025);
   transition:border-color .16s ease,background-color .16s ease,box-shadow .18s ease,transform .18s ease;
-  cursor:grab;touch-action:none;
+  cursor:grab;touch-action:pan-y;
 }
 .reserva-slot:hover{border-color:rgba(217,180,107,.48);background:rgba(217,180,107,.045);}
 .reserva-slot:active{cursor:grabbing;}
@@ -2703,7 +2703,7 @@ html[data-theme="light"] .reserve-yield-error{color:#9b2525;background:rgba(239,
   .reserve-yield-modal{padding:17px 15px 15px;}
 }
 
-/* V6.34.2 — contenção, scroll e desempenho dos lançamentos no Smartphone Mode */
+/* V6.34.3 — contenção, scroll e desempenho dos lançamentos no Smartphone Mode */
 .transaction-modal-overlay,
 .transaction-modal{
   min-width:0;
@@ -2756,6 +2756,22 @@ html[data-interface-mode="smartphone"] #modal-root{
   width:100%;
   max-width:none;
   overflow:visible!important;
+}
+/* Estado normal: o documento é o único proprietário da rolagem vertical. */
+html[data-interface-mode="smartphone"]:not(.modal-open){
+  overflow-x:hidden;
+  overflow-y:auto;
+  touch-action:pan-y;
+}
+html[data-interface-mode="smartphone"]:not(.modal-open) body:not(.mobile-menu-open):not(.modal-scroll-locked){
+  overflow-x:hidden;
+  overflow-y:visible;
+  touch-action:pan-y;
+}
+html[data-interface-mode="smartphone"] .shell,
+html[data-interface-mode="smartphone"] .main,
+html[data-interface-mode="smartphone"] #view-root{
+  overflow-x:clip;
 }
 html[data-interface-mode="smartphone"].modal-open{
   overscroll-behavior:none;

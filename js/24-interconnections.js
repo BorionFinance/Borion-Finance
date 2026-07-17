@@ -811,8 +811,8 @@
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `<div class="modal-box"><div class="modal-head"><h2>Conectar ${escHtml(source.name)}</h2><button data-close>&times;</button></div><p class="modal-sub">Escolha o perfil que receberá os lançamentos convertidos. A conta abaixo será o destino padrão; depois você poderá criar vínculos diferentes por forma de pagamento.</p><label class="field"><span>Perfil de destino</span><select id="interop_profile">${profiles.map(p => `<option value="${escHtml(p.id)}" ${String(p.id) === String(existing?.profile.id || initialProfile) ? 'selected' : ''}>${escHtml(p.name)}</option>`).join('')}</select></label><label class="field"><span>Conta padrão</span><select id="interop_account"></select><small>Você poderá trocar a conta para cada forma de pagamento na aba Vínculos.</small></label><div class="form-actions"><button class="btn-outline" data-close>Cancelar</button><button class="btn btn-primary" id="interop_connect">Conectar ${transport === 'drive' ? 'Google Drive' : 'pasta local'}</button></div></div>`;
     const root = document.getElementById('modal-root');
-    root.innerHTML = '';
-    root.appendChild(overlay);
+    root.replaceChildren(overlay);
+    if(typeof attachModalGuard==='function') attachModalGuard(overlay);
     const psel = overlay.querySelector('#interop_profile');
     const asel = overlay.querySelector('#interop_account');
     const refresh = () => {
@@ -821,12 +821,12 @@
     };
     refresh();
     psel.onchange = refresh;
-    overlay.querySelectorAll('[data-close]').forEach(btn => btn.onclick = () => { root.innerHTML = ''; });
+    overlay.querySelectorAll('[data-close]').forEach(btn => btn.onclick = () => { closeModal(); });
     overlay.querySelector('#interop_connect').onclick = async () => {
       const btn = overlay.querySelector('#interop_connect');
       btn.disabled = true;
       btn.textContent = 'Conectando…';
-      try{ await configure(sourceAppId, transport, psel.value, asel.value); root.innerHTML = ''; }
+      try{ await configure(sourceAppId, transport, psel.value, asel.value); closeModal(); }
       catch(error){ alert(error.message || String(error)); btn.disabled = false; btn.textContent = 'Tentar novamente'; }
     };
   }
@@ -1053,13 +1053,13 @@
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `<div class="modal-box interop-delete-modal"><div class="modal-head"><h2>Excluir lançamento importado</h2><button data-close>&times;</button></div><p class="modal-sub">Este lançamento veio de <b>${escHtml(sourceName(tx.integrationSourceAppId))}</b>. Escolha o que deve acontecer na próxima sincronização.</p><button class="interop-delete-choice" data-choice="reimport"><strong>Excluir e permitir importar novamente</strong><span>Remove o lançamento e libera o ID. Se ele ainda existir na origem, voltará na próxima sincronização.</span></button><button class="interop-delete-choice danger" data-choice="permanent"><strong>Excluir e ignorar permanentemente</strong><span>Remove o lançamento e grava o ID na lista de ignorados. Ele não voltará.</span></button><button class="btn-outline btn-block" data-close>Cancelar</button></div>`;
-    root.innerHTML = '';
-    root.appendChild(overlay);
-    overlay.querySelectorAll('[data-close]').forEach(btn => btn.onclick = () => { root.innerHTML = ''; });
+    root.replaceChildren(overlay);
+    if(typeof attachModalGuard==='function') attachModalGuard(overlay);
+    overlay.querySelectorAll('[data-close]').forEach(btn => btn.onclick = () => { closeModal(); });
     overlay.querySelectorAll('[data-choice]').forEach(btn => btn.onclick = () => {
-      const choice = btn.dataset.choice === 'permanent' ? 'permanent' : 'reimport';
-      root.innerHTML = '';
-      if(typeof onChoice === 'function') onChoice(choice);
+      const choice=btn.dataset.choice==='permanent'?'permanent':'reimport';
+      closeModal();
+      if(typeof onChoice==='function') onChoice(choice);
     });
   }
 

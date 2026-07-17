@@ -488,19 +488,20 @@ window.addEventListener('online', function(){ try{ OrderPreferences.retryPending
    Os listeners de pointermove/pointerup só existem durante um arraste ativo e são sempre
    removidos ao soltar, então não há acúmulo de listeners entre uma reorganização e outra. */
 document.addEventListener('pointerdown', function(e){
+  const touchLike=e.pointerType==='touch' || (window.matchMedia&&window.matchMedia('(pointer:coarse)').matches);
   const patrimonySlot=e.target.closest('.patrimony-grid-organizer > .patrimony-module-slot[data-order-id]');
   const patrimonyContainer=patrimonySlot&&patrimonySlot.closest('[data-order-list="patrimony_modules"]');
-  if(patrimonySlot&&patrimonyContainer&&!e.target.closest('button:not(.order-handle),a,input,select,textarea')){
+  /* Mouse pode arrastar pela superfície do slot. Em touch, somente a alça inicia o
+     arraste; assim o gesto vertical sobre cards permanece reservado ao scroll nativo. */
+  if(!touchLike&&patrimonySlot&&patrimonyContainer&&!e.target.closest('button:not(.order-handle),a,input,select,textarea')){
     e.preventDefault();borionStartPatrimonySlotDrag(patrimonySlot,patrimonyContainer,e);return;
   }
   const organizerSlot=e.target.closest('.reserva-grid-organizer > .reserva-slot[data-order-id]');
-  const organizerContainer=organizerSlot && organizerSlot.closest('[data-order-list="reservas"]');
-  if(organizerSlot && organizerContainer && !e.target.closest('button:not(.order-handle),a,input,select,textarea')){
-    e.preventDefault();
-    borionStartReservaSlotDrag(organizerSlot, organizerContainer, e);
-    return;
+  const organizerContainer=organizerSlot&&organizerSlot.closest('[data-order-list="reservas"]');
+  if(!touchLike&&organizerSlot&&organizerContainer&&!e.target.closest('button:not(.order-handle),a,input,select,textarea')){
+    e.preventDefault();borionStartReservaSlotDrag(organizerSlot,organizerContainer,e);return;
   }
-  const handle = e.target.closest('.order-handle');
+  const handle=e.target.closest('.order-handle');
   if(!handle) return;
   const row = handle.closest('[data-order-id]');
   const container = handle.closest('[data-order-list]');
@@ -509,28 +510,63 @@ document.addEventListener('pointerdown', function(e){
   if(container.classList.contains('reserva-grid-organizer')) borionStartReservaSlotDrag(row, container, e);
   else borionStartOrderDrag(handle, row, container, e);
 });
+/* Listeners de arraste existem apenas durante o gesto ativo. A limpeza cobre
+   pointerup, pointercancel, perda de captura, blur, aba oculta e remoção por render. */
+function borionBindTransientDrag(pointerId,{onMove,onFinish,onCancel,captureTarget}){
+  let active=true;
+  const pointerMatches=ev=>!ev || ev.pointerId==null || ev.pointerId===pointerId;
+  const unbind=()=>{
+    if(!active)return;
+    active=false;
+    document.removeEventListener('pointermove',move);
+    document.removeEventListener('pointerup',finish);
+    document.removeEventListener('pointercancel',cancel);
+    document.removeEventListener('visibilitychange',visibilityCancel);
+    window.removeEventListener('blur',blurCancel);
+    if(captureTarget)captureTarget.removeEventListener('lostpointercapture',lostCapture);
+  };
+  const move=ev=>{
+    if(!active||!pointerMatches(ev))return;
+    if(captureTarget&&!captureTarget.isConnected){cancel();return;}
+    onMove(ev);
+  };
+  const finish=ev=>{if(!active||!pointerMatches(ev))return;unbind();onFinish(ev);};
+  const cancel=ev=>{if(!active||!pointerMatches(ev))return;unbind();onCancel(ev);};
+  const blurCancel=()=>cancel();
+  const visibilityCancel=()=>{if(document.hidden)cancel();};
+  const lostCapture=ev=>cancel(ev);
+  document.addEventListener('pointermove',move,{passive:false});
+  document.addEventListener('pointerup',finish);
+  document.addEventListener('pointercancel',cancel);
+  document.addEventListener('visibilitychange',visibilityCancel);
+  window.addEventListener('blur',blurCancel);
+  if(captureTarget){
+    captureTarget.addEventListener('lostpointercapture',lostCapture);
+    try{captureTarget.setPointerCapture(pointerId);}catch(err){}
+  }
+}
 function borionStartPatrimonySlotDrag(slot,container,startEvent){
   if(!(OrderPreferences.active&&OrderPreferences.activeType==='patrimony_modules'))return;
   const pointerId=startEvent.pointerId;let target=null;
   slot.classList.add('order-dragging');container.classList.add('order-dragging-active');
   function clearTarget(){if(target)target.classList.remove('patrimony-slot-target');target=null;}
   function onMove(ev){
-    if(ev.pointerId!==pointerId)return;
+    if(ev.cancelable)ev.preventDefault();
     const hit=document.elementFromPoint(ev.clientX,ev.clientY);
     const next=hit&&hit.closest?hit.closest('.patrimony-grid-organizer > .patrimony-module-slot[data-order-id]'):null;
     if(next&&next!==slot&&next.closest('[data-order-list="patrimony_modules"]')===container){if(target!==next){clearTarget();target=next;target.classList.add('patrimony-slot-target');}}else clearTarget();
   }
   function finish(ev){
-    if(ev.pointerId!==pointerId)return;
-    document.removeEventListener('pointermove',onMove);document.removeEventListener('pointerup',finish);document.removeEventListener('pointercancel',cancel);
-    if(target){const marker=document.createComment('patrimony-slot-swap');slot.parentNode.insertBefore(marker,slot);target.parentNode.insertBefore(slot,target);marker.parentNode.insertBefore(target,marker);marker.remove();}
-    const ids=Array.from(container.querySelectorAll(':scope > .patrimony-module-slot[data-order-id]')).map(x=>x.getAttribute('data-order-id'));
-    OrderPreferences.pending.patrimony_modules=ids;writeJSON(OrderPreferences.modeStorageKey('patrimony_modules'),'manual');const root=OrderPreferences.profilePreferenceRoot(true);if(root)root.sortModes.patrimony_modules='manual';
+    if(target&&slot.isConnected&&target.isConnected){const marker=document.createComment('patrimony-slot-swap');slot.parentNode.insertBefore(marker,slot);target.parentNode.insertBefore(slot,target);marker.parentNode.insertBefore(target,marker);marker.remove();}
+    if(container.isConnected){
+      const ids=Array.from(container.querySelectorAll(':scope > .patrimony-module-slot[data-order-id]')).map(x=>x.getAttribute('data-order-id'));
+      OrderPreferences.pending.patrimony_modules=ids;writeJSON(OrderPreferences.modeStorageKey('patrimony_modules'),'manual');const root=OrderPreferences.profilePreferenceRoot(true);if(root)root.sortModes.patrimony_modules='manual';
+    }
     cleanup();OrderPreferences.notify();
   }
-  function cancel(ev){if(ev.pointerId!==pointerId)return;document.removeEventListener('pointermove',onMove);document.removeEventListener('pointerup',finish);document.removeEventListener('pointercancel',cancel);cleanup();}
+  function cancel(){cleanup();}
   function cleanup(){clearTarget();slot.classList.remove('order-dragging');container.classList.remove('order-dragging-active');}
-  document.addEventListener('pointermove',onMove,{passive:false});document.addEventListener('pointerup',finish);document.addEventListener('pointercancel',cancel);
+  borionBindTransientDrag(pointerId,{onMove,onFinish:finish,onCancel:cancel,captureTarget:startEvent.target.closest('.order-handle')||slot});
 }
 function borionStartReservaSlotDrag(slot, container, startEvent){
   if(!(OrderPreferences.active && OrderPreferences.activeType==='reservas')) return;
@@ -549,13 +585,11 @@ function borionStartReservaSlotDrag(slot, container, startEvent){
   slot.classList.add('reserva-slot-dragging');
   container.classList.add('reserva-grid-dragging-active');
   document.body.classList.add('reserva-layout-dragging');
-  let targetSlot=null;
-  function moveGhost(ev){
-    ghost.style.transform=`translate3d(${ev.clientX-offsetX-rect.left}px,${ev.clientY-offsetY-rect.top}px,0) rotate(.45deg) scale(1.025)`;
-  }
+  let targetSlot=null,cleaned=false;
+  function moveGhost(ev){ghost.style.transform=`translate3d(${ev.clientX-offsetX-rect.left}px,${ev.clientY-offsetY-rect.top}px,0) rotate(.45deg) scale(1.025)`;}
   function clearTarget(){ if(targetSlot) targetSlot.classList.remove('reserva-slot-target'); targetSlot=null; }
   function onMove(ev){
-    if(ev.pointerId!==pointerId) return;
+    if(ev.cancelable)ev.preventDefault();
     moveGhost(ev);
     const hit=document.elementFromPoint(ev.clientX,ev.clientY);
     const next=hit && hit.closest ? hit.closest('.reserva-grid-organizer > .reserva-slot[data-order-id]') : null;
@@ -563,75 +597,40 @@ function borionStartReservaSlotDrag(slot, container, startEvent){
       if(targetSlot!==next){ clearTarget(); targetSlot=next; targetSlot.classList.add('reserva-slot-target'); }
     }else clearTarget();
   }
-  function finish(ev){
-    if(ev.pointerId!==pointerId) return;
-    document.removeEventListener('pointermove',onMove);
-    document.removeEventListener('pointerup',finish);
-    document.removeEventListener('pointercancel',cancel);
-    if(targetSlot){
+  function finish(){
+    if(targetSlot&&slot.isConnected&&targetSlot.isConnected){
       const marker=document.createComment('reserva-slot-swap');
-      slot.parentNode.insertBefore(marker,slot);
-      targetSlot.parentNode.insertBefore(slot,targetSlot);
-      marker.parentNode.insertBefore(targetSlot,marker);
-      marker.remove();
+      slot.parentNode.insertBefore(marker,slot);targetSlot.parentNode.insertBefore(slot,targetSlot);marker.parentNode.insertBefore(targetSlot,marker);marker.remove();
       const ids=Array.from(container.querySelectorAll(':scope > .reserva-slot[data-order-id]')).map(x=>x.getAttribute('data-order-id'));
-      OrderPreferences.pending.reservas=ids;
-      writeJSON(OrderPreferences.modeStorageKey('reservas'),'manual');
+      OrderPreferences.pending.reservas=ids;writeJSON(OrderPreferences.modeStorageKey('reservas'),'manual');
     }
-    cleanup();
-    OrderPreferences.notify();
+    cleanup();OrderPreferences.notify();
   }
-  function cancel(ev){
-    if(ev.pointerId!==pointerId) return;
-    document.removeEventListener('pointermove',onMove);
-    document.removeEventListener('pointerup',finish);
-    document.removeEventListener('pointercancel',cancel);
-    cleanup();
-  }
+  function cancel(){cleanup();}
   function cleanup(){
-    clearTarget();
-    slot.classList.remove('reserva-slot-dragging');
-    container.classList.remove('reserva-grid-dragging-active');
-    document.body.classList.remove('reserva-layout-dragging');
-    ghost.classList.add('reserva-drag-ghost-out');
-    setTimeout(()=>ghost.remove(),120);
+    if(cleaned)return;cleaned=true;
+    clearTarget();slot.classList.remove('reserva-slot-dragging');container.classList.remove('reserva-grid-dragging-active');document.body.classList.remove('reserva-layout-dragging');
+    ghost.classList.add('reserva-drag-ghost-out');setTimeout(()=>ghost.remove(),120);
   }
   moveGhost(startEvent);
-  document.addEventListener('pointermove',onMove,{passive:false});
-  document.addEventListener('pointerup',finish);
-  document.addEventListener('pointercancel',cancel);
+  borionBindTransientDrag(pointerId,{onMove,onFinish:finish,onCancel:cancel,captureTarget:startEvent.target.closest('.order-handle')||slot});
 }
 function borionStartOrderDrag(handle, row, container, startEvent){
   const type = container.getAttribute('data-order-list');
   const pointerId = startEvent.pointerId;
-  row.classList.add('order-dragging');
-  container.classList.add('order-dragging-active');
+  row.classList.add('order-dragging');container.classList.add('order-dragging-active');
   function getRows(){ return Array.from(container.querySelectorAll(':scope > [data-order-id]')); }
   function onMove(ev){
-    if(ev.pointerId!==pointerId) return;
-    const y = ev.clientY;
-    const rows = getRows();
-    let target = null;
-    for(const r of rows){
-      if(r===row) continue;
-      const rect = r.getBoundingClientRect();
-      const mid = rect.top + rect.height/2;
-      if(y < mid){ target = r; break; }
-    }
-    if(target) container.insertBefore(row, target);
-    else container.appendChild(row);
+    if(ev.cancelable)ev.preventDefault();
+    const y = ev.clientY;const rows = getRows();let target = null;
+    for(const r of rows){if(r===row) continue;const rect = r.getBoundingClientRect();if(y < rect.top + rect.height/2){ target = r; break; }}
+    if(target) container.insertBefore(row, target);else container.appendChild(row);
   }
-  function onUp(ev){
-    if(ev.pointerId!==pointerId) return;
-    document.removeEventListener('pointermove', onMove);
-    document.removeEventListener('pointerup', onUp);
-    document.removeEventListener('pointercancel', onUp);
-    row.classList.remove('order-dragging');
-    container.classList.remove('order-dragging-active');
-    const ids = getRows().map(r=>r.getAttribute('data-order-id'));
-    OrderPreferences.reorderFromDom(type, ids);
+  function finish(){
+    cleanup();
+    if(container.isConnected)OrderPreferences.reorderFromDom(type, getRows().map(r=>r.getAttribute('data-order-id')));
   }
-  document.addEventListener('pointermove', onMove);
-  document.addEventListener('pointerup', onUp);
-  document.addEventListener('pointercancel', onUp);
+  function cancel(){cleanup();}
+  function cleanup(){row.classList.remove('order-dragging');container.classList.remove('order-dragging-active');}
+  borionBindTransientDrag(pointerId,{onMove,onFinish:finish,onCancel:cancel,captureTarget:handle});
 }

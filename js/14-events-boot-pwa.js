@@ -157,7 +157,10 @@ window.addEventListener('beforeunload', e=>{
   // silencioso; a confirmação manual não faz mais sentido.
 });
 window.addEventListener('visibilitychange', ()=>{
-  if(document.visibilityState==='visible') ExitSaveGuard.refresh();
+  if(document.visibilityState==='visible'){
+    ExitSaveGuard.refresh();
+    if(typeof window.syncGlobalScrollLockState==='function') window.syncGlobalScrollLockState({source:'boot.visibility'});
+  }
   if(document.visibilityState==='hidden') ExitSaveGuard.finalSaveSilently('visibilitychange');
 });
 window.addEventListener('pagehide', ()=> ExitSaveGuard.finalSaveSilently('pagehide'));
@@ -190,7 +193,10 @@ window.addEventListener('pageshow', (e)=>{
       forceManualSave();
     }
   });
-  window.addEventListener('resize', ()=>{ if(window.innerWidth>980 && window.MobileMenu) MobileMenu.close(); });
+  window.addEventListener('resize', ()=>{
+    if(window.innerWidth>980 && window.MobileMenu) MobileMenu.close();
+    else if(typeof window.syncGlobalScrollLockState==='function') window.syncGlobalScrollLockState({source:'boot.resize'});
+  });
   if(window.matchMedia){
     const mq = window.matchMedia('(prefers-color-scheme: light)');
     const handler = ()=>{ if(S.config && S.config.theme==='system') applyTheme(); };

@@ -316,6 +316,10 @@ function getNavItems(){
 }
 
 function renderApp(){
+  /* Qualquer render estrutural invalida sidebar/backdrop antigos. Feche primeiro para
+     impedir que mobile-menu-open sobreviva à substituição de #root. */
+  if(window.MobileMenu && typeof MobileMenu.close==='function') MobileMenu.close();
+  else if(document.body) document.body.classList.remove('mobile-menu-open');
   applyInterfaceMode();
   if(window.SmartphoneHistory) SmartphoneHistory.activate();
   if(!S.currentProfile || !S.data){
@@ -356,24 +360,33 @@ function renderApp(){
     </div>
   `;
   renderView();
+  if(typeof window.syncGlobalScrollLockState==='function')
+    window.syncGlobalScrollLockState({source:'renderApp'});
   if(window.ExitSaveGuard) ExitSaveGuard.refresh();
   if(window.BackupFS) setTimeout(()=>BackupFS.notifyStartupFolderStatus(),180);
 }
 
 const MobileMenu = {
   open(){
-    const sidebar = document.querySelector('.sidebar');
-    const backdrop = document.querySelector('.mobile-menu-backdrop');
-    if(sidebar) sidebar.classList.add('open');
-    if(backdrop) backdrop.classList.add('show');
-    document.body.classList.add('mobile-menu-open');
+    const sidebar=document.querySelector('.sidebar');
+    const backdrop=document.querySelector('.mobile-menu-backdrop');
+    if(!sidebar || !backdrop){
+      document.body.classList.remove('mobile-menu-open');
+      if(typeof window.syncGlobalScrollLockState==='function') window.syncGlobalScrollLockState({source:'MobileMenu.open.missingDom'});
+      return;
+    }
+    sidebar.classList.add('open');
+    backdrop.classList.add('show');
+    if(typeof window.syncGlobalScrollLockState==='function') window.syncGlobalScrollLockState({source:'MobileMenu.open'});
+    else document.body.classList.add('mobile-menu-open');
   },
   close(){
-    const sidebar = document.querySelector('.sidebar');
-    const backdrop = document.querySelector('.mobile-menu-backdrop');
+    const sidebar=document.querySelector('.sidebar');
+    const backdrop=document.querySelector('.mobile-menu-backdrop');
     if(sidebar) sidebar.classList.remove('open');
     if(backdrop) backdrop.classList.remove('show');
     document.body.classList.remove('mobile-menu-open');
+    if(typeof window.syncGlobalScrollLockState==='function') window.syncGlobalScrollLockState({source:'MobileMenu.close'});
   },
   toggle(){
     const sidebar = document.querySelector('.sidebar');

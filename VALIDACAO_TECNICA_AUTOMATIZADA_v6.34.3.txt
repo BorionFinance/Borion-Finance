@@ -1,0 +1,41 @@
+VALIDAÇÃO TÉCNICA BORION FINANCE v6.34.3
+Data: 2026-07-17
+
+[1] Sintaxe JavaScript
+PASS — 30 arquivos JavaScript analisados sem erro de sintaxe.
+
+[2] Referências locais do index e versionamento
+PASS — 36 referências locais existem; todos os JS/CSS usam ?v=6.34.3.
+
+[3] Service Worker
+PASS — cache novo, skipWaiting, clients.claim, limpeza de caches e 39 assets válidos/versionados.
+
+[4] Fechamento de modais
+PASS — nenhum fechamento operacional de #modal-root ignora closeModal(); aberturas permanecem guardadas.
+
+[5] CSS de toque e rolagem
+PASS — documento usa pan-y; cards de reserva usam pan-y; 7 usos de touch-action:none estão restritos a menu aberto ou alças dedicadas.
+
+[6] Listeners globais de roda/toque
+PASS — nenhum listener global permanente de wheel/touchmove.
+
+[7] Teste estrutural em Chromium headless
+CHECKS
+- normal state unlocked: PASS
+- document is scrollable: PASS
+- normal wheel/touch/pointer not canceled: PASS
+- modal locks background: PASS
+- modal internal overflow: PASS
+- close unlocks and preserves position: PASS
+- legacy observer opens: PASS
+- legacy observer closes: PASS
+- menu locks: PASS
+- orphan menu/backdrop clears: PASS
+- mode switch releases fixed body: PASS
+- 30 cycles clean: PASS
+OBS — PageDown/gestos físicos não foram classificados neste teste porque a política do ambiente bloqueou navegação da página e eventos de entrada confiáveis.
+
+[8] Versão antiga residual
+PASS — nenhuma referência executável à versão 6.34.2.
+
+RESULTADO FINAL: PASS nas verificações automatizáveis deste ambiente.

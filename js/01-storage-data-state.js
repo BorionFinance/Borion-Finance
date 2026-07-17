@@ -95,6 +95,8 @@ function applyInterfaceMode(){
     document.body.classList.toggle('smartphone-mode',mode==='smartphone');
     document.body.classList.toggle('pro-mode',mode==='pro');
   }
+  if(typeof window.syncGlobalScrollLockState==='function')
+    window.syncGlobalScrollLockState({source:'applyInterfaceMode'});
   return mode;
 }
 function applyTheme(){

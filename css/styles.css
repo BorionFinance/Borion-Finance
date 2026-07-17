@@ -2528,7 +2528,95 @@ html[data-theme="light"] .launch-location-inline,html[data-theme="light"] .launc
 html[data-theme="light"] .launch-destination-inline{background:rgba(184,137,55,.075);border-color:rgba(184,137,55,.18)}
 
 html[data-interface-mode="smartphone"] .date-sort-toggle{width:36px!important;min-width:36px!important;justify-self:center}
-html[data-interface-mode="smartphone"] .budget-launch-table{min-width:680px}
+html[data-interface-mode="smartphone"] .budget-launch-table{
+  width:100%;
+  min-width:0;
+  table-layout:fixed;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table th,
+html[data-interface-mode="smartphone"] .budget-launch-table td{
+  padding:9px 6px;
+  word-break:break-word;
+  overflow-wrap:anywhere;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table th:first-child,
+html[data-interface-mode="smartphone"] .budget-launch-table td:first-child{
+  width:56px;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table th:last-child,
+html[data-interface-mode="smartphone"] .budget-launch-table td:last-child{
+  width:44px;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table th:nth-child(3),
+html[data-interface-mode="smartphone"] .budget-launch-table td:nth-child(3){
+  display:none;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table th:nth-child(4),
+html[data-interface-mode="smartphone"] .budget-launch-table td:nth-child(4){
+  width:88px;
+  text-align:right;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-name-main{
+  align-items:flex-start;
+  gap:5px;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-name-text{
+  line-height:1.3;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-source-line,
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-meta-row{
+  margin-top:3px;
+}
+html[data-interface-mode="smartphone"] .panel-box{
+  padding:16px;
+  overflow:hidden;
+}
+html[data-interface-mode="smartphone"] .tabs{
+  gap:4px;
+  padding:4px;
+  max-width:100%;
+}
+html[data-interface-mode="smartphone"] .tab-btn{
+  padding:10px 12px;
+  font-size:12px;
+}
+html[data-interface-mode="smartphone"] .donut-wrap{
+  width:100%;
+  max-width:100%;
+  align-items:center;
+  overflow:hidden;
+}
+html[data-interface-mode="smartphone"] .donut-hole-wrap{
+  width:min(190px, calc(100vw - 88px));
+  height:min(190px, calc(100vw - 88px));
+  max-width:100%;
+  margin:0 auto 8px;
+}
+html[data-interface-mode="smartphone"] .donut-svg{
+  display:block;
+  width:100%;
+  height:100%;
+  overflow:hidden;
+}
+html[data-interface-mode="smartphone"] .legend{
+  width:100%;
+  max-width:100%;
+}
+html[data-interface-mode="smartphone"] .legend-item{
+  display:grid;
+  grid-template-columns:auto auto minmax(0,1fr);
+  column-gap:8px;
+  row-gap:2px;
+  align-items:center;
+}
+html[data-interface-mode="smartphone"] .legend-item .ln{
+  min-width:0;
+  overflow-wrap:anywhere;
+}
+html[data-interface-mode="smartphone"] .legend-item .lv{
+  grid-column:2 / 4;
+  justify-self:start;
+}
 
 
 /* ================= V6.33.1 — Configurações refinadas, modo de interface segmentado,
@@ -2900,7 +2988,7 @@ html[data-interface-mode="smartphone"].keyboard-open .transaction-modal.mobile-b
 
 
 /* =====================================================================================
-   V6.34.4 — CORREÇÃO DEFINITIVA DO SCROLL PRINCIPAL NO SMARTPHONE MODE
+   V6.34.5 — AJUSTE DE LAYOUT MOBILE, TABELA E GRÁFICO NO SMARTPHONE MODE
    Causa reproduzida: html e body se tornavam dois contêineres concorrentes. Como
    overflow-x:hidden faz overflow-y:visible computar como auto, o gesto era entregue ao
    body sem área própria de rolagem e não chegava ao documento. A gaveta funcionava porque

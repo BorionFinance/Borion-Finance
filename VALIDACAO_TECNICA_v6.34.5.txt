@@ -1,0 +1,13 @@
+VALIDAÇÃO TÉCNICA — BORION FINANCE v6.34.5
+
+PASS — CSS mobile não força mais `.budget-launch-table` para 680px.
+PASS — `.budget-launch-table` usa `width:100%`, `min-width:0` e `table-layout:fixed` no Smartphone Mode.
+PASS — coluna de categoria é ocultada apenas no mobile para caber melhor.
+PASS — `panel-box` no mobile usa contenção visual para impedir vazamento lateral.
+PASS — `donut-wrap` e `donut-hole-wrap` são responsivos no Smartphone Mode.
+PASS — legenda do gráfico foi adaptada para layout responsivo.
+PASS — assets locais usam `?v=6.34.5`.
+PASS — manifest usa versão `6.34.5`.
+PASS — `BORION_APP_VERSION` atualizado para `6.34.5`.
+PASS — registro do Service Worker usa `sw.js?v=6.34.5`.
+PASS — validação de sintaxe dos arquivos JavaScript concluída sem erro.

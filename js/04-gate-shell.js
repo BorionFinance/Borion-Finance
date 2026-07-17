@@ -316,6 +316,16 @@ function getNavItems(){
 }
 
 function renderApp(){
+  /* Painéis globais vivem fora de #root. Feche/remova antes de reconstruir a aplicação
+     para que nenhuma classe de bloqueio sobreviva sem o painel correspondente. */
+  try{
+    if(window.Notifs && Notifs.panelOpen) Notifs.closePanel();
+    else {
+      const staleNotif=document.getElementById('notif-panel');
+      if(staleNotif) staleNotif.remove();
+      document.body.classList.remove('notif-panel-open');
+    }
+  }catch(_){ document.body.classList.remove('notif-panel-open'); }
   /* Qualquer render estrutural invalida sidebar/backdrop antigos. Feche primeiro para
      impedir que mobile-menu-open sobreviva à substituição de #root. */
   if(window.MobileMenu && typeof MobileMenu.close==='function') MobileMenu.close();

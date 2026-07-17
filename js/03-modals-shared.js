@@ -1,12 +1,19 @@
 /* Borion Finance — Sistema de modais, formulário genérico e criação rápida de categorias. */
 
 /* ---------------- Modal system (generic CRUD forms) ---------------- */
-/* V6.34.3 — controle central e defensivo da rolagem global.
+/* V6.34.4 — controle central e defensivo da rolagem global.
    As classes de bloqueio passam a refletir o DOM real: modal visível e menu lateral
    realmente aberto. Fechamentos legados, re-renderizações e retorno do BFCache não
    conseguem mais deixar html/body travados sem uma camada visual correspondente. */
+function borionPrimaryScrollElement(){
+  const html=document.documentElement;
+  const smartphone=!!(html && html.getAttribute('data-interface-mode')==='smartphone');
+  const main=smartphone ? document.getElementById('view-root') : null;
+  return (main && main.isConnected) ? main : document.scrollingElement;
+}
+
 function borionDocumentScrollTop(){
-  const scrolling=document.scrollingElement;
+  const scrolling=borionPrimaryScrollElement();
   return Math.max(0,Number(scrolling&&scrolling.scrollTop)||Number(window.scrollY)||0);
 }
 
@@ -32,7 +39,7 @@ function releaseModalBodyLock({restoreScroll=true}={}){
   delete html.dataset.modalScrollY;
   if(wasLocked && restoreScroll){
     requestAnimationFrame(()=>{
-      const scrolling=document.scrollingElement;
+      const scrolling=borionPrimaryScrollElement();
       if(scrolling) scrolling.scrollTop=savedY;
       else window.scrollTo(0,savedY);
     });
@@ -50,7 +57,8 @@ function setModalDocumentState(open,{restoreScroll=true}={}){
     if(body.classList.contains('modal-scroll-locked')) return;
     const y=borionDocumentScrollTop();
     html.dataset.modalScrollY=String(y);
-    body.style.setProperty('--modal-lock-top',`${-y}px`);
+    /* No Smartphone Mode o scroll pertence a #view-root. Não fixar o body: isso cria
+       um segundo proprietário de rolagem e trava wheel/touch em WebViews Android. */
     body.classList.add('modal-scroll-locked');
     return;
   }
@@ -68,6 +76,8 @@ function syncGlobalScrollLockState({restoreScroll=true,source='sync'}={}){
   const sidebar=document.querySelector('.sidebar');
   const backdrop=document.querySelector('.mobile-menu-backdrop');
   const mobileMenuOpen=borionMobileMenuIsActuallyOpen();
+  const notifPanel=document.getElementById('notif-panel');
+  const notificationPanelOpen=!!(notifPanel && notifPanel.isConnected);
 
   /* Se apenas uma metade do menu sobreviveu a um render/erro, remova também a classe
      visual órfã. Um backdrop .show sem sidebar continuaria interceptando wheel/touch. */
@@ -78,11 +88,13 @@ function syncGlobalScrollLockState({restoreScroll=true,source='sync'}={}){
 
   setModalDocumentState(modalOpen,{restoreScroll});
   body.classList.toggle('mobile-menu-open',mobileMenuOpen);
+  /* A classe de notificações também precisa refletir o DOM real. */
+  body.classList.toggle('notif-panel-open',notificationPanelOpen);
 
   if(window.BORION_SCROLL_DEBUG===true){
-    const scrolling=document.scrollingElement;
+    const scrolling=borionPrimaryScrollElement();
     console.debug('[SCROLL_LOCK]',{
-      source,modalOpen,mobileMenuOpen,
+      source,modalOpen,mobileMenuOpen,notificationPanelOpen,
       htmlOverflow:getComputedStyle(html).overflowY,
       bodyOverflow:getComputedStyle(body).overflowY,
       bodyTouchAction:getComputedStyle(body).touchAction,
@@ -93,7 +105,7 @@ function syncGlobalScrollLockState({restoreScroll=true,source='sync'}={}){
       scrollTop:scrolling&&scrolling.scrollTop
     });
   }
-  return {modalOpen,mobileMenuOpen};
+  return {modalOpen,mobileMenuOpen,notificationPanelOpen};
 }
 window.syncGlobalScrollLockState=syncGlobalScrollLockState;
 
@@ -160,6 +172,7 @@ function attachModalGuard(overlay){
        recalculado logo em seguida, portanto bloqueios legítimos são reaplicados. */
     html.classList.remove('modal-open');
     body.classList.remove('mobile-menu-open');
+    body.classList.remove('notif-panel-open');
     releaseModalBodyLock({restoreScroll:false});
 
     if(root && root.dataset.scrollStateObserver!=='1' && typeof MutationObserver!=='undefined'){

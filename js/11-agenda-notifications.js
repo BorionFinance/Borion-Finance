@@ -366,7 +366,7 @@ const Notifs = {
   },
   renderPanel(){
     let panel = document.getElementById('notif-panel');
-    if(!this.panelOpen){ if(panel) panel.remove(); document.body.classList.remove('notif-panel-open'); return; }
+    if(!this.panelOpen){ if(panel) panel.remove(); document.body.classList.remove('notif-panel-open'); if(typeof syncGlobalScrollLockState==='function') syncGlobalScrollLockState({source:'Notifs.close'}); return; }
     if(!panel){ panel = document.createElement('section'); panel.id='notif-panel'; panel.className='notif-panel'; document.body.appendChild(panel); }
     panel.classList.toggle('notif-panel-mobile',typeof isSmartphoneMode==='function' && isSmartphoneMode());
     const list = (S.data.notificacoes||[]).slice().sort((a,b)=>(b.criadaEm||0)-(a.criadaEm||0));
@@ -397,6 +397,7 @@ const Notifs = {
       this.bindSwipe(shell,{onCommit:()=>this.removeWithUndo(shell.dataset.notifId)});
     });
     document.body.classList.add('notif-panel-open');
+    if(typeof syncGlobalScrollLockState==='function') syncGlobalScrollLockState({source:'Notifs.open'});
     if(window.MobileExperience && MobileExperience.decorateNotificationPanel) MobileExperience.decorateNotificationPanel(panel);
   },
   toggleRead(id){

@@ -1,0 +1,20 @@
+VALIDAÇÃO TÉCNICA — BORION FINANCE v6.34.4
+Data: 17/07/2026
+
+PASS — Causa raiz reproduzida: html/body como contêineres de overflow concorrentes.
+PASS — #view-root definido como único scroller principal no Smartphone Mode.
+PASS — html/body/#root/shell delimitam o viewport sem rolagem concorrente.
+PASS — Mouse wheel: scrollTop 0 -> 600 em página longa.
+PASS — Touch vertical: scrollTop 600 -> ~1400 em página longa.
+PASS — Lançamentos real: scrollHeight 6257; wheel 0 -> 700.
+PASS — Reservas real: scrollHeight 6223; wheel 0 -> 650.
+PASS — Modal bloqueia fundo e restaura posição 500 após fechar.
+PASS — Menu bloqueia fundo e devolve scroll após fechar.
+PASS — Sidebar fechada não captura eventos durante animação.
+PASS — notif-panel-open órfã é removida pela reconciliação.
+PASS — 30 ciclos modal/menu sem trava residual.
+PASS — Todos os arquivos JS e sw.js passaram em node --check.
+PASS — index.html usa ?v=6.34.4 em todos os assets locais.
+PASS — Service Worker: cache v6.34.4, updateViaCache none, skipWaiting e clients.claim.
+
+Limitação: não houve aparelho Android físico no ambiente; touch e wheel foram enviados ao Chromium real via protocolo de automação em viewport 390x844.

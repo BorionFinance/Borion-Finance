@@ -291,7 +291,8 @@ const Cards = {
     ], onSave(v){
       const c = S.data.cartoes.find(x=>x.id===cartaoId);
       const dataCompraCompleta=v.dataCompra||todayISO();
-      const diaCompra=Math.max(1,Math.min(31,Number(v.diaEntrada)||parseInt(dataCompraCompleta.slice(8,10),10)||1));
+      /* V6.35.4 — mesma prioridade de editParcela: a data escolhida manda no dia. */
+      const diaCompra=Math.max(1,Math.min(31,parseInt(dataCompraCompleta.slice(8,10),10)||Number(v.diaEntrada)||1));
       const p = {id:uid(), descricao:v.descricao, local:v.local, categoria:v.categoria||'Outro', valorParcela:Number(v.valorParcela)||0, parcelaTotal:Math.max(1,Math.round(v.parcelaTotal)||1), dataCompra:dataCompraCompleta.slice(0,7), dataCompraCompleta, diaEntrada:diaCompra, apareceDespesas:!!v.apareceDespesas, despesaTipo:v.despesaTipo||'variavel', statusFaturaPorCompetencia:{}, despesaTransacaoId:null, despesaTransacaoIds:[], despesaFixaId:null};
       c.parcelas.push(p);
       linkParcelaToDespesa(c, p);
@@ -317,7 +318,15 @@ const Cards = {
     onDelete(){ unlinkParcelaFromDespesa(p); c.parcelas = c.parcelas.filter(x=>x.id!==parcelaId); saveCurrentData(); closeModal(); renderView(); },
     onSave(v){
       const dataCompraCompleta=v.dataCompra||p.dataCompraCompleta||(p.dataCompra?(p.dataCompra+'-'+pad2(p.diaEntrada||1)):'');
-      const diaCompra=Math.max(1,Math.min(31,Number(v.diaEntrada)||parseInt(dataCompraCompleta.slice(8,10),10)||p.diaEntrada||1));
+      /* V6.35.4 — "Data da compra" e "Dia do mês que entra na fatura" são dois campos
+         para a mesma informação (o dia). Antes, o dia digitado em "Dia da fatura"
+         (pré-preenchido com o valor ANTIGO ao abrir para editar) sempre vencia, mesmo
+         quando o usuário só mexia em "Data da compra". Resultado: mudar a data de dia 15
+         para dia 16 e salvar continuava mostrando dia 15, porque o campo numérico
+         nunca tinha sido tocado e ainda carregava o valor antigo. Agora o dia é extraído
+         primeiro da própria data escolhida — que é o campo que o usuário efetivamente
+         está editando — e só cai para "Dia da fatura" se a data vier vazia. */
+      const diaCompra=Math.max(1,Math.min(31,parseInt(dataCompraCompleta.slice(8,10),10)||Number(v.diaEntrada)||p.diaEntrada||1));
       Object.assign(p,{descricao:v.descricao, local:v.local, categoria:v.categoria||p.categoria||'Outro', valorParcela:Number(v.valorParcela)||0, parcelaTotal:Math.max(1,Math.round(v.parcelaTotal)||1), dataCompra:dataCompraCompleta.slice(0,7), dataCompraCompleta, diaEntrada:diaCompra, apareceDespesas:!!v.apareceDespesas, despesaTipo:v.despesaTipo||'variavel'});
       linkParcelaToDespesa(c, p);
       saveCurrentData(); closeModal(); renderView();

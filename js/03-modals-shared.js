@@ -1,7 +1,7 @@
 /* Borion Finance — Sistema de modais, formulário genérico e criação rápida de categorias. */
 
 /* ---------------- Modal system (generic CRUD forms) ---------------- */
-/* V6.34.5 — controle central e defensivo da rolagem global.
+/* V6.35.0 — controle central e defensivo da rolagem global preservado.
    As classes de bloqueio passam a refletir o DOM real: modal visível e menu lateral
    realmente aberto. Fechamentos legados, re-renderizações e retorno do BFCache não
    conseguem mais deixar html/body travados sem uma camada visual correspondente. */

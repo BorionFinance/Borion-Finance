@@ -1,0 +1,249 @@
+VALIDAÇÃO TÉCNICA — BORION FINANCE v6.35.0
+IMPORTAÇÃO INTELIGENTE DE EXTRATOS POR PRINT
+
+Legenda:
+[OK] aprovado por teste automático ou inspeção direta
+[PARCIAL] implementado, mas falta validação real indicada
+[PENDENTE] não executado neste ambiente
+[N/A] não aplicável
+
+======================================================================
+VERSÃO, ESTRUTURA E MENU
+======================================================================
+
+[OK] Projeto baseado diretamente na v6.34.5 recebida.
+[OK] Versão interna atualizada para 6.35.0.
+[OK] Referências de assets do index.html atualizadas para 6.35.0.
+[OK] manifest.json atualizado para 6.35.0.
+[OK] CACHE_NAME atualizado.
+[OK] Service worker inclui js/16a-import-statement-images.js.
+[OK] Existe somente um item “Importar Extrato” no menu.
+[OK] O item permanece controlado por modules.imports.
+[OK] O novo fluxo fica dentro da tela existente.
+[OK] Existem “Arquivo bancário” e “Prints do extrato”.
+[OK] Nenhuma segunda rota de importação foi criada.
+
+======================================================================
+IMPORTADOR LEGADO
+======================================================================
+
+[OK] Parser CSV executado e aprovado.
+[OK] Parser OFX executado e aprovado.
+[OK] Parser TXT executado e aprovado.
+[PARCIAL] Parser PDF textual foi preservado, mas não executado em navegador neste ambiente.
+[OK] Commit legado permanece separado do commit por imagem.
+
+======================================================================
+SELEÇÃO E MEMÓRIA DAS IMAGENS
+======================================================================
+
+[OK] Input principal aceita PNG, JPEG e WEBP.
+[OK] Input principal permite múltiplas imagens.
+[OK] Input principal não força capture.
+[OK] Existe suporte a arrastar imagens.
+[OK] Existe suporte a colar imagem.
+[OK] Existem miniaturas.
+[OK] É possível remover uma imagem.
+[OK] É possível limpar todas.
+[OK] É possível reordenar imagens.
+[OK] Limite de 10 imagens aplicado.
+[OK] Limite de 12 MB por arquivo aplicado.
+[OK] URL.createObjectURL é usada.
+[OK] URL.revokeObjectURL é chamada na remoção/limpeza.
+[OK] Fingerprint SHA-256 implementado.
+[OK] A imagem integral não entra em S.data.
+[OK] Base64 não é usado para persistência.
+
+======================================================================
+OCR LOCAL
+======================================================================
+
+[OK] Carregamento ocorre sob demanda.
+[OK] Promise singleton implementada.
+[OK] Worker é reutilizado na sessão.
+[OK] Processamento sequencial implementado.
+[OK] Progresso e etapas implementados.
+[OK] Cancelamento implementado.
+[OK] Segunda leitura aprimorada ocorre somente quando necessária.
+[OK] Nenhuma imagem é enviada por fetch.
+[OK] Modelo português por.traineddata.gz incluído.
+[PARCIAL] Caminhos estão fixados para Tesseract.js 5.1.1.
+[PENDENTE] tesseract.min.js oficial não está incluído.
+[PENDENTE] worker.min.js oficial não está incluído.
+[PENDENTE] tesseract-core.wasm.js oficial não está incluído.
+[PENDENTE] tesseract-core.wasm oficial não está incluído.
+[PARCIAL] Navegadores com TextDetector podem usar o leitor nativo.
+[PENDENTE] OCR Tesseract.js completo em navegador sem TextDetector.
+
+======================================================================
+PRÉ-PROCESSAMENTO
+======================================================================
+
+[OK] createImageBitmap usado quando disponível.
+[OK] Fallback por Image implementado.
+[OK] Orientação solicitada ao bitmap.
+[OK] Lado maior limitado a 2600 px.
+[OK] Proporção preservada.
+[OK] Imagem pequena não é ampliada exageradamente.
+[OK] Segunda passagem em tons de cinza/contraste implementada.
+[OK] Canvas e bitmap são liberados.
+
+======================================================================
+PARSER MERCADO PAGO
+======================================================================
+
+[OK] Detecção por pontuação implementada.
+[OK] Valor monetário usado como âncora.
+[OK] Horário reconhecido.
+[OK] Código “Movimento” e sufixo reconhecidos.
+[OK] Datas Hoje e Ontem resolvidas pela data-base local.
+[OK] Datas por extenso e numéricas reconhecidas.
+[OK] Saldo “Disponível” é informativo e não vira transação.
+[OK] Pagamento vira Despesa.
+[OK] Pix recebido vira Receita.
+[OK] Dinheiro reservado vira Conta → Reserva.
+[OK] Dinheiro retirado vira Reserva → Conta.
+[OK] Rendimento de cofre vira Rendimento de Reserva.
+[OK] Estorno/devolução vira Receita de reembolso.
+[OK] Operação desconhecida fica pendente e desmarcada.
+[OK] O parser não usa coordenadas absolutas do print de referência.
+[PENDENTE] Teste com o print real, pois a imagem não foi recebida.
+
+======================================================================
+CENÁRIO DE SETE MOVIMENTAÇÕES
+======================================================================
+
+[OK] Sete linhas reconhecidas em entrada sintética equivalente.
+[OK] Luz de vela: R$ 117,90 de Despesa.
+[OK] TERRA NOVA: R$ 150,00 de Receita.
+[OK] Parcela YAS-62: Conta → Reserva, R$ 3,36.
+[OK] Pessoal: Reserva → Conta, R$ 3,27.
+[OK] Pessoal: Conta → Reserva, R$ 200,00.
+[OK] Borion 1: Reserva → Conta, R$ 100,05.
+[OK] Borion 2: Reserva → Conta, R$ 100,04.
+[OK] Receita total: R$ 150,00.
+[OK] Despesa total: R$ 117,90.
+[OK] Resultado Receita - Despesa: R$ 32,10.
+[OK] Transferências têm efeito líquido zero na Conta.
+[OK] Variação final da Conta: R$ 32,10.
+[OK] Variação conjunta das Reservas: R$ 0,00.
+
+======================================================================
+REVISÃO E RESPONSIVIDADE
+======================================================================
+
+[OK] Revisão desktop em tabela implementada.
+[OK] Revisão mobile em cards abaixo de 760 px implementada.
+[OK] Campos dinâmicos por tipo financeiro implementados.
+[OK] Receita permite categoria, origem e Conta.
+[OK] Despesa permite categoria, status, forma e Conta.
+[OK] Conta → Reserva permite Conta e Reserva.
+[OK] Reserva → Conta permite Reserva e Conta.
+[OK] Reserva → Reserva permite origem e destino.
+[OK] Rendimento permite Reserva.
+[OK] Transferência entre Contas permite origem e destino.
+[OK] Ignorar não grava nem altera saldo.
+[OK] Confiança alta/média/baixa implementada.
+[OK] Pendências bloqueantes implementadas.
+[OK] CSS usa min-width:0 e cards no mobile.
+[OK] Não foi adicionado bloqueio global de body/overflow para o importador.
+[PENDENTE] Inspeção visual real em 320, 360, 390, 412 e 480 px.
+[PENDENTE] Teste tátil em aparelho Android físico.
+[PENDENTE] Teste com teclado virtual Android.
+[PENDENTE] Inspeção visual completa em 1280×720, 1366×768 e 1920×1080.
+[PENDENTE] Inspeção visual completa em tema claro e escuro.
+
+======================================================================
+RESERVAS E MAPEAMENTOS
+======================================================================
+
+[OK] Mapeamento é salvo por perfil em importPreferences.reserveMappings.
+[OK] Correspondência exata por nome é automática.
+[OK] Correspondência aproximada vira sugestão.
+[OK] Nova Reserva pode ser preparada para criação no commit.
+[OK] Nova Reserva não é criada durante a revisão.
+[OK] Módulo de Reservas desativado gera pendência.
+[OK] Dinheiro reservado não é Despesa.
+[OK] Dinheiro retirado não é Receita.
+[OK] Conta → Reserva testado.
+[OK] Reserva → Conta testado.
+[OK] Reserva → Reserva suportado.
+[OK] Rendimento de Reserva suportado.
+[OK] Saldo insuficiente bloqueia a linha.
+[OK] Origem e destino iguais são bloqueados.
+
+======================================================================
+DUPLICIDADE
+======================================================================
+
+[OK] Chave com código externo implementada.
+[OK] Chave alternativa sem código implementada.
+[OK] Busca em transações implementada.
+[OK] Busca em fixas implementada.
+[OK] Busca em transferências implementada.
+[OK] Busca em movimentos de Reservas implementada.
+[OK] Movimentos vinculados não contam como nova importação independente.
+[OK] Duplicidade dentro do lote implementada.
+[OK] Sobreposição mantém a linha de maior confiança.
+[OK] Reimportação sintética marcou sete duplicidades.
+[OK] Reimportação deixou zero linhas selecionadas.
+[OK] Reimportação não alterou saldo.
+[OK] Forçar uma duplicidade exige confirmação individual.
+
+======================================================================
+COMMIT E ROLLBACK
+======================================================================
+
+[OK] Todas as linhas são validadas antes da mutação.
+[OK] Conta é resolvida antes da mutação.
+[OK] Reservas são resolvidas/preparadas antes da mutação.
+[OK] Duplicidade é reavaliada antes da gravação.
+[OK] Linhas são aplicadas cronologicamente.
+[OK] runAtomicFinancialMutation é reutilizada.
+[OK] applyTxSaldoEffect é reutilizada para Receita/Despesa.
+[OK] Cards.applyTransferenciaEffect é reutilizada para transferências.
+[OK] saveCurrentData não é chamado a cada linha.
+[OK] Histórico de lote é criado somente em sucesso.
+[OK] Falha forçada na última linha restaurou todas as transações.
+[OK] Falha forçada restaurou todas as transferências.
+[OK] Falha forçada restaurou saldos da Conta.
+[OK] Falha forçada restaurou saldos das Reservas.
+[OK] Falha forçada não deixou lote incompleto.
+
+======================================================================
+PRIVACIDADE E PERFIS
+======================================================================
+
+[OK] Nenhuma imagem é salva em localStorage pelo novo módulo.
+[OK] Nenhuma imagem é salva em IndexedDB pelo novo módulo.
+[OK] Nenhuma imagem é salva no Google Drive pelo novo módulo.
+[OK] Nenhuma imagem é salva em S.data.
+[OK] Nenhuma imagem entra no backup JSON.
+[OK] Não há fetch com Blob/imagem no novo módulo.
+[OK] O texto OCR completo não é gravado no lote.
+[OK] Troca de perfil cancela e limpa o fluxo temporário.
+[OK] Logout cancela e limpa o fluxo temporário.
+[OK] Mapeamentos persistentes permanecem no perfil correto.
+
+======================================================================
+PWA E SINCRONIZAÇÃO
+======================================================================
+
+[OK] Cache principal atualizado.
+[OK] Script novo incluído no cache do app.
+[OK] Cache antigo é removido pelo activate.
+[OK] Cache de runtime do OCR separado.
+[OK] Registro do service worker usa v6.35.0.
+[PENDENTE] Instalação real do PWA em dispositivo.
+[PENDENTE] Atualização real da v6.34.5 para v6.35.0 em dispositivo.
+[PENDENTE] Sincronização real com Google Drive após importação.
+
+======================================================================
+RESULTADO DE APROVAÇÃO
+======================================================================
+
+[PARCIAL] Arquitetura, parser, revisão, regras financeiras, duplicidade e rollback aprovados nos testes automáticos disponíveis.
+[PENDENTE] Aprovação final do OCR em todos os navegadores depende da inclusão dos quatro assets oficiais do Tesseract.js 5.1.1.
+[PENDENTE] Aprovação final do cenário visual depende do print real e de testes manuais em navegador/Android.
+
+O pacote não deve ser apresentado como totalmente validado em produção enquanto os itens PENDENTE acima não forem concluídos.

@@ -664,6 +664,7 @@ const CloudStorage = {
     cloudActionLog(action,'SUCCESS',{profileId:id, remaining:this.profiles.length, activeProfileId:this.activeProfileId});
   },
   async switchProfile(id){
+    try{ if(typeof resetImportTransientState==='function') resetImportTransientState(); }catch(_e){}
     if(!isValidUUID(id)) throw new Error('Este perfil tem um id inválido (formato antigo, não é UUID) e não pode mais ser aberto. Exclua-o e crie um novo perfil.');
     if(this.activeProfileId && this.activeProfileId!==id && S && S.data){
       const ok = await this.syncNow();

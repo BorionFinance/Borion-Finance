@@ -297,6 +297,10 @@ function emptyData(){
     /* V6.23.1 — auditoria defensiva da migração para accountId. Não participa de cálculos. */
     accountMigrationReview: [],
     migrationBackups: [],
+    /* V6.35.0 — preferências e histórico do importador inteligente por print.
+       Permanecem dentro do perfil atual e nunca armazenam Blob, File, base64 ou pixels. */
+    importPreferences: { reserveMappings:{}, merchantRules:{} },
+    importBatches: [],
     uiPreferences:{budgetDateSort:{receita:'desc',fixa:'desc',variavel:'desc',transferencias:'desc'},floatingNotes:{enabled:false,text:'',minimized:true,x:null,y:null}}
   };
 }
@@ -341,6 +345,12 @@ function migrateData(d){
      ao perfil atual porque fica dentro de S.data. Não participa de nenhum cálculo e não
      altera valores atuais; serve somente para consulta e comparação histórica. */
   if(!Array.isArray(d.reservas.monthlyReports)) d.reservas.monthlyReports=[];
+  /* V6.35.0 — migração defensiva, sem tocar em saldos ou IDs financeiros. */
+  if(!d.importPreferences || typeof d.importPreferences!=='object' || Array.isArray(d.importPreferences)) d.importPreferences={};
+  if(!d.importPreferences.reserveMappings || typeof d.importPreferences.reserveMappings!=='object' || Array.isArray(d.importPreferences.reserveMappings)) d.importPreferences.reserveMappings={};
+  if(!d.importPreferences.merchantRules || typeof d.importPreferences.merchantRules!=='object' || Array.isArray(d.importPreferences.merchantRules)) d.importPreferences.merchantRules={};
+  if(!Array.isArray(d.importBatches)) d.importBatches=[];
+  if(d.importBatches.length>100) d.importBatches=d.importBatches.slice(-100);
   if(!d.uiPreferences || typeof d.uiPreferences!=='object') d.uiPreferences={};
   if(!d.uiPreferences.budgetSummary || !Array.isArray(d.uiPreferences.budgetSummary.order)) d.uiPreferences.budgetSummary={order:['receita','investir','despesas','saldo'],visible:['receita','investir','despesas','saldo']};
   if(!d.uiPreferences.budgetDateSort || typeof d.uiPreferences.budgetDateSort!=='object') d.uiPreferences.budgetDateSort={};

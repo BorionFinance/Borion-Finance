@@ -1,0 +1,3 @@
+Engine target: Tesseract.js 5.1.1 (local)
+Language model: por.traineddata.gz
+Fallback: browser-native TextDetector, when available

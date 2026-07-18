@@ -2988,7 +2988,7 @@ html[data-interface-mode="smartphone"].keyboard-open .transaction-modal.mobile-b
 
 
 /* =====================================================================================
-   V6.34.5 — AJUSTE DE LAYOUT MOBILE, TABELA E GRÁFICO NO SMARTPHONE MODE
+   V6.35.0 — BASE DO AJUSTE DE LAYOUT MOBILE, TABELA E GRÁFICO NO SMARTPHONE MODE
    Causa reproduzida: html e body se tornavam dois contêineres concorrentes. Como
    overflow-x:hidden faz overflow-y:visible computar como auto, o gesto era entregue ao
    body sem área própria de rolagem e não chegava ao documento. A gaveta funcionava porque
@@ -3067,4 +3067,89 @@ html[data-interface-mode="smartphone"] .sidebar:not(.open){
 }
 html[data-interface-mode="smartphone"] .sidebar.open{
   pointer-events:auto;
+}
+
+/* =====================================================================================
+   V6.35.0 — IMPORTAÇÃO INTELIGENTE DE EXTRATOS POR PRINT
+===================================================================================== */
+.import-source-switch{display:inline-grid;grid-template-columns:1fr 1fr;gap:4px;max-width:520px;width:100%;padding:4px;margin:0 0 18px;border:1px solid rgba(217,180,107,.16);border-radius:16px;background:rgba(255,255,255,.025);box-sizing:border-box;}
+.import-source-tab{min-width:0;min-height:44px;border:0;border-radius:12px;padding:10px 14px;background:transparent;color:var(--muted);font-weight:850;cursor:pointer;transition:background-color .18s ease,color .18s ease,box-shadow .18s ease;}
+.import-source-tab.active{color:var(--text);background:linear-gradient(135deg,rgba(217,180,107,.18),rgba(217,180,107,.08));box-shadow:inset 0 0 0 1px rgba(217,180,107,.24);}
+.import-image-drop{outline:none;min-width:0;}
+.import-image-drop:focus-visible{box-shadow:0 0 0 3px rgba(217,180,107,.22);}
+.import-image-buttons{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0;}
+.import-image-list{display:grid;gap:10px;margin:12px 0;min-width:0;}
+.import-image-card{display:grid;grid-template-columns:64px minmax(0,1fr) auto;align-items:center;gap:12px;padding:10px;border:1px solid rgba(255,255,255,.07);border-radius:15px;background:rgba(255,255,255,.025);min-width:0;box-sizing:border-box;}
+.import-image-thumb{width:64px;height:64px;object-fit:cover;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(0,0,0,.2);}
+.import-image-meta{display:flex;flex-direction:column;gap:4px;min-width:0;}
+.import-image-meta strong,.import-image-meta span,.import-image-meta small{overflow-wrap:anywhere;word-break:break-word;}
+.import-image-meta strong{font-size:13px;}
+.import-image-meta span{font-size:11px;color:var(--muted);}
+.import-image-meta small{font-size:10.5px;}
+.import-image-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
+.import-ocr-progress{padding:14px;margin:12px 0;border:1px solid rgba(217,180,107,.18);border-radius:15px;background:rgba(217,180,107,.055);}
+.import-ocr-stage{font-size:12.5px;font-weight:800;margin-bottom:9px;}
+.import-ocr-progress-track{height:7px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;}
+.import-ocr-progress-bar{height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--gold),var(--gold-bright));transition:width .18s ease;}
+.import-ocr-progress-meta{display:flex;justify-content:space-between;gap:10px;margin:7px 0 10px;font-size:10.5px;color:var(--muted);}
+.import-privacy-note,.import-relative-date-warning{padding:12px 14px;margin-top:12px;border-radius:14px;font-size:11.5px;line-height:1.45;}
+.import-privacy-note{border:1px solid rgba(74,222,128,.18);background:rgba(34,197,94,.07);color:var(--text);}
+.import-relative-date-warning{border:1px solid rgba(245,158,11,.22);background:rgba(245,158,11,.08);color:#f5d68b;}
+.import-kpis-expanded{grid-template-columns:repeat(2,minmax(0,1fr));}
+.import-reconciliation{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 14px;}
+.import-reconciliation>div{min-width:0;padding:10px;border-radius:12px;border:1px solid rgba(255,255,255,.055);background:rgba(255,255,255,.025);}
+.import-reconciliation span{display:block;color:var(--muted);font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;}
+.import-reconciliation b{display:block;font-size:12px;overflow-wrap:anywhere;}
+.import-confidence{display:inline-flex;align-items:center;justify-content:center;min-width:46px;padding:5px 8px;border-radius:999px;font-size:10px;font-weight:900;border:1px solid transparent;}
+.import-confidence-high{color:#86efac;background:rgba(34,197,94,.10);border-color:rgba(74,222,128,.22);}
+.import-confidence-medium{color:#f5d68b;background:rgba(245,158,11,.10);border-color:rgba(245,158,11,.22);}
+.import-confidence-low{color:#fca5a5;background:rgba(239,68,68,.10);border-color:rgba(248,113,113,.22);}
+.pending-pill{display:inline-flex;padding:4px 8px;border-radius:999px;font-size:9.5px;font-weight:850;color:#f5d68b;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.20);}
+.import-image-table{min-width:1180px;}
+.import-table-dynamic{display:grid;gap:7px;min-width:220px;}
+.import-table-dynamic label{display:grid;gap:4px;color:var(--muted);font-size:9px;}
+.import-table-dynamic select,.import-table-dynamic input{width:100%;min-width:0;box-sizing:border-box;}
+.import-review-cards-mobile{display:none;}
+.import-row-card{border:1px solid rgba(255,255,255,.07);border-radius:18px;background:rgba(255,255,255,.025);padding:14px;min-width:0;box-sizing:border-box;}
+.import-row-card+.import-row-card{margin-top:12px;}
+.import-row-card-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:start;min-width:0;}
+.import-row-card-head>div{min-width:0;}
+.import-row-card-head strong,.import-row-card-head small{display:block;overflow-wrap:anywhere;}
+.import-row-card-head strong{font-size:14px;}
+.import-row-card-head small{margin-top:3px;color:var(--muted);font-size:10.5px;}
+.import-row-card-head>b{white-space:nowrap;font-size:13px;}
+.import-row-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0;color:var(--muted);font-size:10.5px;}
+.import-row-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;min-width:0;}
+.import-row-fields label{display:grid;gap:5px;min-width:0;color:var(--muted);font-size:10px;font-weight:750;}
+.import-row-fields input,.import-row-fields select{width:100%;min-width:0;box-sizing:border-box;}
+.import-issue-list{display:grid;gap:5px;margin-top:10px;}
+.import-issue-list span{display:block;padding:7px 9px;border-radius:10px;background:rgba(239,68,68,.07);border:1px solid rgba(248,113,113,.12);font-size:10.5px;color:#fecaca;overflow-wrap:anywhere;}
+.import-row-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:12px;}
+.import-row-actions label{font-size:10.5px;color:var(--muted);}
+
+html[data-theme="light"] .import-source-switch,html[data-theme="light"] .import-image-card,html[data-theme="light"] .import-reconciliation>div,html[data-theme="light"] .import-row-card{background:rgba(255,255,255,.66);border-color:rgba(122,85,29,.12);}
+html[data-theme="light"] .import-source-tab.active{background:linear-gradient(135deg,rgba(184,137,55,.18),rgba(184,137,55,.08));}
+html[data-theme="light"] .import-relative-date-warning{color:#7c5515;background:rgba(245,158,11,.10);}
+html[data-theme="light"] .import-privacy-note{background:rgba(34,197,94,.08);}
+html[data-theme="light"] .import-issue-list span{color:#991b1b;background:rgba(239,68,68,.07);}
+
+@media(max-width:760px){
+  .import-source-switch{max-width:none;display:grid;}
+  .import-source-tab{padding:9px 8px;font-size:12px;}
+  .import-image-card{grid-template-columns:54px minmax(0,1fr);align-items:start;}
+  .import-image-thumb{width:54px;height:54px;}
+  .import-image-actions{grid-column:1/-1;justify-content:flex-start;}
+  .import-image-buttons{display:grid;grid-template-columns:1fr 1fr;}
+  .import-image-buttons>*{width:100%;min-width:0;}
+  .import-kpis-expanded{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .import-reconciliation{grid-template-columns:1fr;}
+  .import-review-table-desktop{display:none;}
+  .import-review-cards-mobile{display:block;min-width:0;}
+  .import-row-fields{grid-template-columns:1fr;}
+  .import-row-card-head{grid-template-columns:auto minmax(0,1fr);}
+  .import-row-card-head>b{grid-column:2;justify-self:start;}
+  .import-drop{width:100%;min-width:0;box-sizing:border-box;overflow:hidden;}
+  .import-drop>div:last-child{min-width:0;}
+  .import-drop strong,.import-drop span{overflow-wrap:anywhere;word-break:break-word;}
+  .import-review{overflow:visible;min-width:0;}
 }

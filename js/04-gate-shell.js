@@ -250,7 +250,14 @@ function postLoginSequence(){
   setTimeout(()=>{ checkOverdueModal(); }, popupList.length? 1400 : 650);
 }
 
+function resetImportTransientState(){
+  try{ if(typeof cleanupStatementImportImages==='function' && S.importState) cleanupStatementImportImages(S.importState); }catch(_e){}
+  try{ if(typeof terminateStatementOcrEngine==='function') terminateStatementOcrEngine(); }catch(_e){}
+  S.importState=null;
+}
+
 async function enterProfile(profile, remember){
+  resetImportTransientState();
   // V5.34.3 — mesmo padrão de isolamento do fluxo de nuvem: zera S.data ANTES
   // de trocar S.currentProfile, para nunca deixar uma janela em que o perfil
   // "ativo" já é o novo mas os dados em memória ainda são do perfil anterior.
@@ -273,6 +280,7 @@ async function enterProfile(profile, remember){
   postLoginSequence();
 }
 function logout(){
+  resetImportTransientState();
   setSession(null);
   S.currentProfile=null; S.data=null;
   S.gate={mode:'list',error:''};
@@ -283,6 +291,7 @@ function logout(){
    perfil sem encerrar a sessão da conta (login) na nuvem. Diferente de
    logout()/cloudLogout(), que saem da conta inteira. */
 function switchProfileScreen(){
+  resetImportTransientState();
   S.currentProfile=null; S.data=null;
   S.gate={mode:'list',error:''};
   if(window.ExitSaveGuard) ExitSaveGuard.refresh();

@@ -1,17 +1,10 @@
-# Testes — Borion V6.31.0
+# Testes do importador v6.35.0
 
-Execute na raiz do projeto:
+Executar na raiz do projeto:
 
 ```bash
-node tests/borion-regression-tests.js
-node tests/smart-interconnections-tests.js
-node tests/system-integrity-audit.js
+node tests/test_importacao_prints_core.js
+node tests/test_importador_legado.js
 ```
 
-Resultados atuais:
-
-- `regression-results.json`: 88/88 testes regressivos.
-- `smart-interconnections-results.json`: 10/10 testes da integração inteligente.
-- Auditoria estrutural: 223/223 verificações.
-
-A suíte específica de integrações valida conversão por Vínculos, lançamento nativo/editável, preservação de alterações locais, antiduplicidade após edição, as duas formas de exclusão, preservação após tombstone da origem e descoberta automática dos campos externos.
+O primeiro teste cobre o cenário de sete movimentações do Mercado Pago, matemática de Conta/Reservas, reimportação e rollback. O segundo cobre regressão básica de CSV, OFX e TXT.

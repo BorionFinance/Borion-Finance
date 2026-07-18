@@ -1,151 +1,133 @@
-/* Borion Finance — Importador de extratos CSV/OFX/TXT/PDF textual com revisão antes de lançar. */
+/* Borion Finance — Importador de extratos CSV/OFX/TXT/PDF textual e prints com revisão antes de lançar. */
+
+function createEmptyImportState(seed){
+  const baseDate=(typeof todayISO==='function'?todayISO():new Date().toISOString().slice(0,10));
+  const baseMonth=(typeof monthKey==='function'&&typeof S!=='undefined'&&S.month)?monthKey(S.month.y,S.month.m):baseDate.slice(0,7);
+  return Object.assign({
+    mode:'file',
+    fileName:'', fileType:'', rawText:'',
+    images:[], ocrStatus:'idle', ocrProgress:0, ocrStage:'', ocrCurrentImage:0, ocrTotalImages:0, ocrCancelable:false, ocrCancelRequested:false,
+    detectedBank:'', selectedBank:'',
+    referenceMonth:baseMonth, referenceDate:baseDate,
+    parsed:[], detectedBalance:null, relativeDatesFound:false,
+    batchDuplicates:0, existingDuplicates:0, blockingIssues:0,
+    lastError:'', loading:false,
+    stats:{total:0,selected:0,selecionados:0,receitas:0,despesas:0,transferencias:0,rendimentos:0,duplicados:0,pendencias:0}
+  },seed||{});
+}
 
 function ensureImportState(){
-  if(!S.importState){
-    S.importState = {
-      fileName:'', fileType:'', rawText:'', detectedBank:'', selectedBank:'', parsed:[],
-      lastError:'', loading:false, stats:{total:0, receitas:0, despesas:0, duplicados:0, selecionados:0}
-    };
+  if(!S.importState) S.importState=createEmptyImportState();
+  else {
+    const current=S.importState;
+    const merged=createEmptyImportState();
+    Object.keys(merged).forEach(k=>{ if(current[k]===undefined) current[k]=merged[k]; });
+    if(!Array.isArray(current.images)) current.images=[];
+    if(!Array.isArray(current.parsed)) current.parsed=[];
+    if(!current.stats||typeof current.stats!=='object') current.stats=merged.stats;
   }
   return S.importState;
 }
 
-function renderImportStatement(){
-  const st = ensureImportState();
-  const rows = st.parsed || [];
-  const hasRows = rows.length>0;
-  const selectedCount = rows.filter(r=>r.incluir).length;
-  const receitas = rows.filter(r=>r.incluir && r.tipo==='receita').reduce((a,b)=>a+Number(b.valor||0),0);
-  const despesas = rows.filter(r=>r.incluir && r.tipo!=='receita').reduce((a,b)=>a+Number(b.valor||0),0);
-  const bancoAtual = resolveAccountId(st.selectedBank) || st.selectedBank || resolveAccountId(st.detectedBank) || '';
-  const bankOptions = [`<option value="">Escolha uma conta bancária ativa</option>`].concat(accountSelectOptions().map(o=>`<option value="${esc(o.value)}" ${o.value===bancoAtual?'selected':''}>${esc(o.label)}</option>`)).join('');
-
-  return `
-    <div class="import-hero">
-      <div class="ih-left">
-        <div class="import-eyebrow">Automação assistida</div>
-        <h2>Importar extrato</h2>
-        <p>Leia extratos em CSV, OFX, TXT ou PDF textual, revise linha por linha, edite categoria, tipo, banco e importe só o que fizer sentido.</p>
-      </div>
-      <div class="ih-badge"><span>⇣</span><strong>Revisar antes de lançar</strong></div>
-    </div>
-
-    <div class="import-grid">
-      <div class="panel-box import-panel-main">
-        <div class="toolbar">
-          <div class="toolbar-left">Arquivo do extrato</div>
-          <div class="toolbar-right"><button class="btn-outline" onclick="ImportStatement.clear()">Limpar</button></div>
-        </div>
-
-        <label class="import-drop" for="statement_file" ondragover="ImportStatement.drag(event)" ondrop="ImportStatement.drop(event)">
-          <input id="statement_file" type="file" accept=".csv,.ofx,.ofc,.txt,.pdf,text/csv,application/pdf" onchange="ImportStatement.pickFile(event)" hidden>
-          <div class="drop-icon">▦</div>
-          <div>
-            <strong>${st.fileName ? esc(st.fileName) : 'Clique para escolher ou arraste o extrato aqui'}</strong>
-            <span>CSV e OFX são os mais confiáveis. PDF funciona quando o texto é selecionável e não protegido.</span>
-          </div>
-        </label>
-
-        <div class="import-controls">
-          <div class="field">
-            <label>Banco detectado / conta de destino</label>
-            <select id="import_bank" onchange="ImportStatement.setBank(this.value,true)">${bankOptions}</select>
-          </div>
-          <div class="field">
-            <label>Mês de referência</label>
-            <input type="month" id="import_month" value="${monthKey(S.month.y,S.month.m)}" onchange="ImportStatement.reparseWithMonth(this.value)">
-          </div>
-        </div>
-
-        ${st.detectedBank?`<div class="import-detect-ok">Banco provável detectado: <b>${esc(st.detectedBank)}</b></div>`:''}
-        ${st.lastError?`<div class="import-warning">${esc(st.lastError)}</div>`:''}
-
-        <div class="import-help">
-          <b>Como usar:</b> importe o arquivo, confira a prévia, desmarque o que não quer lançar, edite o que precisar e só depois clique em importar. Duplicados ficam desmarcados por segurança.
-        </div>
-      </div>
-
-      <div class="panel-box">
-        <div class="panel-title">Resumo da importação</div>
-        <div class="import-kpis">
-          <div class="import-kpi"><span>Lidas</span><strong>${rows.length}</strong></div>
-          <div class="import-kpi"><span>Selecionadas</span><strong>${selectedCount}</strong></div>
-          <div class="import-kpi"><span>Receitas</span><strong class="val-pos">${brl(receitas)}</strong></div>
-          <div class="import-kpi"><span>Despesas</span><strong class="val-neg">${brl(despesas)}</strong></div>
-        </div>
-        <div class="import-side-actions">
-          <button class="btn btn-secondary btn-block" onclick="ImportStatement.selectAll(true)" ${hasRows?'':'disabled'}>Selecionar tudo</button>
-          <button class="btn btn-secondary btn-block" onclick="ImportStatement.selectAll(false)" ${hasRows?'':'disabled'}>Desmarcar tudo</button>
-          <button class="btn btn-secondary btn-block" onclick="ImportStatement.reviewDuplicates()" ${hasRows?'':'disabled'}>Revisar duplicidade${rows.filter(r=>r.duplicado).length?` (${rows.filter(r=>r.duplicado).length})`:''}</button>
-          <button class="btn btn-secondary btn-block" onclick="ImportStatement.reviewBeforeImport()" ${selectedCount?'':'disabled'}>Revisar antes de importar</button>
-          <button class="btn btn-primary btn-block" onclick="ImportStatement.commit()" ${selectedCount?'':'disabled'}>Importar ${selectedCount} lançamento${selectedCount===1?'':'s'}</button>
-          <button class="btn-outline btn-block" onclick="ImportStatement.commitAsReserve()" ${selectedCount?'':'disabled'}>Importar como saldo de reserva</button>
-        </div>
-      </div>
-    </div>
-
-    ${hasRows ? renderImportReviewTable(rows) : renderImportEmptyState()}
-  `;
+function renderImportSourceSwitch(mode){
+  return `<div class="import-source-switch" role="tablist" aria-label="Origem do extrato">
+    <button type="button" class="import-source-tab ${mode==='file'?'active':''}" role="tab" aria-selected="${mode==='file'}" onclick="ImportStatement.setMode('file')">Arquivo bancário</button>
+    <button type="button" class="import-source-tab ${mode==='image'?'active':''}" role="tab" aria-selected="${mode==='image'}" onclick="ImportStatement.setMode('image')">Prints do extrato</button>
+  </div>`;
 }
 
-function renderImportEmptyState(){
-  return `
-    <div class="panel-box import-empty">
-      <div class="empty-orb">◎</div>
-      <h3>Nenhum extrato carregado</h3>
-      <p>Envie um arquivo CSV, OFX, TXT ou PDF textual. O Borion vai tentar detectar banco, datas, descrições, valores e tipo de lançamento.</p>
-      <div class="import-format-grid">
-        <div><b>CSV</b><span>melhor opção para planilha/exportação</span></div>
-        <div><b>OFX</b><span>melhor opção bancária estruturada</span></div>
-        <div><b>PDF</b><span>bom quando possui texto selecionável</span></div>
-        <div><b>TXT</b><span>útil para colar/exportar extrato simples</span></div>
+function renderImportFilePanel(st,bankOptions){
+  return `<div class="panel-box import-panel-main">
+    <div class="toolbar">
+      <div class="toolbar-left">Arquivo do extrato</div>
+      <div class="toolbar-right"><button class="btn-outline" onclick="ImportStatement.clear()">Limpar</button></div>
+    </div>
+    <label class="import-drop" for="statement_file" ondragover="ImportStatement.drag(event)" ondrop="ImportStatement.drop(event)">
+      <input id="statement_file" type="file" accept=".csv,.ofx,.ofc,.txt,.pdf,text/csv,application/pdf" onchange="ImportStatement.pickFile(event)" hidden>
+      <div class="drop-icon">▦</div>
+      <div>
+        <strong>${st.fileName ? esc(st.fileName) : 'Clique para escolher ou arraste o extrato aqui'}</strong>
+        <span>CSV e OFX são os mais confiáveis. PDF funciona quando o texto é selecionável e não protegido.</span>
       </div>
-    </div>`;
+    </label>
+    <div class="import-controls">
+      <div class="field"><label>Banco detectado / conta de destino</label><select id="import_bank" onchange="ImportStatement.setBank(this.value,true)">${bankOptions}</select></div>
+      <div class="field"><label>Mês de referência</label><input type="month" id="import_month" value="${esc(st.referenceMonth||monthKey(S.month.y,S.month.m))}" onchange="ImportStatement.reparseWithMonth(this.value)"></div>
+    </div>
+    ${st.detectedBank?`<div class="import-detect-ok">Banco provável detectado: <b>${esc(st.detectedBank)}</b></div>`:''}
+    ${st.lastError?`<div class="import-warning">${esc(st.lastError)}</div>`:''}
+    <div class="import-help"><b>Como usar:</b> importe o arquivo, confira a prévia, desmarque o que não quer lançar, edite o que precisar e só depois clique em importar. Duplicados ficam desmarcados por segurança.</div>
+  </div>`;
+}
+
+function importStatsForRender(st){
+  const rows=st.parsed||[];
+  if(st.mode==='image'&&typeof recalculateImageImportStats==='function') return recalculateImageImportStats(false);
+  const selected=rows.filter(r=>r.incluir);
+  return {
+    total:rows.length, selected:selected.length,
+    receitas:selected.filter(r=>r.tipo==='receita').reduce((a,b)=>a+Number(b.valor||0),0),
+    despesas:selected.filter(r=>r.tipo!=='receita').reduce((a,b)=>a+Number(b.valor||0),0),
+    transferencias:0,rendimentos:0,
+    duplicados:rows.filter(r=>r.duplicado).length,pendencias:0
+  };
+}
+
+function renderImportSummary(st,stats){
+  const hasRows=(st.parsed||[]).length>0;
+  const selectedCount=stats.selected||0;
+  const isImage=st.mode==='image';
+  return `<div class="panel-box">
+    <div class="panel-title">Resumo da importação</div>
+    <div class="import-kpis ${isImage?'import-kpis-expanded':''}">
+      <div class="import-kpi"><span>Lidas</span><strong>${stats.total||0}</strong></div>
+      <div class="import-kpi"><span>Selecionadas</span><strong>${selectedCount}</strong></div>
+      <div class="import-kpi"><span>Receitas</span><strong class="val-pos">${brl(stats.receitas||0)}</strong></div>
+      <div class="import-kpi"><span>Despesas</span><strong class="val-neg">${brl(stats.despesas||0)}</strong></div>
+      ${isImage?`<div class="import-kpi"><span>Transferências</span><strong>${stats.transferencias||0}</strong></div>
+      <div class="import-kpi"><span>Rendimentos</span><strong>${stats.rendimentos||0}</strong></div>
+      <div class="import-kpi"><span>Duplicadas</span><strong>${stats.duplicados||0}</strong></div>
+      <div class="import-kpi"><span>Pendências</span><strong class="${stats.pendencias?'val-neg':''}">${stats.pendencias||0}</strong></div>`:''}
+    </div>
+    ${isImage&&typeof renderImageReconciliation==='function'?renderImageReconciliation(st,stats):''}
+    <div class="import-side-actions">
+      <button class="btn btn-secondary btn-block" onclick="ImportStatement.selectAll(true)" ${hasRows?'':'disabled'}>Selecionar tudo</button>
+      <button class="btn btn-secondary btn-block" onclick="ImportStatement.selectAll(false)" ${hasRows?'':'disabled'}>Desmarcar tudo</button>
+      <button class="btn btn-secondary btn-block" onclick="ImportStatement.reviewDuplicates()" ${hasRows?'':'disabled'}>Revisar duplicidade${stats.duplicados?` (${stats.duplicados})`:''}</button>
+      <button class="btn btn-secondary btn-block" onclick="ImportStatement.reviewBeforeImport()" ${selectedCount?'':'disabled'}>Revisar antes de importar</button>
+      <button class="btn btn-primary btn-block" onclick="ImportStatement.commit()" ${selectedCount?'':'disabled'}>Importar ${selectedCount} movimentação${selectedCount===1?'':'ões'}</button>
+      ${!isImage?`<button class="btn-outline btn-block" onclick="ImportStatement.commitAsReserve()" ${selectedCount?'':'disabled'}>Importar como saldo de reserva</button>`:''}
+    </div>
+  </div>`;
+}
+
+function renderImportStatement(){
+  const st=ensureImportState();
+  const rows=st.parsed||[];
+  const bancoAtual=resolveAccountId(st.selectedBank)||st.selectedBank||resolveAccountId(st.detectedBank)||'';
+  const bankOptions=[`<option value="">Escolha uma conta bancária ativa</option>`].concat(accountSelectOptions().map(o=>`<option value="${esc(o.value)}" ${o.value===bancoAtual?'selected':''}>${esc(o.label)}</option>`)).join('');
+  const stats=importStatsForRender(st);
+  const mainPanel=st.mode==='image'&&typeof renderImageImportPanel==='function'?renderImageImportPanel(st,bankOptions):renderImportFilePanel(st,bankOptions);
+  const review=rows.length?(st.mode==='image'&&typeof renderImageImportReview==='function'?renderImageImportReview(rows):renderImportReviewTable(rows)):renderImportEmptyState(st.mode);
+  return `<div class="import-hero">
+      <div class="ih-left"><div class="import-eyebrow">Automação assistida</div><h2>Importar extrato</h2><p>Importe arquivos bancários ou leia prints localmente, revise cada movimentação e só então aplique os efeitos financeiros.</p></div>
+      <div class="ih-badge"><span>⇣</span><strong>Revisar antes de lançar</strong></div>
+    </div>
+    ${renderImportSourceSwitch(st.mode)}
+    <div class="import-grid">${mainPanel}${renderImportSummary(st,stats)}</div>
+    ${review}`;
+}
+
+function renderImportEmptyState(mode){
+  if(mode==='image') return `<div class="panel-box import-empty"><div class="empty-orb">▧</div><h3>Nenhum print processado</h3><p>Selecione imagens do extrato. Elas ficam somente na memória deste dispositivo e passam por revisão antes de qualquer gravação.</p></div>`;
+  return `<div class="panel-box import-empty"><div class="empty-orb">◎</div><h3>Nenhum extrato carregado</h3><p>Envie um arquivo CSV, OFX, TXT ou PDF textual. O Borion vai tentar detectar banco, datas, descrições, valores e tipo de lançamento.</p><div class="import-format-grid"><div><b>CSV</b><span>melhor opção para planilha/exportação</span></div><div><b>OFX</b><span>melhor opção bancária estruturada</span></div><div><b>PDF</b><span>bom quando possui texto selecionável</span></div><div><b>TXT</b><span>útil para extrato simples</span></div></div></div>`;
 }
 
 function renderImportReviewTable(rows){
-  const catsOptions = (tipo, selected)=>{
-    const key = tipo==='fixa' ? 'fixa' : tipo;
-    const cats = (S.data.categorias[key]||['Outro']);
-    return cats.map(c=>`<option value="${esc(c)}" ${c===selected?'selected':''}>${esc(c)}</option>`).join('');
-  };
-  const bankOpts = (selected)=>`<option value="">— Escolha uma conta —</option>` + accountSelectOptions().map(o=>`<option value="${esc(o.value)}" ${o.value===selected?'selected':''}>${esc(o.label)}</option>`).join('');
-  const body = rows.map((r,i)=>`
-    <tr class="${r.duplicado?'is-dup':''} ${!r.incluir?'is-muted':''}">
-      <td><input type="checkbox" ${r.incluir?'checked':''} onchange="ImportStatement.update(${i},'incluir',this.checked)"></td>
-      <td><input class="mini-input" type="date" value="${esc(r.data||'')}" onchange="ImportStatement.update(${i},'data',this.value)"></td>
-      <td><input class="mini-input desc" type="text" value="${esc(r.nome||'')}" onchange="ImportStatement.update(${i},'nome',this.value)"><div class="import-original">${esc(r.original||'')}</div></td>
-      <td><input class="mini-input money-mini" type="text" value="${formatMoneyInput(r.valor)}" onchange="ImportStatement.updateMoney(${i},this.value)"></td>
-      <td>
-        <select class="mini-select" onchange="ImportStatement.updateType(${i},this.value)">
-          <option value="receita" ${r.tipo==='receita'?'selected':''}>Receita</option>
-          <option value="variavel" ${r.tipo==='variavel'?'selected':''}>Despesa variável</option>
-          <option value="fixa" ${r.tipo==='fixa'?'selected':''}>Despesa fixa</option>
-        </select>
-      </td>
-      <td><select class="mini-select" onchange="ImportStatement.update(${i},'categoria',this.value)">${catsOptions(r.tipo, r.categoria)}</select></td>
-      <td><select class="mini-select" onchange="ImportStatement.update(${i},'accountId',this.value)">${bankOpts(r.accountId||resolveAccountId(r.banco)||'')}</select></td>
-      <td>${r.duplicado?'<span class="dup-pill">duplicado</span>':'<span class="ok-pill">novo</span>'}</td>
-      <td><button class="mini-danger" onclick="ImportStatement.removeRow('+i+')">Excluir</button></td>
-    </tr>`).join('');
-
-  return `
-    <div class="panel-box import-review">
-      <div class="toolbar">
-        <div class="toolbar-left">Revisão antes de lançar</div>
-        <div class="toolbar-right">
-          <button class="btn-outline" onclick="ImportStatement.applyBankToAll()">Aplicar banco a todos</button>
-          <button class="btn-outline" onclick="ImportStatement.removeUnselected()">Remover desmarcados</button>
-        </div>
-      </div>
-      <div class="table-scroll">
-        <table class="import-table">
-          <thead><tr><th>Usar</th><th>Data</th><th>Descrição</th><th>Valor</th><th>Tipo</th><th>Categoria</th><th>Banco</th><th>Status</th><th></th></tr></thead>
-          <tbody>${body}</tbody>
-        </table>
-      </div>
-      <div class="import-footnote">Despesa fixa importada vira um compromisso recorrente a partir do mês da data do lançamento. Para extrato comum, normalmente use “Despesa variável”.</div>
-    </div>`;
+  const catsOptions=(tipo,selected)=>{const key=tipo==='fixa'?'fixa':tipo;const cats=(S.data.categorias[key]||['Outro']);return cats.map(c=>`<option value="${esc(c)}" ${c===selected?'selected':''}>${esc(c)}</option>`).join('');};
+  const bankOpts=selected=>`<option value="">— Escolha uma conta —</option>`+accountSelectOptions().map(o=>`<option value="${esc(o.value)}" ${o.value===selected?'selected':''}>${esc(o.label)}</option>`).join('');
+  const body=rows.map((r,i)=>`<tr class="${r.duplicado?'is-dup':''} ${!r.incluir?'is-muted':''}"><td><input type="checkbox" ${r.incluir?'checked':''} onchange="ImportStatement.update(${i},'incluir',this.checked)"></td><td><input class="mini-input" type="date" value="${esc(r.data||'')}" onchange="ImportStatement.update(${i},'data',this.value)"></td><td><input class="mini-input desc" type="text" value="${esc(r.nome||'')}" onchange="ImportStatement.update(${i},'nome',this.value)"><div class="import-original">${esc(r.original||'')}</div></td><td><input class="mini-input money-mini" type="text" value="${formatMoneyInput(r.valor)}" onchange="ImportStatement.updateMoney(${i},this.value)"></td><td><select class="mini-select" onchange="ImportStatement.updateType(${i},this.value)"><option value="receita" ${r.tipo==='receita'?'selected':''}>Receita</option><option value="variavel" ${r.tipo==='variavel'?'selected':''}>Despesa variável</option><option value="fixa" ${r.tipo==='fixa'?'selected':''}>Despesa fixa</option></select></td><td><select class="mini-select" onchange="ImportStatement.update(${i},'categoria',this.value)">${catsOptions(r.tipo,r.categoria)}</select></td><td><select class="mini-select" onchange="ImportStatement.update(${i},'accountId',this.value)">${bankOpts(r.accountId||resolveAccountId(r.banco)||'')}</select></td><td>${r.duplicado?'<span class="dup-pill">duplicado</span>':'<span class="ok-pill">novo</span>'}</td><td><button class="mini-danger" onclick="ImportStatement.removeRow(${i})">Excluir</button></td></tr>`).join('');
+  return `<div class="panel-box import-review"><div class="toolbar"><div class="toolbar-left">Revisão antes de lançar</div><div class="toolbar-right"><button class="btn-outline" onclick="ImportStatement.applyBankToAll()">Aplicar banco a todos</button><button class="btn-outline" onclick="ImportStatement.removeUnselected()">Remover desmarcados</button></div></div><div class="table-scroll"><table class="import-table"><thead><tr><th>Usar</th><th>Data</th><th>Descrição</th><th>Valor</th><th>Tipo</th><th>Categoria</th><th>Banco</th><th>Status</th><th></th></tr></thead><tbody>${body}</tbody></table></div><div class="import-footnote">Despesa fixa importada vira um compromisso recorrente a partir do mês da data do lançamento. Para extrato comum, normalmente use “Despesa variável”.</div></div>`;
 }
 
 function formatMoneyInput(n){
@@ -353,17 +335,25 @@ function looksLikeCSV(text){
 }
 
 const ImportStatement = {
+  setMode(mode){
+    if(mode!=='file'&&mode!=='image') return;
+    const st=ensureImportState();
+    st.mode=mode; st.lastError='';
+    renderView();
+  },
   drag(ev){ ev.preventDefault(); },
   drop(ev){ ev.preventDefault(); const f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0]; if(f) this.loadFile(f); },
   pickFile(ev){ const f = ev.target.files && ev.target.files[0]; if(f) this.loadFile(f); },
   loadFile(file){
     const st = ensureImportState();
+    st.mode='file';
     st.loading=true; st.fileName=file.name; st.fileType=(file.name.split('.').pop()||'').toLowerCase(); st.lastError=''; st.parsed=[];
     const reader = new FileReader();
     reader.onerror = ()=>{ st.lastError='Não consegui ler esse arquivo.'; st.loading=false; renderView(); };
     reader.onload = ()=>{
       try{
-        const fallbackYM = document.getElementById('import_month')?.value || monthKey(S.month.y,S.month.m);
+        const fallbackYM = document.getElementById('import_month')?.value || st.referenceMonth || monthKey(S.month.y,S.month.m);
+        st.referenceMonth=fallbackYM;
         let text='';
         if(st.fileType==='pdf'){
           text = extractPdfTextBasic(reader.result);
@@ -385,7 +375,8 @@ const ImportStatement = {
     renderView();
   },
   reparseWithMonth(ym){
-    const st=ensureImportState();
+    const st=ensureImportState(); st.referenceMonth=ym||st.referenceMonth;
+    if(st.mode==='image'){ if(typeof ImportStatement.setReferenceMonth==='function') ImportStatement.setReferenceMonth(st.referenceMonth); return; }
     if(!st.rawText || !st.fileName) return;
     const parsed = parseAnyStatement(st.rawText, st.fileName, ym || monthKey(S.month.y,S.month.m));
     st.detectedBank = parsed.bank || st.detectedBank || '';
@@ -436,9 +427,14 @@ const ImportStatement = {
     $('#rv_close').onclick=closeModal; $('#rv_cancel').onclick=closeModal;
     $('#rv_confirm').onclick=()=>{ closeModal(); ImportStatement.commit(); };
   },
-  clear(){ S.importState = {fileName:'', fileType:'', rawText:'', detectedBank:'', selectedBank:'', parsed:[], lastError:'', loading:false, stats:{}}; renderView(); },
+  clear(){
+    const current=ensureImportState(); const mode=current.mode;
+    if(typeof cleanupStatementImportImages==='function') cleanupStatementImportImages(current);
+    S.importState=createEmptyImportState({mode}); renderView();
+  },
   commit(){
     const st=ensureImportState();
+    if(st.mode==='image'&&typeof commitImageStatementImport==='function'){ commitImageStatementImport(); return; }
     const selected = st.parsed.filter(r=>r.incluir);
     if(!selected.length){ toast('Nada selecionado para importar.'); return; }
 
@@ -478,7 +474,7 @@ const ImportStatement = {
       toast('A importação falhou e nenhuma alteração financeira foi mantida.');
       return;
     }
-    S.importState = {fileName:'', fileType:'', rawText:'', detectedBank:'', selectedBank:'', parsed:[], lastError:'', loading:false, stats:{}};
+    S.importState=createEmptyImportState({mode:'file'});
     renderView();
     toast(`Importação concluída: ${trans} lançamento(s), ${fixas} fixa(s)${ignored?`, ${ignored} duplicado(s) ignorado(s)`:''}.`);
   },
@@ -510,7 +506,7 @@ const ImportStatement = {
         });
         saveCurrentData();
         closeModal();
-        S.importState = {fileName:'', fileType:'', rawText:'', detectedBank:'', selectedBank:'', parsed:[], lastError:'', loading:false, stats:{}};
+        S.importState=createEmptyImportState({mode:'file'});
         renderView();
         toast('Importado como saldo de reserva: '+selected.length+' movimentação(ões) em "'+nome+'".');
       }

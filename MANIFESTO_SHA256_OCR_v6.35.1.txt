@@ -1,0 +1,32 @@
+MANIFESTO SHA-256 — BORION FINANCE v6.35.1 — OCR LOCAL
+========================================================
+Gerado em: 17/07/2026
+Diretório: vendor/tesseract/
+
+a8e29918d098b2b06e1012bdaeffb4aec0445c5d5654709023e0bd1f442a80e8  tesseract.min.js
+aca1229639fc9907d86f96e825955a2b7c5716d17f3bc3acd71f9c7ab66181fc  worker.min.js
+2b8c8c92b8788807061fb4bb16c5acdf000c149e100255f879f78d2c58ca9969  tesseract-core.wasm.js
+b47a852b19181ae0999f9d970c368cd351135a320ea978b35bd38602d8bcc0bc  tesseract-core.wasm
+d8bee36ca4cd49393496bb7195a2b6b7bc0870e4173d5e26e2c6625b5099c425  lang-data/por.traineddata.gz
+
+Tamanhos em bytes:
+  tesseract.min.js             66.695
+  worker.min.js                123.724
+  tesseract-core.wasm.js       4.734.777
+  tesseract-core.wasm          3.457.035
+  lang-data/por.traineddata.gz 1.009.185
+
+Verificação de conteúdo:
+  - tesseract.min.js, worker.min.js, tesseract-core.wasm.js: validados
+    com `node --check` (sintaxe JavaScript válida, não é HTML/erro).
+  - tesseract-core.wasm: assinatura WebAssembly confirmada
+    (4 primeiros bytes = 00 61 73 6d).
+  - lang-data/por.traineddata.gz: `gzip -t` sem erro.
+
+Origem: distribuição oficial do npm (registry.npmjs.org), pacotes
+tesseract.js@5.1.1 e tesseract.js-core@5.1.1. Ver THIRD_PARTY_NOTICES_OCR.txt
+para URLs completas e shasums oficiais do npm.
+
+Nota: os hashes acima foram recalculados após a montagem do ZIP final
+(Borion_Finance_v6.35.1_OCR_LOCAL_COMPLETO.zip) e conferem com os arquivos
+efetivamente incluídos no pacote.

@@ -1,0 +1,65 @@
+BORION FINANCE v6.35.1 — AVISOS DE TERCEIROS (OCR LOCAL)
+===========================================================
+
+Este pacote inclui os seguintes componentes de terceiros, usados para
+viabilizar a leitura local (no navegador) de prints de extrato, sem envio
+de imagens a qualquer servidor externo.
+
+-----------------------------------------------------------
+1) Tesseract.js
+-----------------------------------------------------------
+Versão utilizada:      5.1.1
+Licença:                Apache License 2.0
+Repositório oficial:    https://github.com/naptha/tesseract.js
+Fonte do download:      https://registry.npmjs.org/tesseract.js/-/tesseract.js-5.1.1.tgz
+Shasum oficial (npm):   7bfaca1c103ba0ce3ddf5e101f0692802a01f880
+Ferramenta de obtenção: npm pack tesseract.js@5.1.1
+Data do download:       17/07/2026
+
+Arquivos incluídos neste pacote, extraídos de dist/ do tarball oficial:
+  - vendor/tesseract/tesseract.min.js   (66.695 bytes)
+  - vendor/tesseract/worker.min.js      (123.724 bytes)
+
+-----------------------------------------------------------
+2) Tesseract.js Core
+-----------------------------------------------------------
+Versão utilizada:      5.1.1
+  (declarada como dependência "^5.1.1" no package.json oficial do
+  tesseract.js@5.1.1; 5.1.1 é a versão mais recente compatível com essa
+  faixa disponível no npm no momento do download)
+Licença:                Apache License 2.0
+Repositório oficial:    https://github.com/naptha/tesseract.js-core
+Fonte do download:      https://registry.npmjs.org/tesseract.js-core/-/tesseract.js-core-5.1.1.tgz
+Shasum oficial (npm):   2b6f3ef28dd109bf4efdbc8fff70bd11adac8b85
+Ferramenta de obtenção: npm pack tesseract.js-core@5.1.1
+Data do download:       17/07/2026
+
+Arquivos incluídos neste pacote, extraídos da raiz do tarball oficial
+(variante "tesseract-core", combinada LSTM + legado, sem SIMD — a
+variante padrão que tesseract.js@5.1.1 carrega por padrão quando não usa
+o caminho "-simd"):
+  - vendor/tesseract/tesseract-core.wasm.js   (4.734.777 bytes)
+  - vendor/tesseract/tesseract-core.wasm      (3.457.035 bytes)
+
+-----------------------------------------------------------
+3) Modelo de idioma português (Tesseract "por")
+-----------------------------------------------------------
+Arquivo:                vendor/tesseract/lang-data/por.traineddata.gz
+Origem:                 já estava presente no pacote v6.35.0 fornecido;
+                         não foi alterado nem substituído nesta correção.
+Validação nesta versão: gzip -t confirmado sem erro (arquivo íntegro).
+
+-----------------------------------------------------------
+4) Processamento e privacidade
+-----------------------------------------------------------
+- Processing: local browser worker (Web Worker do Tesseract.js rodando
+  inteiramente no navegador do usuário).
+- External OCR APIs: none.
+- Nenhuma imagem, Blob ou pixel de print é enviado para qualquer servidor,
+  API externa, ou provedor de nuvem (incluindo Google Drive) durante o
+  processamento de OCR.
+- Os arquivos listados acima são servidos pelo próprio domínio/origem do
+  Borion (vendor/tesseract/...), sem consulta a CDN (unpkg, jsDelivr,
+  cdnjs ou similares) no runtime de produção.
+
+Hashes SHA-256 de todos os arquivos: ver MANIFESTO_SHA256_OCR_v6.35.1.txt

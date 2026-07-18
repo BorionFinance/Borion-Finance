@@ -1,4 +1,5 @@
-/* Borion Finance v6.35.0 — Importação inteligente de extratos por imagem.
+/* Borion Finance v6.35.2 — Importação inteligente de extratos por imagem.
+   OCR local completo: Tesseract.js 5.1.1 (vendor/tesseract) instalado a partir da distribuição oficial npm.
    Privacidade: File/Blob/canvas/OCR permanecem apenas na memória da sessão. */
 
 let statementOcrLoaderPromise=null;

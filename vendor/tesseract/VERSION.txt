@@ -1,3 +1,10 @@
 Engine target: Tesseract.js 5.1.1 (local)
+Tesseract.js Core: 5.1.1 (oficial, via npm pack tesseract.js-core@5.1.1)
 Language model: por.traineddata.gz
+Processing: local browser worker
+External OCR APIs: none
 Fallback: browser-native TextDetector, when available
+Status: completo — tesseract.min.js, worker.min.js, tesseract-core.wasm.js
+        e tesseract-core.wasm instalados a partir da distribuição oficial
+        npm em 17/07/2026. Ver THIRD_PARTY_NOTICES_OCR.txt e
+        MANIFESTO_SHA256_OCR_v6.35.1.txt na raiz do projeto.

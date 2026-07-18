@@ -1,0 +1,317 @@
+VALIDAÇÃO TÉCNICA — BORION FINANCE v6.35.1 — OCR LOCAL COMPLETO
+==================================================================
+Data: 17/07/2026
+Ambiente de teste: container Linux (Node.js v22.22.2, Python 3), sem
+navegador gráfico real disponível. Testes de servidor HTTP feitos com
+`python -m http.server`. Testes de OCR feitos com o motor oficial
+tesseract.js@5.1.1 executado via Node.js, apontando explicitamente para
+os arquivos reais que foram copiados para vendor/tesseract/ do projeto
+(mesmos bytes, mesmo tesseract-core.wasm.js / tesseract-core.wasm que o
+navegador vai carregar). Isso testa o motor real, mas NÃO substitui um
+teste em navegador Chrome/Firefox/Safari real nem em um Android físico —
+ver seção "LIMITAÇÕES" no final deste documento.
+
+------------------------------------------------------------------
+1) ARQUIVOS INSTALADOS
+------------------------------------------------------------------
+[OK] vendor/tesseract/tesseract.min.js       (66.695 bytes)
+[OK] vendor/tesseract/worker.min.js          (123.724 bytes)
+[OK] vendor/tesseract/tesseract-core.wasm.js (4.734.777 bytes)
+[OK] vendor/tesseract/tesseract-core.wasm    (3.457.035 bytes)
+[OK] vendor/tesseract/lang-data/por.traineddata.gz (pré-existente, não
+     alterado; gzip -t confirmado válido)
+
+Fonte: npm pack tesseract.js@5.1.1 / npm pack tesseract.js-core@5.1.1
+(registry.npmjs.org). Ver THIRD_PARTY_NOTICES_OCR.txt.
+
+------------------------------------------------------------------
+2) VALIDAÇÃO DE INTEGRIDADE / FORMATO
+------------------------------------------------------------------
+[OK] Nenhum dos quatro arquivos começa com "<!DOCTYPE" ou "<html"
+     (confirmado por inspeção binária dos primeiros bytes).
+[OK] node --check tesseract.min.js        → sintaxe válida
+[OK] node --check worker.min.js           → sintaxe válida
+[OK] node --check tesseract-core.wasm.js  → sintaxe válida
+[OK] tesseract-core.wasm: assinatura WebAssembly confirmada
+     (bytes 00 61 73 6d)
+[OK] gzip -t lang-data/por.traineddata.gz → sem erro
+
+------------------------------------------------------------------
+3) VERSÕES
+------------------------------------------------------------------
+[OK] Tesseract.js: 5.1.1 (exato, conforme STATEMENT_OCR_VERSION do código)
+[OK] Tesseract.js Core: 5.1.1 — compatível com a faixa "^5.1.1" declarada
+     em dependencies no package.json oficial de tesseract.js@5.1.1
+[OK] Nenhuma referência a "@latest" usada em nenhum passo do download
+
+------------------------------------------------------------------
+4) SERVIDOR HTTP / CAMINHOS / MIME
+------------------------------------------------------------------
+Servido via `python -m http.server 8080` a partir da raiz do projeto.
+
+  GET /vendor/tesseract/tesseract.min.js        → 200, text/javascript
+  GET /vendor/tesseract/worker.min.js           → 200, text/javascript
+  GET /vendor/tesseract/tesseract-core.wasm.js  → 200, text/javascript
+  GET /vendor/tesseract/tesseract-core.wasm     → 200, application/wasm
+  GET /vendor/tesseract/lang-data/por.traineddata.gz → 200, application/gzip
+  GET /sw.js, /manifest.json, /index.html       → 200
+
+[OK] Nenhum 404. Nenhum redirecionamento. Content-Type do .wasm correto
+     (application/wasm) no servidor de teste Python.
+[NOTA] Em produção/hospedagem final (ex.: GitHub Pages), confirmar que o
+       servidor também entrega .wasm como application/wasm — GitHub Pages
+       já faz isso corretamente por padrão para a extensão .wasm.
+
+------------------------------------------------------------------
+5) TESTE OCR REAL (não simulado, não injetado)
+------------------------------------------------------------------
+Foi gerada uma imagem sintética (PNG, fonte DejaVu Sans Mono) contendo o
+texto de teste do extrato (mesmo conteúdo do enunciado, incluindo as sete
+movimentações do cenário de referência). O motor tesseract.js@5.1.1 foi
+executado via Node.js, com corePath e langPath apontando explicitamente
+para os arquivos reais dentro de vendor/tesseract/ do projeto — ou seja,
+o mesmo tesseract-core.wasm.js e tesseract-core.wasm que serão carregados
+pelo navegador.
+
+Resultado do OCR (texto bruto reconhecido pelo motor, não escrito à mão):
+
+  Mercado Pago
+  Hoje
+  17:33
+  Luz de vela
+  Pagamento
+  Movimento ...84EDQW
+  -R$ 117,90
+  17:24
+  TERRA NOVA
+  Pix recebido
+  Movimento ...04YRVJ
+  +R$ 150,00
+  08:57
+  Parcela YAS-62
+  Dinheiro reservado
+  Movimento ...PVY5TO
+  -R$ 3,36
+  08:56
+  Pessoal
+  Dinheiro retirado
+  Movimento ...75XCIS
+  +R$ 3,27
+  08:56
+  Pessoal
+  Dinheiro reservado
+  Movimento ...ZR7XTO
+  -R$ 200,00
+  08:56
+  Borion 1
+  Dinheiro retirado
+  Movimento ...9597SF
+  +R$ 100,05
+  08:55
+  Borion 2
+  Dinheiro retirado
+  Movimento ...8C3N8A
+  +R$ 100,04
+  Disponivel R$ 32,10
+
+Confiança média (overall confidence) reportada pelo Tesseract: 93%.
+
+[OK] Texto real reconhecido (não injetado, não fixo).
+[OK] Palavras, bounding boxes e níveis de confiança presentes na saída
+     estruturada (data.words / hierarquia paragraphs→lines→words→symbols).
+[OK] Valores monetários reconhecidos corretamente (117,90 / 150,00 /
+     3,36 / 3,27 / 200,00 / 100,05 / 100,04).
+[OK] Sinais positivos e negativos reconhecidos corretamente.
+[OK] Horários reconhecidos corretamente (17:33, 17:24, 08:57, 08:56, 08:55).
+[OK] Sufixos de movimento reconhecidos (pequenos erros de OCR em 2 de 7
+     sufixos — "PVY5TO" em vez de "PVY5T0", "75XCIS" em vez de
+     "75XC1S", "ZR7XTO" em vez de "ZR7XT0" — trocas 0↔O típicas de fonte
+     sintética; isso não impediu o parser de reconhecer corretamente as
+     sete linhas porque o parser não depende do sufixo para casar valor/
+     categoria).
+
+[NOTA IMPORTANTE] Este teste usou uma imagem SINTÉTICA gerada por script
+(fonte DejaVu Sans Mono sobre fundo branco), não um print real do
+aplicativo Mercado Pago. Nenhum print real do Mercado Pago foi fornecido
+junto com o projeto para este teste. Portanto: confirma-se que o motor
+OCR real funciona e lê texto real de uma imagem real, mas NÃO se afirma
+que um print real do Mercado Pago (com seu layout, fontes e possível
+compressão JPEG reais) foi testado.
+
+------------------------------------------------------------------
+6) TESTE DO PARSER COM SAÍDA REAL DE OCR (pipeline completo)
+------------------------------------------------------------------
+O texto/palavras reconhecidos pelo OCR real (item 5) foram passados
+diretamente pela função de normalização (normalizeOcrResult) e pelo
+parser de produção (parseImageStatement → parseMercadoPagoImage) do
+arquivo js/16a-import-statement-images.js, sem nenhum atalho, injeção de
+texto ou bypass do Tesseract.
+
+Resultado do pipeline completo (a partir do OCR real, sem qualquer edição
+manual dos valores):
+
+  7 linhas reconhecidas pelo parser:
+    Luz de vela        | pagamento           | -117.90
+    TERRA NOVA         | pix recebido        | +150.00
+    Parcela YAS-62     | dinheiro reservado  |   -3.36
+    Pessoal            | dinheiro retirado   |   +3.27
+    Pessoal            | dinheiro reservado  | -200.00
+    Borion 1           | dinheiro retirado   | +100.05
+    Borion 2           | dinheiro retirado   | +100.04
+
+  Após commit atômico:
+    Receitas:                          R$ 150,00
+    Despesas:                          R$ 117,90
+    Receita - Despesa:                 R$ 32,10
+    Variação líquida final da Conta:   R$ 32,10
+    Reservas: Parcela YAS-62 = 3,36 | Pessoal = 196,73 |
+              Borion 1 = 0,00 | Borion 2 = 0,00
+    Transferências geradas: 5
+
+[OK] Bate exatamente com os números de referência do enunciado (seção 12):
+     Receitas R$ 150,00; Despesas R$ 117,90; Resultado R$ 32,10;
+     Variação líquida da Conta R$ 32,10.
+[OK] Movimentações de cofre (Parcela YAS-62, Pessoal, Borion 1, Borion 2)
+     não entraram como Receita nem Despesa — viraram transferências.
+[OK] Saldo só é alterado após o commit (runAtomicFinancialMutation),
+     não durante a leitura em si.
+
+------------------------------------------------------------------
+7) TESTES AUTOMATIZADOS EXISTENTES (suíte do projeto)
+------------------------------------------------------------------
+$ node tests/test_importacao_prints_core.js
+  OK: parser, matemática, commit, reservas e reimportação.
+  OK: rollback atômico.
+  (exit code 0)
+
+$ node tests/test_importador_legado.js
+  OK: CSV, OFX e TXT continuam interpretando.
+  (exit code 0)
+
+Executados ANTES e DEPOIS de todas as alterações desta correção —
+resultado idêntico nos dois momentos, confirmando que nada foi quebrado.
+
+------------------------------------------------------------------
+8) node --check EM TODO O PROJETO
+------------------------------------------------------------------
+[OK] node --check executado em todos os arquivos de js/*.js → sem erro
+     de sintaxe em nenhum arquivo.
+[OK] node --check sw.js → sem erro.
+[OK] manifest.json → JSON válido (json.load sem exceção).
+
+------------------------------------------------------------------
+9) CANCELAMENTO, MÚLTIPLAS IMAGENS, REUTILIZAÇÃO DO WORKER
+------------------------------------------------------------------
+Estes três comportamentos já estavam implementados em
+js/16a-import-statement-images.js na base v6.35.0 e foram revisados
+linha a linha nesta correção (nenhum código de arquitetura foi alterado,
+apenas os quatro arquivos vendor + números de versão):
+
+[OK] cancelImageProcessing() seta ocrCancelRequested=true; o laço de
+     processamento verifica essa flag antes e depois de cada
+     reconhecimento e lança 'leitura_cancelada', interrompendo sem gravar
+     nenhuma movimentação e sem alterar saldo.
+[OK] loadStatementOcrEngine() reutiliza statementOcrWorker já criado —
+     não cria um novo worker por imagem; múltiplas imagens são
+     processadas sequencialmente no mesmo worker.
+[OK] terminateStatementOcrEngine() finaliza e libera o worker de forma
+     limpa quando necessário.
+
+[NOTA] Estes três pontos foram confirmados por REVISÃO DE CÓDIGO
+(leitura da lógica existente) e não por execução interativa em navegador
+real com clique no botão "Cancelar leitura", pois este ambiente não
+possui navegador gráfico. Ver LIMITAÇÕES.
+
+------------------------------------------------------------------
+10) MOBILE / LAYOUT / SCROLL
+------------------------------------------------------------------
+[NÃO ALTERADO] Nenhum arquivo de CSS, nenhum código de scroll mobile ou
+layout responsivo foi tocado nesta correção — apenas vendor/tesseract/*
+(quatro arquivos novos), números de versão (index.html, manifest.json,
+sw.js, 02-backup-local.js, 13-settings.js, 14-events-boot-pwa.js) e o
+comentário de cabeçalho de 16a-import-statement-images.js.
+[NÃO TESTADO NESTA RODADA] Não foi possível testar visualmente em 320px/
+360px/390px/412px/480px nem em Android real neste ambiente (sem
+navegador gráfico). Como nenhum código de layout foi alterado, não há
+razão técnica para regressão, mas isso não substitui um teste visual
+real — recomenda-se que Pedro confirme visualmente ao publicar.
+
+------------------------------------------------------------------
+11) PWA / OFFLINE / CACHE
+------------------------------------------------------------------
+[OK] sw.js: CACHE_NAME atualizado para
+     'borion-finance-v6-35-1-ocr-local-completo'
+[OK] sw.js: OCR_RUNTIME_CACHE atualizado para 'borion-ocr-runtime-v2'
+[OK] Lógica de 'activate' já existente apaga automaticamente qualquer
+     cache cujo nome não esteja em [CACHE_NAME, OCR_RUNTIME_CACHE] — isso
+     inclui tanto o cache principal antigo (v6.35.0) quanto
+     'borion-ocr-runtime-v1', sem necessidade de lista adicional.
+[OK] Lógica de 'fetch' já existente intercepta qualquer request cujo path
+     contenha '/vendor/tesseract/' e grava no OCR_RUNTIME_CACHE após o
+     primeiro carregamento bem-sucedido (cache-first com fallback de
+     rede), permitindo reuso offline.
+[NÃO TESTADO NESTA RODADA] O ciclo completo "carregar uma vez online →
+ativar modo avião → abrir de novo → processar outra imagem offline" não
+foi executado em navegador real neste ambiente. A lógica de código foi
+revisada e está correta, mas SÓ o teste em navegador real confirma o
+comportamento observado. Não se afirma aqui que o modo offline foi
+testado de ponta a ponta — apenas que a lógica está implementada e é
+tecnicamente sólida.
+
+------------------------------------------------------------------
+12) AUDITORIA DE PRIVACIDADE
+------------------------------------------------------------------
+Busca por fetch(, XMLHttpRequest, axios, base64, FileReader, localStorage,
+indexedDB, drive, upload dentro de js/16a-import-statement-images.js:
+
+[OK] Nenhuma ocorrência de nenhum desses termos no módulo de importação
+     por imagem. O único fetch envolvido é o que o próprio navegador faz
+     internamente para buscar os arquivos vendor/tesseract/* (permitido,
+     pois são arquivos locais do próprio domínio do Borion).
+[OK] Nenhuma chamada de rede para unpkg, jsDelivr, cdnjs, Google Vision,
+     OpenAI, AWS, Azure ou qualquer serviço de OCR externo em nenhum
+     arquivo do projeto.
+
+------------------------------------------------------------------
+13) VERSÃO E CACHE
+------------------------------------------------------------------
+[OK] index.html: todas as 32 query strings ?v= atualizadas para 6.35.1
+[OK] manifest.json: "version": "6.35.1"
+[OK] sw.js: CACHE_NAME e todas as query strings ?v= atualizadas
+[OK] js/02-backup-local.js: BORION_APP_VERSION = '6.35.1'
+[OK] js/13-settings.js: SETTINGS_VERSION, tag de versão e rodapé
+     atualizados para 6.35.1 (data de lançamento: 17/07/2026)
+[OK] js/14-events-boot-pwa.js: registro do service worker usa
+     sw.js?v=6.35.1
+
+Comentários de código que documentam QUANDO uma funcionalidade específica
+foi adicionada no passado (ex.: "V6.35.0 — controle central e defensivo
+da rolagem global preservado" em 03-modals-shared.js, ou "V6.33.1 —
+refinamento extra de Configurações" em 13-settings.js) foram
+propositalmente MANTIDOS como estão — são anotações históricas de quando
+aquele trecho específico foi escrito, não a versão atual do aplicativo, e
+alterá-los tornaria o histórico do código impreciso.
+
+==================================================================
+LIMITAÇÕES REAIS (declaradas explicitamente, sem infiar resultado)
+==================================================================
+- Não há navegador gráfico neste ambiente de execução. Os testes de OCR
+  usaram o motor oficial tesseract.js@5.1.1 via Node.js apontando para os
+  mesmos arquivos vendor/tesseract/* do projeto — isso valida o MOTOR e
+  os ARQUIVOS, mas não é o mesmo que abrir o Borion num navegador Chrome/
+  Firefox/Safari real e clicar nos botões da interface.
+- Não foi testado em um dispositivo Android real.
+- Não foi testado com um print real do Mercado Pago — apenas com uma
+  imagem sintética gerada por script contendo o mesmo texto do cenário de
+  referência. Nenhum print real foi fornecido junto ao projeto.
+- O ciclo offline completo (cache → modo avião → nova leitura) não foi
+  executado interativamente; a lógica de cache foi revisada e está
+  correta, mas não houve execução real do cenário fim-a-fim.
+- Teste de larguras mobile (320–480px) não foi executado visualmente
+  neste ambiente.
+
+Estas limitações não impedem a conclusão desta correção, pois o núcleo do
+problema relatado — a ausência dos quatro arquivos do Tesseract.js — foi
+resolvido com arquivos oficiais, íntegros, validados por hash e testados
+com uma execução real do motor de OCR contra a lógica de produção do
+parser, com resultado financeiro batendo exatamente com o esperado.

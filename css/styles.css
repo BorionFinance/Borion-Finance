@@ -2791,39 +2791,42 @@ html[data-theme="light"] .reserve-yield-error{color:#9b2525;background:rgba(239,
   .reserve-yield-modal{padding:17px 15px 15px;}
 }
 
-/* V6.34.3 — contenção, scroll e desempenho dos lançamentos no Smartphone Mode */
-.transaction-modal-overlay,
-.transaction-modal{
+/* V6.35.2 — a contenção abaixo é exclusiva do Smartphone Mode. Na v6.35.1 estas regras
+   vazavam para o modo Desktop (faltava o seletor html[data-interface-mode="smartphone"]),
+   o que fazia .modal-box perder o max-width:400px e esticar a janela suspensa no computador,
+   além de cortar a rolagem interna do formulário (overflow:hidden sem o wrapper do sheet). */
+html[data-interface-mode="smartphone"] .transaction-modal-overlay,
+html[data-interface-mode="smartphone"] .transaction-modal{
   min-width:0;
   max-width:100%;
 }
-.transaction-modal{
+html[data-interface-mode="smartphone"] .transaction-modal{
   box-sizing:border-box;
   overflow:hidden;
   overscroll-behavior:none;
 }
-.transaction-modal > *,
-.transaction-modal .field,
-.transaction-modal .mf-conditional,
-.transaction-modal .payment-source-panel,
-.transaction-modal .segmented-toggle{
+html[data-interface-mode="smartphone"] .transaction-modal > *,
+html[data-interface-mode="smartphone"] .transaction-modal .field,
+html[data-interface-mode="smartphone"] .transaction-modal .mf-conditional,
+html[data-interface-mode="smartphone"] .transaction-modal .payment-source-panel,
+html[data-interface-mode="smartphone"] .transaction-modal .segmented-toggle{
   min-width:0;
   max-width:100%;
 }
-.transaction-modal input,
-.transaction-modal select,
-.transaction-modal textarea,
-.transaction-modal button{
+html[data-interface-mode="smartphone"] .transaction-modal input,
+html[data-interface-mode="smartphone"] .transaction-modal select,
+html[data-interface-mode="smartphone"] .transaction-modal textarea,
+html[data-interface-mode="smartphone"] .transaction-modal button{
   min-width:0;
   max-width:100%;
 }
-.transaction-modal input,
-.transaction-modal select,
-.transaction-modal textarea,
-.transaction-modal .segmented-toggle{
+html[data-interface-mode="smartphone"] .transaction-modal input,
+html[data-interface-mode="smartphone"] .transaction-modal select,
+html[data-interface-mode="smartphone"] .transaction-modal textarea,
+html[data-interface-mode="smartphone"] .transaction-modal .segmented-toggle{
   width:100%;
 }
-.transaction-modal .segmented-toggle .seg-btn{
+html[data-interface-mode="smartphone"] .transaction-modal .segmented-toggle .seg-btn{
   min-width:0;
   white-space:normal;
   overflow-wrap:anywhere;
@@ -2874,8 +2877,8 @@ html[data-interface-mode="smartphone"].modal-open body.modal-scroll-locked{
   overscroll-behavior:none;
 }
 html[data-interface-mode="smartphone"] .mobile-sheet-overlay{
-  width:100vw;
-  max-width:100vw;
+  width:100%;
+  max-width:100%;
   height:var(--borion-vh);
   top:var(--borion-vv-top,0px);
   bottom:auto;
@@ -2920,9 +2923,9 @@ html[data-interface-mode="smartphone"] .transaction-modal-overlay{
   justify-content:center!important;
 }
 html[data-interface-mode="smartphone"] .transaction-modal.mobile-bottom-sheet{
-  width:100vw!important;
+  width:100%!important;
   min-width:0!important;
-  max-width:100vw!important;
+  max-width:100%!important;
   height:calc(var(--borion-vh) - max(8px, env(safe-area-inset-top)))!important;
   max-height:calc(var(--borion-vh) - max(8px, env(safe-area-inset-top)))!important;
   padding-left:max(14px, env(safe-area-inset-left))!important;

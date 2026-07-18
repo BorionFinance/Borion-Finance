@@ -147,6 +147,10 @@ function attachModalGuard(overlay){
   window.__borionModalEscCloseWired=true;
   document.addEventListener('keydown',e=>{
     if(e.key==='Escape'){
+      /* V6.35.3 — o aviso (window.alert) agora vive fora de #modal-root, empilhado
+         por cima. Esc precisa fechar só o aviso, e não o formulário por trás dele. */
+      const alertBox=document.querySelector('.borion-alert-overlay');
+      if(alertBox){ e.preventDefault(); alertBox.remove(); return; }
       const root=document.getElementById('modal-root');
       if(root && root.querySelector('.modal-overlay')){
         e.preventDefault();
@@ -359,19 +363,28 @@ function openConfirmModal({title, text, confirmLabel, cancelLabel, variant='dang
   window.alert = function(message){
     const text = message==null ? '' : String(message);
     if(!document.getElementById('modal-root') || typeof el!=='function'){ nativeAlert(text); return; }
+    /* V6.35.3 — antes, este aviso substituía TODO o conteúdo de #modal-root
+       (innerHTML='') para se exibir. Se o alert() era disparado com uma janela
+       de lançamento (receita/despesa fixa/variável) já aberta atrás — ex.: "Digite
+       um valor maior que zero" — isso destruía o formulário inteiro por baixo do
+       aviso. Ao clicar em "Entendi", closeModal() limpava #modal-root de vez, e
+       tudo que o usuário tinha digitado (nome, categoria, data, etc.) já tinha
+       sumido. Agora o aviso é anexado direto no <body>, empilhado por cima do
+       modal-root com z-index maior, e fechá-lo remove só o próprio aviso — o
+       formulário de baixo continua intacto com os dados preenchidos. */
     const box = el(`
-      <div class="modal-overlay">
+      <div class="modal-overlay borion-alert-overlay" style="z-index:1000;">
         <div class="modal-box confirm-box confirm-gold">
           <div class="modal-head"><h2>Aviso</h2><button id="al_close">&times;</button></div>
           <p class="confirm-text">${esc(text)}</p>
           <div class="row-btns"><button class="btn btn-primary btn-block" id="al_ok">Entendi</button></div>
         </div>
       </div>`);
-    $('#modal-root').innerHTML='';
-    $('#modal-root').appendChild(box);
-    attachModalGuard(box);
-    $('#al_close').onclick = closeModal;
-    $('#al_ok').onclick = closeModal;
+    document.body.appendChild(box);
+    const closeAlert=()=>{ box.remove(); };
+    box.querySelector('#al_close').onclick = closeAlert;
+    box.querySelector('#al_ok').onclick = closeAlert;
+    box.addEventListener('click', e=>{ if(e.target===box) closeAlert(); });
   };
 })();
 

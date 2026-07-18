@@ -218,11 +218,18 @@ function parcelaDescricaoMensal(nome, atual, total){
 function createParcelaDespesaVariavel({nome, categoria, valorParcela, totalParcelas, startMonth, banco, formaPagamento, extra}){
   const ids=[];
   const valor = Number(valorParcela)||0;
+  /* V6.35.3 — antes, toda parcela virava uma despesa variável travada no dia 01 do
+     mês (data:ym+'-01'), não importa que dia o usuário tivesse escolhido na compra.
+     O dia certo (diaEntrada) já era calculado e guardado na parcela do cartão — ele
+     só não era usado para montar a data desta despesa espelhada. Por isso uma compra
+     no crédito à vista no dia 15/07, por exemplo, aparecia em Despesas variáveis como
+     01/07. Agora usamos diaEntrada (quando existir em extra) para todas as parcelas. */
+  const dia = Math.max(1,Math.min(31,parseInt((extra&&extra.diaEntrada)||1,10)||1));
   for(let i=0;i<totalParcelas;i++){
     const ym = shiftYM(startMonth, i);
     const t = Object.assign({
       id:uid(), tipo:'variavel', nome:parcelaDescricaoMensal(nome, i+1, totalParcelas),
-      data:ym+'-01', categoria, valor, banco:banco||'', formaPagamento,
+      data:ym+'-'+pad2(dia), categoria, valor, banco:banco||'', formaPagamento,
       parcelaAtual:i+1, parcelaTotal:totalParcelas
     }, extra||{});
     S.data.transacoes.push(t);

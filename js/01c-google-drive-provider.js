@@ -35,6 +35,15 @@ const GOOGLE_DRIVE_AUTOSAVE_INTERVAL_MS = 60 * 1000;
 const GOOGLE_DRIVE_AUTOSAVE_IDLE_KICK_MS = 3 * 1000;
 const GOOGLE_DRIVE_AUTOSAVE_RETRY_MS = 15 * 1000;
 const GOOGLE_DRIVE_AUTOSAVE_SLOTS = 20;
+/* V6.38.0 — pedido: quando um lançamento é feito num dispositivo (ex.: computador),
+   os outros dispositivos já abertos (ex.: celular) devem enxergar a mudança sozinhos,
+   sem precisar sair do app e entrar de novo. A cada GOOGLE_DRIVE_LIVE_POLL_MS, se este
+   dispositivo NÃO tem nenhuma alteração local pendente, ele confere só os METADADOS do
+   current.json (mesma chamada barata já usada pela checagem de conflito do syncNow —
+   nenhum conteúdo é baixado à toa). Se o `modifiedTime` mudou, é porque outro
+   dispositivo salvou — aí sim busca o conteúdo novo e atualiza a tela sozinho. Ver
+   checkForRemoteUpdate() mais abaixo. */
+const GOOGLE_DRIVE_LIVE_POLL_MS = 6 * 1000;
 /* V6.20.0 — novo: além do autosave automático acima, cada Ctrl+S (forceSyncNow)
    agora também grava num rodízio PRÓPRIO de até 40 slots (forcesave-1.json ...
    forcesave-40.json), separado do autosave normal — histórico só dos momentos em que
@@ -289,6 +298,45 @@ function applyAccountPayloadSilently(obj){
   S.currentProfile = null; S.data = null;
 }
 
+/* V6.38.0 — versão "gentil" da função acima, usada pela atualização automática em
+   segundo plano (checkForRemoteUpdate): atualiza os perfis e os dados de TODOS eles
+   (assim como applyAccountPayloadSilently), mas NÃO derruba a pessoa de volta pro
+   seletor de perfil — se ela já estava dentro de um perfil, continua nele, só com os
+   números atualizados. Só sai do perfil atual no caso raro de ele ter sido apagado
+   em outro dispositivo enquanto esta aba estava aberta. */
+function applyAccountPayloadForLiveUpdate(obj){
+  S.config = obj.config || S.config;
+  const nextProfiles = (obj.profiles || []).slice(0, 5);
+  setConfig(S.config); setProfiles(nextProfiles);
+  S.profiles = nextProfiles;
+  Object.keys(obj.dataByProfile || {}).forEach(pid=>{
+    const d = migrateData((obj.dataByProfile || {})[pid] || emptyData());
+    setProfileData(pid, d);
+    if(S.currentProfile && S.currentProfile.id === pid) S.data = d;
+  });
+  if(S.currentProfile && !nextProfiles.some(p=>p.id===S.currentProfile.id)){
+    S.currentProfile = null; S.data = null;
+    return { profileRemoved: true };
+  }
+  return { profileRemoved: false };
+}
+
+/* V6.38.0 — nunca aplica uma atualização automática em cima de algo que a pessoa
+   está digitando ou de um modal aberto (ex.: criando um lançamento) — isso poderia
+   apagar o que ela estava preenchendo ou mudar o conteúdo debaixo dela sem aviso.
+   Se não for seguro agora, a próxima checagem (poucos segundos depois) tenta de
+   novo sozinha — nenhuma atualização é perdida, só adiada. */
+function borionLiveUpdateSafeToApplyNow(){
+  if(document.querySelector('.modal-overlay')) return false;
+  const active = document.activeElement;
+  if(active){
+    const tag = (active.tagName||'').toUpperCase();
+    if(tag==='INPUT' || tag==='TEXTAREA' || tag==='SELECT') return false;
+    if(active.isContentEditable) return false;
+  }
+  return true;
+}
+
 /* ---------------- Provider principal ---------------- */
 const GoogleDriveProvider = {
   folderId: null,
@@ -298,6 +346,8 @@ const GoogleDriveProvider = {
   syncTimer: null,
   autosaveTimer: null,
   autosaveKickTimer: null,
+  liveTimer: null,
+  _liveCheckInFlight: false,
   autosaveSlotIndex: 0,
   forcesaveSlotIndex: 0,
   autosaveDirtySinceLast: false,
@@ -353,6 +403,7 @@ const GoogleDriveProvider = {
     this.forcesaveSlotIndex = gdriveReadSlotIndex(this.folderId, 'forcesave');
     const result = await this.loadFromDrive();
     this.startAutosaveLoop();
+    this.startLivePollLoop();
     if(result && result.empty){
       renderGoogleDriveOnboarding();
     } else {
@@ -500,6 +551,83 @@ const GoogleDriveProvider = {
   stopAutosaveLoop(){
     if(this.autosaveTimer){ clearInterval(this.autosaveTimer); this.autosaveTimer = null; }
     if(this.autosaveKickTimer){ clearTimeout(this.autosaveKickTimer); this.autosaveKickTimer = null; }
+  },
+
+  /* V6.38.0 — "atualização ao vivo": confere a cada poucos segundos se outro
+     dispositivo salvou algo novo, e se sim atualiza a tela sozinho, sem precisar
+     sair do app e entrar de novo. Ver checkForRemoteUpdate() para os detalhes e
+     as travas de segurança (nunca roda por cima de uma alteração local pendente,
+     nunca interrompe quem está digitando). */
+  startLivePollLoop(){
+    this.stopLivePollLoop();
+    this.liveTimer = setInterval(()=>{ this.checkForRemoteUpdate(); }, GOOGLE_DRIVE_LIVE_POLL_MS);
+  },
+  stopLivePollLoop(){
+    if(this.liveTimer){ clearInterval(this.liveTimer); this.liveTimer = null; }
+  },
+
+  /* Só confere METADADOS (this.currentFileMeta.modifiedTime) — a mesma chamada
+     barata que o syncNow() já usa pra detectar conflito, sem baixar o conteúdo à
+     toa. Só busca o conteúdo completo quando a data realmente mudou. Nunca roda
+     enquanto: não está conectado; existe uma alteração local pendente (dirty —
+     nesse caso é o próprio syncNow()/conflito que decide, não a atualização ao
+     vivo); já existe uma checagem ao vivo ou uma sincronização em andamento; a
+     aba está em segundo plano (document.hidden); ou já existe um conflito
+     aguardando decisão da pessoa. */
+  async checkForRemoteUpdate(){
+    if(!this.isConnected() || !this.currentFileId) return false;
+    if(this.dirty || this.conflict) return false;
+    if(this._liveCheckInFlight || this._syncInFlight || this._autosaveInFlight) return false;
+    if(typeof document!=='undefined' && document.hidden) return false;
+    this._liveCheckInFlight = true;
+    try{
+      const freshMeta = await GoogleDriveFS.getFileMeta(this.currentFileId);
+      if(!this.currentFileMeta || !this.currentFileMeta.modifiedTime || !freshMeta.modifiedTime) return false;
+      if(freshMeta.modifiedTime === this.currentFileMeta.modifiedTime) return false; // nada novo
+
+      // Algo mudou no Drive desde a última leitura deste dispositivo. Só aplica
+      // agora se não for atrapalhar a pessoa (modal aberto, campo em edição) —
+      // senão adia pra próxima checagem, poucos segundos depois, sem perder o
+      // sinal de que existe algo novo (currentFileMeta só é atualizado quando a
+      // atualização é realmente aplicada).
+      if(!borionLiveUpdateSafeToApplyNow()) return false;
+
+      const data = await GoogleDriveFS.readFile(this.currentFileId);
+      const check = validateBorionJson(data);
+      if(!check.valid){ console.warn('[GoogleDriveProvider] atualização ao vivo ignorada: current.json parecia inválido.'); return false; }
+
+      const result = applyAccountPayloadForLiveUpdate(data);
+      this.currentFileMeta = freshMeta;
+      this.lastKnownProfileCount = (data.profiles || []).length;
+      if(window.BorionDataGuard){
+        const counts = BorionDataGuard.countAccountRecords(data);
+        this._lastGoodCounts = counts;
+        BorionDataGuard.writeLastGoodCounts(this.folderId, counts);
+      }
+
+      if(result.profileRemoved){
+        toast('O perfil que estava aberto foi removido em outro dispositivo.');
+        S.gate = { mode: 'list', error: '' };
+        renderGate();
+      } else if(S.currentProfile && S.data){
+        renderView();
+        toast('Atualizado com uma alteração feita em outro dispositivo.');
+      } else if(document.querySelector('.gate-wrap') && (!S.gate || S.gate.mode==='list')){
+        // Fora do modo "list" (ex.: preenchendo senha ou criando perfil), os
+        // dados já foram atualizados silenciosamente acima — só a tela não é
+        // redesenhada agora, pra não apagar um formulário em andamento. Aparece
+        // sozinho na próxima vez que a pessoa voltar pra lista de perfis.
+        renderGate();
+      }
+      return true;
+    }catch(e){
+      // Falha de rede/token aqui não é grave — é só uma checagem de fundo; a
+      // próxima tentativa (poucos segundos depois) resolve sozinha.
+      console.warn('[GoogleDriveProvider] checagem de atualização ao vivo falhou (tenta de novo em breve):', e);
+      return false;
+    }finally{
+      this._liveCheckInFlight = false;
+    }
   },
 
   /* V6.20.0 — lógica de rodízio compartilhada entre o autosave automático
@@ -824,6 +952,7 @@ const GoogleDriveProvider = {
   disconnect(){
     GoogleDriveAuth.signOut();
     this.stopAutosaveLoop();
+    this.stopLivePollLoop();
     this.folderId = null; this.currentFileId = null; this.currentFileMeta = null;
     this._backupsFolderId = null; this.conflict = false; this.dirty = false;
     this.autosaveDirtySinceLast = false; this._forceRequested = false; this._forceSavePromise = null;
@@ -846,6 +975,23 @@ const GoogleDriveProvider = {
 };
 
 window.GoogleDriveProvider = GoogleDriveProvider;
+
+/* V6.38.0 — além do poll de fundo (GOOGLE_DRIVE_LIVE_POLL_MS), confere na hora
+   quando a pessoa volta pro app (troca de aba, tira do segundo plano no celular) —
+   é exatamente o momento em que mais faz sentido já estar atualizado, sem esperar
+   o próximo tick do timer. */
+if(typeof document!=='undefined'){
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState==='visible' && window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){
+      GoogleDriveProvider.checkForRemoteUpdate();
+    }
+  });
+}
+if(typeof window!=='undefined'){
+  window.addEventListener('focus', ()=>{
+    if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.checkForRemoteUpdate();
+  });
+}
 
 /* Tela de onboarding pra pasta compartilhada que ainda não tem nenhum current.json —
    pede pra escolher entre importar um JSON antigo (ex: exportado do Supabase) ou

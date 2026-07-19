@@ -3,7 +3,7 @@
 // Estratégia: stale-while-revalidate.
 //
 // Ao editar o app e quiser forçar atualização do cache, aumente o número abaixo.
-const CACHE_NAME = 'borion-finance-v6-37-0-protecao-dados';
+const CACHE_NAME = 'borion-finance-v6-38-0-atualizacao-ao-vivo';
 const OCR_RUNTIME_CACHE = 'borion-ocr-runtime-v2';
 
 const ASSETS = [
@@ -16,8 +16,8 @@ const ASSETS = [
   "./js/borion-hub.js?v=6.36.0",
   "./js/01-storage-data-state.js?v=6.36.0",
   "./js/01b-storage-provider.js?v=6.36.0",
-  "./js/01c-google-drive-provider.js?v=6.37.0",
-  "./js/01d-data-guard.js?v=6.37.0",
+  "./js/01c-google-drive-provider.js?v=6.38.0",
+  "./js/01d-data-guard.js?v=6.38.0",
   "./js/02-backup-local.js?v=6.36.0",
   "./js/03-modals-shared.js?v=6.36.0",
   "./js/04-gate-shell.js?v=6.37.0",

@@ -11,8 +11,9 @@ function makeSandbox(){
   const sandbox={
     console, Object, Array, String, Number, JSON, Math, Promise, Date,
     localStorage:{ getItem:k=>store[k]??null, setItem:(k,v)=>{store[k]=String(v);}, removeItem:k=>{delete store[k];} },
-    document:{ querySelector:()=>null, createElement:()=>({}), head:{appendChild(){}} },
+    document:{ querySelector:()=>null, createElement:()=>({}), head:{appendChild(){}}, addEventListener(){} },
     navigator:{ onLine:true },
+    addEventListener(){},
     fetch:async ()=>{ throw new Error('fetch não deveria ser chamado neste teste (a checagem de segurança tem que interromper ANTES da rede).'); },
     toast(){}, // no-op
     window:null

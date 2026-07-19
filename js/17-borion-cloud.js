@@ -1018,10 +1018,12 @@ const CloudAuth={
     this.renderEmailForm(root);
   },
 
-  /* Tela padrão: só o essencial — logo, um botão grande "Continuar com Google" e,
-     como alternativa discreta, "Usar sem conta". Tudo mais (explicação da pasta do
-     Drive, e-mail/senha antigo, "esqueci a pasta"/limpar dados) fica atrás do link
-     "Instruções e mais opções", pra quem realmente precisar. */
+  /* V6.37.0 — pedido: só Google Drive como forma de entrar daqui pra frente.
+     "Usar sem conta" (modo 100% local) foi removido desta tela — quem já
+     estava em modo local antes continua acessando o que já tinha (nada foi
+     apagado), mas não é mais possível escolher esse caminho a partir de uma
+     entrada nova. Tudo mais (e-mail/senha antigo, limpar dados) fica só
+     atrás de "Instruções e mais opções", pra quem realmente precisar. */
   renderCleanLogin(root){
     root.innerHTML = `<div class="gate-wrap cloud-login-wrap"><div class="gate-box">
       <div class="gate-logo"><img src="borion-emblem.png" alt="Borion Finance"/><div class="appname">Borion Finance</div></div>
@@ -1031,7 +1033,6 @@ const CloudAuth={
         ${this.error?`<p class="gate-error">${esc(this.error)}</p>`:''}
         ${this.info?`<p class="gate-info">${esc(this.info)}</p>`:''}
         <button class="btn btn-primary btn-block" id="cloud_gdrive">Continuar com Google</button>
-        <div class="cloud-actions"><button class="link-btn" id="cloud_use_local">Usar sem conta (só neste dispositivo)</button></div>
         <div style="text-align:center;margin-top:20px;"><button class="link-btn" id="cloud_more_info" style="opacity:.65;">Instruções e mais opções</button></div>
       </div>
     </div></div>`;
@@ -1040,31 +1041,28 @@ const CloudAuth={
       try{ await GoogleDriveProvider.connect(true); }
       catch(e){ gd.disabled=false; gd.textContent='Continuar com Google'; alert(e.message||String(e)); }
     };
-    const ul=document.getElementById('cloud_use_local'); if(ul) ul.onclick=()=>{ setStorageMode('offline'); enterLocalMode(); };
     const mi=document.getElementById('cloud_more_info'); if(mi) mi.onclick=()=>this.showMoreInfoModal();
   },
 
-  /* Painel "Instruções e mais opções": explica como o login funciona, avisa sobre
-     perfis locais existentes, e dá as duas saídas que não fazem sentido na tela
-     principal mais: entrar com e-mail/senha antigo (Supabase) e limpar dados do
-     navegador em caso de problema. */
+  /* Painel "Instruções e mais opções": explica como o login funciona e dá a
+     saída de limpar dados do navegador em caso de problema. V6.37.0 — o
+     e-mail/senha antigo (Supabase) foi removido daqui também: só continua
+     acessível para quem já estiver com uma sessão Supabase aberta (o boot()
+     entra direto sem passar por esta tela nesse caso); não é mais possível
+     iniciar um login por e-mail/senha novo a partir da tela de entrada. */
   showMoreInfoModal(){
     const hasLocalProfiles = typeof getProfiles==='function' && (getProfiles()||[]).some(p=>p&&!p.cloud);
     const box = el(`<div class="modal-overlay">
       <div class="modal-box">
         <div class="modal-head"><h2>Instruções e mais opções</h2><button id="cai_close">&times;</button></div>
-        <p class="modal-sub">Como o login do Borion funciona, e outras formas de entrar.</p>
+        <p class="modal-sub">Como o login do Borion funciona.</p>
         <div class="info-box">"Continuar com Google" usa a pasta do Google Drive que foi compartilhada com a sua conta — escolha a pasta que tem o seu nome quando o seletor abrir. Cada conta pode ter vários perfis financeiros.</div>
-        ${hasLocalProfiles?`<div class="info-box">Você já tem perfil(is) salvos só neste dispositivo. Eles continuam aqui e voltam a aparecer quando você usar "sem conta".</div>`:''}
-        <div class="row-btns" style="margin-top:14px;flex-direction:column;gap:10px;">
-          <button class="btn-outline btn-block" id="cai_email_login">Entrar com e-mail e senha</button>
-        </div>
+        ${hasLocalProfiles?`<div class="info-box">Você tem perfil(is) salvos só neste dispositivo, de antes desta mudança. Eles continuam aqui — fale com quem administra o Borion para migrar esses dados para o Google Drive.</div>`:''}
         <div style="text-align:center;margin-top:16px;"><button class="link-btn" id="cai_reset_device" style="opacity:.55;font-size:.85em;">Problemas para entrar? Limpar dados deste navegador</button></div>
       </div>
     </div>`);
     $('#modal-root').innerHTML=''; $('#modal-root').appendChild(box); attachModalGuard(box);
     $('#cai_close').onclick=closeModal;
-    $('#cai_email_login').onclick=()=>{ closeModal(); this.emailExpanded=true; this.error=''; this.info=''; this.render(); };
     $('#cai_reset_device').onclick=()=>{ closeModal(); if(window.confirmResetDeviceState) confirmResetDeviceState(); };
   },
 

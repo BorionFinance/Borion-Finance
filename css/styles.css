@@ -3156,3 +3156,8 @@ html[data-theme="light"] .import-issue-list span{color:#991b1b;background:rgba(2
   .import-drop strong,.import-drop span{overflow-wrap:anywhere;word-break:break-word;}
   .import-review{overflow:visible;min-width:0;}
 }
+
+/* V6.36.0 — botão de acesso à Central do Borion (visível antes do carregamento sob demanda). */
+.settings-help-tab{display:flex!important;align-items:center!important;gap:9px!important;margin-top:3px!important;border-top:1px solid rgba(255,255,255,.075)!important;border-radius:0 0 12px 12px!important;padding-top:13px!important;}
+.settings-help-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 24px;width:24px;height:24px;border-radius:50%;border:1px solid rgba(217,180,107,.28);background:rgba(217,180,107,.08);color:var(--gold-bright);font-weight:950;}
+@media(max-width:760px){.settings-help-tab{border-top:0!important;border-radius:12px!important;padding-top:11px!important;}}

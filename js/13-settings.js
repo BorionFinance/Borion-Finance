@@ -2,6 +2,48 @@
 
 /* ---------------- VIEW: SETTINGS ---------------- */
 function settingsTabButton(key,label){ return `<button class="settings-tab ${S.settingsTab===key?'active':''}" onclick="Settings.setTab('${key}')">${label}</button>`; }
+
+/* V6.36.0 — a Central do Borion é carregada somente quando o usuário abre o botão ?.
+   O manual completo não participa do caminho crítico de inicialização do app. */
+const HelpCenterLoader = {
+  promise:null,
+  placeholder(){ return `<div class="help-loading-card"><span class="help-loading-spinner"></span><strong>Carregando a Central do Borion...</strong><span>Guias, checklist e história do sistema.</span></div>`; },
+  ensure(){
+    if(window.BorionHelp) return Promise.resolve(window.BorionHelp);
+    if(this.promise) return this.promise;
+    this.promise = new Promise((resolve,reject)=>{
+      if(!document.querySelector('link[data-borion-help-css]')){
+        const link=document.createElement('link');
+        link.rel='stylesheet'; link.href='css/help-center.css?v=6.36.0'; link.dataset.borionHelpCss='1';
+        document.head.appendChild(link);
+      }
+      const existing=document.querySelector('script[data-borion-help-script]');
+      if(existing){
+        existing.addEventListener('load',()=>resolve(window.BorionHelp),{once:true});
+        existing.addEventListener('error',()=>reject(new Error('Falha ao carregar a Central do Borion.')),{once:true});
+        return;
+      }
+      const script=document.createElement('script');
+      script.src='js/26-help-center.js?v=6.36.0'; script.async=true; script.dataset.borionHelpScript='1';
+      script.onload=()=>window.BorionHelp?resolve(window.BorionHelp):reject(new Error('A Central do Borion não iniciou.'));
+      script.onerror=()=>{ script.remove(); reject(new Error('Falha ao carregar a Central do Borion.')); };
+      document.head.appendChild(script);
+    }).catch(err=>{ this.promise=null; throw err; });
+    return this.promise;
+  },
+  open(){
+    S.settingsTab='help';
+    if(window.BorionHelp){ renderView(); return; }
+    renderView();
+    this.ensure().then(()=>{
+      if(S.view==='settings' && S.settingsTab==='help') renderView();
+    }).catch(err=>{
+      console.error('[BORION_HELP][LOAD]',err);
+      toast('Não foi possível abrir a Central do Borion. Recarregue o aplicativo.');
+    });
+  }
+};
+window.HelpCenterLoader=HelpCenterLoader;
 function moduleToggleHTML({key,title,desc,enabled,onClick}){
   return `<div class="module-toggle-card ${enabled?'enabled':''}">
     <div class="module-toggle-head">
@@ -24,6 +66,7 @@ function renderSettings(){
       ${settingsTabButton('personalization','Personalização')}
       ${settingsTabButton('backup','Backups')}
       ${settingsTabButton('integrations','Integrações')}
+      <button class="settings-tab settings-help-tab ${S.settingsTab==='help'?'active':''}" onclick="HelpCenterLoader.open()" title="Abrir a Central do Borion"><span class="settings-help-icon">?</span><span>Central do Borion</span></button>
       <button id="qb_both" class="btn btn-primary btn-sm settings-quick-backup-btn" onclick="Settings.quickBackupBoth()" title="Cria um backup agora e salva ao mesmo tempo no Google Drive e neste dispositivo">SALVAR DRIVE&amp;LOCAL</button>
     </div>`;
   let content='';
@@ -34,9 +77,10 @@ function renderSettings(){
   else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
   else if(S.settingsTab==='integrations') content = window.BorionInterop ? BorionInterop.renderSettings() : '<div class="settings-section">Integração indisponível.</div>'; // protected interop seam
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.35.2 • OCR local completo</div><footer class="app-release-footer" aria-label="Informações do Borion">
-<div><strong>Versão:</strong> 6.35.2</div>
-<div><strong>Lançamento:</strong> 17/07/2026</div>
+  else if(S.settingsTab==='help') content = window.BorionHelp ? BorionHelp.render() : HelpCenterLoader.placeholder();
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.36.0 • Central do Borion</div><footer class="app-release-footer" aria-label="Informações do Borion">
+<div><strong>Versão:</strong> 6.36.0</div>
+<div><strong>Lançamento:</strong> 18/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
 </footer></div>`;
@@ -995,7 +1039,7 @@ window.Settings = Settings;
 /* ================= V6.33.1 — refinamento extra de Configurações, padronização de ordenação
    e bloco flutuante de Anotações persistente entre abas ================= */
 (function(){
-  const SETTINGS_VERSION = '6.35.2';
+  const SETTINGS_VERSION = '6.36.0';
 
   function floatingNotesPrefs(create=false){
     const fallback={enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};
@@ -1055,6 +1099,7 @@ window.Settings = Settings;
         ${originalSettingsTabButton('personalization','Personalização')}
         ${originalSettingsTabButton('backup','Backups')}
         ${originalSettingsTabButton('integrations','Integrações')}
+        <button class="settings-tab settings-help-tab ${S.settingsTab==='help'?'active':''}" onclick="HelpCenterLoader.open()" title="Abrir a Central do Borion"><span class="settings-help-icon">?</span><span>Central do Borion</span></button>
         <button id="qb_both" class="btn btn-primary btn-sm settings-quick-backup-btn" onclick="Settings.quickBackupBoth()" title="Cria um backup agora e salva ao mesmo tempo no Google Drive e neste dispositivo">SALVAR DRIVE&amp;LOCAL</button>
       </div>`;
     let content='';
@@ -1065,9 +1110,10 @@ window.Settings = Settings;
     else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
     else if(S.settingsTab==='backup') content = renderSettingsBackup();
     else if(S.settingsTab==='integrations') content = window.BorionInterop ? BorionInterop.renderSettings() : '<div class="settings-section">Integração indisponível.</div>';
-    return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. ${SETTINGS_VERSION} • Importação inteligente de extratos por print</div><footer class="app-release-footer" aria-label="Informações do Borion">
+    else if(S.settingsTab==='help') content = window.BorionHelp ? BorionHelp.render() : HelpCenterLoader.placeholder();
+    return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. ${SETTINGS_VERSION} • Central do Borion</div><footer class="app-release-footer" aria-label="Informações do Borion">
 <div><strong>Versão:</strong> ${SETTINGS_VERSION}</div>
-<div><strong>Lançamento:</strong> 15/07/2026</div>
+<div><strong>Lançamento:</strong> 18/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
 </footer></div>`;

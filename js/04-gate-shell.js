@@ -453,6 +453,8 @@ function renderView(){
       <div style="display:flex;gap:12px;align-items:center;">
         ${(window.CloudStorage && CloudStorage.user)
           ? `<button id="cloud_status_badge" class="cloud-status syncing" onclick="CloudStorage.syncNow()">Sincronizando...</button>`
+          : (window.GoogleDriveProvider && GoogleDriveProvider.isConnected() && GoogleDriveProvider.blockedSuspicious)
+          ? `<button id="cloud_status_badge" class="cloud-status offline" onclick="GoogleDriveProvider.reload()" title="${esc(GoogleDriveProvider.blockedSuspicious)}">Salvamento bloqueado — ver</button>`
           : (window.GoogleDriveProvider && GoogleDriveProvider.isConnected() && GoogleDriveProvider.conflict)
           ? `<button id="cloud_status_badge" class="cloud-status offline" onclick="GoogleDriveProvider.reload()" title="Existe uma versão mais recente no Drive — clique pra recarregar, ou Ctrl+S pra salvar sua versão">Conflito — recarregar</button>`
           : (window.GoogleDriveProvider && GoogleDriveProvider.isConnected())

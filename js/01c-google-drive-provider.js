@@ -394,15 +394,37 @@ const GoogleDriveProvider = {
     // caminho inverso.
     const pendingSince = localStorage.getItem(gdrivePendingKey(this.folderId));
     if(pendingSince){
-      this.dirty = true;
-      await this.syncNow();
-      return { empty: false };
+      // V6.37.0 — antes de tratar cegamente o dado LOCAL como "mais recente" e
+      // reenviá-lo, confere se ele não está suspeitosamente menor que a última
+      // base confiável conhecida nesta pasta. Isso cobre o caso raro em que a
+      // flag "pendente" sobreviveu no localStorage mas o IndexedDB/dado real
+      // foi parcialmente perdido entre uma sessão e outra — sem essa checagem,
+      // essa reconexão reenviaria uma base ruim por cima de uma boa no Drive.
+      const payload = await buildFullBackupPayload();
+      const nextCounts = window.BorionDataGuard ? BorionDataGuard.countAccountRecords(payload) : null;
+      const baseline = window.BorionDataGuard ? BorionDataGuard.readLastGoodCounts(this.folderId) : null;
+      const check = (nextCounts && baseline) ? BorionDataGuard.detectSuspiciousAccountDrop(nextCounts, baseline) : { suspicious:false, reasons:[] };
+      if(check.suspicious){
+        console.warn('[GoogleDriveProvider] alteração pendente parecia suspeita ao reconectar — ignorando o "catch-up" e lendo o Drive normalmente:', BorionDataGuard.describeSuspiciousAccountReasons(check.reasons));
+        try{ localStorage.removeItem(gdrivePendingKey(this.folderId)); }catch(e){}
+        toast('Uma alteração pendente deste dispositivo parecia incompleta e não foi enviada ao Google Drive. Os dados mais recentes da nuvem foram carregados normalmente.');
+        // segue para a leitura normal abaixo, em vez de dar return aqui
+      } else {
+        this.dirty = true;
+        await this.syncNow();
+        return { empty: false };
+      }
     }
     const data = await GoogleDriveFS.readFile(file.id);
     const check = validateBorionJson(data);
     if(!check.valid) throw new Error('O current.json desta pasta parece corrompido: ' + check.errors.join(' '));
     applyAccountPayloadSilently(data);
     this.lastKnownProfileCount = (data.profiles || []).length;
+    if(window.BorionDataGuard){
+      const counts = BorionDataGuard.countAccountRecords(data);
+      this._lastGoodCounts = counts;
+      BorionDataGuard.writeLastGoodCounts(this.folderId, counts);
+    }
     return { empty: false };
   },
 
@@ -554,19 +576,30 @@ const GoogleDriveProvider = {
         return;
       }
       const payload = await buildFullBackupPayload();
-      // V6.5.0 — nunca sobrescreve um current.json que tinha perfis com um payload
-      // vazio (0 perfis) — isso só aconteceria por bug, nunca por ação normal da
-      // pessoa (excluir perfil é uma ação explícita em outra tela, não por aqui).
-      if((payload.profiles || []).length === 0 && this.lastKnownProfileCount > 0){
-        console.warn('[GoogleDriveProvider] gravação automática bloqueada: tentaria salvar 0 perfis por cima de um arquivo que tinha ' + this.lastKnownProfileCount + '.');
+      // V6.37.0 — checagem ampliada: antes só bloqueava se TODOS os perfis
+      // sumissem (payload.profiles.length===0). Agora também compara a
+      // contagem de transações, cartões, investimentos etc. de CADA perfil
+      // com a última base confiável conhecida — pega o caso em que os dados
+      // de UM perfil específico zeram (cache/IndexedDB corrompido) sem o
+      // perfil em si desaparecer da lista. Ver js/01d-data-guard.js.
+      const nextCounts = window.BorionDataGuard ? BorionDataGuard.countAccountRecords(payload) : null;
+      const baseline = window.BorionDataGuard ? (this._lastGoodCounts || BorionDataGuard.readLastGoodCounts(this.folderId)) : null;
+      const check = (nextCounts && baseline) ? BorionDataGuard.detectSuspiciousAccountDrop(nextCounts, baseline) : { suspicious:false, reasons:[] };
+      if(check.suspicious){
+        const reasonText = BorionDataGuard.describeSuspiciousAccountReasons(check.reasons);
+        console.warn('[GoogleDriveProvider] gravação automática bloqueada por segurança: ' + reasonText);
+        this.blockedSuspicious = reasonText;
+        toast('Salvamento no Google Drive bloqueado por segurança: os dados desta sessão parecem menores que o esperado (' + reasonText + '). Nada foi substituído.');
         this.dirty = true;
         return;
       }
+      this.blockedSuspicious = null;
       this.dirty = false;
       const updated = await GoogleDriveFS.updateFile(this.currentFileId, payload);
       this.currentFileMeta = updated;
       this.conflict = false;
       this.lastKnownProfileCount = (payload.profiles || []).length;
+      if(nextCounts && window.BorionDataGuard){ this._lastGoodCounts = nextCounts; BorionDataGuard.writeLastGoodCounts(this.folderId, nextCounts); }
       try{ localStorage.removeItem(gdrivePendingKey(this.folderId)); }catch(e){}
     }catch(e){
       console.warn('[GoogleDriveProvider] falha ao sincronizar com o Drive (tenta de novo na próxima alteração):', e);
@@ -578,6 +611,26 @@ const GoogleDriveProvider = {
         this.dirty = true;
         this.syncNow();
       }
+    }
+  },
+
+  /* V6.37.0 — mesma checagem de queda suspeita do syncNow(), só que usada pelo
+     Ctrl+S/forceSyncNow. Continua bloqueando por padrão mesmo sendo uma ação
+     explícita — "forçar" deveria resolver um CONFLITO de versões, não abrir
+     uma exceção para gravar uma base vazia por engano. Quem chama pode passar
+     options.acknowledgeSuspicious=true depois de confirmar com a pessoa (ex.:
+     um diálogo "tem certeza?") para prosseguir mesmo assim. */
+  _assertSafeToForceWrite(payload, options={}){
+    if(!window.BorionDataGuard || options.acknowledgeSuspicious) return;
+    const nextCounts = BorionDataGuard.countAccountRecords(payload);
+    const baseline = this._lastGoodCounts || BorionDataGuard.readLastGoodCounts(this.folderId);
+    const check = baseline ? BorionDataGuard.detectSuspiciousAccountDrop(nextCounts, baseline) : { suspicious:false, reasons:[] };
+    if(check.suspicious){
+      const reasonText = BorionDataGuard.describeSuspiciousAccountReasons(check.reasons);
+      const err = new Error('Salvamento bloqueado por segurança: os dados desta sessão parecem menores que o esperado (' + reasonText + '). Nada foi substituído no Google Drive. Se isso for esperado (ex.: você excluiu bastante coisa de propósito), confirme novamente para continuar.');
+      err.code = 'SUSPICIOUS_ACCOUNT_DROP';
+      err.reasons = check.reasons;
+      throw err;
     }
   },
 
@@ -612,12 +665,14 @@ const GoogleDriveProvider = {
           payload = options.payload;
           this.dirty = false;
           this._syncAgain = false;
+          this._assertSafeToForceWrite(payload, options);
           updated = await GoogleDriveFS.updateFile(this.currentFileId, payload);
         }else{
           for(let attempt=0; attempt<3; attempt++){
             this.dirty = false;
             this._syncAgain = false;
             payload = await buildFullBackupPayload();
+            this._assertSafeToForceWrite(payload, options);
             updated = await GoogleDriveFS.updateFile(this.currentFileId, payload);
             if(!this.dirty && !this._syncAgain) break;
           }
@@ -627,6 +682,12 @@ const GoogleDriveProvider = {
         this.dirty = false;
         this._syncAgain = false;
         this.lastKnownProfileCount = (payload.profiles || []).length;
+        if(window.BorionDataGuard){
+          const counts = BorionDataGuard.countAccountRecords(payload);
+          this._lastGoodCounts = counts;
+          BorionDataGuard.writeLastGoodCounts(this.folderId, counts);
+        }
+        this.blockedSuspicious = null;
         try{ localStorage.removeItem(gdrivePendingKey(this.folderId)); }catch(e){}
         await this.writeRotatingSnapshot('forcesave', GOOGLE_DRIVE_FORCESAVE_SLOTS, payload);
         return true;
@@ -766,6 +827,7 @@ const GoogleDriveProvider = {
     this.folderId = null; this.currentFileId = null; this.currentFileMeta = null;
     this._backupsFolderId = null; this.conflict = false; this.dirty = false;
     this.autosaveDirtySinceLast = false; this._forceRequested = false; this._forceSavePromise = null;
+    this._lastGoodCounts = null; this.blockedSuspicious = null;
     setStorageMode(null);
   },
 
@@ -777,7 +839,8 @@ const GoogleDriveProvider = {
       folderName: this.folderName || null,
       folderLink: this.folderId ? ('https://drive.google.com/drive/folders/' + this.folderId) : null,
       pending: this.dirty,
-      conflict: this.conflict
+      conflict: this.conflict,
+      blockedSuspicious: this.blockedSuspicious || null
     };
   }
 };

@@ -1,4 +1,4 @@
-/* Borion Finance — Journal imutável no Google Drive (V6.40.1)
+/* Borion Finance — Journal imutável no Google Drive (V6.40.2)
    Horário serve só para ordenação/diagnóstico. Aplicação é decidida unicamente
    por operationId persistido em __syncMeta640.appliedOperationIds. */
 const BORION_SYNC_FOLDER_NAME='Borion_Sync';

@@ -270,7 +270,7 @@ window.addEventListener('pageshow', (e)=>{
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try{
-      const registration=await navigator.serviceWorker.register('sw.js?v=6.40.1',{updateViaCache:'none'});
+      const registration=await navigator.serviceWorker.register('sw.js?v=6.40.2',{updateViaCache:'none'});
       /* V6.23.8 — app instalado verifica atualização sempre que abre. O botão
          “Salvar e atualizar” também chama registration.update() antes do reload. */
       registration.update().catch(()=>{});

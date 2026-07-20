@@ -14,7 +14,7 @@ const HelpCenterLoader = {
     this.promise = new Promise((resolve,reject)=>{
       if(!document.querySelector('link[data-borion-help-css]')){
         const link=document.createElement('link');
-        link.rel='stylesheet'; link.href='css/help-center.css?v=6.40.1'; link.dataset.borionHelpCss='1';
+        link.rel='stylesheet'; link.href='css/help-center.css?v=6.40.2'; link.dataset.borionHelpCss='1';
         document.head.appendChild(link);
       }
       const existing=document.querySelector('script[data-borion-help-script]');
@@ -24,7 +24,7 @@ const HelpCenterLoader = {
         return;
       }
       const script=document.createElement('script');
-      script.src='js/26-help-center.js?v=6.40.1'; script.async=true; script.dataset.borionHelpScript='1';
+      script.src='js/26-help-center.js?v=6.40.2'; script.async=true; script.dataset.borionHelpScript='1';
       script.onload=()=>window.BorionHelp?resolve(window.BorionHelp):reject(new Error('A Central do Borion não iniciou.'));
       script.onerror=()=>{ script.remove(); reject(new Error('Falha ao carregar a Central do Borion.')); };
       document.head.appendChild(script);
@@ -851,10 +851,27 @@ Settings.resumeDeleteAccountFromMagicLink = function(){
 };
 
 Settings.deleteProfile = function(id){
-  const pr=(S.profiles||[]).find(x=>x.id===id); if(!pr) return;
+  const pr=(S.profiles||[]).find(x=>String(x.id)===String(id)); if(!pr) return;
   openConfirmModal({title:'Excluir perfil financeiro', text:`Para excluir "${pr.name}", confirme. Esta ação apaga este perfil e seus dados financeiros na nuvem. Mantenha um backup se precisar.`, confirmLabel:'Excluir perfil', cancelLabel:'Cancelar', variant:'danger', onConfirm: async ()=>{
-    try{ if(window.CloudStorage&&CloudStorage.user){ await CloudStorage.deleteProfile(id); } else { if(window.BorionDataActions6401) BorionDataActions6401.deleteProfile(id,'settings_delete'); S.profiles=S.profiles.filter(x=>x.id!==id); setProfiles(S.profiles); localStorage.removeItem(LS_DATA_PREFIX+id); idbDeleteProfileData(id); if(S.currentProfile&&S.currentProfile.id===id) logout(); else renderView(); } toast('Perfil excluído.'); }
-    catch(e){ alert(e.message||String(e)); }
+    try{
+      if(window.CloudStorage&&CloudStorage.user){
+        await CloudStorage.deleteProfile(id);
+        toast('Perfil excluído e confirmado na nuvem.');
+        return;
+      }
+      if(!window.BorionDataActions6401||typeof BorionDataActions6401.deleteProfileAndSync!=='function') throw new Error('O módulo seguro de exclusão de perfil não está disponível.');
+      const result=await BorionDataActions6401.deleteProfileAndSync(id,'settings_delete');
+      if(!result.deleted) throw new Error('O perfil não foi encontrado para exclusão.');
+      if(result.syncResult===true){
+        toast('Perfil excluído e sincronizado no Google Drive.');
+      }else if(result.syncResult&&result.syncResult.delegated){
+        toast('Perfil excluído. A aba principal está enviando a exclusão ao Drive.');
+      }else if(window.GoogleDriveProvider&&GoogleDriveProvider.isConnected()){
+        toast(navigator.onLine===false?'Perfil excluído neste dispositivo. A exclusão será enviada quando a internet voltar.':'Perfil excluído. A exclusão está pendente de confirmação no Drive.');
+      }else{
+        toast('Perfil excluído deste dispositivo.');
+      }
+    }catch(e){ alert(e.message||String(e)); }
   }});
 };
 Settings.exportProfile = async function(){
@@ -1039,7 +1056,7 @@ window.Settings = Settings;
 /* ================= V6.33.1 — refinamento extra de Configurações, padronização de ordenação
    e bloco flutuante de Anotações persistente entre abas ================= */
 (function(){
-  const SETTINGS_VERSION = '6.40.1';
+  const SETTINGS_VERSION = '6.40.2';
 
   function floatingNotesPrefs(create=false){
     const fallback={enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};

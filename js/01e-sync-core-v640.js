@@ -1,4 +1,4 @@
-/* Borion Finance — Núcleo de sincronização segura (V6.40.1 — Dados e Segurança)
+/* Borion Finance — Núcleo de sincronização segura (V6.40.2 — Dados e Segurança)
 
    Lógica pura e testável: identidade determinística para dados legados,
    tombstones, merge de três vias e checksums. O Google Drive não oferece uma
@@ -335,6 +335,20 @@ function normalizeAccountMeta(payload){
   if(!Array.isArray(meta.accountConflicts)) meta.accountConflicts=[];
   return meta;
 }
+function mergeProfileTombstones6402(...sets){
+  const out={};
+  for(const set of sets){
+    if(!set||typeof set!=='object') continue;
+    for(const id of ownKeysSafe(set)){
+      const candidate=set[id]; if(!candidate||typeof candidate!=='object') continue;
+      const current=out[id];
+      const candidateKey=String(candidate.deletedAt||'')+'|'+String(candidate.operationId||'');
+      const currentKey=current?(String(current.deletedAt||'')+'|'+String(current.operationId||'')):'';
+      if(!current||candidateKey>currentKey) out[id]=safeClone(candidate);
+    }
+  }
+  return out;
+}
 function mergeProfileMetadata(base,local,remote,id,conflicts){
   const localConf=[];
   const out=deepThreeWayMerge(base||{},local||{},remote||{},'profiles.'+id,localConf)||{};
@@ -348,16 +362,21 @@ function mergeAccountPayload(basePayload,localPayload,remotePayload){
   const lp=new Map((local.profiles||[]).filter(p=>p&&p.id).map(p=>[String(p.id),p]));
   const rp=new Map((remote.profiles||[]).filter(p=>p&&p.id).map(p=>[String(p.id),p]));
   const bm=normalizeAccountMeta(base),lm=normalizeAccountMeta(local),rm=normalizeAccountMeta(remote);
-  const profileTombstones=Object.assign({},bm.profileTombstones,lm.profileTombstones,rm.profileTombstones);
+  const profileTombstones=mergeProfileTombstones6402(bm.profileTombstones,lm.profileTombstones,rm.profileTombstones);
   const ids=new Set([...bp.keys(),...lp.keys(),...rp.keys(),...Object.keys(base.dataByProfile||{}),...Object.keys(local.dataByProfile||{}),...Object.keys(remote.dataByProfile||{}),...ownKeysSafe(profileTombstones)]);
   const profiles=[],dataByProfile={};
   for(const id of ids){
     if(BORION_DANGEROUS_KEYS.has(id)) continue;
     const b=bp.get(id),l=lp.get(id),r=rp.get(id),t=profileTombstones[id];
     if(t){
-      const survivor=l||r, changed=survivor&&b&&!sameValue(survivor,b)&&String(survivor.updatedAt||'')>String(t.deletedAt||'');
-      if(changed){ accountConflicts.push({kind:'profile_edit_vs_delete',profileId:id,base:b||null,local:l||null,remote:r||null,tombstone:t}); }
-      else continue;
+      const survivor=l||r, changed=survivor&&b&&!sameValue(survivor,b);
+      if(changed){
+        // A edição não é descartada: fica inteira no conflito para recuperação.
+        // Porém o perfil permanece excluído. Um dispositivo antigo nunca pode
+        // reativá-lo apenas por enviar uma cópia local depois do tombstone.
+        accountConflicts.push({kind:'profile_edit_vs_delete',profileId:id,base:b||null,local:l||null,remote:r||null,tombstone:t,preservedEdit:safeClone(survivor)});
+      }
+      continue;
     }
     const p=mergeProfileMetadata(b,l,r,id,accountConflicts); profiles.push(p);
     const bd=(base.dataByProfile||{})[id],ld=(local.dataByProfile||{})[id],rd=(remote.dataByProfile||{})[id];

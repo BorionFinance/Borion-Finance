@@ -1,0 +1,79 @@
+
+=== test_atomic_account_apply_v6401.js ===
+OK: aplicação de conta é atômica; interrupção, quota, IDs duplicados e dados órfãos não deixam migração parcial.
+
+=== test_backup_gate_v6401.js ===
+OK: backup pré-migração preserva bytes exatos, valida checksum/restauração, é idempotente e bloqueia o boot antes de qualquer migração quando falha.
+
+=== test_checksum_schema_v640.js ===
+OK: checksum canônico é determinístico e a migração de schema 6400 é idempotente e não-destrutiva.
+
+=== test_data_guard.js ===
+OK: todos os testes de BorionDataGuard passaram.
+
+=== test_data_guard_integration.js ===
+OK: todos os testes de integração do guard no google-drive-provider passaram.
+
+=== test_data_guard_v640.js ===
+OK: integridade do índice de perfis (item 13)
+OK: queda suspeita detectada por perfil, mesmo compensada no agregado (item 13)
+OK: detecção de IDs duplicados (item 13)
+OK: detecção de referências quebradas (item 13)
+OK: detecção de valores inválidos (NaN/Infinity) (item 13)
+OK: todos os testes do Data Guard por perfil (item 13) passaram.
+
+=== test_drive_pagination_v6401.js ===
+OK: paginação completa retorna 2.500 itens, deduplica, falha fechada em página incompleta e trata 429/500/403 corretamente.
+
+=== test_drive_sync_fail_safe.js ===
+OK: sincronização fail-safe v6.40.2 preserva pendências, retoma migração interrompida, persiste o schema no boot e separa operação protegida de snapshot confirmado.
+
+=== test_durable_queue_v640.js ===
+OK: fila durável sobrevive ao fechamento da aba, só é liberada após confirmação remota real, e deviceId é estável entre sessões enquanto sessionId é renovado.
+
+=== test_help_center.js ===
+OK: Central do Borion renderiza guias, história e 629 verificações.
+
+=== test_importador_legado.js ===
+OK: CSV, OFX e TXT continuam interpretando.
+
+=== test_journal_v6401.js ===
+OK: journal ignora relógio como verdade, recupera operação tardia, detecta colisão/pastas duplicadas, tolera consistência eventual e compacta sem exclusão definitiva.
+
+=== test_live_update.js ===
+OK: todos os testes de checkForRemoteUpdate (atualização ao vivo) passaram.
+
+=== test_merge_engine_v640.js ===
+OK cenário A (perfis diferentes)
+OK cenário B (registros diferentes, mesmo perfil)
+OK cenário C (campos diferentes no mesmo registro)
+OK cenário D (mesmo campo alterado nos dois lados — conflito, sem perda)
+OK cenário E (edição x exclusão — bloqueado, registrado, preservado)
+OK cenário F (idempotência: duas exclusões e operação repetida)
+OK: perfil que só existe remotamente nunca é descartado
+OK: mesclagem protegida contra prototype pollution (item 21)
+OK: todos os cenários de mesclagem de três vias (item 27.1) passaram sem perda de dados.
+
+=== test_merge_schema_v6401.js ===
+OK: merge explícito preserva categorias, módulos, cards, configurações, ordens e vínculos; conflitos no mesmo campo ficam registrados.
+
+=== test_migration_preservation_v6401.js ===
+OK: migração real é determinística entre dispositivos, idempotente, preserva duplicatas legítimas, totais, configurações, vínculos e contas com 2/5 perfis.
+
+=== test_multitab_v6401.js ===
+OK: eleição mantém uma única líder, follower apenas delega, heartbeat/lock transferem liderança sem duplicar processamento.
+
+=== test_profile_delete_propagation_v6402.js ===
+OK: exclusão de perfil é enfileirada e confirmada imediatamente, usa operationId único, não ressuscita e fecha o perfil aberto em outras abas/dispositivos.
+
+=== test_real_delete_tombstones_v6401.js ===
+OK: exclusões reais e implícitas criam tombstones; registro antigo não ressuscita e edição concorrente vira conflito preservado.
+
+=== test_version_v640.js ===
+OK: nenhuma referência a 6.38.4 sobrou nos arquivos funcionais.
+OK: versão 6.40.2 ("6.40 — Dados e Segurança") está presente em todos os locais esperados.
+OK: os 4 módulos novos do motor de sincronização estão registrados no index.html e no cache do service worker.
+OK: nenhuma limpeza do Drive usa exclusão definitiva.
+OK: versionamento consistente (item 31), cache novo e limpeza recuperável.
+
+OK: 20/20 arquivos de teste passaram.

@@ -1,6 +1,6 @@
-/* Borion Finance — Google Drive Provider (V6.40.1 — Dados e Segurança)
+/* Borion Finance — Google Drive Provider (V6.40.2 — Dados e Segurança)
 
-   Arquitetura 6.40.1: current.json é apenas o snapshot consolidado. Toda alteração
+   Arquitetura 6.40.2: current.json é apenas o snapshot consolidado. Toda alteração
    é protegida primeiro como operação imutável, identificada por operationId, e só
    depois consolidada e confirmada por checksum. O carregamento recupera operações
    pendentes antes de apresentar a conta; horários servem apenas para ordenação.
@@ -335,7 +335,7 @@ const GoogleDriveFS = {
     return await res.json();
   },
 
-  /* V6.40.1 — paginação completa. Uma falha em qualquer página lança erro;
+  /* V6.40.2 — paginação completa. Uma falha em qualquer página lança erro;
      o journal não avança parcialmente. */
   async listQuery(q,options={}){
     const pageSize=Math.min(1000,Math.max(1,Number(options.pageSize)||1000));
@@ -484,6 +484,16 @@ function commitPreparedAccountPayload6401(prepared,options={}){
     setConfig(prepared.config);setProfiles(prepared.profiles);
     for(const p of prepared.profiles) setProfileData(String(p.id),prepared.dataByProfile[String(p.id)]);
     if(prepared.profileTombstones&&typeof applyProfileTombstones6401==='function') applyProfileTombstones6401(prepared.profileTombstones);
+    // Só apaga o cache de um perfil ausente quando existe tombstone explícito.
+    // Assim uma listagem incompleta nunca elimina dados locais, mas uma exclusão
+    // confirmada não deixa uma cópia velha disponível para ressurreição.
+    for(const oldProfile of previous.profiles||[]){
+      const oldId=oldProfile&&oldProfile.id!=null?String(oldProfile.id):'';
+      if(!oldId||nextIds.has(oldId)||!(prepared.profileTombstones&&prepared.profileTombstones[oldId])) continue;
+      try{localStorage.removeItem('mc_data_'+oldId);}catch(e){}
+      try{if(typeof idbDeleteProfileData==='function')idbDeleteProfileData(oldId);}catch(e){}
+      try{if(typeof clearExitSavePending==='function')clearExitSavePending(oldId);}catch(e){}
+    }
     S.config=prepared.config;S.profiles=prepared.profiles;
     if(options.preserveCurrentProfile&&previous.currentProfile){
       const active=prepared.profiles.find(p=>String(p.id)===String(previous.currentProfile.id));
@@ -522,6 +532,16 @@ function applyAccountPayloadSilently(obj){
 function applyAccountPayloadForLiveUpdate(obj){
   const prepared=prepareAccountPayload6401(obj);
   return commitPreparedAccountPayload6401(prepared,{preserveCurrentProfile:true});
+}
+function handleRemovedActiveProfile6402(result,source='remote_update'){
+  if(!result||!result.profileRemoved) return false;
+  try{if(typeof resetImportTransientState==='function')resetImportTransientState();}catch(e){}
+  try{if(typeof closeModal==='function')closeModal();}catch(e){}
+  S.currentProfile=null;S.data=null;S.gate={mode:'list',selectedProfileId:null,error:''};
+  if(window.ExitSaveGuard&&typeof ExitSaveGuard.refresh==='function')ExitSaveGuard.refresh();
+  if(typeof renderGate==='function')renderGate();
+  if(typeof toast==='function')toast('O perfil que estava aberto foi removido em outro dispositivo.');
+  return true;
 }
 
 /* V6.38.0 — nunca aplica uma atualização automática em cima de algo que a pessoa
@@ -739,7 +759,8 @@ const GoogleDriveProvider = {
     if(window.BorionMultiTab640 && !BorionMultiTab640.tabId){
       BorionMultiTab640.init({
         onBecomeLeader: ()=>{ if(this.dirty || this.hasPersistedPending() || this.hasPersistedConsolidation()) this.resumePendingSync('multitab_leader'); },
-        onPendingFromFollower: ()=>{ if(this.hasPersistedPending()) this.dirty = true; this.resumePendingSync('multitab_follower_notify'); }
+        onPendingFromFollower: ()=>{ if(this.hasPersistedPending()) this.dirty = true; this.resumePendingSync('multitab_follower_notify'); },
+        onAccountUpdated: meta=>this.applySharedAccountUpdateFromLeader6402(meta)
       });
     }
     const sub = GoogleDriveAuth.user.sub;
@@ -1013,6 +1034,33 @@ const GoogleDriveProvider = {
      sair do app e entrar de novo. Ver checkForRemoteUpdate() para os detalhes e
      as travas de segurança (nunca roda por cima de uma alteração local pendente,
      nunca interrompe quem está digitando). */
+  applySharedAccountUpdateFromLeader6402(meta={}){
+    try{
+      const profiles=typeof getProfiles==='function'?getProfiles():(S.profiles||[]);
+      const activeId=S.currentProfile&&S.currentProfile.id!=null?String(S.currentProfile.id):null;
+      S.profiles=profiles;
+      if(activeId&&!profiles.some(p=>p&&String(p.id)===activeId)){
+        return handleRemovedActiveProfile6402({profileRemoved:true},'multitab_leader');
+      }
+      if(activeId){
+        const fresh=profiles.find(p=>p&&String(p.id)===activeId);
+        const freshData=typeof getProfileData==='function'?getProfileData(activeId):null;
+        if(fresh)S.currentProfile=fresh;
+        if(freshData)S.data=freshData;
+        if(typeof renderView==='function'&&S.data)renderView();
+      }else if(typeof document!=='undefined'&&document.querySelector&&document.querySelector('.gate-wrap')&&typeof renderGate==='function'){
+        renderGate();
+      }
+      return true;
+    }catch(e){console.warn('[GoogleDriveProvider] aba secundária não aplicou atualização compartilhada:',e);return false;}
+  },
+
+  _notifyAccountSnapshotApplied6402(result,source){
+    if(window.BorionMultiTab640&&BorionMultiTab640.isLeader&&BorionMultiTab640.isLeader()){
+      BorionMultiTab640.notifyAccountUpdated({source:source||'snapshot',profileRemoved:!!(result&&result.profileRemoved)});
+    }
+  },
+
   startLivePollLoop(){
     this.stopLivePollLoop();
     this.liveTimer = setInterval(()=>{ this.checkForRemoteUpdate(); }, GOOGLE_DRIVE_LIVE_POLL_MS);
@@ -1070,10 +1118,9 @@ const GoogleDriveProvider = {
         BorionDataGuard.writeLastGoodCounts(this.folderId, counts);
       }
 
-      if(result.profileRemoved){
-        toast('O perfil que estava aberto foi removido em outro dispositivo.');
-        S.gate = { mode: 'list', error: '' };
-        renderGate();
+      this._notifyAccountSnapshotApplied6402(result,'live_remote');
+      if(handleRemovedActiveProfile6402(result,'live_remote')){
+        // A função central já limpou a tela e voltou para a seleção de perfis.
       } else if(S.currentProfile && S.data){
         renderView();
         toast('Atualizado com uma alteração feita em outro dispositivo.');
@@ -1195,7 +1242,7 @@ const GoogleDriveProvider = {
         const confirmedCheck=await BorionDriveJournal640.validateSnapshot(confirmed,requiredOperationId||undefined);
         if(!confirmedCheck.valid)throw new Error('Snapshot relido não confirmou a consolidação: '+confirmedCheck.reason);
         this.currentFileMeta=updated||this.currentFileMeta;this._lastConsolidatedPayload=confirmed;this._operationBasePayload=JSON.parse(JSON.stringify(confirmed));
-        this._surfaceMergeConflicts(confirmed);try{applyAccountPayloadForLiveUpdate(confirmed);}catch(e){console.warn('[GoogleDriveProvider] consolidação confirmada; atualização visual adiada:',e);}
+        this._surfaceMergeConflicts(confirmed);try{const applied=applyAccountPayloadForLiveUpdate(confirmed);this._notifyAccountSnapshotApplied6402(applied,'consolidation_retry');handleRemovedActiveProfile6402(applied,'consolidation_retry');}catch(e){console.warn('[GoogleDriveProvider] consolidação confirmada; atualização visual adiada:',e);}
         this._clearConsolidationPending();this.lastSyncError='';this._recordSyncSuccess();
         if(window.BorionSyncState)BorionSyncState.set('SNAPSHOT_CONFIRMED',{operationId:requiredOperationId,checksum:confirmedCheck.checksum});
         return true;
@@ -1253,7 +1300,7 @@ const GoogleDriveProvider = {
       this.currentFileMeta=updated;this._lastConsolidatedPayload=confirmed;this._operationBasePayload=JSON.parse(JSON.stringify(confirmed));
       this._clearConsolidationPending();
       this._surfaceMergeConflicts(confirmed);
-      try{applyAccountPayloadForLiveUpdate(confirmed);}catch(e){console.warn('[GoogleDriveProvider] snapshot confirmado, mas atualização local da UI foi adiada:',e);}
+      try{const applied=applyAccountPayloadForLiveUpdate(confirmed);this._notifyAccountSnapshotApplied6402(applied,'sync_confirmed');handleRemovedActiveProfile6402(applied,'sync_confirmed');}catch(e){console.warn('[GoogleDriveProvider] snapshot confirmado, mas atualização local da UI foi adiada:',e);}
       this.conflict=false;this.lastKnownProfileCount=(confirmed.profiles||[]).length;
       if(window.BorionDataGuard){const counts=BorionDataGuard.countAccountRecords(confirmed);this._lastGoodCounts=counts;BorionDataGuard.writeLastGoodCounts(this.folderId,counts);}
       this.dirty=revision!==this._syncRevision;this._syncAgain=this.dirty;this._queueOperationId=null;

@@ -147,8 +147,14 @@ function setProfileTombstones6401(v){ writeJSON(LS_PROFILE_TOMBSTONES_6401,v||{}
 function recordProfileDeletion6401(profileId,reason='user_delete'){
   if(!profileId) return null;
   const all=getProfileTombstones6401();
-  const opId=(window.GoogleDriveProvider&&GoogleDriveProvider._queueOperationId)||(window.BorionSyncCore&&BorionSyncCore.uuid640?BorionSyncCore.uuid640():uid());
-  const deviceId=(window.GoogleDriveProvider&&GoogleDriveProvider._deviceId)||null;
+  const provider=window.GoogleDriveProvider||null;
+  let opId=provider&&provider._queueOperationId;
+  if(!opId) opId=(window.BorionSyncCore&&BorionSyncCore.uuid640?BorionSyncCore.uuid640():uid());
+  // A marca de exclusão e o arquivo imutável enviado ao Drive precisam carregar
+  // exatamente o mesmo operationId. Sem isto, a exclusão podia ficar registrada
+  // com um ID e a fila durável criar outro, dificultando confirmação e recuperação.
+  if(provider&&provider.isConnected&&provider.isConnected()&&!provider._queueOperationId) provider._queueOperationId=opId;
+  const deviceId=(provider&&provider._deviceId)||null;
   const tomb={profileId:String(profileId),deletedAt:new Date().toISOString(),deviceId,operationId:opId,reason};
   all[String(profileId)]=tomb; setProfileTombstones6401(all); return tomb;
 }
@@ -1115,7 +1121,43 @@ const BorionDataActions6401 = {
     else setProfileData(pid,data);
     return true;
   },
-  deleteProfile(profileId,reason='user_delete'){ return recordProfileDeletion6401(profileId,reason); }
+  deleteProfile(profileId,reason='user_delete'){ return recordProfileDeletion6401(profileId,reason); },
+  async deleteProfileAndSync(profileId,reason='user_delete'){
+    const id=String(profileId||'');
+    const profile=(S.profiles||[]).find(p=>p&&String(p.id)===id);
+    if(!id||!profile) return {deleted:false,reason:'profile_not_found'};
+    const wasCurrent=!!(S.currentProfile&&String(S.currentProfile.id)===id);
+    const tombstone=this.deleteProfile(id,reason);
+
+    S.profiles=(S.profiles||[]).filter(p=>p&&String(p.id)!==id);
+    setProfiles(S.profiles);
+    try{localStorage.removeItem(LS_DATA_PREFIX+id);}catch(e){}
+    try{if(typeof idbDeleteProfileData==='function') await idbDeleteProfileData(id);}catch(e){console.warn('[BORION][PROFILE_DELETE][IDB_CLEANUP_WARN]',e);}
+    try{if(typeof clearExitSavePending==='function') clearExitSavePending(id);}catch(e){}
+
+    if(wasCurrent){
+      if(typeof logout==='function') logout();
+      else{S.currentProfile=null;S.data=null;S.gate={mode:'list',error:''};if(typeof renderGate==='function')renderGate();}
+    }else if(typeof renderView==='function'&&S.currentProfile){
+      renderView();
+    }else if(typeof renderGate==='function'){
+      renderGate();
+    }
+
+    let syncResult=null,syncError=null;
+    const provider=window.GoogleDriveProvider||null;
+    if(provider&&provider.isConnected&&provider.isConnected()){
+      // queueSave() persiste a pendência e solicita a líder imediatamente. O
+      // forceSyncNow() não cria outra operação: reutiliza o operationId já ligado
+      // ao tombstone acima e tenta confirmar o snapshot sem esperar o debounce.
+      provider.queueSave();
+      if(typeof navigator==='undefined'||navigator.onLine!==false){
+        try{syncResult=await provider.forceSyncNow({reason:'profile_delete',profileId:id});}
+        catch(e){syncError=e;console.warn('[BORION][PROFILE_DELETE][SYNC_PENDING]',e);}
+      }
+    }
+    return {deleted:true,profileId:id,profileName:profile.name||'Perfil',wasCurrent,tombstone,syncResult,syncError};
+  }
 };
 window.BorionDataActions6401=BorionDataActions6401;
 

@@ -1,5 +1,5 @@
 /* Borion Finance — Fila durável, identidade de dispositivo e máquina de estados
-   (V6.40.1 — Dados e Segurança)
+   (V6.40.2 — Dados e Segurança)
 
    Depende de js/01e-sync-core-v640.js (uuid640, checksumOf). Não depende do
    Google Drive nem de nenhum outro provider — só de IndexedDB. Isso permite

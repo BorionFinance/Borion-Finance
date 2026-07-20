@@ -74,7 +74,7 @@ function makeSandbox(){
     buildFullBackupPayload:async()=>({type:'borion-account-backup',profiles:[{id:'pedro'}],dataByProfile:{pedro:{transacoes:[{id:'t1'}]}}}),
     buildSharedBackupSnapshot:async()=>({type:'borion-account-backup',profiles:[{id:'pedro'}],dataByProfile:{pedro:{transacoes:[{id:'t1'}]}}}),
     renderGate(){},renderView(){},writeJSON(){},readJSON(){return null;},
-    BORION_APP_VERSION:'6.40.1'
+    BORION_APP_VERSION:'6.40.2'
   };
   sandbox.window=sandbox;
   vm.createContext(sandbox);
@@ -89,7 +89,7 @@ function makeSandbox(){
   sandbox.GoogleDriveProvider.currentFileMeta={modifiedTime:'2026-07-19T17:00:00.000Z'};
   sandbox.GoogleDriveProvider._deviceId='device-1';
 
-  // Drive em memória compatível com a topologia v6.40.1. Assim o teste cobre
+  // Drive em memória compatível com a topologia v6.40.2. Assim o teste cobre
   // a operação real do journal (descoberta de pastas, listagem, leitura,
   // consolidação e confirmação do snapshot), sem chamar OAuth ou DOM.
   const driveFiles=new Map();
@@ -242,5 +242,5 @@ function makeSandbox(){
     assert(current.__syncMeta640&&current.__syncMeta640.schemaVersion===6401&&current.integrity.checksum,'retomada deve persistir snapshot migrado e validado');
   }
 
-  console.log('OK: sincronização fail-safe v6.40.1 preserva pendências, retoma migração interrompida, persiste o schema no boot e separa operação protegida de snapshot confirmado.');
+  console.log('OK: sincronização fail-safe v6.40.2 preserva pendências, retoma migração interrompida, persiste o schema no boot e separa operação protegida de snapshot confirmado.');
 })().catch(e=>{console.error(e);process.exit(1);});

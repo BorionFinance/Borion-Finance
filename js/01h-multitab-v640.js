@@ -1,13 +1,13 @@
-/* Borion Finance — Coordenação entre abas (V6.40.1)
+/* Borion Finance — Coordenação entre abas (V6.40.2)
    Somente a líder executa rede. Followers persistem localmente e delegam. */
-const BORION_TAB_CHANNEL_NAME='borion_sync_channel_v6401';
+const BORION_TAB_CHANNEL_NAME='borion_sync_channel_v6402';
 const BORION_LEADER_HEARTBEAT_MS=2500;
 const BORION_LEADER_TIMEOUT_MS=8000;
-const LS_BORION_LEASE='borion_sync_leader_lease_v6401';
+const LS_BORION_LEASE='borion_sync_leader_lease_v6402';
 
 const BorionMultiTab640={
   tabId:null,leader:false,_channel:null,_heartbeatTimer:null,_watchTimer:null,
-  _onBecomeLeader:null,_onLoseLeader:null,_onPendingFromFollower:null,
+  _onBecomeLeader:null,_onLoseLeader:null,_onPendingFromFollower:null,_onAccountUpdated:null,
   _lockRelease:null,_lockPending:false,_navigatorLocksDisabled:false,
 
   init(handlers={}){
@@ -16,6 +16,7 @@ const BorionMultiTab640={
     this._onBecomeLeader=handlers.onBecomeLeader||function(){};
     this._onLoseLeader=handlers.onLoseLeader||function(){};
     this._onPendingFromFollower=handlers.onPendingFromFollower||function(){};
+    this._onAccountUpdated=handlers.onAccountUpdated||function(){};
     if(typeof BroadcastChannel!=='undefined'){
       this._channel=new BroadcastChannel(BORION_TAB_CHANNEL_NAME);
       this._channel.onmessage=ev=>this._handleMessage(ev.data);
@@ -45,7 +46,7 @@ const BorionMultiTab640={
     if(this._lockPending||this.leader||!this._canUseNavigatorLock()) return;
     this._lockPending=true;
     try{
-      await navigator.locks.request('borion_sync_leader_v6401',{mode:'exclusive',ifAvailable:true},lock=>{
+      await navigator.locks.request('borion_sync_leader_v6402',{mode:'exclusive',ifAvailable:true},lock=>{
         if(!lock) return undefined;
         this._becomeLeader('navigator.locks');
         return new Promise(resolve=>{this._lockRelease=resolve;});
@@ -107,6 +108,7 @@ const BorionMultiTab640={
       if(lease&&lease.tabId!==this.tabId&&this._leaseValid(lease)) this._loseLeader('other_leader_confirmed');
     }
     if(msg.type==='sync_request'&&this.leader){try{this._onPendingFromFollower(msg);}catch(e){console.error(e);}}
+    if(msg.type==='account_snapshot_applied'){try{this._onAccountUpdated(msg);}catch(e){console.error(e);}}
   },
   _broadcast(msg){if(this._channel)try{this._channel.postMessage(msg);}catch(e){}},
   requestSync(meta={}){
@@ -114,6 +116,7 @@ const BorionMultiTab640={
     this._broadcast(Object.assign({type:'sync_request',tabId:this.tabId},meta));return false;
   },
   notifyPending(meta={}){return this.requestSync(meta);},
+  notifyAccountUpdated(meta={}){this._broadcast(Object.assign({type:'account_snapshot_applied',tabId:this.tabId,at:Date.now()},meta));},
   release(){
     if(this.leader){const lease=this._readLease();if(lease&&lease.tabId===this.tabId)try{localStorage.removeItem(LS_BORION_LEASE);}catch(e){}}
     this._loseLeader('release');

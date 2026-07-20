@@ -27,15 +27,15 @@ assert(delegated===false,'aba secundária deve apenas delegar');
 assert(aRemote===1&&bRemote===0,'somente a líder deve processar a solicitação remota da secundária');
 
 // Heartbeat renova o lease.
-const before=JSON.parse(sharedStore.borion_sync_leader_lease_v6401);
+const before=JSON.parse(sharedStore.borion_sync_leader_lease_v6402);
 a.Multi._tickElection();
-const after=JSON.parse(sharedStore.borion_sync_leader_lease_v6401);
+const after=JSON.parse(sharedStore.borion_sync_leader_lease_v6402);
 assert(after.tabId===a.Multi.tabId&&after.expiresAt>=before.expiresAt,'heartbeat deve renovar o lease da líder');
 
 // Simula fechamento inesperado: não chama release(), apenas deixa o lease expirar e
 // remove a comunicação da aba que caiu. A secundária deve assumir na próxima eleição.
 a.Multi._channel.close();a.Multi._channel=null;a.Multi.leader=false;
-const stale=JSON.parse(sharedStore.borion_sync_leader_lease_v6401);stale.expiresAt=Date.now()-1;sharedStore.borion_sync_leader_lease_v6401=JSON.stringify(stale);
+const stale=JSON.parse(sharedStore.borion_sync_leader_lease_v6402);stale.expiresAt=Date.now()-1;sharedStore.borion_sync_leader_lease_v6402=JSON.stringify(stale);
 b.Multi._tickElection();
 assert(b.Multi.isLeader()===true&&bLeader===1,'aba secundária deve assumir após expiração do heartbeat da líder que caiu');
 const self=b.Multi.requestSync({operationId:'op-2'});
@@ -50,7 +50,7 @@ b.Multi.release();
   const lockManager={holder:false,request(_name,_opts,callback){
     if(this.holder)return Promise.resolve(callback(null));
     this.holder=true;
-    let result;try{result=callback({name:'borion_sync_leader_v6401'});}catch(e){this.holder=false;throw e;}
+    let result;try{result=callback({name:'borion_sync_leader_v6402'});}catch(e){this.holder=false;throw e;}
     return Promise.resolve(result).finally(()=>{this.holder=false;});
   }};
   let cLead=0,dLead=0;

@@ -9,7 +9,7 @@
 /* ---------------- Backup em pasta local (File System Access API — Chrome/Edge) ---------------- */
 const FS_ACCESS_SUPPORTED = typeof window!=='undefined' && 'showDirectoryPicker' in window;
 const IDB_NAME = 'borion_handles', IDB_STORE = 'handles';
-const BORION_APP_VERSION = '6.40.1';
+const BORION_APP_VERSION = '6.40.2';
 const BORION_BACKUP_CONSENT_PREFIX = 'borion_backup_consent_v2_';
 const BORION_BACKUP_LAST_CLOUD_PREFIX = 'borion_backup_last_cloud_v1_';
 const BORION_BACKUP_SNOOZE_PREFIX = 'borion_backup_consent_snooze_v1_';
@@ -444,7 +444,7 @@ const BackupFS = {
 
   /* ---------------- V6.40 — Dados e Segurança (itens 15.1, 15.3, 15.4) ---------------- */
 
-  /* Item 15.1 / correção 6.40.1: backup EXATO dos bytes originais antes de
+  /* Item 15.1 / correção 6.40.2: backup EXATO dos bytes originais antes de
      qualquer migração de schema. O arquivo recém-criado é relido, tem o checksum
      conferido e precisa passar na validação de restauração. Qualquer falha mantém
      a base original intacta e bloqueia migração, persistência e sincronização até

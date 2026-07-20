@@ -1224,7 +1224,12 @@ const GoogleDriveProvider = {
     if(window.BorionDataGuard){const counts=BorionDataGuard.countAccountRecords(data);this._lastGoodCounts=counts;BorionDataGuard.writeLastGoodCounts(this.folderId,counts);}
     this._notifyAccountSnapshotApplied6402(result,source);
     if(handleRemovedActiveProfile6402(result,source))return true;
-    if(S.currentProfile&&S.data){if(typeof requestAnimationFrame==='function')requestAnimationFrame(()=>renderView());else renderView();if(typeof toast==='function')toast('Atualizado agora com uma alteração feita em outro dispositivo.');}
+    // V6.44.3 — mesma proteção de js/24-interconnections.js: uma atualização vinda
+    // de outro dispositivo não pode repintar a tela por cima de uma edição não
+    // salva na aba Integrações (ex.: "Como o valor entra no Borion"). Os dados já
+    // foram aplicados acima; só a repintura fica pendente até a pessoa sair da tela.
+    const editingIntegrationSettings=typeof S!=='undefined'&&S.view==='settings'&&S.settingsTab==='integrations';
+    if(S.currentProfile&&S.data){if(!editingIntegrationSettings){if(typeof requestAnimationFrame==='function')requestAnimationFrame(()=>renderView());else renderView();}if(typeof toast==='function')toast('Atualizado agora com uma alteração feita em outro dispositivo.');}
     else if(document.querySelector('.gate-wrap')&&(!S.gate||S.gate.mode==='list'))renderGate();
     this.lastSyncAt=Date.now();this.lastSyncError='';this.authRequired=false;
     if(window.BorionSyncState)BorionSyncState.set('SNAPSHOT_CONFIRMED',{source});

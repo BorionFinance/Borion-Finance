@@ -139,8 +139,21 @@ function profileAvatarHTML(profile, extraClass=''){
   return `<div class="${cls}" style="background:${profileAvatarBg(p)}">${esc(initials(p.name||'Perfil'))}</div>`;
 }
 
+const LS_PROFILE_TOMBSTONES_6401='borion_profile_tombstones_v6401';
 function getProfiles(){ return readJSON(LS_PROFILES, []); }
 function setProfiles(list){ writeJSON(LS_PROFILES, list); }
+function getProfileTombstones6401(){ const v=readJSON(LS_PROFILE_TOMBSTONES_6401,{}); return v&&typeof v==='object'&&!Array.isArray(v)?v:{}; }
+function setProfileTombstones6401(v){ writeJSON(LS_PROFILE_TOMBSTONES_6401,v||{}); }
+function recordProfileDeletion6401(profileId,reason='user_delete'){
+  if(!profileId) return null;
+  const all=getProfileTombstones6401();
+  const opId=(window.GoogleDriveProvider&&GoogleDriveProvider._queueOperationId)||(window.BorionSyncCore&&BorionSyncCore.uuid640?BorionSyncCore.uuid640():uid());
+  const deviceId=(window.GoogleDriveProvider&&GoogleDriveProvider._deviceId)||null;
+  const tomb={profileId:String(profileId),deletedAt:new Date().toISOString(),deviceId,operationId:opId,reason};
+  all[String(profileId)]=tomb; setProfileTombstones6401(all); return tomb;
+}
+function applyProfileTombstones6401(v){ if(v&&typeof v==='object'&&!Array.isArray(v)) setProfileTombstones6401(v); }
+function clearProfileDeletion6401(profileId){ const all=getProfileTombstones6401(); delete all[String(profileId)]; setProfileTombstones6401(all); }
 
 function getSession(){ return readJSON(LS_SESSION, null); }
 function setSession(s){ if(s) writeJSON(LS_SESSION, s); else localStorage.removeItem(LS_SESSION); }
@@ -233,7 +246,7 @@ async function hydrateProfileDataFromIDB(id){
   const idbData = await idbGetProfileData(id);
   if(idbData){
     writeJSON(LS_DATA_PREFIX+id, idbData);
-    return migrateData(idbData);
+    return migrateData(idbData, {profileId:id});
   }
   return null;
 }
@@ -304,8 +317,18 @@ function emptyData(){
     uiPreferences:{budgetDateSort:{receita:'desc',fixa:'desc',variavel:'desc',transferencias:'desc'},floatingNotes:{enabled:false,text:'',minimized:true,x:null,y:null}}
   };
 }
-function migrateData(d){
+function migrateData(d, migrationContext={}){
   if(!d) return emptyData();
+  const _migrationProfileId = migrationContext.profileId || (d.__syncMeta&&d.__syncMeta.profileId) || ((typeof S!=='undefined'&&S.currentProfile&&S.currentProfile.id)||null) || 'unknown-profile';
+  const _migrationOccurrences = new Map();
+  const migrationUid6401 = (kind,stable,forcedOccurrence)=>{
+    const canonical=(window.BorionSyncCore&&BorionSyncCore.canonicalStringify)?BorionSyncCore.canonicalStringify(stable):JSON.stringify(stable);
+    const fp=String(kind)+'|'+canonical;
+    const occurrence=forcedOccurrence==null?(_migrationOccurrences.get(fp)||0):forcedOccurrence;
+    if(forcedOccurrence==null)_migrationOccurrences.set(fp,occurrence+1);
+    const seed=['legacy-generated-v6401',_migrationProfileId,kind,canonical,String(occurrence)].join('|');
+    return window.BorionSyncCore?'legacy_'+BorionSyncCore.sha256Sync640(seed).slice(0,40):uid();
+  };
   if(!d.categorias) d.categorias=defaultCategories();
   const _defaultCats = defaultCategories();
   ['receita','fixa','variavel'].forEach(k=>{
@@ -368,7 +391,7 @@ function migrateData(d){
     .filter(r=>r && /^\d{4}-(0[1-9]|1[0-2])$/.test(r.monthKey||''))
     .sort((a,b)=>String(a.closedAt||'').localeCompare(String(b.closedAt||'')))
     .filter(r=>{ if(_reportMonths.has(r.monthKey)) return false; _reportMonths.add(r.monthKey); return true; })
-    .map(r=>Object.assign({id:uid(),monthLabel:'',closedAt:null,total:0,metaTotal:0,activeCount:0,boxCount:0,summary:{entradas:0,saidas:0,rendimentos:0,movimentacoes:0},boxes:[],moves:[]},r,{boxes:Array.isArray(r.boxes)?r.boxes:[],moves:Array.isArray(r.moves)?r.moves:[],summary:Object.assign({entradas:0,saidas:0,rendimentos:0,movimentacoes:0},r.summary||{})}));
+    .map((r,i)=>Object.assign({id:migrationUid6401('reservas.monthlyReports',{monthKey:r.monthKey,closedAt:r.closedAt||null,total:r.total||0},i),monthLabel:'',closedAt:null,total:0,metaTotal:0,activeCount:0,boxCount:0,summary:{entradas:0,saidas:0,rendimentos:0,movimentacoes:0},boxes:[],moves:[]},r,{boxes:Array.isArray(r.boxes)?r.boxes:[],moves:Array.isArray(r.moves)?r.moves:[],summary:Object.assign({entradas:0,saidas:0,rendimentos:0,movimentacoes:0},r.summary||{})}));
   d.modules.reserves = d.reservas.enabled!==false;
   if(!d.contas) d.contas=[];
   if(!Array.isArray(d.contas)) d.contas=[];
@@ -400,7 +423,7 @@ function migrateData(d){
   if(_legacyRefsPresent&&!d.migrationBackups.some(b=>b&&b.kind==='before_account_id_v6231')){
     const snapshot={};
     ['contas','liquidez','transacoes','fixas','fixaPagamentos','bens','metas','agenda','boletos','transferencias','assinaturas','assinaturaCobrancas','cartoes'].forEach(k=>{try{snapshot[k]=JSON.parse(JSON.stringify(d[k]));}catch(_){}});
-    d.migrationBackups.push({id:uid(),kind:'before_account_id_v6231',createdAt:Date.now(),snapshot});
+    d.migrationBackups.push({id:migrationUid6401('migrationBackup',{kind:'before_account_id_v6231',snapshot}),kind:'before_account_id_v6231',createdAt:0,snapshot});
   }
   // V5.36.0 — "Carteira" (dinheiro físico) é uma conta fixa que sempre precisa existir,
   // não pode ser excluída e nunca pode ser confundida com cartão de crédito. Migração
@@ -419,8 +442,8 @@ function migrateData(d){
   })();
   // upgrade contas registry with the new bank/account fields
   const usedAccountIds = new Set();
-  d.contas.forEach(c=>{
-    if(!c.id || usedAccountIds.has(String(c.id))) c.id = uid();
+  d.contas.forEach((c,accountIndex)=>{
+    if(!c.id || usedAccountIds.has(String(c.id))) c.id = migrationUid6401('contas',c,accountIndex);
     usedAccountIds.add(String(c.id));
     if(c.nome==null) c.nome = c.banco || 'Conta';
     if(c.tipo==null) c.tipo = 'Conta corrente';
@@ -448,10 +471,10 @@ function migrateData(d){
   };
   function recordAccountReview(entityType, entity, field, legacyValue, candidates){
     if(!entity) return;
-    const rid=entity.id||entity.fixaId||entity.assinaturaId||uid();
+    const rid=entity.id||entity.fixaId||entity.assinaturaId||migrationUid6401('accountMigrationReview.entity',entity);
     const key=[entityType,rid,field,String(legacyValue||'')].join('|');
     if(!d.accountMigrationReview.some(r=>r&&r.key===key)){
-      d.accountMigrationReview.push({key,entityType,entityId:rid,field,legacyValue:legacyValue||'',candidateAccountIds:(candidates||[]).map(c=>c.id),status:(candidates||[]).length>1?'ambiguous':'unresolved',createdAt:Date.now()});
+      d.accountMigrationReview.push({key,entityType,entityId:rid,field,legacyValue:legacyValue||'',candidateAccountIds:(candidates||[]).map(c=>c.id),status:(candidates||[]).length>1?'ambiguous':'unresolved',createdAt:0});
     }
     entity.accountMigrationStatus=(candidates||[]).length>1?'ambiguous':'unresolved';
   }
@@ -602,7 +625,7 @@ function migrateData(d){
       if(p.despesaTipo==='fixa' && p.statusPagamento==='Pago'){
         const competencia=p.dataCompra||monthKey(todayYM().y,todayYM().m);
         if(!p.pagamentosIndividuais.some(r=>r&&r.competencia===competencia&&r.pago!==false))
-          p.pagamentosIndividuais.push({id:uid(),competencia,pago:true,data:null,updatedAt:Date.now(),migrado:true});
+          p.pagamentosIndividuais.push({id:migrationUid6401('cartoes.parcelas.pagamentosIndividuais',{parcelaId:p.id||null,competencia}),competencia,pago:true,data:null,updatedAt:0,migrado:true});
         p.statusPagamento='Em aberto';
       }
     });
@@ -617,7 +640,7 @@ function migrateData(d){
       if(!Array.isArray(parcela.pagamentosIndividuais)) parcela.pagamentosIndividuais=[];
       const competencia=f.startMonth||parcela.dataCompra||monthKey(todayYM().y,todayYM().m);
       if(!parcela.pagamentosIndividuais.some(r=>r&&r.competencia===competencia&&r.pago!==false))
-        parcela.pagamentosIndividuais.push({id:uid(),competencia,pago:true,data:null,updatedAt:Date.now(),migrado:true});
+        parcela.pagamentosIndividuais.push({id:migrationUid6401('cartoes.parcelas.pagamentosIndividuais',{parcelaId:parcela.id||null,competencia}),competencia,pago:true,data:null,updatedAt:0,migrado:true});
     }
     f.statusPagamento='Em aberto';
   });
@@ -680,7 +703,7 @@ function migrateData(d){
         normalizeLinkedTxIds(p, t=>t && t.viaParcelaId===p.id, i=>{
           const ym = shiftYM(startMonth, i);
           const nome = total>1 ? `${nomeBase} (${i+1}/${total})` : nomeBase;
-          return {id:uid(), tipo:'variavel', nome, data:ym+'-01', categoria:p.categoria||'Outro', valor:valorParcela, banco:c.banco||'', formaPagamento:'Crédito', viaCartaoId:c.id, viaParcelaId:p.id, parcelaAtual:i+1, parcelaTotal:total};
+          return {id:migrationUid6401('transacoes.cartaoParcela',{cartaoId:c.id||null,parcelaId:p.id||null,ym,indice:i}), tipo:'variavel', nome, data:ym+'-01', categoria:p.categoria||'Outro', valor:valorParcela, banco:c.banco||'', formaPagamento:'Crédito', viaCartaoId:c.id, viaParcelaId:p.id, parcelaAtual:i+1, parcelaTotal:total};
         }, total, valorParcela);
       });
     });
@@ -694,7 +717,7 @@ function migrateData(d){
       normalizeLinkedTxIds(b, t=>t && t.viaBoletoId===b.id, i=>{
         const ym = shiftYM(startMonth, i);
         const nome = total>1 ? `${nomeBase} (${i+1}/${total})` : nomeBase;
-        return {id:uid(), tipo:'variavel', nome, data:ym+'-01', categoria:b.categoria||'Outro', valor:valorParcela, banco:b.banco||'', formaPagamento:'Boleto', viaBoletoId:b.id, parcelaAtual:i+1, parcelaTotal:total};
+        return {id:migrationUid6401('transacoes.boletoParcela',{boletoId:b.id||null,ym,indice:i}), tipo:'variavel', nome, data:ym+'-01', categoria:b.categoria||'Outro', valor:valorParcela, banco:b.banco||'', formaPagamento:'Boleto', viaBoletoId:b.id, parcelaAtual:i+1, parcelaTotal:total};
       }, total, valorParcela);
     });
   })();
@@ -730,17 +753,32 @@ function migrateData(d){
       const box = resolveBox(t.nome);
       if(!box){ keep.push(t); return; } // não deu pra identificar com segurança — mantém como estava
       d.transferencias.push({
-        id: uid(), origemTipo:'reserva', origemId:box.id, origemNome:box.nome, origemBanco:'',
+        id: migrationUid6401('transferencias.retiradaReserva',{sourceId:t.id||null,nome:t.nome||'',data:t.data||'',boxId:box.id||null}), origemTipo:'reserva', origemId:box.id, origemNome:box.nome, origemBanco:'',
         destinoTipo:'conta', destinoId:t.banco||box.banco||'', destinoNome:t.banco||box.banco||'', destinoBanco:t.banco||box.banco||'',
         valor: Number(t.valor)||0, data: t.data||todayISO(),
         descricao: (t.nome||'Retirada de reserva')+' — migrado automaticamente de uma receita antiga (V6.0). Saldo não foi alterado por esta migração.',
-        createdAt: Date.now(), historico:true, migratedFromTransacaoId: t.id, migratedFromTransacao: JSON.parse(JSON.stringify(t))
+        createdAt: t.createdAt||t.data||0, historico:true, migratedFromTransacaoId: t.id, migratedFromTransacao: JSON.parse(JSON.stringify(t))
       });
       // não entra em "keep": some da lista de Receitas, mas o lançamento original
       // continua preservado dentro da transferência acima (migratedFromTransacao).
     });
     d.transacoes = keep;
   })();
+  // V6.40 — item 11/25 do pedido: adiciona id/createdAt/updatedAt/revision
+  // estáveis a registros antigos que ainda não têm (nunca troca um ID já
+  // existente, nunca mexe em nenhum campo que a interface já usa). Puramente
+  // síncrono e idempotente — ver js/01e-sync-core-v640.js. Isolado em try/catch
+  // por segurança: se por algum motivo o módulo 01e ainda não tiver carregado
+  // (ordem de scripts), a migração de identidade só é adiada, nunca quebra o
+  // carregamento normal dos dados.
+  try{
+    if(window.BorionSyncCore){
+      let _deviceIdSync = null;
+      try{ _deviceIdSync = localStorage.getItem('borion_device_id_v640'); }catch(_e){}
+      const _profileIdSync = _migrationProfileId;
+      BorionSyncCore.migrateDataToSchema640(d, _deviceIdSync, _profileIdSync);
+    }
+  }catch(e){ console.warn('[BORION][SCHEMA_640_MIGRATION_WARN]', e); }
   return d;
 }
 /* V6.3.0 — validação central de um JSON de backup/importação do Borion, antes de
@@ -1027,9 +1065,66 @@ function toggleValuesHidden(){
   renderView();
 }
 
+const BorionDataActions6401 = {
+  _deviceId(){ return (window.GoogleDriveProvider&&GoogleDriveProvider._deviceId)||null; },
+  _operationId(){
+    if(window.GoogleDriveProvider){
+      if(!GoogleDriveProvider._queueOperationId && window.BorionSyncCore) GoogleDriveProvider._queueOperationId=BorionSyncCore.uuid640();
+      if(GoogleDriveProvider._queueOperationId) return GoogleDriveProvider._queueOperationId;
+    }
+    return window.BorionSyncCore?BorionSyncCore.uuid640():uid();
+  },
+  captureImplicitDeletions(previous,current,profileId){
+    if(!previous||!current||!window.BorionSyncCore) return {entities:0,primitives:0};
+    BorionSyncCore.migrateDataToSchema640(previous,this._deviceId(),profileId);
+    BorionSyncCore.migrateDataToSchema640(current,this._deviceId(),profileId);
+    let entities=0,primitives=0;
+    const opId=this._operationId(),deviceId=this._deviceId();
+    for(const path of BorionSyncCore.BORION_SYNCABLE_COLLECTIONS){
+      const before=BorionSyncCore.pathGet(previous,path),after=BorionSyncCore.pathGet(current,path);
+      if(!Array.isArray(before)||!Array.isArray(after)) continue;
+      const afterIds=new Set(after.filter(x=>x&&x.id).map(x=>String(x.id)));
+      for(const rec of before){
+        if(!rec||!rec.id||afterIds.has(String(rec.id))) continue;
+        const key=BorionSyncCore.pathKey(path),meta=BorionSyncCore.ensureSyncMeta(current);
+        if(meta.tombstones[key]&&meta.tombstones[key][String(rec.id)]) continue;
+        BorionSyncCore.recordTombstone(current,path,String(rec.id),deviceId,opId,{reason:'captured_real_delete'}); entities++;
+      }
+    }
+    for(const type of ['receita','fixa','variavel']){
+      const path=['categorias',type],before=BorionSyncCore.pathGet(previous,path)||[],after=BorionSyncCore.pathGet(current,path)||[];
+      const afterKeys=new Set(after.map(v=>BorionSyncCore.canonicalStringify(v)));
+      for(const value of before){
+        const ck=BorionSyncCore.canonicalStringify(value); if(afterKeys.has(ck)) continue;
+        const id='primitive_'+BorionSyncCore.sha256Sync640(BorionSyncCore.pathKey(path)+'|'+ck).slice(0,40);
+        const key=BorionSyncCore.pathKey(path),meta=BorionSyncCore.ensureSyncMeta(current);
+        if(meta.tombstones[key]&&meta.tombstones[key][id]) continue;
+        BorionSyncCore.recordTombstone(current,path,id,deviceId,opId,{reason:'captured_category_delete',value}); primitives++;
+      }
+    }
+    return {entities,primitives};
+  },
+  deleteEntity({profileId,collection,entityId,reason='user_delete'}){
+    const pid=profileId||(S.currentProfile&&S.currentProfile.id); if(!pid||!entityId) return false;
+    const data=(S.currentProfile&&S.currentProfile.id===pid)?S.data:getProfileData(pid); if(!data) return false;
+    const arr=BorionSyncCore.pathGet(data,collection); if(!Array.isArray(arr)) return false;
+    const next=arr.filter(x=>!(x&&String(x.id)===String(entityId))); if(next.length===arr.length) return false;
+    BorionSyncCore.pathSet(data,collection,next);
+    BorionSyncCore.recordTombstone(data,collection,String(entityId),this._deviceId(),this._operationId(),{reason});
+    if(S.currentProfile&&S.currentProfile.id===pid){ S.data=data; saveCurrentData(); }
+    else setProfileData(pid,data);
+    return true;
+  },
+  deleteProfile(profileId,reason='user_delete'){ return recordProfileDeletion6401(profileId,reason); }
+};
+window.BorionDataActions6401=BorionDataActions6401;
+
 function saveCurrentData(options={}){
   if(S.currentProfile && S.data){
+    const _previousProfileData = getProfileData(S.currentProfile.id);
     if(!options.skipPatrimonioSnapshot) recordPatrimonioSnapshot();
+    try{ BorionDataActions6401.captureImplicitDeletions(_previousProfileData,S.data,S.currentProfile.id); }
+    catch(e){ console.warn('[BORION][DELETE_CAPTURE_WARN]',e); }
     setProfileData(S.currentProfile.id, S.data);
     // V5.34.3 — isolamento entre perfis: o profileId é passado explicitamente
     // (o mesmo que acabou de receber os dados em setProfileData acima), em vez

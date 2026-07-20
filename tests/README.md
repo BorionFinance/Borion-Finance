@@ -1,42 +1,32 @@
-# Testes do importador v6.35.0
+# Testes do Borion Finance 6.40.1 — Dados e Segurança
 
-Executar na raiz do projeto:
-
-```bash
-node tests/test_importador_legado.js
-```
-
-Cobre regressão básica de CSV, OFX e TXT.
-
-## Central do Borion v6.36.0
+Executar toda a suíte na raiz do projeto:
 
 ```bash
-node tests/test_help_center.js
+node tests/run_all.js
 ```
 
-Valida o carregamento do módulo de ajuda, os guias obrigatórios, a história do projeto e o inventário completo do checklist.
-
-## Proteção de dados e Google Drive v6.37.0
+Verificar sintaxe de todos os JavaScript:
 
 ```bash
-node tests/test_data_guard.js
-node tests/test_data_guard_integration.js
+find js -type f -name '*.js' -print0 | xargs -0 -n1 node --check
+node --check sw.js
 ```
 
-O primeiro testa a lógica pura de contagem de registros e detecção de queda suspeita (`js/01d-data-guard.js`), isolada, sem depender de rede. O segundo carrega o `js/01c-google-drive-provider.js` real dentro de um sandbox Node e confirma que `syncNow()`/`forceSyncNow()` realmente bloqueiam uma gravação suspeita ANTES de qualquer chamada de rede — não só a lógica de contagem em isolado.
+## Cobertura principal da correção 6.40.1
 
-## Atualização ao vivo entre dispositivos v6.38.0
+- `test_atomic_account_apply_v6401.js`: preparação integral em memória, rollback de quota, migração interrompida, IDs de perfil duplicados e dados órfãos.
+- `test_backup_gate_v6401.js`: backup exato antes da migração, JSON malformado/snapshot truncado, checksum, releitura, idempotência e bloqueio da migração quando o backup falha.
+- `test_drive_pagination_v6401.js`: 2.500 arquivos em três páginas, deduplicação, ordenação estável, limite de segurança, falha fechada em página incompleta e política de retry HTTP.
+- `test_journal_v6401.js`: relógio atrasado, operação aparecendo tardiamente, duplicata, operação já aplicada, árvores duplicadas, adulteração e compactação interrompida.
+- `test_migration_preservation_v6401.js`: IDs determinísticos em dois ambientes, duplicatas legítimas distintas, migração idempotente e preservação de contas com dois e cinco perfis.
+- `test_merge_schema_v6401.js`: merge de categorias, configurações, módulos, cartões, ordenação, vínculos e conflitos no mesmo campo.
+- `test_multitab_v6401.js`: uma única líder, delegação da aba secundária, heartbeat, expiração do lease, transferência de liderança e ausência de duplicação.
+- `test_real_delete_tombstones_v6401.js`: exclusão pela ação central real, captura de remoções implícitas, tombstones por entidade e perfil, tentativa de ressurreição e edição concorrente contra exclusão.
+- `test_drive_sync_fail_safe.js`: fila local, 401, retorno da rede, edição durante upload, operação protegida com consolidação falhando, persistência da migração no boot e retomada após PATCH interrompido.
 
-```bash
-node tests/test_live_update.js
-```
+A suíte também mantém os testes anteriores de importação, ajuda, Data Guard, atualização ao vivo, fila durável, checksum, merge e versionamento.
 
-Testa `checkForRemoteUpdate()` (o "atualização ao vivo" que detecta quando outro dispositivo salvou algo novo e atualiza a tela sozinho, sem precisar sair e entrar de novo): nada muda quando não há nada novo; atualiza e redesenha a tela quando é seguro; nunca aplica com uma alteração local pendente; adia (não descarta) quando existe um modal aberto ou um campo em edição; lida com o perfil ativo sendo removido em outro dispositivo; e não faz nada com a aba em segundo plano.
+## Limites do ambiente automatizado
 
-## Correção crítica de sincronização v6.38.1
-
-```bash
-node tests/test_drive_sync_fail_safe.js
-```
-
-Testa que uma alteração pendente é preservada e reenviada ao Drive mesmo após falha (token expirado, sem internet), que o envio retoma sozinho ao voltar ao aplicativo, e que uma edição feita enquanto outra ainda está sendo enviada não se perde.
+Os testes de Google Drive usam simulações determinísticas da API, inclusive paginação, erros 401/403/429/500 e árvores duplicadas. O teste final com credenciais reais, duas abas e dois dispositivos deve ser executado no navegador conforme `REVISAO_V6.40.1.md`.

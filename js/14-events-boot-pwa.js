@@ -183,6 +183,26 @@ window.addEventListener('pageshow', (e)=>{
 /* ---------------- BOOT ---------------- */
 (function boot(){
   const backupFolderInit=BackupFS.init();
+  // V6.40 — item 19 do pedido (inicialização e recuperação): identidade do
+  // dispositivo/sessão é preparada cedo, antes de qualquer possível
+  // queueSave(), e a fila durável do IndexedDB é conferida por operações que
+  // ficaram como 'pending' de uma sessão anterior (aba fechada no meio de um
+  // envio) — se existir alguma, só registra um aviso técnico no console por
+  // ora (o próprio GoogleDriveProvider.connect()/resumePendingSync() já
+  // retoma o envio de verdade assim que a conexão com o Drive é restabelecida
+  // logo abaixo). Nada bloqueia o boot: é só melhor esforço, silencioso.
+  const deviceInit=(async()=>{
+    try{
+      if(window.BorionDevice640){
+        await BorionDevice640.getOrCreateDeviceId();
+        BorionDevice640.newSessionId();
+      }
+      if(window.BorionDurableQueue){
+        const stuck = await BorionDurableQueue.pendingOnly();
+        if(stuck.length) console.warn('[BORION][BOOT][RECOVERING] '+stuck.length+' operação(ões) pendente(s) de uma sessão anterior — serão retomadas ao reconectar ao Google Drive.', stuck.map(s=>s.operationId));
+      }
+    }catch(e){ console.warn('[BORION][BOOT][DEVICE_INIT_WARN]', e); }
+  })();
   Notifs.closePanelOnOutsideClick();
   BankFilter.closePanelOnOutsideClick();
   document.addEventListener('click', GlobalSearch.outsideClickHandler);
@@ -205,6 +225,7 @@ window.addEventListener('pageshow', (e)=>{
   }
   showSplash(async ()=>{
     await backupFolderInit;
+    await deviceInit;
     await CloudStorage.init();
     if(CloudStorage.user && CloudStorage.recoveryMode){
       CloudAuth.mode='changePassword';
@@ -249,7 +270,7 @@ window.addEventListener('pageshow', (e)=>{
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try{
-      const registration=await navigator.serviceWorker.register('sw.js?v=6.38.4',{updateViaCache:'none'});
+      const registration=await navigator.serviceWorker.register('sw.js?v=6.40.1',{updateViaCache:'none'});
       /* V6.23.8 — app instalado verifica atualização sempre que abre. O botão
          “Salvar e atualizar” também chama registration.update() antes do reload. */
       registration.update().catch(()=>{});
@@ -392,12 +413,11 @@ function handleImport(obj){
       }
     }
     if(!incomingData){ alert('Formato de backup não reconhecido.'); return; }
-    incomingData = migrateData(incomingData);
+    incomingData = migrateData(incomingData, {profileId:(incomingProfile&&incomingProfile.id)||(S.currentProfile&&S.currentProfile.id)||null});
     const activeName = S.currentProfile.name;
     const importedName = (incomingProfile && incomingProfile.name) ? incomingProfile.name : 'Perfil importado';
     const importAsNew = async ()=>{
       try{
-        if((S.profiles||[]).length>=5) throw new Error('Máximo de 5 perfis atingido. Exclua um perfil antes de importar como novo.');
         const options={
           avatarColor: incomingProfile.avatarColor || incomingProfile.avatar_color || avatarColor(importedName),
           avatarImage: incomingProfile.avatarImage || incomingProfile.avatar_image || ''
@@ -411,7 +431,7 @@ function handleImport(obj){
     const replaceActive = async ()=>{
       try{
         if(window.BackupFS) await BackupFS.createCloudBackup('before_import_replace','backup automático antes de substituir perfil por JSON',{silent:true});
-        S.data=migrateData(incomingData);
+        S.data=migrateData(incomingData, {profileId:S.currentProfile&&S.currentProfile.id});
         setProfileData(S.currentProfile.id,S.data);
         saveCurrentData();
         const ok=await CloudStorage.syncNow();
@@ -422,7 +442,7 @@ function handleImport(obj){
     const mergeActive = async ()=>{
       try{
         if(window.BackupFS) await BackupFS.createCloudBackup('before_import_merge','backup automático antes de mesclar JSON no perfil',{silent:true});
-        S.data=cloudMergeData(S.data,incomingData);
+        S.data=cloudMergeData(S.data,incomingData,S.currentProfile&&S.currentProfile.id);
         setProfileData(S.currentProfile.id,S.data);
         saveCurrentData();
         const ok=await CloudStorage.syncNow();
@@ -444,10 +464,9 @@ function handleImport(obj){
   }
   if(obj.type==='multicap-profile-backup' || obj.type==='borion-profile-backup'){
     const incoming = obj.profile || {id:uid(),name:'Perfil importado'};
-    const incomingData = migrateData(obj.data || emptyData());
+    const incomingData = migrateData(obj.data || emptyData(), {profileId:incoming.id});
     const existingIdx = S.profiles.findIndex(p=>p.id===incoming.id);
     const doImportAsNew = ()=>{
-      if(S.profiles.length>=5){ alert('Máximo de 5 perfis atingido.'); closeModal(); return; }
       const newId=uid(); S.profiles.push({...incoming,id:newId,name:(incoming.name||'Perfil')+' (importado)'}); setProfiles(S.profiles); setProfileData(newId,incomingData); notifyGoogleDriveAfterImport(); closeModal(); toast('Perfil importado.'); if(S.currentProfile) renderView(); else renderGate();
     };
     if(existingIdx>-1){

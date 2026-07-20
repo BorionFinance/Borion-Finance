@@ -137,7 +137,7 @@
   }
   function profileData(profileId){
     if(S.currentProfile && String(S.currentProfile.id) === String(profileId) && S.data) return S.data;
-    return migrateData(getProfileData(profileId) || emptyData());
+    return migrateData(getProfileData(profileId) || emptyData(), {profileId});
   }
   function saveProfileData(profileId, data){
     setProfileData(profileId, data);

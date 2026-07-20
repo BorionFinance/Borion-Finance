@@ -9,7 +9,7 @@
 /* ---------------- Backup em pasta local (File System Access API — Chrome/Edge) ---------------- */
 const FS_ACCESS_SUPPORTED = typeof window!=='undefined' && 'showDirectoryPicker' in window;
 const IDB_NAME = 'borion_handles', IDB_STORE = 'handles';
-const BORION_APP_VERSION = '6.38.4';
+const BORION_APP_VERSION = '6.40.1';
 const BORION_BACKUP_CONSENT_PREFIX = 'borion_backup_consent_v2_';
 const BORION_BACKUP_LAST_CLOUD_PREFIX = 'borion_backup_last_cloud_v1_';
 const BORION_BACKUP_SNOOZE_PREFIX = 'borion_backup_consent_snooze_v1_';
@@ -89,9 +89,10 @@ async function buildLocalAccountBackupPayload(backupType='manual', reason=''){
   for(const p of profiles){
     let d = (S.currentProfile && p.id===S.currentProfile.id && S.data) ? S.data : getProfileData(p.id);
     if(!d && typeof idbGetProfileData==='function') d = await idbGetProfileData(p.id);
-    dataByProfile[p.id] = migrateData(d || emptyData());
+    dataByProfile[p.id] = migrateData(d || emptyData(), {profileId:p.id});
   }
-  const compact = {profiles, dataByProfile, config:S.config||{}};
+  const accountSyncMeta={schemaVersion:(window.BorionSyncCore&&BorionSyncCore.BORION_DATA_SCHEMA_VERSION)||6401,profileTombstones:(typeof getProfileTombstones6401==='function'?getProfileTombstones6401():{})};
+  const compact = {profiles, dataByProfile, config:S.config||{}, __syncMeta640:accountSyncMeta};
   const hash = typeof sha256Hex==='function' ? await sha256Hex(JSON.stringify(compact)) : '';
   return {
     type:'borion-account-backup',
@@ -107,6 +108,7 @@ async function buildLocalAccountBackupPayload(backupType='manual', reason=''){
       email:(window.CloudStorage&&CloudStorage.user&&CloudStorage.user.email)||''
     },
     config:S.config||{},
+    __syncMeta640:accountSyncMeta,
     profileCount:profiles.length,
     profiles,
     dataByProfile,
@@ -143,15 +145,16 @@ async function buildCloudAccountBackupPayload(backupType='manual', reason=''){
       .eq('user_id',cloud.user.id);
     if(dataError) throw dataError;
     const dataByProfile={};
-    (dataRows||[]).forEach(r=>{ dataByProfile[r.profile_id]=migrateData(r.data||emptyData()); });
+    (dataRows||[]).forEach(r=>{ dataByProfile[r.profile_id]=migrateData(r.data||emptyData(), {profileId:r.profile_id}); });
     for(const p of profiles){
       if(!dataByProfile[p.id]){
         let local = (S.currentProfile && p.id===S.currentProfile.id && S.data) ? S.data : getProfileData(p.id);
         if(!local && typeof idbGetProfileData==='function') local = await idbGetProfileData(p.id);
-        dataByProfile[p.id]=migrateData(local||emptyData());
+        dataByProfile[p.id]=migrateData(local||emptyData(), {profileId:p.id});
       }
     }
-    const compact={profiles,dataByProfile,config:S.config||{}};
+    const accountSyncMeta={schemaVersion:(window.BorionSyncCore&&BorionSyncCore.BORION_DATA_SCHEMA_VERSION)||6401,profileTombstones:(typeof getProfileTombstones6401==='function'?getProfileTombstones6401():{})};
+    const compact={profiles,dataByProfile,config:S.config||{},__syncMeta640:accountSyncMeta};
     const hash=typeof sha256Hex==='function' ? await sha256Hex(JSON.stringify(compact)) : '';
     return {
       type:'borion-account-backup',
@@ -164,6 +167,7 @@ async function buildCloudAccountBackupPayload(backupType='manual', reason=''){
       exportedAt:new Date().toISOString(),
       account:{userId:cloud.user.id,email:cloud.user.email||''},
       config:S.config||{},
+      __syncMeta640:accountSyncMeta,
       profileCount:profiles.length,
       profiles,
       dataByProfile,
@@ -438,6 +442,148 @@ const BackupFS = {
     }
   },
 
+  /* ---------------- V6.40 — Dados e Segurança (itens 15.1, 15.3, 15.4) ---------------- */
+
+  /* Item 15.1 / correção 6.40.1: backup EXATO dos bytes originais antes de
+     qualquer migração de schema. O arquivo recém-criado é relido, tem o checksum
+     conferido e precisa passar na validação de restauração. Qualquer falha mantém
+     a base original intacta e bloqueia migração, persistência e sincronização até
+     que o usuário entre em modo de recuperação ou o backup seja confirmado. */
+  async ensureRawSchemaMigrationBackup(context={}){
+    const rawText=String(context.rawText==null?'':context.rawText);
+    const folderId=(window.GoogleDriveProvider&&GoogleDriveProvider.folderId)||'local';
+    const key='borion_schema6401_raw_backup_done_'+backupUserKey()+'_'+folderId;
+    if(!rawText) throw Object.assign(new Error('Não foi possível ler os bytes originais do current.json; migração bloqueada.'),{code:'MIGRATION_BACKUP_REQUIRED'});
+    let parsed;
+    try{ parsed=JSON.parse(rawText); }catch(e){ throw Object.assign(new Error('O current.json original é JSON inválido; migração bloqueada.'),{code:'MIGRATION_SOURCE_INVALID'}); }
+    const check=validateBorionJson(parsed);
+    if(!check.valid) throw Object.assign(new Error('A base original não passou na validação: '+check.errors.join(' ')),{code:'MIGRATION_SOURCE_INVALID'});
+
+    // Não cria um novo "pré-migração" quando o snapshot já está integralmente no
+    // schema 6401. Se qualquer perfil/entidade ainda estiver legado, falha fechado.
+    let migrationRequired=!(parsed.__syncMeta640&&Number(parsed.__syncMeta640.schemaVersion)>=6401&&parsed.integrity&&parsed.integrity.checksum);
+    if(window.BorionSyncCore){
+      for(const p of (parsed.profiles||[])){
+        const d=(parsed.dataByProfile||{})[p&&p.id];
+        if(!d||!d.__syncMeta||Number(d.__syncMeta.schemaVersion)<6401||d.__syncMeta.migrationVersion!==BorionSyncCore.BORION_MIGRATION_ID_VERSION){migrationRequired=true;break;}
+        for(const path of BorionSyncCore.BORION_SYNCABLE_COLLECTIONS){
+          const arr=BorionSyncCore.pathGet(d,path);
+          if(Array.isArray(arr)&&arr.some(x=>x&&typeof x==='object'&&!x.id)){migrationRequired=true;break;}
+        }
+        if(migrationRequired)break;
+      }
+    }else migrationRequired=true;
+    if(!migrationRequired&&window.BorionDriveJournal640){
+      try{const snapshotCheck=await BorionDriveJournal640.validateSnapshot(parsed);if(!snapshotCheck.valid)migrationRequired=true;}
+      catch(e){migrationRequired=true;}
+    }
+    if(!migrationRequired) return {notRequired:true,schemaVersion:6401};
+
+    const checksum=window.BorionSyncCore?await BorionSyncCore.sha256Hex640(rawText):await sha256Hex(rawText);
+    const prior=readJSON(key,false);
+    if(prior&&prior.fileId&&prior.checksum&&window.GoogleDriveProvider&&GoogleDriveProvider.isConnected()){
+      try{
+        const priorRaw=await GoogleDriveFS.readFileText(prior.fileId);
+        const priorChecksum=window.BorionSyncCore?await BorionSyncCore.sha256Hex640(priorRaw):await sha256Hex(priorRaw);
+        const priorParsed=JSON.parse(priorRaw),priorCheck=validateBorionJson(priorParsed);
+        if(priorChecksum===prior.checksum&&priorChecksum===checksum&&priorCheck.valid) return {alreadyDone:true,backup:{id:prior.fileId},checksum:priorChecksum,exactBytes:true,verifiedAgain:true};
+      }catch(e){ console.warn('[BORION_BACKUP][PRE_MIGRATION_REVERIFY_FAILED]',e); }
+      try{localStorage.removeItem(key);}catch(e){}
+    }else if(prior){try{localStorage.removeItem(key);}catch(e){}}
+    if(!window.GoogleDriveProvider||!GoogleDriveProvider.isConnected()) throw Object.assign(new Error('Conecte o Google Drive para criar o backup pré-migração obrigatório.'),{code:'MIGRATION_BACKUP_REQUIRED'});
+    const backupsFolderId=await GoogleDriveProvider.ensureBackupsFolder();
+    const name='backup_original_pre_migracao_v6401_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';
+    const created=await GoogleDriveFS.createTextFile(backupsFolderId,name,rawText,'application/json');
+    const reread=await GoogleDriveFS.readFileText(created.id);
+    const rereadChecksum=window.BorionSyncCore?await BorionSyncCore.sha256Hex640(reread):await sha256Hex(reread);
+    if(rereadChecksum!==checksum) throw Object.assign(new Error('O backup pré-migração foi criado, mas falhou na conferência de checksum.'),{code:'MIGRATION_BACKUP_VERIFY_FAILED'});
+    let restored; try{restored=JSON.parse(reread);}catch(e){throw Object.assign(new Error('O backup pré-migração não pôde ser relido como JSON.'),{code:'MIGRATION_BACKUP_VERIFY_FAILED'});}
+    const restoreCheck=validateBorionJson(restored);
+    if(!restoreCheck.valid) throw Object.assign(new Error('O backup pré-migração não é restaurável: '+restoreCheck.errors.join(' ')),{code:'MIGRATION_BACKUP_VERIFY_FAILED'});
+    writeJSON(key,{at:Date.now(),checksum,fileId:created.id,sourceFileId:context.sourceFileId||null,exactBytes:true});
+    return {alreadyDone:false,backup:{id:created.id,name},checksum,exactBytes:true};
+  },
+
+  async ensureSchemaMigrationBackup(context={}){
+    if(context&&context.rawText!=null) return await this.ensureRawSchemaMigrationBackup(context);
+    const folderId=(window.GoogleDriveProvider&&GoogleDriveProvider.folderId)||'local';
+    const key='borion_schema6401_raw_backup_done_'+backupUserKey()+'_'+folderId;
+    if(readJSON(key,false)) return {alreadyDone:true};
+    throw Object.assign(new Error('Backup pré-migração exato ainda não foi confirmado; migração bloqueada.'),{code:'MIGRATION_BACKUP_REQUIRED'});
+  },
+
+  /* Item 15.3: além dos 20 autosaves e 40 forcesaves rotativos (que se
+     sobrescrevem), mantém um ponto IMUTÁVEL por dia (nunca sobrescrito),
+     com retenção mínima de 30 dias — a limpeza remove só os mais antigos que
+     já passaram da janela, nunca todos de uma vez. */
+  async maybeDailyDriveSnapshot(){
+    if(!window.GoogleDriveProvider || !GoogleDriveProvider.isConnected() || !navigator.onLine) return false;
+    const todayKey = new Date().toISOString().slice(0,10); // AAAA-MM-DD
+    const lsKey = 'borion_daily_snapshot_v640_' + GoogleDriveProvider.folderId;
+    const last = localStorage.getItem(lsKey);
+    if(last === todayKey) return false;
+    try{
+      const payload = await buildSharedBackupSnapshot('daily_immutable', 'ponto diário imutável (V6.40 — Dados e Segurança, item 15.3)');
+      const created = await GoogleDriveProvider.createBackup('daily_'+todayKey, {payload});
+      localStorage.setItem(lsKey, todayKey);
+      await this._pruneDailySnapshots();
+      return created;
+    }catch(e){ console.warn('[BORION_BACKUP][DAILY_SNAPSHOT_FAILED]', e); return false; }
+  },
+  async _pruneDailySnapshots(retentionDays=30){
+    if(!window.GoogleDriveProvider || !GoogleDriveProvider.isConnected()) return;
+    try{
+      const files = await GoogleDriveProvider.listBackups();
+      const dailyFiles = files.filter(f=>/_daily_\d{4}-\d{2}-\d{2}_/.test(f.name)).sort((a,b)=> a.name<b.name?-1:1);
+      const toRemove = dailyFiles.length>retentionDays ? dailyFiles.slice(0, dailyFiles.length-retentionDays) : [];
+      for(const f of toRemove){
+        try{ await GoogleDriveFS.trashFile(f.id); }
+        catch(e){ console.warn('[BORION_BACKUP][DAILY_PRUNE_FAILED]', f.name, e); }
+      }
+    }catch(e){ console.warn('[BORION_BACKUP][DAILY_PRUNE_LIST_FAILED]', e); }
+  },
+
+  /* Item 15.4: NÃO aplica nada — só lê, valida JSON/schema/checksum, migra EM
+     MEMÓRIA (nunca grava) e devolve um resumo (perfis, contagens por coleção,
+     referências quebradas via BorionDataGuard) para a pessoa decidir se quer
+     mesmo restaurar. Quem chama decide separadamente se/quando aplicar de
+     verdade (fora desta função, com backup do estado atual antes — ver
+     Settings.restoreFromBackupFile ou equivalente). */
+  async simulateRestore(rawObjOrString){
+    const result = { valid:false, errors:[], profiles:[], counts:null, integrityReport:null };
+    let obj = rawObjOrString;
+    if(typeof rawObjOrString==='string'){
+      try{ obj = JSON.parse(rawObjOrString); }
+      catch(e){ result.errors.push('JSON inválido: '+e.message); return result; }
+    }
+    const check = validateBorionJson(obj);
+    if(!check.valid){ result.errors.push(...check.errors); return result; }
+    if(obj.integrity && obj.integrity.sha256){
+      const canonical = backupSafeClone(obj); delete canonical.integrity; delete canonical.snapshotChecksum;
+      const recomputed = typeof sha256Hex==='function' ? await sha256Hex(JSON.stringify({profiles:canonical.profiles,dataByProfile:canonical.dataByProfile,config:canonical.config||{}})) : null;
+      // Checksum antigo (backupSchema 5352) usa uma serialização específica de
+      // {profiles,dataByProfile,config} — recalculado aqui só como conferência
+      // best-effort; uma divergência gera aviso, não bloqueia a simulação (o
+      // arquivo pode ser legítimo e só ter sido salvo por uma versão anterior
+      // com uma ordem de campos diferente).
+      if(recomputed && recomputed!==obj.integrity.sha256) result.errors.push('Aviso: o checksum salvo no arquivo não bateu com o recalculado — confira a origem do arquivo antes de aplicar.');
+    }
+    let migratedDataByProfile = {};
+    try{
+      Object.keys(obj.dataByProfile||{}).forEach(pid=>{
+        migratedDataByProfile[pid] = migrateData(JSON.parse(JSON.stringify(obj.dataByProfile[pid]||{})), {profileId:pid});
+      });
+    }catch(e){ result.errors.push('Falha ao migrar os dados em memória para conferência: '+e.message); return result; }
+    const migratedPayload = { profiles: obj.profiles||[], dataByProfile: migratedDataByProfile };
+    result.profiles = (obj.profiles||[]).map(p=>({ id:p.id, name:p.name }));
+    result.counts = window.BorionDataGuard ? BorionDataGuard.countAccountRecords(migratedPayload) : null;
+    if(window.BorionDataGuard){
+      result.integrityReport = BorionDataGuard.buildProfileIntegrityReport(migratedPayload, null, {});
+    }
+    result.valid = result.errors.length===0;
+    return result;
+  },
+
   async maybeDailyCloudBackup(){
     const cloud=window.CloudStorage;
     if(!cloud || !cloud.user || !navigator.onLine) return false;
@@ -567,7 +713,7 @@ const BackupFS = {
         return {
           user_id:cloud.user.id,
           profile_id:p.id,
-          data:migrateData((payload.dataByProfile||{})[originalId]||(payload.dataByProfile||{})[p.id]||emptyData()),
+          data:migrateData((payload.dataByProfile||{})[originalId]||(payload.dataByProfile||{})[p.id]||emptyData(), {profileId:p.id}),
           sync_version:Date.now(),
           updated_at:new Date().toISOString()
         };

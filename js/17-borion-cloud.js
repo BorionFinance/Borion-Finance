@@ -56,9 +56,9 @@ function cloudShowError(action, error){
   try{ toast(msg); }catch(_e){}
   return msg;
 }
-function cloudMergeData(base, incoming){
-  const out = migrateData(cloudSafeClone(base || emptyData()));
-  const inc = migrateData(cloudSafeClone(incoming || emptyData()));
+function cloudMergeData(base, incoming, profileId){
+  const out = migrateData(cloudSafeClone(base || emptyData()), {profileId});
+  const inc = migrateData(cloudSafeClone(incoming || emptyData()), {profileId});
   Object.keys(inc).forEach(k=>{
     if(Array.isArray(inc[k])){
       const seen = new Set((out[k]||[]).map(x=>x && x.id).filter(Boolean));
@@ -67,7 +67,7 @@ function cloudMergeData(base, incoming){
       out[k] = Object.assign({}, out[k]||{}, inc[k]);
     }else out[k] = inc[k];
   });
-  return migrateData(out);
+  return migrateData(out, {profileId});
 }
 
 const CloudStorage = {
@@ -411,7 +411,6 @@ const CloudStorage = {
         .select('id',{count:'exact',head:true})
         .eq('user_id',this.user.id);
       if(countError) throw cloudSupabaseError(action+' count profiles', countError);
-      if(Number(count||0)>=5) throw new Error('Limite de 5 perfis por conta atingido.');
 
       const row={user_id:this.user.id,name:cleanName,avatar_color:(options&&options.avatarColor)||avatarColor(cleanName),avatar_image:(options&&options.avatarImage)||'',updated_at:cloudNowISO()};
       if(options && (options.passwordHash || options.passwordSalt)){
@@ -440,7 +439,7 @@ const CloudStorage = {
       if(!confirmed || confirmed.id!==inserted.id) throw new Error(action+': não consegui confirmar o perfil recém-criado na tabela profiles.');
       const profile=this.mapProfile(confirmed);
 
-      const seedData = migrateData(initialData || emptyData());
+      const seedData = migrateData(initialData || emptyData(), {profileId:profile.id});
       const seedPayload={user_id:this.user.id,profile_id:profile.id,data:seedData,sync_version:1,updated_at:cloudNowISO()};
       // V5.34.5 — NÃO usa mais upsert aqui. Em bancos que já tinham uma versão
       // antiga da tabela, o onConflict:'profile_id' falhava quando a constraint
@@ -684,7 +683,7 @@ const CloudStorage = {
     this.applyProfilesToRuntime(id);
     const freshProfile = this.profiles.find(x=>x.id===id) || p;
     S.currentProfile = freshProfile;
-    const freshData = migrateData(await this.loadData(id));
+    const freshData = migrateData(await this.loadData(id), {profileId:id});
     S.data = freshData;
     setProfileData(p.id, S.data);
     setSession({cloud:true,profileId:p.id}); recordPatrimonioSnapshot(); renderApp(); if(window.ExitSaveGuard) ExitSaveGuard.refresh(); postLoginSequence(); this.updateBadge();
@@ -694,7 +693,7 @@ const CloudStorage = {
      IndexedDB antes de desistir para um perfil vazio. Isso evita perder dados
      quando o localStorage foi limpo pelo navegador mas o IndexedDB sobreviveu. */
   async localFallback(pid, cached){
-    if(cached && cached.data) return migrateData(cached.data);
+    if(cached && cached.data) return migrateData(cached.data, {profileId:pid});
     const idbData = await hydrateProfileDataFromIDB(pid);
     if(idbData) return idbData;
     return emptyData();
@@ -724,7 +723,7 @@ const CloudStorage = {
       if(error) throw cloudSupabaseError(action+' select borion_profile_data', error);
       if(data){
         this.dataRowId=data.id;
-        const cloudData=migrateData(data.data||emptyData());
+        const cloudData=migrateData(data.data||emptyData(), {profileId:pid});
         this.writeCache(cloudData,pid);
         this.lastSyncAt=Date.now();
         this.setStatus('online','Nuvem sincronizada');
@@ -811,7 +810,7 @@ const CloudStorage = {
     if(!navigator.onLine){ this.setStatus('offline','Offline — salvando neste dispositivo'); cloudActionLog(action,'OFFLINE_CACHE',{profileId:pid}); return false; }
     this.setStatus('syncing','Sincronizando...');
     try{
-      const payload={user_id:this.user.id,profile_id:pid,data:migrateData(data),updated_at:cloudNowISO(),sync_version:Date.now()};
+      const payload={user_id:this.user.id,profile_id:pid,data:migrateData(data, {profileId:pid}),updated_at:cloudNowISO(),sync_version:Date.now()};
       // V5.34.5 — troca UPSERT por SELECT + UPDATE/INSERT. Isso remove a
       // dependência de uma constraint única específica no Supabase e revela
       // claramente se o problema é SELECT, INSERT, UPDATE, RLS ou grant.
@@ -922,14 +921,14 @@ const CloudStorage = {
       if(!profileUpdate||profileUpdate.avatar_color!=='#654321') throw new Error('UPDATE em profiles não confirmou avatar_color.');
       add('UPDATE_PROFILE_META', true, profileUpdate);
 
-      const payload={user_id:user.id,profile_id:profile.id,data:migrateData(emptyData()),sync_version:Date.now(),updated_at:cloudNowISO()};
+      const payload={user_id:user.id,profile_id:profile.id,data:migrateData(emptyData(), {profileId:profile.id}),sync_version:Date.now(),updated_at:cloudNowISO()};
       const {data:dataInsert,error:dataInsertError}=await this.client.from('borion_profile_data')
         .insert(payload).select('id,profile_id,updated_at').single();
       if(dataInsertError) throw cloudSupabaseError(action+' insert borion_profile_data', dataInsertError);
       if(!dataInsert||dataInsert.profile_id!==profile.id) throw new Error('INSERT em borion_profile_data não confirmou profile_id.');
       add('INSERT_PROFILE_DATA', true, dataInsert);
 
-      const changed=migrateData(emptyData()); changed._diagnosticoBorion={ok:true,at:cloudNowISO()};
+      const changed=migrateData(emptyData(), {profileId:profile.id}); changed._diagnosticoBorion={ok:true,at:cloudNowISO()};
       const {data:dataUpdate,error:dataUpdateError}=await this.client.from('borion_profile_data')
         .update({data:changed,sync_version:Date.now(),updated_at:cloudNowISO()})
         .eq('profile_id',profile.id).eq('user_id',user.id)

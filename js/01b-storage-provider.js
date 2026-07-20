@@ -98,7 +98,7 @@ const storageProvider = {
     const id = profileId || (S.currentProfile && S.currentProfile.id);
     if(!id) return null;
     const fromIdb = await hydrateProfileDataFromIDB(id);
-    return fromIdb || migrateData(getProfileData(id));
+    return fromIdb || migrateData(getProfileData(id), {profileId:id});
   },
 
   /* Grava no perfil ativo (localStorage + IndexedDB, e enfileira pro Supabase se

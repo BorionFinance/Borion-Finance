@@ -28,7 +28,7 @@ function importNormalizeAccountBackup(obj){
     incoming.push({
       sourceId,
       profile:Object.assign({},profile||{},{id:sourceId,name:importProfileName(profile)}),
-      data:migrateData(dataByProfile[sourceId]||emptyData())
+      data:migrateData(dataByProfile[sourceId]||emptyData(), {profileId:sourceId})
     });
   });
   keys.forEach(sourceId=>{
@@ -37,10 +37,10 @@ function importNormalizeAccountBackup(obj){
     incoming.push({
       sourceId:String(sourceId),
       profile:{id:String(sourceId),name:'Perfil do backup'},
-      data:migrateData(dataByProfile[sourceId]||emptyData())
+      data:migrateData(dataByProfile[sourceId]||emptyData(), {profileId:sourceId})
     });
   });
-  return incoming.slice(0,5);
+  return incoming;
 }
 function importUniqueName(base, profiles){
   const used=new Set((profiles||[]).map(p=>String(p.name||'').trim().toLocaleLowerCase('pt-BR')));
@@ -66,7 +66,6 @@ function collectAccountImportPlan(incoming, existing){
   const newCount=actions.filter(a=>a.action==='new').length;
   const finalCount=existing.length-deleteIds.length+newCount;
   if(finalCount<1) throw new Error('A importação precisa deixar pelo menos um perfil na conta.');
-  if(finalCount>5) throw new Error('O plano terminaria com '+finalCount+' perfis. O limite é 5. Exclua algum perfil atual ou importe menos perfis como novos.');
   return {actions,deleteIds,finalCount,newCount,replacementTargets};
 }
 function importFindCurrentRow(profileId){
@@ -83,7 +82,7 @@ function renderAccountImportPlanSummary(incoming, existing){
     const plan=collectAccountImportPlan(incoming,existing);
     if(error){ error.textContent=''; error.classList.add('hidden'); }
     const imported=plan.actions.filter(a=>a.action!=='skip').length;
-    summary.innerHTML=`<strong>Resultado previsto</strong><span>${imported} importado(s) · ${plan.replacementTargets.length} substituição(ões) · ${plan.newCount} novo(s) · ${plan.deleteIds.length} exclusão(ões) · ${plan.finalCount}/5 perfil(is) ao final</span>`;
+    summary.innerHTML=`<strong>Resultado previsto</strong><span>${imported} importado(s) · ${plan.replacementTargets.length} substituição(ões) · ${plan.newCount} novo(s) · ${plan.deleteIds.length} exclusão(ões) · ${plan.finalCount} perfil(is) ao final</span>`;
   }catch(e){
     summary.innerHTML='<strong>Plano incompleto</strong><span>Revise as escolhas abaixo.</span>';
     if(error){ error.textContent=e.message||String(e); error.classList.remove('hidden'); }
@@ -112,6 +111,7 @@ async function executeLocalAccountImportPlan(obj, incoming, plan){
   try{
     let profiles=(S.profiles||[]).map(p=>Object.assign({},p));
     plan.deleteIds.forEach(id=>{
+      if(window.BorionDataActions6401) BorionDataActions6401.deleteProfile(id,'import_plan_delete');
       profiles=profiles.filter(p=>String(p.id)!==String(id));
       try{ localStorage.removeItem(LS_DATA_PREFIX+id); }catch(_e){}
       try{ idbDeleteProfileData(id); }catch(_e){}
@@ -119,7 +119,7 @@ async function executeLocalAccountImportPlan(obj, incoming, plan){
     for(const action of plan.actions){
       const source=incoming.find(x=>x.sourceId===action.sourceId);
       if(!source||action.action==='skip') continue;
-      const data=migrateData(source.data||emptyData());
+      const data=migrateData(source.data||emptyData(), {profileId:source.sourceId||source.profile&&source.profile.id});
       if(action.action==='new'){
         const newId=uid();
         const name=importUniqueName(importProfileName(source.profile),profiles);
@@ -142,11 +142,11 @@ async function executeLocalAccountImportPlan(obj, incoming, plan){
       }
     }
     if(!profiles.length) throw new Error('Nenhum perfil restou após aplicar o plano.');
-    S.profiles=profiles.slice(0,5);
+    S.profiles=profiles;
     setProfiles(S.profiles);
     const active=S.profiles.find(p=>String(p.id)===String(activeBefore))||S.profiles[0];
     S.currentProfile=active;
-    S.data=migrateData(getProfileData(active.id)||emptyData());
+    S.data=migrateData(getProfileData(active.id)||emptyData(), {profileId:active.id});
     setProfileData(active.id,S.data);
     notifyGoogleDriveAfterImport();
     closeModal();
@@ -163,7 +163,7 @@ async function executeLocalAccountImportPlan(obj, incoming, plan){
       applyAccountPayloadSilently(safety);
       const restored=(S.profiles||[]).find(p=>String(p.id)===String(activeBefore))||(S.profiles||[])[0]||null;
       S.currentProfile=restored;
-      S.data=restored?migrateData(getProfileData(restored.id)||emptyData()):null;
+      S.data=restored?migrateData(getProfileData(restored.id)||emptyData(), {profileId:restored.id}):null;
       if(restored) renderApp(); else renderGate();
     }catch(rollbackError){ console.error('[BORION_IMPORT_PLAN][ROLLBACK_ERROR]',rollbackError); }
     throw e;
@@ -173,7 +173,7 @@ async function executeCloudAccountImportPlan(obj, incoming, plan){
   if(!navigator.onLine) throw new Error('Conecte-se à internet para aplicar perfis da conta na nuvem.');
   if(window.BackupFS) await BackupFS.createCloudBackup('before_import_review','backup automático antes da importação revisada de perfis',{silent:true});
   const currentCount=(CloudStorage.profiles||[]).length;
-  const needFree=Math.max(0,currentCount+plan.newCount-5);
+  const needFree=0;
   const deleteFirst=plan.deleteIds.slice(0,needFree);
   const deleteLater=plan.deleteIds.slice(needFree);
 
@@ -182,7 +182,7 @@ async function executeCloudAccountImportPlan(obj, incoming, plan){
     const source=incoming.find(x=>x.sourceId===action.sourceId);
     if(!source) continue;
     const targetId=action.action.slice(8);
-    const data=migrateData(source.data||emptyData());
+    const data=migrateData(source.data||emptyData(), {profileId:source.sourceId||source.profile&&source.profile.id});
     const ok=await CloudStorage.saveNow(data,targetId);
     if(!ok) throw new Error('A nuvem não confirmou a substituição do perfil '+targetId+'.');
     const target=CloudStorage.profiles.find(p=>p.id===targetId);
@@ -210,7 +210,7 @@ async function executeCloudAccountImportPlan(obj, incoming, plan){
     const source=incoming.find(x=>x.sourceId===action.sourceId);
     if(!source) continue;
     const name=importUniqueName(importProfileName(source.profile),CloudStorage.profiles||[]);
-    await CloudStorage.createProfile(name,false,migrateData(source.data||emptyData()),{
+    await CloudStorage.createProfile(name,false,migrateData(source.data||emptyData(), {profileId:source.sourceId||source.profile&&source.profile.id}),{
       avatarColor:source.profile.avatarColor||source.profile.avatar_color||avatarColor(name),
       avatarImage:source.profile.avatarImage||source.profile.avatar_image||''
     });

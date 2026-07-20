@@ -103,7 +103,7 @@ function renderGate(){
       <p class="gate-title">Quem é você?</p>
       <p class="gate-sub">Selecione seu perfil para continuar.</p>
       <div class="profile-grid">${chips}${addChip}</div>
-      <p class="limit-note">${profiles.length}/5 perfis criados${profiles.length>=5?' — máximo atingido':''}</p>
+      <p class="limit-note">${profiles.length} perfil(is) criado(s)</p>
       ${gateCloudLinkHTML()}
     `;
   }
@@ -165,7 +165,6 @@ function wireCreateProfileForm(){
     const name = $('#np_name').value.trim();
     const email = $('#np_email').value.trim();
     if(!name){ S.gate.error='Digite um nome para o perfil.'; renderGate(); return; }
-    if(S.profiles.length>=5){ S.gate.error='Máximo de 5 perfis atingido. Exclua um perfil existente primeiro.'; renderGate(); return; }
     if(window.CloudStorage && CloudStorage.user){
       try{
         const options={};
@@ -269,7 +268,7 @@ async function enterProfile(profile, remember){
   // se ainda não houver nada gravado lá (ex.: perfil recém-criado).
   const fromIdb = await hydrateProfileDataFromIDB(profile.id);
   S.data = fromIdb || getProfileData(profile.id) || emptyData();
-  S.data = migrateData(S.data);
+  S.data = migrateData(S.data, {profileId:profile.id});
   recordPatrimonioSnapshot();
   setProfileData(profile.id, S.data);
   S.view='overview';

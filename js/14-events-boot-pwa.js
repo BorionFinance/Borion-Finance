@@ -157,7 +157,7 @@ let borionServiceWorkerPromise=null;
 function registerBorionServiceWorker642(){
   if(borionServiceWorkerPromise)return borionServiceWorkerPromise;
   if(!('serviceWorker' in navigator))return Promise.resolve(null);
-  borionServiceWorkerPromise=navigator.serviceWorker.register('sw.js?v=6.44.2',{updateViaCache:'none'})
+  borionServiceWorkerPromise=navigator.serviceWorker.register('sw.js?v=6.44.4',{updateViaCache:'none'})
     .then(registration=>{registration.update().catch(()=>{});let lastCheck=Date.now();document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&Date.now()-lastCheck>30*60*1000){lastCheck=Date.now();registration.update().catch(()=>{});}});return registration;})
     .catch(err=>{console.warn('SW falhou:',err);return null;});
   return borionServiceWorkerPromise;
@@ -370,6 +370,11 @@ async function notifyGoogleDriveAfterImport(options={}){
 }
 function prepareManualJsonReplacement(rawData,targetProfileId,sourceProfileId,currentData){
   const migrated=migrateData(rawData||emptyData(),{profileId:targetProfileId||sourceProfileId||null});
+  // V6.44.3 — mesma proteção de js/23-profile-import-review.js: preserva o estado
+  // das integrações (config + registros já reconhecidos como importados) do
+  // dispositivo atual, para que a sincronização automática (a cada 15s) não
+  // recrie sozinha lançamentos que o JSON corretivo removeu de propósito.
+  if(currentData && currentData.interconnections) migrated.interconnections = JSON.parse(JSON.stringify(currentData.interconnections));
   if(!window.BorionSyncCore||typeof BorionSyncCore.markAuthoritativeImport!=='function') return migrated;
   let remoteData=null;
   try{

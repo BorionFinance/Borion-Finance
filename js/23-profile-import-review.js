@@ -50,6 +50,13 @@ function importKnownRemoteData(profileId){
 }
 function importAsAuthoritativeData(rawData,targetProfileId,sourceProfileId,currentData){
   const migrated=migrateData(rawData||emptyData(),{profileId:targetProfileId||sourceProfileId||null});
+  // V6.44.3 — preserva o estado das integrações (config + registros já
+  // reconhecidos como importados, ex.: Marco Iris) do dispositivo atual.
+  // O JSON importado normalmente não traz esse bloco interno. Sem preservá-lo,
+  // um JSON corretivo que remove lançamentos vindos de uma integração perde a
+  // marcação "já importado" desses registros — e a sincronização automática
+  // (a cada 15s) os recria sozinha, desfazendo a correção minutos depois.
+  if(currentData && currentData.interconnections) migrated.interconnections = JSON.parse(JSON.stringify(currentData.interconnections));
   if(!window.BorionSyncCore||typeof BorionSyncCore.markAuthoritativeImport!=='function') return migrated;
   const previous=[currentData,importKnownRemoteData(targetProfileId)].filter(Boolean);
   return BorionSyncCore.markAuthoritativeImport(migrated,{

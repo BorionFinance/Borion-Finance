@@ -3,48 +3,46 @@
 // Estratégia: stale-while-revalidate.
 //
 // Ao editar o app e quiser forçar atualização do cache, aumente o número abaixo.
-const CACHE_NAME = 'borion-finance-v6-38-0-atualizacao-ao-vivo';
-const OCR_RUNTIME_CACHE = 'borion-ocr-runtime-v2';
+const CACHE_NAME = 'borion-finance-v6-38-2-menu-e-importacao';
 
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.json",
-  "./css/styles.css?v=6.36.0",
-  "./css/borion-hub.css?v=6.36.0",
-  "./js/00-utils.js?v=6.36.0",
-  "./js/borion-hub.js?v=6.36.0",
-  "./js/01-storage-data-state.js?v=6.36.0",
-  "./js/01b-storage-provider.js?v=6.36.0",
-  "./js/01c-google-drive-provider.js?v=6.38.0",
-  "./js/01d-data-guard.js?v=6.38.0",
-  "./js/02-backup-local.js?v=6.36.0",
-  "./js/03-modals-shared.js?v=6.36.0",
-  "./js/04-gate-shell.js?v=6.37.0",
-  "./js/05-calculations-charts.js?v=6.36.0",
-  "./js/06-overview.js?v=6.36.0",
-  "./js/07-budget.js?v=6.36.0",
-  "./js/08-investments.js?v=6.36.0",
-  "./js/09-patrimony-goals.js?v=6.36.0",
-  "./js/10-cards-accounts.js?v=6.36.0",
-  "./js/11-agenda-notifications.js?v=6.36.0",
-  "./js/12-bank-filter-search.js?v=6.36.0",
-  "./js/13-settings.js?v=6.36.0",
-  "./js/14-events-boot-pwa.js?v=6.36.0",
-  "./js/15-cheques.js?v=6.36.0",
-  "./js/16-import-statement.js?v=6.36.0",
-  "./js/16a-import-statement-images.js?v=6.36.0",
-  "./js/17-borion-cloud.js?v=6.37.0",
-  "./js/18-order-preferences.js?v=6.36.0",
-  "./js/19-subscriptions.js?v=6.36.0",
-  "./js/20-smartphone-mode.js?v=6.36.0",
-  "./js/21-smartphone-history.js?v=6.36.0",
-  "./js/22-mobile-experience.js?v=6.36.0",
-  "./js/23-profile-import-review.js?v=6.36.0",
-  "./js/24-interconnections.js?v=6.36.0",
-  "./js/25-module-layout.js?v=6.36.0",
-  "./css/help-center.css?v=6.36.0",
-  "./js/26-help-center.js?v=6.36.0",
+  "./css/styles.css?v=6.38.2",
+  "./css/borion-hub.css?v=6.38.2",
+  "./js/00-utils.js?v=6.38.2",
+  "./js/borion-hub.js?v=6.38.2",
+  "./js/01-storage-data-state.js?v=6.38.2",
+  "./js/01b-storage-provider.js?v=6.38.2",
+  "./js/01c-google-drive-provider.js?v=6.38.2",
+  "./js/01d-data-guard.js?v=6.38.2",
+  "./js/02-backup-local.js?v=6.38.2",
+  "./js/03-modals-shared.js?v=6.38.2",
+  "./js/04-gate-shell.js?v=6.38.2",
+  "./js/05-calculations-charts.js?v=6.38.2",
+  "./js/06-overview.js?v=6.38.2",
+  "./js/07-budget.js?v=6.38.2",
+  "./js/08-investments.js?v=6.38.2",
+  "./js/09-patrimony-goals.js?v=6.38.2",
+  "./js/10-cards-accounts.js?v=6.38.2",
+  "./js/11-agenda-notifications.js?v=6.38.2",
+  "./js/12-bank-filter-search.js?v=6.38.2",
+  "./js/13-settings.js?v=6.38.2",
+  "./js/14-events-boot-pwa.js?v=6.38.2",
+  "./js/15-cheques.js?v=6.38.2",
+  "./js/16-import-statement.js?v=6.38.2",
+  "./js/17-borion-cloud.js?v=6.38.2",
+  "./js/18-order-preferences.js?v=6.38.2",
+  "./js/19-subscriptions.js?v=6.38.2",
+  "./js/20-smartphone-mode.js?v=6.38.2",
+  "./js/21-smartphone-history.js?v=6.38.2",
+  "./js/22-mobile-experience.js?v=6.38.2",
+  "./js/23-profile-import-review.js?v=6.38.2",
+  "./js/24-interconnections.js?v=6.38.2",
+  "./js/25-module-layout.js?v=6.38.2",
+  "./css/help-center.css?v=6.38.2",
+  "./js/26-help-center.js?v=6.38.2",
   "./borion-emblem.png",
   "./borion-full.png",
   "./icon-192.png",
@@ -68,7 +66,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => ![CACHE_NAME, OCR_RUNTIME_CACHE].includes(k)).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -91,18 +89,6 @@ self.addEventListener('fetch', (event) => {
   // navegador as trata normalmente, sempre indo à rede.
   if (url.origin !== self.location.origin) return;
 
-  if (url.pathname.includes('/vendor/tesseract/')) {
-    event.respondWith(
-      caches.open(OCR_RUNTIME_CACHE).then(async (cache) => {
-        const cached = await cache.match(request);
-        if (cached) return cached;
-        const response = await fetch(request);
-        if (response && response.status === 200) cache.put(request, response.clone());
-        return response;
-      })
-    );
-    return;
-  }
   const freshFirst = request.destination === 'document' || request.destination === 'script' || request.destination === 'style';
 
   if (freshFirst) {

@@ -28,7 +28,7 @@ vm.runInContext(source,sandbox,{filename:'26-help-center.js'});
 
 if(!sandbox.BorionHelp) throw new Error('window.BorionHelp não foi exposto.');
 const guides=sandbox.BorionHelp.render();
-for(const text of ['CENTRAL DO BORION','Guias passo a passo','Checklist completo','Como começou','Adicionar uma receita','Importar prints de extrato com OCR local']){
+for(const text of ['CENTRAL DO BORION','Guias passo a passo','Checklist completo','Como começou','Adicionar uma receita']){
   if(!guides.includes(text)) throw new Error('Conteúdo obrigatório ausente: '+text);
 }
 

@@ -13,7 +13,7 @@ const HELP_CATEGORIES=[
   {id:'reservas',icon:'◇',title:'Reservas e transferências'},
   {id:'patrimonio',icon:'◉',title:'Patrimônio, metas e investimentos'},
   {id:'agenda',icon:'◷',title:'Agenda, notificações e cheques'},
-  {id:'importacao',icon:'⇩',title:'Importação e OCR'},
+  {id:'importacao',icon:'⇩',title:'Importação'},
   {id:'integracoes',icon:'⛓',title:'Integrações'},
   {id:'personalizacao',icon:'⚙',title:'Configurações e organização'},
   {id:'backup',icon:'⇧',title:'Backup, nuvem e segurança'},
@@ -280,23 +280,13 @@ const HELP_ARTICLES=[
   ],[],['cheque recebido','cheque emitido','lote','baixa','devolução','reapresentação']),
 
   article('importar-arquivo','importacao','Importar CSV, OFX, TXT ou PDF textual','A importação lê o arquivo, transforma linhas em lançamentos revisáveis e só aplica efeitos após sua confirmação.',[
-    'Abra Importar Extrato e escolha a opção de arquivo.',
+    'Abra Importar Extrato.',
     'Selecione CSV, OFX, TXT ou PDF com texto reconhecível.',
     'Escolha a conta de destino e confira banco, datas, nomes, valores e tipo sugerido.',
     'Corrija categoria, status, conta e inclusão linha por linha.',
     'Revise avisos de duplicidade e desmarque registros indevidos.',
     'Confirme a importação e confira o resumo final antes de sair.'
   ],['Faça backup antes de importar muitos registros.'],['csv','ofx','txt','pdf','importar extrato']),
-
-  article('importar-prints','importacao','Importar prints de extrato com OCR local','O OCR roda no dispositivo e transforma imagens em uma prévia que precisa ser revisada pelo usuário.',[
-    'Abra Importar Extrato → Prints do extrato.',
-    'Adicione uma ou várias imagens em ordem cronológica quando possível.',
-    'Aguarde o OCR local concluir. Não feche a tela durante o processamento.',
-    'Confira banco detectado, data de referência, nome, valor, entrada ou saída e confiança da leitura.',
-    'Corrija linhas pendentes, campos obrigatórios e datas relativas.',
-    'Escolha conta, categoria, reserva e tipo financeiro para cada linha.',
-    'Importe somente quando a reconciliação e os totais fizerem sentido.'
-  ],['OCR não é prova contábil. Imagens cortadas, fontes pequenas e capturas sobrepostas exigem revisão manual.'],['print','imagem','ocr','extrato mercado pago','confiança']),
 
   article('duplicidade-importacao','importacao','Evitar duplicidade na importação','O Borion compara chaves, datas, nomes, valores, conta e metadados para sinalizar registros repetidos.',[
     'Leia as etiquetas “Já importado”, “Duplicado no lote” ou “Pendente”.',
@@ -499,10 +489,7 @@ const FEATURE_GROUPS=[
     'Ativar ou desativar módulo Cheques.','Abrir painel de cheques.','Cadastrar cheque recebido.','Cadastrar cheque emitido.','Editar cheque.','Excluir cheque.','Informar identificação e valor.','Informar banco.','Informar emitente ou favorecido.','Informar datas.','Adicionar observações.','Agrupar em lote.','Filtrar cheques.','Acompanhar vencimento.','Registrar baixa.','Registrar devolução.','Registrar reapresentação.','Exibir indicadores do módulo.','Separar recebidos e emitidos.','Preservar histórico de status.'
   ]),
   group('import-file','importacao','Importação de arquivos',[
-    'Ativar ou desativar módulo Importar extratos.','Abrir importador.','Alternar entre Arquivo e Prints.','Importar CSV.','Importar OFX.','Importar TXT.','Importar PDF textual.','Detectar formato suportado.','Selecionar conta para o lote.','Interpretar data.','Interpretar nome.','Interpretar valor.','Classificar entrada ou saída.','Inferir categoria.','Editar linha importada.','Alterar tipo da linha.','Alterar categoria.','Alterar conta.','Marcar ou desmarcar inclusão.','Selecionar todas as linhas válidas.','Remover linhas desmarcadas.','Desmarcar duplicados.','Revisar alerta de duplicidade.','Incluir operação idêntica conscientemente.','Aplicar conta a todas as linhas.','Validar campos obrigatórios.','Confirmar lote.','Aplicar efeitos financeiros.','Exibir resumo final.','Registrar metadados da importação.'
-  ]),
-  group('import-image','importacao','Importação de prints e OCR local',[
-    'Adicionar um print.','Adicionar vários prints.','Exibir miniatura da imagem.','Remover imagem antes do OCR.','Calcular impressão digital do arquivo.','Preparar imagem localmente.','Carregar mecanismo OCR local.','Exibir progresso e etapa.','Reconhecer palavras e posições.','Agrupar palavras em linhas.','Detectar banco ou formato conhecido.','Interpretar extrato do Mercado Pago.','Interpretar formato genérico.','Resolver datas completas.','Resolver datas relativas.','Alertar data relativa incerta.','Extrair valores monetários.','Classificar operação conhecida.','Calcular confiança OCR.','Exibir confiança alta.','Exibir confiança média.','Exibir confiança baixa.','Criar linha revisável.','Sugerir conta.','Sugerir reserva por nome.','Sugerir categoria.','Aplicar regra de comerciante.','Detectar duplicado já importado.','Detectar duplicado dentro do lote.','Mesclar linhas compatíveis.','Exibir pendências bloqueantes.','Exibir reconciliação de entradas e saídas.','Editar cada campo no desktop.','Editar cada campo em cards no mobile.','Criar reserva pendente quando permitido.','Validar saldo de reservas antes de importar.','Confirmar importação.','Encerrar worker OCR após uso.','Manter processamento no dispositivo.'
+    'Ativar ou desativar módulo Importar extratos.','Abrir importador.','Importar CSV.','Importar OFX.','Importar TXT.','Importar PDF textual.','Detectar formato suportado.','Selecionar conta para o lote.','Interpretar data.','Interpretar nome.','Interpretar valor.','Classificar entrada ou saída.','Inferir categoria.','Editar linha importada.','Alterar tipo da linha.','Alterar categoria.','Alterar conta.','Marcar ou desmarcar inclusão.','Selecionar todas as linhas válidas.','Remover linhas desmarcadas.','Desmarcar duplicados.','Revisar alerta de duplicidade.','Incluir operação idêntica conscientemente.','Aplicar conta a todas as linhas.','Validar campos obrigatórios.','Confirmar lote.','Aplicar efeitos financeiros.','Exibir resumo final.','Registrar metadados da importação.'
   ]),
   group('integracoes','integracoes','Integrações e vínculos',[
     'Abrir Configurações → Integrações.','Selecionar Amanda Estética.','Selecionar Marco Iris Tecnologia.','Abrir aba Conexão.','Abrir aba Vínculos.','Inspecionar campos da origem.','Mapear direção entrada.','Mapear direção saída.','Mapear tipo de lançamento.','Mapear categoria.','Mapear origem da receita.','Mapear forma de pagamento.','Mapear conta.','Mapear Carteira.','Mapear Reserva.','Mapear status.','Salvar vínculos.','Sincronizar registros.','Identificar ID externo permanente.','Evitar duplicidade por ID.','Criar lançamento nativo editável.','Não sincronizar edição de volta para a origem.','Excluir e permitir reimportação.','Excluir e ignorar permanentemente.','Exibir status conectado/configurado.','Exibir revisão necessária.'
@@ -517,7 +504,7 @@ const FEATURE_GROUPS=[
     'Usar hash e salt para senha de perfil.','Validar senha antes de entrar.','Alterar senha de conta conectada.','Recuperar senha de conta quando disponível.','Excluir conta com confirmação e credenciais.','Excluir perfil com confirmação.','Separar dados por identificador de perfil.','Migrar identificadores legados para UUID válido.','Validar UUID.','Executar mutação financeira atômica.','Reverter efeito financeiro em caso de erro.','Impedir conta obrigatória vazia.','Impedir saldo insuficiente de reserva.','Impedir duplicidade de importação.','Preservar dados ao ocultar módulo.','Registrar snapshot patrimonial.','Marcar salvamento pendente ao sair.','Confirmar salvamento final.','Exibir aviso de salvamento pendente.','Manter backups antes de operações destrutivas.'
   ]),
   group('mobile','mobile','Smartphone, PWA e experiência',[
-    'Detectar smartphone automaticamente.','Forçar Smartphone Mode.','Forçar Modo Pro.','Exibir visão geral adaptada.','Exibir ações rápidas.','Exibir barra inferior com cinco atalhos.','Abrir menu por gesto de toque no botão.','Permitir scroll vertical do conteúdo principal.','Manter scroll próprio em modal.','Bloquear scroll principal somente com camada aberta.','Fechar camada antes de voltar.','Evitar captura de toque pela gaveta fechada.','Adaptar tabelas para cards na importação de prints.','Adaptar grades para uma coluna.','Manter campos com tamanho adequado ao toque.','Usar áreas seguras do dispositivo.','Salvar e atualizar pelo menu do smartphone.','Instalar como PWA.','Abrir em modo standalone.','Usar cache offline dos arquivos do aplicativo.','Atualizar cache por versão.','Manter runtime do OCR em cache.','Exibir ícone e manifest do aplicativo.','Abrir atalho existente em vez de duplicar janela quando suportado.'
+    'Detectar smartphone automaticamente.','Forçar Smartphone Mode.','Forçar Modo Pro.','Exibir visão geral adaptada.','Exibir ações rápidas.','Exibir barra inferior com cinco atalhos.','Abrir menu por gesto de toque no botão.','Permitir scroll vertical do conteúdo principal.','Manter scroll próprio em modal.','Bloquear scroll principal somente com camada aberta.','Fechar camada antes de voltar.','Evitar captura de toque pela gaveta fechada.','Adaptar grades para uma coluna.','Manter campos com tamanho adequado ao toque.','Usar áreas seguras do dispositivo.','Salvar e atualizar pelo menu do smartphone.','Instalar como PWA.','Abrir em modo standalone.','Usar cache offline dos arquivos do aplicativo.','Atualizar cache por versão.','Exibir ícone e manifest do aplicativo.','Abrir atalho existente em vez de duplicar janela quando suportado.'
   ]),
   group('troubleshooting','mobile','Diagnóstico e solução de problemas',[
     'Confirmar perfil ativo antes de investigar dados.','Confirmar mês selecionado.','Confirmar filtro de bancos.','Confirmar valores ocultos ou visíveis.','Confirmar módulo ativo.','Confirmar modo de interface.','Fechar menu, modal e painel de notificações.','Restaurar zoom do navegador para 100%.','Reabrir o PWA após atualização.','Fazer recarregamento forçado quando cache está antigo.','Verificar indicador do Drive.','Fazer backup local antes de resolver conflito.','Comparar versão local e remota.','Preservar current.json e backups.','Validar arquivo JSON antes de restaurar.','Revisar duplicados após importação.','Comparar saldo com extrato original.','Registrar tela, ação, dispositivo e orientação ao relatar bug.','Evitar novas alterações enquanto existe conflito de dados.','Usar checklist da Central do Borion para auditoria funcional.'

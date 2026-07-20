@@ -3,11 +3,10 @@
 Executar na raiz do projeto:
 
 ```bash
-node tests/test_importacao_prints_core.js
 node tests/test_importador_legado.js
 ```
 
-O primeiro teste cobre o cenário de sete movimentações do Mercado Pago, matemática de Conta/Reservas, reimportação e rollback. O segundo cobre regressão básica de CSV, OFX e TXT.
+Cobre regressão básica de CSV, OFX e TXT.
 
 ## Central do Borion v6.36.0
 
@@ -33,3 +32,11 @@ node tests/test_live_update.js
 ```
 
 Testa `checkForRemoteUpdate()` (o "atualização ao vivo" que detecta quando outro dispositivo salvou algo novo e atualiza a tela sozinho, sem precisar sair e entrar de novo): nada muda quando não há nada novo; atualiza e redesenha a tela quando é seguro; nunca aplica com uma alteração local pendente; adia (não descarta) quando existe um modal aberto ou um campo em edição; lida com o perfil ativo sendo removido em outro dispositivo; e não faz nada com a aba em segundo plano.
+
+## Correção crítica de sincronização v6.38.1
+
+```bash
+node tests/test_drive_sync_fail_safe.js
+```
+
+Testa que uma alteração pendente é preservada e reenviada ao Drive mesmo após falha (token expirado, sem internet), que o envio retoma sozinho ao voltar ao aplicativo, e que uma edição feita enquanto outra ainda está sendo enviada não se perde.

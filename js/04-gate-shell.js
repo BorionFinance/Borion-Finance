@@ -15,17 +15,20 @@ function gearIconSVG(){
 
 function navIconSVG(key){
   const attrs = 'viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"';
+  const cardsAttrs = 'viewBox="0 0 28 28" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"';
+  const cardPath = '<path d="M3 8a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3l0 -8" /><path d="M3 10l18 0" /><path d="M7 15l.01 0" /><path d="M11 15l2 0" />';
   const icons = {
-    overview: `<svg ${attrs}><rect x="5" y="5" width="5" height="14" rx="1.15"/><rect x="14" y="5" width="5" height="14" rx="1.15"/></svg>`,
-    budget: `<svg ${attrs}><path d="M19 7H6"/><path d="M10 3 6 7l4 4"/><path d="M5 17h13"/><path d="M14 13l4 4-4 4"/></svg>`,
+    /* V6.38.2 — ícones do menu lateral trocados para o set consistente aprovado (contorno, sem badge circular) */
+    overview: `<svg ${attrs}><path d="M5 4h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-6a1 1 0 0 1 1 -1" /><path d="M5 16h4a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1" /><path d="M15 12h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-6a1 1 0 0 1 1 -1" /><path d="M15 4h4a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1" /></svg>`,
+    budget: `<svg ${attrs}><path d="M7 3l0 18" /><path d="M10 6l-3 -3l-3 3" /><path d="M20 18l-3 3l-3 -3" /><path d="M17 21l0 -18" /></svg>`,
     investments: `<svg ${attrs}><path d="M6 18 18 6"/><path d="M10 6h8v8"/></svg>`,
-    patrimony: `<svg ${attrs}><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5V12h8.5"/></svg>`,
-    reservas: `<svg ${attrs}><path d="M12 3.5 20.5 12 12 20.5 3.5 12 12 3.5Z"/><path d="M12 8 16 12 12 16 8 12 12 8Z"/></svg>`,
-    cards: `<svg ${attrs}><rect x="4.5" y="4.5" width="15" height="15" rx="1.8"/><path d="M8 9h8"/><path d="M8 12h8"/><path d="M8 15h8"/></svg>`,
-    agenda: `<svg ${attrs}><circle cx="12" cy="12" r="8.4"/><path d="M12 7.5V12h4"/></svg>`,
+    patrimony: `<svg ${attrs}><path d="M3 17l6 -6l4 4l8 -8" /><path d="M14 7l7 0l0 7" /></svg>`,
+    reservas: `<svg ${attrs}><path d="M6 5h12l3 5l-8.5 9.5a.7 .7 0 0 1 -1 0l-8.5 -9.5l3 -5" /><path d="M10 12l-2 -2.2l.6 -1" /></svg>`,
+    cards: `<svg ${cardsAttrs}><g transform="translate(4,1) scale(0.72)" opacity="0.5">${cardPath}</g><g transform="translate(1,7) scale(0.72)">${cardPath}</g></svg>`,
+    agenda: `<svg ${attrs}><path d="M11.795 21h-6.795a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v4" /><path d="M14 18a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M15 3v4" /><path d="M7 3v4" /><path d="M3 11h16" /><path d="M18 16.496v1.504l1 1" /></svg>`,
     cheques: `<svg ${attrs}><rect x="4" y="7" width="16" height="10" rx="2"/><path d="M7 11h6"/><path d="M7 14h4"/><path d="M15.5 12l1.5 1.5 3-3"/></svg>`,
     imports: `<svg ${attrs}><path d="M12 4.8v11.4"/><path d="M7.5 11.8 12 16.3l4.5-4.5"/><path d="M5.5 19.2h13"/></svg>`,
-    settings: `<svg ${attrs}><circle cx="12" cy="12" r="3.1"/><path d="M19.2 14.7a1.7 1.7 0 0 0 .34 1.87l.04.04a2.05 2.05 0 0 1-2.9 2.9l-.04-.04a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56v.12a2.05 2.05 0 0 1-4.1 0v-.12a1.7 1.7 0 0 0-1.04-1.56 1.7 1.7 0 0 0-1.87.34l-.04.04a2.05 2.05 0 0 1-2.9-2.9l.04-.04a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.04h-.12a2.05 2.05 0 0 1 0-4.1h.12a1.7 1.7 0 0 0 1.56-1.04 1.7 1.7 0 0 0-.34-1.87l-.04-.04a2.05 2.05 0 0 1 2.9-2.9l.04.04a1.7 1.7 0 0 0 1.87.34 1.7 1.7 0 0 0 1.04-1.56v-.12a2.05 2.05 0 0 1 4.1 0v.12a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.87-.34l.04-.04a2.05 2.05 0 0 1 2.9 2.9l-.04.04a1.7 1.7 0 0 0-.34 1.87 1.7 1.7 0 0 0 1.56 1.04h.12a2.05 2.05 0 0 1 0 4.1h-.12a1.7 1.7 0 0 0-1.56 1.04Z"/></svg>`
+    settings: `<svg ${attrs}><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065" /><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /></svg>`
   };
   return icons[key] || icons.overview;
 }
@@ -251,8 +254,6 @@ function postLoginSequence(){
 }
 
 function resetImportTransientState(){
-  try{ if(typeof cleanupStatementImportImages==='function' && S.importState) cleanupStatementImportImages(S.importState); }catch(_e){}
-  try{ if(typeof terminateStatementOcrEngine==='function') terminateStatementOcrEngine(); }catch(_e){}
   S.importState=null;
 }
 
@@ -454,11 +455,13 @@ function renderView(){
         ${(window.CloudStorage && CloudStorage.user)
           ? `<button id="cloud_status_badge" class="cloud-status syncing" onclick="CloudStorage.syncNow()">Sincronizando...</button>`
           : (window.GoogleDriveProvider && GoogleDriveProvider.isConnected() && GoogleDriveProvider.blockedSuspicious)
-          ? `<button id="cloud_status_badge" class="cloud-status offline" onclick="GoogleDriveProvider.reload()" title="${esc(GoogleDriveProvider.blockedSuspicious)}">Salvamento bloqueado — ver</button>`
+          ? `<button id="cloud_status_badge" class="cloud-status offline" onclick="GoogleDriveProvider.handleStatusClick()" title="${esc(GoogleDriveProvider.blockedSuspicious)}">Salvamento bloqueado — ver</button>`
           : (window.GoogleDriveProvider && GoogleDriveProvider.isConnected() && GoogleDriveProvider.conflict)
-          ? `<button id="cloud_status_badge" class="cloud-status offline" onclick="GoogleDriveProvider.reload()" title="Existe uma versão mais recente no Drive — clique pra recarregar, ou Ctrl+S pra salvar sua versão">Conflito — recarregar</button>`
+          ? `<button id="cloud_status_badge" class="cloud-status offline" onclick="GoogleDriveProvider.handleStatusClick()" title="Existe uma versão mais recente no Drive — clique pra recarregar, ou Ctrl+S pra salvar sua versão">Conflito — recarregar</button>`
+          : (window.GoogleDriveProvider && GoogleDriveProvider.isConnected() && (GoogleDriveProvider.lastSyncError || !navigator.onLine))
+          ? `<button id="cloud_status_badge" class="cloud-status offline" onclick="GoogleDriveProvider.handleStatusClick()" title="${esc(GoogleDriveProvider.lastSyncError||'Sem internet. Os dados continuam neste dispositivo.')}">${GoogleDriveProvider.authRequired?'Google Drive — reconectar':'Google Drive — não salvo'}</button>`
           : (window.GoogleDriveProvider && GoogleDriveProvider.isConnected())
-          ? `<button id="cloud_status_badge" class="cloud-status local" onclick="GoogleDriveProvider.syncNow()" title="Conectado ao Google Drive — ${esc(GoogleDriveAuth.user?GoogleDriveAuth.user.email:'')} — pasta: ${esc(GoogleDriveProvider.folderName||'?')}">Google Drive${GoogleDriveProvider.dirty?' — salvando...':''}</button>`
+          ? `<button id="cloud_status_badge" class="cloud-status ${GoogleDriveProvider.dirty?'syncing':'local'}" onclick="GoogleDriveProvider.handleStatusClick()" title="Conectado ao Google Drive — ${esc(GoogleDriveAuth.user?GoogleDriveAuth.user.email:'')} — pasta: ${esc(GoogleDriveProvider.folderName||'?')}">Google Drive${GoogleDriveProvider.dirty?' — salvando...':' — salvo'}</button>`
           : `<button id="cloud_status_badge" class="cloud-status local" onclick="Nav.go('settings')" title="Sem conta na nuvem — dados salvos só neste dispositivo">Modo local</button>`}
         ${bankBtn}
         ${monthNav}

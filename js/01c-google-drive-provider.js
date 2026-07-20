@@ -1,4 +1,4 @@
-/* Borion Finance — Google Drive Provider (V6.4.0, FASE 3 da migração)
+/* Borion Finance — Google Drive Provider (V6.38.1 — sincronização protegida)
 
    Modelo "central" que você escolheu: cada pessoa entra com a PRÓPRIA conta Google
    (login e token de acesso individuais, nada de segredo compartilhado). A primeira vez,
@@ -137,18 +137,35 @@ const GoogleDriveAuth = {
      silêncio (só funciona se a pessoa já autorizou antes nesta sessão do navegador). */
   requestToken(interactive){
     return new Promise((resolve, reject)=>{
-      this.tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: GOOGLE_DRIVE_SCOPES,
-        callback: (resp)=>{
-          if(resp.error){ reject(new Error('Google recusou o acesso: ' + resp.error)); return; }
-          this.accessToken = resp.access_token;
-          this.tokenExpiresAt = Date.now() + ((resp.expires_in || 3300) * 1000);
-          resolve(resp.access_token);
-        },
-        error_callback: (err)=>{ reject(new Error((err && err.message) || 'Login com Google cancelado ou falhou.')); }
-      });
-      this.tokenClient.requestAccessToken({ prompt: interactive ? 'consent' : '' });
+      let settled = false;
+      const finishOk = (token)=>{
+        if(settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        resolve(token);
+      };
+      const finishError = (error)=>{
+        if(settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        reject(error instanceof Error ? error : new Error(String(error||'Falha no acesso ao Google.')));
+      };
+      const timeoutId = setTimeout(()=>finishError(new Error('O Google não respondeu à renovação do acesso. Reconecte sua conta.')), 20000);
+      try{
+        this.tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: GOOGLE_CLIENT_ID,
+          scope: GOOGLE_DRIVE_SCOPES,
+          callback: (resp)=>{
+            if(resp && resp.error){ finishError(new Error('Google recusou o acesso: ' + resp.error)); return; }
+            if(!resp || !resp.access_token){ finishError(new Error('O Google não devolveu um token de acesso válido.')); return; }
+            this.accessToken = resp.access_token;
+            this.tokenExpiresAt = Date.now() + ((resp.expires_in || 3300) * 1000);
+            finishOk(resp.access_token);
+          },
+          error_callback: (err)=>{ finishError(new Error((err && (err.message||err.type)) || 'Login com Google cancelado ou falhou.')); }
+        });
+        this.tokenClient.requestAccessToken({ prompt: interactive ? 'consent' : '' });
+      }catch(e){ finishError(e); }
     });
   },
 
@@ -158,10 +175,15 @@ const GoogleDriveAuth = {
     return await this.fetchUserInfo();
   },
 
-  async ensureFreshToken(){
+  async ensureFreshToken(interactive=false){
     if(this.accessToken && Date.now() < this.tokenExpiresAt - 60000) return this.accessToken;
     await this.ensureLoaded();
-    return await this.requestToken(false);
+    return await this.requestToken(!!interactive);
+  },
+
+  invalidateToken(){
+    this.accessToken = null;
+    this.tokenExpiresAt = 0;
   },
 
   async fetchUserInfo(){
@@ -189,21 +211,36 @@ const GoogleDriveFS = {
     return { Authorization: 'Bearer ' + token };
   },
 
+  /* V6.38.1 — todas as chamadas ao Drive passam por aqui. Se o Google invalidar
+     um token antes do horário estimado, a chamada 401 limpa o token e tenta uma
+     renovação silenciosa uma única vez, em vez de deixar a sessão presa usando um
+     token aparentemente válido porém recusado. */
+  async request(url, options={}){
+    let response = null;
+    for(let attempt=0; attempt<2; attempt++){
+      const headers = Object.assign({}, options.headers || {}, await this.authHeaders());
+      response = await fetch(url, Object.assign({}, options, {headers}));
+      if(response.status !== 401 || attempt===1) return response;
+      GoogleDriveAuth.invalidateToken();
+    }
+    return response;
+  },
+
   async findChild(parentId, name, mimeType){
     const safeName = name.replace(/'/g, "\\'");
     let q = `'${parentId}' in parents and name='${safeName}' and trashed=false`;
     if(mimeType) q += ` and mimeType='${mimeType}'`;
     const url = 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=' + encodeURIComponent('files(id,name,modifiedTime,mimeType)');
-    const res = await fetch(url, { headers: await this.authHeaders() });
+    const res = await this.request(url);
     if(!res.ok) throw new Error('Falha ao consultar o Google Drive (status ' + res.status + ').');
     const data = await res.json();
     return (data.files && data.files[0]) || null;
   },
 
   async createFolder(parentId, name){
-    const res = await fetch('https://www.googleapis.com/drive/v3/files?fields=id,name', {
+    const res = await this.request('https://www.googleapis.com/drive/v3/files?fields=id,name', {
       method: 'POST',
-      headers: Object.assign({ 'Content-Type': 'application/json' }, await this.authHeaders()),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] })
     });
     if(!res.ok) throw new Error('Falha ao criar pasta "' + name + '" no Google Drive.');
@@ -217,13 +254,13 @@ const GoogleDriveFS = {
   },
 
   async readFile(fileId){
-    const res = await fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media', { headers: await this.authHeaders() });
+    const res = await this.request('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media');
     if(!res.ok) throw new Error('Falha ao ler arquivo do Google Drive (status ' + res.status + ').');
     return await res.json();
   },
 
   async getFileMeta(fileId){
-    const res = await fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?fields=id,name,modifiedTime', { headers: await this.authHeaders() });
+    const res = await this.request('https://www.googleapis.com/drive/v3/files/' + fileId + '?fields=id,name,modifiedTime');
     if(!res.ok){
       const err = new Error('Falha ao consultar metadados do arquivo no Drive (status ' + res.status + ').');
       err.status = res.status;
@@ -240,9 +277,9 @@ const GoogleDriveFS = {
       + '--' + boundary + '\r\n'
       + 'Content-Type: application/json\r\n\r\n' + JSON.stringify(obj) + '\r\n'
       + '--' + boundary + '--';
-    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime', {
+    const res = await this.request('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime', {
       method: 'POST',
-      headers: Object.assign({ 'Content-Type': 'multipart/related; boundary=' + boundary }, await this.authHeaders()),
+      headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
       body
     });
     if(!res.ok) throw new Error('Falha ao criar arquivo "' + name + '" no Google Drive.');
@@ -250,9 +287,9 @@ const GoogleDriveFS = {
   },
 
   async updateFile(fileId, obj){
-    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files/' + fileId + '?uploadType=media&fields=id,name,modifiedTime', {
+    const res = await this.request('https://www.googleapis.com/upload/drive/v3/files/' + fileId + '?uploadType=media&fields=id,name,modifiedTime', {
       method: 'PATCH',
-      headers: Object.assign({ 'Content-Type': 'application/json' }, await this.authHeaders()),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(obj)
     });
     if(!res.ok) throw new Error('Falha ao salvar no Google Drive (status ' + res.status + ').');
@@ -356,10 +393,129 @@ const GoogleDriveProvider = {
   _autosaveInFlight: false,
   _syncInFlight: false,
   _syncAgain: false,
+  _syncRevision: 0,
   _forceRequested: false,
   _forceSavePromise: null,
+  syncRetryTimer: null,
+  syncRetryAttempt: 0,
+  lastSyncAt: 0,
+  lastSyncError: '',
+  authRequired: false,
+  _lastFailureToastAt: 0,
 
   isConnected(){ return !!(GoogleDriveAuth.user && this.folderId); },
+
+  hasPersistedPending(){
+    try{ return !!(this.folderId && localStorage.getItem(gdrivePendingKey(this.folderId))); }
+    catch(e){ return false; }
+  },
+
+  _isAuthError(error){
+    const msg = String((error && error.message) || error || '');
+    return /status\s*401|oauth|token|google recusou|login com google|renova|popup|access[_ -]?denied|interaction[_ -]?required/i.test(msg);
+  },
+
+  _refreshStatusUI(){
+    if(typeof document==='undefined' || typeof document.getElementById!=='function') return;
+    const el = document.getElementById('cloud_status_badge');
+    if(!el || !this.isConnected()) return;
+    el.onclick = ()=>this.handleStatusClick();
+    if(this.blockedSuspicious){
+      el.className='cloud-status offline'; el.textContent='Salvamento bloqueado — ver'; el.title=this.blockedSuspicious; return;
+    }
+    if(this.conflict){
+      el.className='cloud-status offline'; el.textContent='Conflito — recarregar'; el.title='Existe uma versão mais recente no Drive. Clique para decidir.'; return;
+    }
+    if(this.lastSyncError || !navigator.onLine){
+      el.className='cloud-status offline';
+      el.textContent=this.authRequired?'Google Drive — reconectar':'Google Drive — não salvo';
+      el.title=this.lastSyncError || 'Sem internet. Os dados continuam guardados neste dispositivo.';
+      return;
+    }
+    if(this.dirty || this._syncInFlight || this.hasPersistedPending()){
+      el.className='cloud-status syncing'; el.textContent='Google Drive — salvando...'; el.title='Existe uma alteração local aguardando confirmação do Google Drive.'; return;
+    }
+    el.className='cloud-status local'; el.textContent='Google Drive — salvo';
+    el.title='Dados confirmados no Google Drive' + (this.lastSyncAt ? ' às '+new Date(this.lastSyncAt).toLocaleTimeString('pt-BR') : '') + '.';
+  },
+
+  _clearRetry(){
+    if(this.syncRetryTimer){ clearTimeout(this.syncRetryTimer); this.syncRetryTimer=null; }
+    this.syncRetryAttempt=0;
+  },
+
+  _scheduleRetry(delayOverride){
+    if(!this.isConnected() || !this.dirty || this.conflict || this.blockedSuspicious) return;
+    if(this.syncRetryTimer) return;
+    const delay = Number.isFinite(delayOverride)
+      ? Math.max(1000, delayOverride)
+      : Math.min(60000, 3000 * Math.pow(2, Math.min(this.syncRetryAttempt, 4)));
+    this.syncRetryAttempt++;
+    this.syncRetryTimer=setTimeout(()=>{
+      this.syncRetryTimer=null;
+      if(this.dirty) this.syncNow({source:'retry'});
+    }, delay);
+  },
+
+  _recordSyncFailure(error, options={}){
+    const msg = String((error && error.message) || error || 'Falha desconhecida ao acessar o Google Drive.');
+    this.lastSyncError = msg;
+    this.authRequired = this._isAuthError(error);
+    this.dirty = true;
+    this._refreshStatusUI();
+    this._scheduleRetry(this.authRequired ? 15000 : undefined);
+    const now=Date.now();
+    if(!options.silent && now-this._lastFailureToastAt>12000){
+      this._lastFailureToastAt=now;
+      toast((this.authRequired?'A conexão com o Google expirou. Toque no selo para reconectar. ':'Não foi possível confirmar no Google Drive. ')+'Os dados continuam salvos neste dispositivo.');
+    }
+  },
+
+  _recordSyncSuccess(){
+    this.lastSyncAt=Date.now();
+    this.lastSyncError='';
+    this.authRequired=false;
+    this._clearRetry();
+    if(S && S.currentProfile && typeof clearExitSavePending==='function') clearExitSavePending(S.currentProfile.id);
+    this._refreshStatusUI();
+  },
+
+  async resumePendingSync(source='resume'){
+    if(!this.isConnected()) return false;
+    if(this.hasPersistedPending()) this.dirty=true;
+    if(!this.dirty){
+      this._refreshStatusUI();
+      return await this.checkForRemoteUpdate();
+    }
+    if(!navigator.onLine){
+      this.lastSyncError='Sem internet. A alteração está salva somente neste dispositivo por enquanto.';
+      this.authRequired=false;
+      this._refreshStatusUI();
+      this._scheduleRetry(5000);
+      return false;
+    }
+    return await this.syncNow({source});
+  },
+
+  async handleStatusClick(){
+    if(this.blockedSuspicious || this.conflict){ await this.reload(); return false; }
+    try{
+      if(this.authRequired){
+        const previousSub=GoogleDriveAuth.user && GoogleDriveAuth.user.sub;
+        await GoogleDriveAuth.login(true);
+        if(previousSub && GoogleDriveAuth.user && GoogleDriveAuth.user.sub!==previousSub){
+          throw new Error('Reconecte usando a mesma conta Google que já estava vinculada a esta pasta.');
+        }
+        this.lastSyncError=''; this.authRequired=false;
+      }
+      const ok=await this.resumePendingSync('status_click');
+      if(ok || !this.dirty) toast('Google Drive sincronizado e confirmado.');
+      return !!ok;
+    }catch(e){
+      this._recordSyncFailure(e);
+      return false;
+    }
+  },
 
   /* Login + (primeira vez) escolher pasta + carregar/ou perguntar o que fazer. Essa
      função já decide sozinha pra qual tela ir (Gate normal ou onboarding de pasta
@@ -462,8 +618,8 @@ const GoogleDriveProvider = {
         // segue para a leitura normal abaixo, em vez de dar return aqui
       } else {
         this.dirty = true;
-        await this.syncNow();
-        return { empty: false };
+        await this.syncNow({source:'boot_pending'});
+        return { empty: false, pending: this.dirty };
       }
     }
     const data = await GoogleDriveFS.readFile(file.id);
@@ -476,6 +632,8 @@ const GoogleDriveProvider = {
       this._lastGoodCounts = counts;
       BorionDataGuard.writeLastGoodCounts(this.folderId, counts);
     }
+    this.lastSyncAt=Date.now(); this.lastSyncError=''; this.authRequired=false;
+    this._refreshStatusUI();
     return { empty: false };
   },
 
@@ -498,8 +656,11 @@ const GoogleDriveProvider = {
   /* Recarrega o current.json mais recente do Drive, descartando qualquer alteração
      local ainda não sincronizada — usado depois de um conflito detectado. */
   async reload(){
-    this.dirty = false; this.conflict = false;
+    this.dirty = false; this.conflict = false; this.lastSyncError=''; this.authRequired=false;
     clearTimeout(this.syncTimer);
+    this._clearRetry();
+    try{ if(this.folderId) localStorage.removeItem(gdrivePendingKey(this.folderId)); }catch(e){}
+    if(S && S.currentProfile && typeof clearExitSavePending==='function') clearExitSavePending(S.currentProfile.id);
     const result = await this.loadFromDrive();
     if(result && result.empty){ renderGoogleDriveOnboarding(); }
     else { S.gate = { mode: 'list', error: '' }; renderGate(); }
@@ -513,6 +674,10 @@ const GoogleDriveProvider = {
     this.dirty = true;
     this.autosaveDirtySinceLast = true;
     this._autosaveRevision++;
+    this._syncRevision++;
+    this.lastSyncError='';
+    this.authRequired=false;
+    this._refreshStatusUI();
     // V6.16.0 — grava um marcador PERSISTENTE (sobrevive a reload/fechar aba) de que
     // existe uma alteração ainda não confirmada no Drive. Ver loadFromDrive(): se esse
     // marcador ainda estiver presente na próxima conexão, o dado local é tratado como
@@ -520,7 +685,7 @@ const GoogleDriveProvider = {
     // sobrescrever uma alteração que nunca chegou a ser enviada.
     try{ localStorage.setItem(gdrivePendingKey(this.folderId), String(Date.now())); }catch(e){}
     clearTimeout(this.syncTimer);
-    this.syncTimer = setTimeout(()=>this.syncNow(), 800);
+    this.syncTimer = setTimeout(()=>this.syncNow({source:'queue'}), 250);
     this.scheduleAutosaveSoon();
   },
 
@@ -583,7 +748,10 @@ const GoogleDriveProvider = {
     try{
       const freshMeta = await GoogleDriveFS.getFileMeta(this.currentFileId);
       if(!this.currentFileMeta || !this.currentFileMeta.modifiedTime || !freshMeta.modifiedTime) return false;
-      if(freshMeta.modifiedTime === this.currentFileMeta.modifiedTime) return false; // nada novo
+      if(freshMeta.modifiedTime === this.currentFileMeta.modifiedTime){
+        if(this.lastSyncError && !this.dirty){ this.lastSyncError=''; this.authRequired=false; this._refreshStatusUI(); }
+        return false; // nada novo
+      }
 
       // Algo mudou no Drive desde a última leitura deste dispositivo. Só aplica
       // agora se não for atrapalhar a pessoa (modal aberto, campo em edição) —
@@ -624,6 +792,9 @@ const GoogleDriveProvider = {
       // Falha de rede/token aqui não é grave — é só uma checagem de fundo; a
       // próxima tentativa (poucos segundos depois) resolve sozinha.
       console.warn('[GoogleDriveProvider] checagem de atualização ao vivo falhou (tenta de novo em breve):', e);
+      this.lastSyncError=String((e&&e.message)||e||'Falha ao consultar o Google Drive.');
+      this.authRequired=this._isAuthError(e);
+      this._refreshStatusUI();
       return false;
     }finally{
       this._liveCheckInFlight = false;
@@ -668,6 +839,13 @@ const GoogleDriveProvider = {
          O snapshot agora é construído explicitamente e também pode rodar com a aba em
          segundo plano, evitando que Alt+Tab impeça o arquivo autosave-N.json de nascer. */
       const payload = await buildSharedBackupSnapshot('auto', 'autosave automático do Google Drive');
+      // Sempre cria também um ponto de recuperação neste dispositivo. Assim, mesmo
+      // que o token do Google expire ou a rede caia, o autosave do minuto não some.
+      if(window.storageProvider && typeof storageProvider.createBackup==='function'){
+        try{ await storageProvider.createBackup('auto', {payload}); }
+        catch(localError){ console.warn('[GoogleDriveProvider] autosave local extra falhou (não crítico):', localError); }
+      }
+      if(this.dirty && !this._syncInFlight) await this.syncNow({source:'autosave'});
       await this.writeRotatingSnapshot('autosave', GOOGLE_DRIVE_AUTOSAVE_SLOTS, payload);
       this.lastAutosaveAt = Date.now();
       if(revision===this._autosaveRevision) this.autosaveDirtySinceLast = false;
@@ -682,34 +860,30 @@ const GoogleDriveProvider = {
     }
   },
 
-  async syncNow(){
-    if(!this.isConnected() || !this.dirty || !this.currentFileId) return;
-    // V6.19.0 — bug real corrigido: sem essa trava, edições rápidas (ou rede lenta)
-    // podiam disparar DUAS execuções de syncNow() ao mesmo tempo — cada uma conferindo
-    // "mudou desde a última leitura?" de forma independente, o que podia gerar um
-    // conflito falso contra a própria sessão, ou deixar uma gravação com dado
-    // desatualizado "vencer" por acaso. Agora, se já tem uma sincronização rodando,
-    // só marca pra rodar de novo assim que a atual terminar.
-    if(this._syncInFlight){ this._syncAgain = true; return; }
+  async syncNow(options={}){
+    if(!this.isConnected() || !this.currentFileId) return false;
+    if(this.hasPersistedPending()) this.dirty=true;
+    if(!this.dirty){ this._recordSyncSuccess(); return true; }
+    if(this._syncInFlight){ this._syncAgain = true; return false; }
+    if(!navigator.onLine){
+      this._recordSyncFailure(new Error('Sem internet. A alteração está salva somente neste dispositivo por enquanto.'), {silent:true});
+      return false;
+    }
     this._syncInFlight = true;
+    this._refreshStatusUI();
+    const revision = this._syncRevision;
     try{
-      // V6.5.0 — proteção contra conflito: se outro dispositivo (celular, outro PC)
-      // salvou depois da última vez que ESTE dispositivo leu o arquivo, não escreve
-      // por cima — avisa e espera a pessoa decidir (botão "Recarregar" no selo do topo,
-      // ou Ctrl+S pra forçar sua versão como a mais recente).
+      // Proteção contra conflito: nunca sobrescreve silenciosamente uma versão
+      // que outro dispositivo gravou depois da última leitura local.
       const freshMeta = await GoogleDriveFS.getFileMeta(this.currentFileId);
       if(this.currentFileMeta && this.currentFileMeta.modifiedTime && freshMeta.modifiedTime && freshMeta.modifiedTime !== this.currentFileMeta.modifiedTime){
         this.conflict = true;
+        this.lastSyncError='Existe uma versão mais recente no Google Drive.';
+        this._refreshStatusUI();
         toast('Existe uma versão mais recente no Google Drive. Ctrl+S força salvar a sua, ou clique no selo pra recarregar.');
-        return;
+        return false;
       }
       const payload = await buildFullBackupPayload();
-      // V6.37.0 — checagem ampliada: antes só bloqueava se TODOS os perfis
-      // sumissem (payload.profiles.length===0). Agora também compara a
-      // contagem de transações, cartões, investimentos etc. de CADA perfil
-      // com a última base confiável conhecida — pega o caso em que os dados
-      // de UM perfil específico zeram (cache/IndexedDB corrompido) sem o
-      // perfil em si desaparecer da lista. Ver js/01d-data-guard.js.
       const nextCounts = window.BorionDataGuard ? BorionDataGuard.countAccountRecords(payload) : null;
       const baseline = window.BorionDataGuard ? (this._lastGoodCounts || BorionDataGuard.readLastGoodCounts(this.folderId)) : null;
       const check = (nextCounts && baseline) ? BorionDataGuard.detectSuspiciousAccountDrop(nextCounts, baseline) : { suspicious:false, reasons:[] };
@@ -717,27 +891,47 @@ const GoogleDriveProvider = {
         const reasonText = BorionDataGuard.describeSuspiciousAccountReasons(check.reasons);
         console.warn('[GoogleDriveProvider] gravação automática bloqueada por segurança: ' + reasonText);
         this.blockedSuspicious = reasonText;
-        toast('Salvamento no Google Drive bloqueado por segurança: os dados desta sessão parecem menores que o esperado (' + reasonText + '). Nada foi substituído.');
+        this.lastSyncError='Salvamento bloqueado por segurança: '+reasonText;
         this.dirty = true;
-        return;
+        this._refreshStatusUI();
+        toast('Salvamento no Google Drive bloqueado por segurança: os dados desta sessão parecem menores que o esperado (' + reasonText + '). Nada foi substituído.');
+        return false;
       }
       this.blockedSuspicious = null;
-      this.dirty = false;
       const updated = await GoogleDriveFS.updateFile(this.currentFileId, payload);
       this.currentFileMeta = updated;
       this.conflict = false;
       this.lastKnownProfileCount = (payload.profiles || []).length;
       if(nextCounts && window.BorionDataGuard){ this._lastGoodCounts = nextCounts; BorionDataGuard.writeLastGoodCounts(this.folderId, nextCounts); }
-      try{ localStorage.removeItem(gdrivePendingKey(this.folderId)); }catch(e){}
+
+      // Só limpa o marcador se NENHUMA nova alteração entrou enquanto o upload
+      // estava em andamento. Na versão anterior, uma edição nova podia ficar sem
+      // marcador por alguns milissegundos e ser perdida se o app fosse fechado ali.
+      if(revision===this._syncRevision){
+        this.dirty=false;
+        this._syncAgain=false;
+        try{ localStorage.removeItem(gdrivePendingKey(this.folderId)); }catch(e){}
+        this._recordSyncSuccess();
+      }else{
+        this.dirty=true;
+        this._syncAgain=true;
+        try{ localStorage.setItem(gdrivePendingKey(this.folderId), String(Date.now())); }catch(e){}
+        this._refreshStatusUI();
+      }
+      return revision===this._syncRevision;
     }catch(e){
-      console.warn('[GoogleDriveProvider] falha ao sincronizar com o Drive (tenta de novo na próxima alteração):', e);
-      this.dirty = true;
+      console.warn('[GoogleDriveProvider] falha ao sincronizar com o Drive (nova tentativa automática agendada):', e);
+      this._recordSyncFailure(e, {silent: options.source==='retry'});
+      return false;
     }finally{
       this._syncInFlight = false;
+      this._refreshStatusUI();
       if(this._syncAgain && !this._forceRequested){
         this._syncAgain = false;
         this.dirty = true;
-        this.syncNow();
+        setTimeout(()=>this.syncNow({source:'follow_up'}), 0);
+      }else if(this.dirty && !this.conflict && !this.blockedSuspicious){
+        this._scheduleRetry();
       }
     }
   },
@@ -816,11 +1010,19 @@ const GoogleDriveProvider = {
           BorionDataGuard.writeLastGoodCounts(this.folderId, counts);
         }
         this.blockedSuspicious = null;
+        this._syncRevision++;
         try{ localStorage.removeItem(gdrivePendingKey(this.folderId)); }catch(e){}
+        this._recordSyncSuccess();
         await this.writeRotatingSnapshot('forcesave', GOOGLE_DRIVE_FORCESAVE_SLOTS, payload);
         return true;
+      }catch(e){
+        this.dirty=true;
+        try{ localStorage.setItem(gdrivePendingKey(this.folderId), String(Date.now())); }catch(_e){}
+        this._recordSyncFailure(e);
+        throw e;
       }finally{
         this._syncInFlight = false;
+        this._refreshStatusUI();
       }
     })();
     try{ return await this._forceSavePromise; }
@@ -884,7 +1086,7 @@ const GoogleDriveProvider = {
     const url = 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q)
       + '&fields=' + encodeURIComponent('files(id,name,modifiedTime,size)')
       + '&orderBy=' + encodeURIComponent('modifiedTime desc') + '&pageSize=1000';
-    const res = await fetch(url, { headers: await GoogleDriveFS.authHeaders() });
+    const res = await GoogleDriveFS.request(url);
     if(!res.ok) throw new Error('Falha ao conferir o tamanho da pasta de backups no Drive.');
     const data = await res.json();
     const files = data.files || [];
@@ -898,7 +1100,7 @@ const GoogleDriveProvider = {
     });
     for(const id of toDelete){
       try{
-        await fetch('https://www.googleapis.com/drive/v3/files/' + id, { method: 'DELETE', headers: await GoogleDriveFS.authHeaders() });
+        await GoogleDriveFS.request('https://www.googleapis.com/drive/v3/files/' + id, { method: 'DELETE' });
       }catch(e){ console.warn('[GoogleDriveProvider] falha ao apagar backup antigo (' + id + '):', e); }
     }
     return { deleted: toDelete.length, totalBytes: cumulative };
@@ -909,7 +1111,7 @@ const GoogleDriveProvider = {
     const q = "'" + folderId + "' in parents and trashed=false";
     const url = 'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q)
       + '&fields=' + encodeURIComponent('files(id,name,modifiedTime)') + '&orderBy=' + encodeURIComponent('modifiedTime desc');
-    const res = await fetch(url, { headers: await GoogleDriveFS.authHeaders() });
+    const res = await GoogleDriveFS.request(url);
     if(!res.ok) throw new Error('Falha ao listar backups no Drive.');
     const data = await res.json();
     return (data.files || []).map(f=>({ id: f.id, name: f.name, modifiedTime: f.modifiedTime }));
@@ -957,6 +1159,7 @@ const GoogleDriveProvider = {
     this._backupsFolderId = null; this.conflict = false; this.dirty = false;
     this.autosaveDirtySinceLast = false; this._forceRequested = false; this._forceSavePromise = null;
     this._lastGoodCounts = null; this.blockedSuspicious = null;
+    this._clearRetry(); this.lastSyncAt=0; this.lastSyncError=''; this.authRequired=false;
     setStorageMode(null);
   },
 
@@ -967,9 +1170,12 @@ const GoogleDriveProvider = {
       folderId: this.folderId,
       folderName: this.folderName || null,
       folderLink: this.folderId ? ('https://drive.google.com/drive/folders/' + this.folderId) : null,
-      pending: this.dirty,
+      pending: this.dirty || this.hasPersistedPending(),
       conflict: this.conflict,
-      blockedSuspicious: this.blockedSuspicious || null
+      blockedSuspicious: this.blockedSuspicious || null,
+      lastSyncAt: this.lastSyncAt || 0,
+      lastSyncError: this.lastSyncError || '',
+      authRequired: !!this.authRequired
     };
   }
 };
@@ -983,13 +1189,26 @@ window.GoogleDriveProvider = GoogleDriveProvider;
 if(typeof document!=='undefined'){
   document.addEventListener('visibilitychange', ()=>{
     if(document.visibilityState==='visible' && window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){
-      GoogleDriveProvider.checkForRemoteUpdate();
+      if(GoogleDriveProvider.dirty || GoogleDriveProvider.hasPersistedPending()) GoogleDriveProvider.resumePendingSync('visibility');
+      else GoogleDriveProvider.checkForRemoteUpdate();
     }
   });
 }
 if(typeof window!=='undefined'){
   window.addEventListener('focus', ()=>{
-    if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.checkForRemoteUpdate();
+    if(!window.GoogleDriveProvider || !GoogleDriveProvider.isConnected()) return;
+    if(GoogleDriveProvider.dirty || GoogleDriveProvider.hasPersistedPending()) GoogleDriveProvider.resumePendingSync('focus');
+    else GoogleDriveProvider.checkForRemoteUpdate();
+  });
+  window.addEventListener('online', ()=>{
+    if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.resumePendingSync('online');
+  });
+  window.addEventListener('offline', ()=>{
+    if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected() && (GoogleDriveProvider.dirty || GoogleDriveProvider.hasPersistedPending())){
+      GoogleDriveProvider.lastSyncError='Sem internet. A alteração está salva somente neste dispositivo por enquanto.';
+      GoogleDriveProvider.authRequired=false;
+      GoogleDriveProvider._refreshStatusUI();
+    }
   });
 }
 

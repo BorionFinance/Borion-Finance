@@ -29,13 +29,6 @@ function ensureImportState(){
   return S.importState;
 }
 
-function renderImportSourceSwitch(mode){
-  return `<div class="import-source-switch" role="tablist" aria-label="Origem do extrato">
-    <button type="button" class="import-source-tab ${mode==='file'?'active':''}" role="tab" aria-selected="${mode==='file'}" onclick="ImportStatement.setMode('file')">Arquivo bancário</button>
-    <button type="button" class="import-source-tab ${mode==='image'?'active':''}" role="tab" aria-selected="${mode==='image'}" onclick="ImportStatement.setMode('image')">Prints do extrato</button>
-  </div>`;
-}
-
 function renderImportFilePanel(st,bankOptions){
   return `<div class="panel-box import-panel-main">
     <div class="toolbar">
@@ -62,7 +55,6 @@ function renderImportFilePanel(st,bankOptions){
 
 function importStatsForRender(st){
   const rows=st.parsed||[];
-  if(st.mode==='image'&&typeof recalculateImageImportStats==='function') return recalculateImageImportStats(false);
   const selected=rows.filter(r=>r.incluir);
   return {
     total:rows.length, selected:selected.length,
@@ -76,27 +68,21 @@ function importStatsForRender(st){
 function renderImportSummary(st,stats){
   const hasRows=(st.parsed||[]).length>0;
   const selectedCount=stats.selected||0;
-  const isImage=st.mode==='image';
   return `<div class="panel-box">
     <div class="panel-title">Resumo da importação</div>
-    <div class="import-kpis ${isImage?'import-kpis-expanded':''}">
+    <div class="import-kpis">
       <div class="import-kpi"><span>Lidas</span><strong>${stats.total||0}</strong></div>
       <div class="import-kpi"><span>Selecionadas</span><strong>${selectedCount}</strong></div>
       <div class="import-kpi"><span>Receitas</span><strong class="val-pos">${brl(stats.receitas||0)}</strong></div>
       <div class="import-kpi"><span>Despesas</span><strong class="val-neg">${brl(stats.despesas||0)}</strong></div>
-      ${isImage?`<div class="import-kpi"><span>Transferências</span><strong>${stats.transferencias||0}</strong></div>
-      <div class="import-kpi"><span>Rendimentos</span><strong>${stats.rendimentos||0}</strong></div>
-      <div class="import-kpi"><span>Duplicadas</span><strong>${stats.duplicados||0}</strong></div>
-      <div class="import-kpi"><span>Pendências</span><strong class="${stats.pendencias?'val-neg':''}">${stats.pendencias||0}</strong></div>`:''}
     </div>
-    ${isImage&&typeof renderImageReconciliation==='function'?renderImageReconciliation(st,stats):''}
     <div class="import-side-actions">
       <button class="btn btn-secondary btn-block" onclick="ImportStatement.selectAll(true)" ${hasRows?'':'disabled'}>Selecionar tudo</button>
       <button class="btn btn-secondary btn-block" onclick="ImportStatement.selectAll(false)" ${hasRows?'':'disabled'}>Desmarcar tudo</button>
       <button class="btn btn-secondary btn-block" onclick="ImportStatement.reviewDuplicates()" ${hasRows?'':'disabled'}>Revisar duplicidade${stats.duplicados?` (${stats.duplicados})`:''}</button>
       <button class="btn btn-secondary btn-block" onclick="ImportStatement.reviewBeforeImport()" ${selectedCount?'':'disabled'}>Revisar antes de importar</button>
       <button class="btn btn-primary btn-block" onclick="ImportStatement.commit()" ${selectedCount?'':'disabled'}>Importar ${selectedCount} movimentação${selectedCount===1?'':'ões'}</button>
-      ${!isImage?`<button class="btn-outline btn-block" onclick="ImportStatement.commitAsReserve()" ${selectedCount?'':'disabled'}>Importar como saldo de reserva</button>`:''}
+      <button class="btn-outline btn-block" onclick="ImportStatement.commitAsReserve()" ${selectedCount?'':'disabled'}>Importar como saldo de reserva</button>
     </div>
   </div>`;
 }
@@ -107,19 +93,17 @@ function renderImportStatement(){
   const bancoAtual=resolveAccountId(st.selectedBank)||st.selectedBank||resolveAccountId(st.detectedBank)||'';
   const bankOptions=[`<option value="">Escolha uma conta bancária ativa</option>`].concat(accountSelectOptions().map(o=>`<option value="${esc(o.value)}" ${o.value===bancoAtual?'selected':''}>${esc(o.label)}</option>`)).join('');
   const stats=importStatsForRender(st);
-  const mainPanel=st.mode==='image'&&typeof renderImageImportPanel==='function'?renderImageImportPanel(st,bankOptions):renderImportFilePanel(st,bankOptions);
-  const review=rows.length?(st.mode==='image'&&typeof renderImageImportReview==='function'?renderImageImportReview(rows):renderImportReviewTable(rows)):renderImportEmptyState(st.mode);
+  const mainPanel=renderImportFilePanel(st,bankOptions);
+  const review=rows.length?renderImportReviewTable(rows):renderImportEmptyState();
   return `<div class="import-hero">
-      <div class="ih-left"><div class="import-eyebrow">Automação assistida</div><h2>Importar extrato</h2><p>Importe arquivos bancários ou leia prints localmente, revise cada movimentação e só então aplique os efeitos financeiros.</p></div>
+      <div class="ih-left"><div class="import-eyebrow">Automação assistida</div><h2>Importar extrato</h2><p>Importe o arquivo bancário, revise cada movimentação e só então aplique os efeitos financeiros.</p></div>
       <div class="ih-badge"><span>⇣</span><strong>Revisar antes de lançar</strong></div>
     </div>
-    ${renderImportSourceSwitch(st.mode)}
     <div class="import-grid">${mainPanel}${renderImportSummary(st,stats)}</div>
     ${review}`;
 }
 
-function renderImportEmptyState(mode){
-  if(mode==='image') return `<div class="panel-box import-empty"><div class="empty-orb">▧</div><h3>Nenhum print processado</h3><p>Selecione imagens do extrato. Elas ficam somente na memória deste dispositivo e passam por revisão antes de qualquer gravação.</p></div>`;
+function renderImportEmptyState(){
   return `<div class="panel-box import-empty"><div class="empty-orb">◎</div><h3>Nenhum extrato carregado</h3><p>Envie um arquivo CSV, OFX, TXT ou PDF textual. O Borion vai tentar detectar banco, datas, descrições, valores e tipo de lançamento.</p><div class="import-format-grid"><div><b>CSV</b><span>melhor opção para planilha/exportação</span></div><div><b>OFX</b><span>melhor opção bancária estruturada</span></div><div><b>PDF</b><span>bom quando possui texto selecionável</span></div><div><b>TXT</b><span>útil para extrato simples</span></div></div></div>`;
 }
 
@@ -336,7 +320,7 @@ function looksLikeCSV(text){
 
 const ImportStatement = {
   setMode(mode){
-    if(mode!=='file'&&mode!=='image') return;
+    if(mode!=='file') return;
     const st=ensureImportState();
     st.mode=mode; st.lastError='';
     renderView();
@@ -376,7 +360,6 @@ const ImportStatement = {
   },
   reparseWithMonth(ym){
     const st=ensureImportState(); st.referenceMonth=ym||st.referenceMonth;
-    if(st.mode==='image'){ if(typeof ImportStatement.setReferenceMonth==='function') ImportStatement.setReferenceMonth(st.referenceMonth); return; }
     if(!st.rawText || !st.fileName) return;
     const parsed = parseAnyStatement(st.rawText, st.fileName, ym || monthKey(S.month.y,S.month.m));
     st.detectedBank = parsed.bank || st.detectedBank || '';
@@ -429,12 +412,10 @@ const ImportStatement = {
   },
   clear(){
     const current=ensureImportState(); const mode=current.mode;
-    if(typeof cleanupStatementImportImages==='function') cleanupStatementImportImages(current);
     S.importState=createEmptyImportState({mode}); renderView();
   },
   commit(){
     const st=ensureImportState();
-    if(st.mode==='image'&&typeof commitImageStatementImport==='function'){ commitImageStatementImport(); return; }
     const selected = st.parsed.filter(r=>r.incluir);
     if(!selected.length){ toast('Nada selecionado para importar.'); return; }
 

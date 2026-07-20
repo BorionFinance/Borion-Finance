@@ -203,7 +203,17 @@ const GoogleDriveAuth = {
             if(!resp||!resp.access_token){finish(Object.assign(new Error('O Google não devolveu um token de acesso válido.'),{code:'AUTH_TOKEN_INVALID'}));return;}
             this.accessToken=resp.access_token;this.tokenExpiresAt=Date.now()+((resp.expires_in||3300)*1000);finish(null,resp.access_token);
           },
-          error_callback:(err)=>finish(Object.assign(new Error((err&&(err.message||err.type))||'Login com Google cancelado ou falhou.'),{code:'AUTH_FAILED'}))
+          error_callback:(err)=>{
+            const type=String(err&&(err.type||err.code)||'').toLowerCase();
+            const popupBlocked=/popup.*failed|failed.*popup|popup_failed_to_open/.test(type);
+            const popupClosed=/popup.*closed|closed.*popup/.test(type);
+            const message=popupBlocked
+              ? 'O navegador bloqueou a janela do Google. Permita pop-ups para este site e tente novamente.'
+              : popupClosed
+                ? 'A janela do Google foi fechada antes de concluir o login.'
+                : ((err&&(err.message||err.type))||'Login com Google cancelado ou falhou.');
+            finish(Object.assign(new Error(message),{code:popupBlocked?'AUTH_POPUP_BLOCKED':(popupClosed?'AUTH_POPUP_CLOSED':'AUTH_FAILED')}));
+          }
         });
         this.tokenClient.requestAccessToken({prompt:interactive?'consent':''});
       }catch(e){finish(e);}
@@ -212,12 +222,24 @@ const GoogleDriveAuth = {
   },
 
   async login(interactive){
-    await this.ensureIdentityLoaded();
     if(window.BootProgress)BootProgress.setStage('google_token',{detail:interactive?'Aguardando a confirmação da conta Google':'Renovando o acesso ao Google Drive'});
     if(window.BorionPerf)BorionPerf.startStage('google_token');
-    await this.requestToken(interactive);
+    let tokenPromise;
+    // No clique do usuário, abre o popup antes do primeiro await. Isso preserva a
+    // ativação do clique e evita "Failed to open popup window" em navegadores mais rígidos.
+    if(interactive&&this._gisReady&&window.google&&google.accounts&&google.accounts.oauth2){
+      tokenPromise=this.requestToken(true);
+    }else{
+      await this.ensureIdentityLoaded();
+      tokenPromise=this.requestToken(!!interactive);
+    }
+    await tokenPromise;
     if(window.BorionPerf)BorionPerf.endStage('google_token');
     return await this.fetchUserInfo();
+  },
+
+  prepareInteractiveLogin(){
+    return this.ensureIdentityLoaded();
   },
 
   async ensureFreshToken(interactive=false){
@@ -227,6 +249,14 @@ const GoogleDriveAuth = {
   },
 
   invalidateToken(){this.accessToken=null;this.tokenExpiresAt=0;},
+
+  resetLoginAttempt(){
+    this.invalidateToken();
+    this._tokenPromise=null;
+    this.tokenClient=null;
+    this.user=null;
+    try{localStorage.removeItem(LS_GDRIVE_USER);}catch(e){}
+  },
 
   async fetchUserInfo(){
     if(window.BorionPerf)BorionPerf.startStage('google_userinfo');
@@ -246,6 +276,7 @@ const GoogleDriveAuth = {
 
   signOut(){if(this.accessToken){try{google.accounts.oauth2.revoke(this.accessToken,()=>{});}catch(e){}}this.accessToken=null;this.tokenExpiresAt=0;this.user=null;localStorage.removeItem(LS_GDRIVE_USER);}
 };
+window.GoogleDriveAuth=GoogleDriveAuth;
 
 /* ---------------- Chamadas cruas à Drive API ---------------- */
 const GoogleDriveFS = {
@@ -1626,6 +1657,23 @@ const GoogleDriveProvider = {
     return { id: created.id, name };
   },
 
+  resetLoginAttempt(){
+    GoogleDriveAuth.resetLoginAttempt();
+    this.stopAutosaveLoop();
+    this.stopLivePollLoop();
+    if(this.syncTimer){clearTimeout(this.syncTimer);this.syncTimer=null;}
+    if(this.autosaveKickTimer){clearTimeout(this.autosaveKickTimer);this.autosaveKickTimer=null;}
+    this.folderId=null;this.folderName=null;this.currentFileId=null;this.currentFileMeta=null;
+    this._backupsFolderId=null;this._backupsFolderIds=[];this._backupsFolderDuplicates=[];this._backupsFolderPromise=null;
+    this.conflict=false;this.dirty=false;this.authRequired=false;this.lastSyncError='';
+    this._syncInFlight=false;this._syncAgain=false;this._forceRequested=false;this._forceSavePromise=null;
+    this._lastConsolidatedPayload=null;this._operationBasePayload=null;this._queueOperationId=null;
+    this.pendingMergeConflicts=[];this._clearRetry();
+    // IDs de pasta, dados locais e alterações pendentes persistidas são mantidos.
+    // Só o estado transitório da tentativa de login é descartado.
+    return true;
+  },
+
   disconnect(){
     GoogleDriveAuth.signOut();
     this.stopAutosaveLoop();
@@ -1744,29 +1792,10 @@ function renderGoogleDriveOnboarding(){
    boot (ex: sessão expirada, revogou acesso pela conta Google). Só tem um botão —
    não tenta adivinhar o motivo, só oferece reconectar (com popup de consentimento). */
 function renderGoogleDriveReconnect(errorMessage){
-  applyFont(); applyTheme();
-  const root = document.getElementById('root');
-  root.innerHTML = `
-    <div class="gate-wrap">
-      <div class="gate-box">
-        <div class="gate-logo"><img src="borion-emblem.png" alt="Borion Finance"/><div class="appname">Borion Finance</div></div>
-        <div class="gate-card">
-          <h2>Reconectar ao Google Drive</h2>
-          <p class="gate-sub">Sua sessão do Google expirou ou foi desconectada. Seus dados continuam salvos no Drive — é só entrar de novo.</p>
-          <div class="info-box" style="margin-bottom:14px;">${esc(errorMessage||'')}</div>
-          <button class="btn btn-primary btn-block" id="gdrive_reconnect">Reconectar Google Drive</button>
-          <div style="text-align:center;margin-top:14px;"><button class="link-btn" id="gdrive_use_other">Usar outra forma de entrar</button></div>
-        </div>
-      </div>
-    </div>`;
-  document.getElementById('gdrive_reconnect').onclick = async ()=>{
-    try{
-      await GoogleDriveProvider.connect(true);
-    }catch(e){ renderGoogleDriveReconnect(e.message||String(e)); }
-  };
-  document.getElementById('gdrive_use_other').onclick = ()=>{
-    setStorageMode(null);
-    CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info=''; CloudAuth.emailExpanded=false;
-    CloudAuth.render();
-  };
+  applyFont();applyTheme();
+  const root=document.getElementById('root');
+  root.innerHTML=`<div class="gate-wrap"><div class="gate-box"><div class="gate-logo"><img src="borion-emblem.png" alt="Borion Finance"/><div class="appname">Borion Finance</div></div><div class="gate-card"><h2>Não foi possível concluir a abertura</h2><p class="gate-sub">A conexão não foi concluída. Nenhum dado foi apagado.</p><button class="btn btn-primary btn-block" id="gdrive_back_login">Voltar ao login</button></div></div></div>`;
+  const button=document.getElementById('gdrive_back_login');
+  if(button)button.onclick=()=>{if(window.returnToSimpleGoogleLogin)window.returnToSimpleGoogleLogin();else{try{GoogleDriveProvider.resetLoginAttempt();}catch(e){}try{setStorageMode(null);}catch(e){}CloudAuth.mode='login';CloudAuth.error='';CloudAuth.info='';CloudAuth.emailExpanded=false;CloudAuth.render();}};
+  if(errorMessage&&window.console&&console.error)console.error('[BORION][LOGIN]',errorMessage);
 }

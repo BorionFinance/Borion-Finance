@@ -3100,14 +3100,14 @@ html[data-theme="light"] .sb-item.active{
 .borion-boot-safe{margin-top:13px!important;font-size:.84rem;color:var(--muted,#929cab)}
 .borion-boot-slow{margin-top:16px;padding:11px 13px;border-radius:12px;background:rgba(218,177,75,.09);color:#e4ca86;font-size:.86rem;line-height:1.4}
 .borion-boot-error{margin-top:18px;text-align:left}.borion-boot-error-stage{padding:10px 12px;border-radius:12px;background:rgba(221,80,80,.09);color:#f0aaaa;font-size:.86rem}
-.borion-boot-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:13px}.borion-boot-actions button{min-height:42px;border:0;border-radius:12px;padding:10px 12px;font:inherit;font-weight:700;cursor:pointer;background:#d9b75f;color:#15120b}.borion-boot-actions button.secondary{background:rgba(255,255,255,.08);color:inherit}.borion-boot-error pre{white-space:pre-wrap;word-break:break-word;max-height:160px;overflow:auto;margin:12px 0 0;padding:12px;border-radius:12px;background:rgba(0,0,0,.24);font-size:.72rem;color:var(--muted,#a9b2c2)}
+.borion-boot-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:13px}.borion-boot-actions-single{grid-template-columns:1fr}.borion-boot-actions button{min-height:42px;border:0;border-radius:12px;padding:10px 12px;font:inherit;font-weight:700;cursor:pointer;background:#d9b75f;color:#15120b}.borion-boot-actions button.secondary{background:rgba(255,255,255,.08);color:inherit}.borion-boot-error pre{white-space:pre-wrap;word-break:break-word;max-height:160px;overflow:auto;margin:12px 0 0;padding:12px;border-radius:12px;background:rgba(0,0,0,.24);font-size:.72rem;color:var(--muted,#a9b2c2)}
 @keyframes borionBootSpin{to{transform:rotate(360deg)}}
 @media (max-width:560px){.borion-boot{padding:14px}.borion-boot-card{padding:26px 18px;border-radius:22px}.borion-boot-logo-wrap{width:94px;height:94px}.borion-boot-logo{width:78px;height:78px}.borion-boot-actions{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){.borion-boot-spinner{animation-duration:1.8s}.borion-boot,.borion-boot-progress>span{transition:none}}
 html[data-theme="light"] .borion-boot{background:radial-gradient(circle at 50% 22%,rgba(176,130,23,.12),transparent 34%),#f5f1e8;color:#161b23}html[data-theme="light"] .borion-boot-card{background:rgba(255,255,255,.9);box-shadow:0 26px 70px rgba(58,45,15,.14)}html[data-theme="light"] .borion-boot-progress{background:rgba(30,35,45,.1)}
 
 
-/* ===== Borion 6.44.0 — integrações em linguagem simples ===== */
+/* ===== Borion 6.44.2 — integrações em linguagem simples ===== */
 .interop-section-title{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
 .interop-section-title h5{margin:0;min-width:0}
 .interop-help-btn{appearance:none;display:inline-flex;align-items:center;justify-content:center;flex:0 0 23px;width:23px;height:23px;border-radius:50%;border:1px solid rgba(217,180,107,.32);background:rgba(217,180,107,.09);color:var(--gold-bright);font:900 12px/1 inherit;cursor:pointer;transition:transform .16s ease,background-color .16s ease,border-color .16s ease,box-shadow .16s ease}

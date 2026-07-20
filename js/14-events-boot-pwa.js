@@ -157,7 +157,7 @@ let borionServiceWorkerPromise=null;
 function registerBorionServiceWorker642(){
   if(borionServiceWorkerPromise)return borionServiceWorkerPromise;
   if(!('serviceWorker' in navigator))return Promise.resolve(null);
-  borionServiceWorkerPromise=navigator.serviceWorker.register('sw.js?v=6.44.0',{updateViaCache:'none'})
+  borionServiceWorkerPromise=navigator.serviceWorker.register('sw.js?v=6.44.2',{updateViaCache:'none'})
     .then(registration=>{registration.update().catch(()=>{});let lastCheck=Date.now();document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&Date.now()-lastCheck>30*60*1000){lastCheck=Date.now();registration.update().catch(()=>{});}});return registration;})
     .catch(err=>{console.warn('SW falhou:',err);return null;});
   return borionServiceWorkerPromise;
@@ -182,7 +182,7 @@ async function runBorionBoot642(){
     if(window.BootProgress)await BootProgress.complete();
     if(result&&result.empty)renderGoogleDriveOnboarding();else{S.gate={mode:'list',error:''};renderGate();}
   };
-  const back=()=>{try{setStorageMode(null);}catch(e){}CloudAuth.render();};
+  const back=()=>{if(window.returnToSimpleGoogleLogin)return window.returnToSimpleGoogleLogin();try{setStorageMode(null);}catch(e){}CloudAuth.mode='login';CloudAuth.error='';CloudAuth.info='';CloudAuth.emailExpanded=false;CloudAuth.render();};
   if(window.BootProgress)BootProgress.start({storageMode,stage:'prepare',retry,reconnect,back});
   try{
     applyFont();applyTheme();applyInterfaceMode();
@@ -356,8 +356,32 @@ window.addEventListener('appinstalled', () => {
    saveCurrentData() — que é onde normalmente o Google Drive é avisado pra sincronizar.
    Sem isso, um perfil importado só chegaria ao Drive na próxima vez que algo mais
    disparasse um save. Chamado no fim de cada fluxo de importação/mesclagem local. */
-function notifyGoogleDriveAfterImport(){
-  if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){ GoogleDriveProvider.queueSave(); }
+async function notifyGoogleDriveAfterImport(options={}){
+  if(!(window.GoogleDriveProvider&&GoogleDriveProvider.isConnected())) return null;
+  GoogleDriveProvider.queueSave();
+  if(!options.authoritative) return null;
+  // A redução de registros é esperada quando a pessoa escolheu um backup antigo.
+  // Por isso esta sincronização específica confirma conscientemente a queda e usa
+  // o marco autoritativo gravado no perfil, sem abrir brecha para saves comuns.
+  return await GoogleDriveProvider.syncNow({
+    source:'manual_json_authoritative_import',
+    acknowledgeSuspicious:true
+  });
+}
+function prepareManualJsonReplacement(rawData,targetProfileId,sourceProfileId,currentData){
+  const migrated=migrateData(rawData||emptyData(),{profileId:targetProfileId||sourceProfileId||null});
+  if(!window.BorionSyncCore||typeof BorionSyncCore.markAuthoritativeImport!=='function') return migrated;
+  let remoteData=null;
+  try{
+    const snapshot=window.GoogleDriveProvider&&GoogleDriveProvider._lastConsolidatedPayload;
+    remoteData=snapshot&&snapshot.dataByProfile&&snapshot.dataByProfile[String(targetProfileId)]||null;
+  }catch(_e){}
+  return BorionSyncCore.markAuthoritativeImport(migrated,{
+    profileId:targetProfileId||null,
+    sourceProfileId:sourceProfileId||null,
+    previousData:[currentData,remoteData].filter(Boolean),
+    source:'manual_json_replace'
+  });
 }
 
 function handleImport(obj){
@@ -399,7 +423,7 @@ function handleImport(obj){
     const replaceActive = async ()=>{
       try{
         if(window.BackupFS) await BackupFS.createCloudBackup('before_import_replace','backup automático antes de substituir perfil por JSON',{silent:true});
-        S.data=migrateData(incomingData, {profileId:S.currentProfile&&S.currentProfile.id});
+        S.data=prepareManualJsonReplacement(incomingData,S.currentProfile&&S.currentProfile.id,incomingProfile&&incomingProfile.id,S.data);
         setProfileData(S.currentProfile.id,S.data);
         saveCurrentData();
         const ok=await CloudStorage.syncNow();
@@ -423,7 +447,7 @@ function handleImport(obj){
       sub:'Arquivo: '+importedName+'. Perfil ativo: '+activeName+'. Escolha se cria um perfil novo ou usa o perfil atual.',
       choices:[
         {label:'Importar como novo perfil', desc:'Cria um perfil separado na sua conta e carrega os dados do JSON nele.', onClick:importAsNew},
-        {label:'Substituir perfil atual', desc:'Apaga os dados atuais deste perfil e coloca os dados do arquivo.', variant:'danger', onClick:replaceActive},
+        {label:'Substituir perfil atual', desc:'Substituição absoluta: o JSON vira a versão oficial e tudo o que não existir nele é removido.', variant:'danger', onClick:replaceActive},
         {label:'Mesclar com perfil atual', desc:'Mantém os dados atuais e adiciona o que veio do backup quando possível.', onClick:mergeActive},
         {label:'Cancelar', onClick:closeModal}
       ]
@@ -434,12 +458,25 @@ function handleImport(obj){
     const incoming = obj.profile || {id:uid(),name:'Perfil importado'};
     const incomingData = migrateData(obj.data || emptyData(), {profileId:incoming.id});
     const existingIdx = S.profiles.findIndex(p=>p.id===incoming.id);
-    const doImportAsNew = ()=>{
-      const newId=uid(); S.profiles.push({...incoming,id:newId,name:(incoming.name||'Perfil')+' (importado)'}); setProfiles(S.profiles); setProfileData(newId,incomingData); notifyGoogleDriveAfterImport(); closeModal(); toast('Perfil importado.'); if(S.currentProfile) renderView(); else renderGate();
+    const doImportAsNew = async ()=>{
+      const newId=uid();
+      const authoritativeData=prepareManualJsonReplacement(incomingData,newId,incoming.id,null);
+      S.profiles.push({...incoming,id:newId,name:(incoming.name||'Perfil')+' (importado)'});
+      setProfiles(S.profiles); setProfileData(newId,authoritativeData);
+      const driveResult=await notifyGoogleDriveAfterImport({authoritative:true});
+      closeModal(); toast(driveResult===false?'Perfil importado neste dispositivo; sincronização com o Drive pendente.':'Perfil importado e definido como versão oficial.'); if(S.currentProfile) renderView(); else renderGate();
     };
     if(existingIdx>-1){
       openChoiceModal({title:'Este perfil já existe', sub:'Já existe um perfil "'+S.profiles[existingIdx].name+'" neste app.', choices:[
-        {label:'Substituir dados deste perfil', variant:'danger', onClick:()=>{ S.profiles[existingIdx]={...S.profiles[existingIdx],...incoming}; setProfiles(S.profiles); setProfileData(incoming.id,incomingData); if(S.currentProfile&&S.currentProfile.id===incoming.id) S.data=incomingData; notifyGoogleDriveAfterImport(); closeModal(); renderView(); toast('Perfil substituído.'); }},
+        {label:'Substituir dados deste perfil', variant:'danger', onClick:async()=>{
+          const targetId=incoming.id;
+          const currentData=(S.currentProfile&&S.currentProfile.id===targetId&&S.data)?S.data:getProfileData(targetId);
+          const authoritativeData=prepareManualJsonReplacement(incomingData,targetId,incoming.id,currentData);
+          S.profiles[existingIdx]={...S.profiles[existingIdx],...incoming}; setProfiles(S.profiles); setProfileData(targetId,authoritativeData);
+          if(S.currentProfile&&S.currentProfile.id===targetId) S.data=authoritativeData;
+          const driveResult=await notifyGoogleDriveAfterImport({authoritative:true});
+          closeModal(); renderView(); toast(driveResult===false?'Perfil substituído neste dispositivo; sincronização com o Drive pendente.':'Perfil substituído. O JSON importado é a versão oficial.');
+        }},
         {label:'Importar como novo perfil', onClick:doImportAsNew},
         {label:'Cancelar', onClick:closeModal}
       ]});

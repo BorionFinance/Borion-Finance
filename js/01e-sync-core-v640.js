@@ -128,6 +128,88 @@ function ensureSyncMeta(data){
   data.__syncMeta.migrationVersion=BORION_MIGRATION_ID_VERSION;
   return data.__syncMeta;
 }
+
+/* V6.44.2 — importação manual autoritativa.
+   Quando a pessoa escolhe "Substituir" em um JSON, o conteúdo importado vira um
+   novo marco (epoch) do perfil. Esse marco impede que um snapshot antigo, uma aba
+   esquecida ou uma operação do journal anterior à importação ressuscite registros
+   que não existem no backup escolhido. Depois que os dois lados já conhecem o
+   mesmo marco, o merge normal volta a funcionar para as novas edições. */
+function normalizeAuthoritativeImportMarker(marker){
+  if(!marker||typeof marker!=='object'||Array.isArray(marker)) return null;
+  const generation=Math.max(0,Number(marker.generation)||0);
+  const token=String(marker.token||'').trim();
+  if(!generation||!token) return null;
+  return {
+    generation,
+    token,
+    importedAt:String(marker.importedAt||''),
+    source:String(marker.source||'manual_json'),
+    profileId:marker.profileId==null?null:String(marker.profileId),
+    sourceProfileId:marker.sourceProfileId==null?null:String(marker.sourceProfileId)
+  };
+}
+function getAuthoritativeImportMarker(data){
+  return normalizeAuthoritativeImportMarker(data&&data.__syncMeta&&data.__syncMeta.authoritativeImport);
+}
+function compareAuthoritativeImportMarkers(a,b){
+  const left=normalizeAuthoritativeImportMarker(a),right=normalizeAuthoritativeImportMarker(b);
+  if(!left&&!right) return 0;
+  if(!left) return -1;
+  if(!right) return 1;
+  if(left.generation!==right.generation) return left.generation-right.generation;
+  if(left.importedAt!==right.importedAt) return left.importedAt>right.importedAt?1:-1;
+  if(left.token!==right.token) return left.token>right.token?1:-1;
+  return 0;
+}
+function sameAuthoritativeImportMarker(a,b){
+  const left=normalizeAuthoritativeImportMarker(a),right=normalizeAuthoritativeImportMarker(b);
+  if(!left||!right) return !left&&!right;
+  return left.generation===right.generation&&left.token===right.token;
+}
+function markAuthoritativeImport(data,options={}){
+  const out=safeClone(data)||{};
+  const previous=[];
+  if(Array.isArray(options.previousData)) previous.push(...options.previousData);
+  else if(options.previousData) previous.push(options.previousData);
+  previous.push(out);
+  let maxGeneration=0;
+  previous.forEach(item=>{
+    const marker=getAuthoritativeImportMarker(item);
+    if(marker) maxGeneration=Math.max(maxGeneration,marker.generation);
+  });
+  const meta=ensureSyncMeta(out);
+  meta.authoritativeImport={
+    generation:maxGeneration+1,
+    token:options.token||uuid640(),
+    importedAt:options.importedAt||new Date().toISOString(),
+    source:options.source||'manual_json',
+    profileId:options.profileId==null?(meta.profileId||null):String(options.profileId),
+    sourceProfileId:options.sourceProfileId==null?null:String(options.sourceProfileId)
+  };
+  meta.revision=Math.max(0,Number(meta.revision)||0)+1;
+  return out;
+}
+function authoritativeProfileWinner(base,local,remote){
+  const markers={
+    base:getAuthoritativeImportMarker(base),
+    local:getAuthoritativeImportMarker(local),
+    remote:getAuthoritativeImportMarker(remote)
+  };
+  const available=Object.values(markers).filter(Boolean);
+  if(!available.length) return null;
+  let top=available[0];
+  for(let i=1;i<available.length;i++) if(compareAuthoritativeImportMarkers(available[i],top)>0) top=available[i];
+  const baseTop=sameAuthoritativeImportMarker(markers.base,top);
+  const localTop=sameAuthoritativeImportMarker(markers.local,top);
+  const remoteTop=sameAuthoritativeImportMarker(markers.remote,top);
+  // Os dois lados já estão no mesmo epoch: merge normal de edições posteriores.
+  if(localTop&&remoteTop) return null;
+  if(localTop) return {side:'local',data:local,marker:top,markers};
+  if(remoteTop) return {side:'remote',data:remote,marker:top,markers};
+  if(baseTop) return {side:'base',data:base,marker:top,markers};
+  return null;
+}
 function recordTombstone(data,path,id,deviceId,operationId,reason){
   if(!data || !id) return null;
   const meta=ensureSyncMeta(data), key=bcorePathKey(path);
@@ -297,6 +379,30 @@ function mergePrimitiveCollection(collectionKey,baseArr,localArr,remoteArr,baseT
 
 function mergeProfileData(baseData,localData,remoteData){
   const base=baseData||{},local=localData||{},remote=remoteData||{},genericConflicts=[];
+  const authoritative=authoritativeProfileWinner(base,local,remote);
+  if(authoritative){
+    const chosen=safeClone(authoritative.data)||{};
+    const meta=ensureSyncMeta(chosen);
+    const competing=Object.entries(authoritative.markers)
+      .filter(([,marker])=>marker&&!sameAuthoritativeImportMarker(marker,authoritative.marker))
+      .map(([side,marker])=>({side,marker:safeClone(marker)}));
+    if(competing.length){
+      const prior=Array.isArray(meta.conflicts)?meta.conflicts:[];
+      meta.conflicts=prior.concat([{
+        kind:'authoritative_import_barrier',
+        resolved:authoritative.side,
+        winningMarker:safeClone(authoritative.marker),
+        ignoredMarkers:competing
+      }]);
+    }
+    meta.revision=Math.max(
+      Number((base.__syncMeta||{}).revision)||0,
+      Number((local.__syncMeta||{}).revision)||0,
+      Number((remote.__syncMeta||{}).revision)||0,
+      Number(meta.revision)||0
+    )+1;
+    return chosen;
+  }
   const result=deepThreeWayMerge(base,local,remote,'',genericConflicts)||{};
   // Coleções com identidade e categorias são mescladas logo abaixo por regras
   // próprias. Descartar apenas os conflitos genéricos dessas mesmas rotas evita
@@ -408,6 +514,7 @@ window.BorionSyncCore={
   BORION_DATA_SCHEMA_VERSION,BORION_MIGRATION_ID_VERSION,BORION_SYNCABLE_COLLECTIONS,
   canonicalize,canonicalStringify,sha256Hex640,sha256Sync640,checksumOf,uuid640,
   emptySyncMeta,ensureSyncMeta,recordTombstone,recordProfileTombstone,
+  normalizeAuthoritativeImportMarker,getAuthoritativeImportMarker,compareAuthoritativeImportMarkers,sameAuthoritativeImportMarker,markAuthoritativeImport,
   deterministicLegacyId,migrateRecordIdentity,migrateDataToSchema640,
   mergeCollection,deepThreeWayMerge,mergeProfileData,mergeAccountPayload,
   pathGet:bcorePathGet,pathSet:bcorePathSet,pathKey:bcorePathKey

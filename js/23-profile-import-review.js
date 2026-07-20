@@ -42,6 +42,24 @@ function importNormalizeAccountBackup(obj){
   });
   return incoming;
 }
+function importKnownRemoteData(profileId){
+  try{
+    const snapshot=window.GoogleDriveProvider&&GoogleDriveProvider._lastConsolidatedPayload;
+    return snapshot&&snapshot.dataByProfile&&snapshot.dataByProfile[String(profileId)]||null;
+  }catch(_e){ return null; }
+}
+function importAsAuthoritativeData(rawData,targetProfileId,sourceProfileId,currentData){
+  const migrated=migrateData(rawData||emptyData(),{profileId:targetProfileId||sourceProfileId||null});
+  if(!window.BorionSyncCore||typeof BorionSyncCore.markAuthoritativeImport!=='function') return migrated;
+  const previous=[currentData,importKnownRemoteData(targetProfileId)].filter(Boolean);
+  return BorionSyncCore.markAuthoritativeImport(migrated,{
+    profileId:targetProfileId||null,
+    sourceProfileId:sourceProfileId||null,
+    previousData:previous,
+    source:'manual_json_replace'
+  });
+}
+
 function importUniqueName(base, profiles){
   const used=new Set((profiles||[]).map(p=>String(p.name||'').trim().toLocaleLowerCase('pt-BR')));
   const root=String(base||'Perfil importado').trim()||'Perfil importado';
@@ -119,19 +137,21 @@ async function executeLocalAccountImportPlan(obj, incoming, plan){
     for(const action of plan.actions){
       const source=incoming.find(x=>x.sourceId===action.sourceId);
       if(!source||action.action==='skip') continue;
-      const data=migrateData(source.data||emptyData(), {profileId:source.sourceId||source.profile&&source.profile.id});
       if(action.action==='new'){
         const newId=uid();
         const name=importUniqueName(importProfileName(source.profile),profiles);
         const profile=Object.assign({},source.profile,{id:newId,name,cloud:false,createdAt:Date.now(),updatedAt:Date.now()});
         delete profile.user_id;
         profiles.push(profile);
+        const data=importAsAuthoritativeData(source.data,newId,source.sourceId,null);
         setProfileData(newId,data);
       }else if(action.action.startsWith('replace:')){
         const targetId=action.action.slice(8);
         const idx=profiles.findIndex(p=>String(p.id)===String(targetId));
         if(idx<0) throw new Error('O perfil de destino não existe mais: '+targetId);
         const old=profiles[idx];
+        const currentData=(S.currentProfile&&String(S.currentProfile.id)===String(old.id)&&S.data)?S.data:getProfileData(old.id);
+        const data=importAsAuthoritativeData(source.data,old.id,source.sourceId,currentData);
         profiles[idx]=Object.assign({},old,source.profile,{
           id:old.id,
           name:importProfileName(source.profile,old.name),
@@ -148,10 +168,11 @@ async function executeLocalAccountImportPlan(obj, incoming, plan){
     S.currentProfile=active;
     S.data=migrateData(getProfileData(active.id)||emptyData(), {profileId:active.id});
     setProfileData(active.id,S.data);
-    notifyGoogleDriveAfterImport();
+    const driveResult=await notifyGoogleDriveAfterImport({authoritative:true});
     closeModal();
     renderApp();
-    toast('Importação concluída: '+plan.actions.filter(a=>a.action!=='skip').length+' perfil(is) processado(s), '+plan.deleteIds.length+' excluído(s).');
+    const summary='Importação concluída: '+plan.actions.filter(a=>a.action!=='skip').length+' perfil(is) processado(s), '+plan.deleteIds.length+' excluído(s).';
+    toast(driveResult===false?summary+' O JSON já vale neste dispositivo; a confirmação no Google Drive ficou pendente.':summary+' O JSON importado agora é a versão oficial.');
   }catch(e){
     try{
       const currentIds=(S.profiles||[]).map(p=>p.id);
@@ -182,7 +203,8 @@ async function executeCloudAccountImportPlan(obj, incoming, plan){
     const source=incoming.find(x=>x.sourceId===action.sourceId);
     if(!source) continue;
     const targetId=action.action.slice(8);
-    const data=migrateData(source.data||emptyData(), {profileId:source.sourceId||source.profile&&source.profile.id});
+    const currentData=(S.currentProfile&&String(S.currentProfile.id)===String(targetId)&&S.data)?S.data:getProfileData(targetId);
+    const data=importAsAuthoritativeData(source.data,targetId,source.sourceId,currentData);
     const ok=await CloudStorage.saveNow(data,targetId);
     if(!ok) throw new Error('A nuvem não confirmou a substituição do perfil '+targetId+'.');
     const target=CloudStorage.profiles.find(p=>p.id===targetId);
@@ -210,7 +232,7 @@ async function executeCloudAccountImportPlan(obj, incoming, plan){
     const source=incoming.find(x=>x.sourceId===action.sourceId);
     if(!source) continue;
     const name=importUniqueName(importProfileName(source.profile),CloudStorage.profiles||[]);
-    await CloudStorage.createProfile(name,false,migrateData(source.data||emptyData(), {profileId:source.sourceId||source.profile&&source.profile.id}),{
+    await CloudStorage.createProfile(name,false,importAsAuthoritativeData(source.data,null,source.sourceId,null),{
       avatarColor:source.profile.avatarColor||source.profile.avatar_color||avatarColor(name),
       avatarImage:source.profile.avatarImage||source.profile.avatar_image||''
     });
@@ -256,13 +278,13 @@ function openAccountImportReview(obj, options={}){
   </div>`).join('');
   const box=el(`<div class="modal-overlay account-import-review-overlay">
     <div class="modal-box account-import-review-modal">
-      <div class="modal-head"><div><h2>Revisar importação de perfis</h2><p class="modal-sub">Nada será alterado até você confirmar. Escolha exatamente onde cada perfil do backup deve entrar.</p></div><button id="import_review_close">&times;</button></div>
+      <div class="modal-head"><div><h2>Revisar importação de perfis</h2><p class="modal-sub">Nada será alterado até você confirmar. Ao escolher Substituir, o JSON vira a versão oficial daquele perfil e remove tudo o que não existir nele.</p></div><button id="import_review_close">&times;</button></div>
       <div class="import-review-kpis"><div><small>No backup</small><strong>${incoming.length}</strong></div><div><small>Atuais</small><strong>${existing.length}/5</strong></div><div><small>Destino</small><strong>${cloud?'Conta na nuvem':'Este dispositivo'}</strong></div></div>
       <section class="import-review-section"><div class="import-review-title">Perfis encontrados no backup</div>${incomingRows}</section>
       <section class="import-review-section"><div class="import-review-title">Perfis atuais da conta</div><p class="import-review-help">Marque uma exclusão somente quando realmente quiser remover aquele perfil. Perfis usados como destino não podem ser excluídos.</p>${currentRows}</section>
       <div class="import-plan-summary" id="import_plan_summary"></div>
       <div class="import-plan-error hidden" id="import_plan_error"></div>
-      <div class="import-review-actions"><button class="btn btn-secondary" id="import_review_cancel">Cancelar</button><button class="btn btn-primary" id="import_review_apply">Aplicar plano de importação</button></div>
+      <div class="import-review-actions"><button class="btn btn-secondary" id="import_review_cancel">Cancelar</button><button class="btn btn-primary" id="import_review_apply">Aplicar JSON como versão oficial</button></div>
     </div>
   </div>`);
   $('#modal-root').innerHTML='';
@@ -287,7 +309,7 @@ function openAccountImportReview(obj, options={}){
       else await executeLocalAccountImportPlan(obj,incoming,plan);
     }catch(e){
       alert('A importação não foi concluída: '+(e&&e.message?e.message:String(e)));
-      if(btn){ btn.disabled=false; btn.textContent='Aplicar plano de importação'; }
+      if(btn){ btn.disabled=false; btn.textContent='Aplicar JSON como versão oficial'; }
     }
   };
   refresh();

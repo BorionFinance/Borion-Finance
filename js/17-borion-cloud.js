@@ -1049,16 +1049,48 @@ const CloudAuth={
         <p class="gate-sub">Entre com sua conta Google para carregar seus perfis financeiros.</p>
         ${this.error?`<p class="gate-error">${esc(this.error)}</p>`:''}
         ${this.info?`<p class="gate-info">${esc(this.info)}</p>`:''}
-        <button class="btn btn-primary btn-block" id="cloud_gdrive">Continuar com Google</button>
+        <button class="btn btn-primary btn-block" id="cloud_gdrive" disabled>Preparando Google...</button>
         <div style="text-align:center;margin-top:20px;"><button class="link-btn" id="cloud_more_info" style="opacity:.65;">Instruções e mais opções</button></div>
       </div>
     </div></div>`;
-    const gd=document.getElementById('cloud_gdrive'); if(gd) gd.onclick=async()=>{
-      gd.disabled=true; gd.textContent='Conectando...';
+    const gd=document.getElementById('cloud_gdrive');
+    const markReady=()=>{if(!gd)return;gd.disabled=false;gd.dataset.googleReady='1';gd.textContent='Continuar com Google';};
+    const markLoadFailure=(error)=>{if(!gd)return;gd.disabled=false;gd.dataset.googleReady='0';gd.textContent='Preparar conexão Google';this.error=this.googleLoginError(error);};
+    if(window.GoogleDriveAuth&&typeof GoogleDriveAuth.prepareInteractiveLogin==='function'){
+      GoogleDriveAuth.prepareInteractiveLogin().then(markReady).catch(error=>{markLoadFailure(error);this.render();});
+    }else markReady();
+    if(gd) gd.onclick=async()=>{
+      if(gd.dataset.googleReady!=='1'){
+        gd.disabled=true;gd.textContent='Preparando Google...';this.error='';
+        try{await GoogleDriveAuth.prepareInteractiveLogin();markReady();this.info='Conexão preparada. Clique em “Continuar com Google” para entrar.';this.render();}
+        catch(error){this.error=this.googleLoginError(error);this.render();}
+        return;
+      }
+      gd.disabled=true;gd.textContent='Conectando...';this.error='';this.info='';
       try{ await GoogleDriveProvider.connect(true); }
-      catch(e){ gd.disabled=false; gd.textContent='Continuar com Google'; alert(e.message||String(e)); }
+      catch(error){ this.returnToSimpleLogin(this.googleLoginError(error)); }
     };
     const mi=document.getElementById('cloud_more_info'); if(mi) mi.onclick=()=>this.showMoreInfoModal();
+  },
+
+  googleLoginError(error){
+    const code=String(error&&error.code||'');
+    const message=String(error&&error.message||error||'');
+    if(/AUTH_POPUP_BLOCKED|popup.*failed|failed.*popup/i.test(code+' '+message)) return 'O navegador bloqueou a janela do Google. Permita pop-ups para este site e tente novamente.';
+    if(/AUTH_POPUP_CLOSED|popup.*closed|closed.*popup/i.test(code+' '+message)) return 'A janela do Google foi fechada antes de concluir o login. Tente novamente.';
+    if(/AUTH_TIMEOUT|demorou|timeout/i.test(code+' '+message)) return 'O Google demorou para responder. Tente entrar novamente.';
+    if(/access_denied|recusou|cancel/i.test(code+' '+message)) return 'O acesso do Google não foi concluído. Tente novamente.';
+    return 'Não foi possível conectar sua conta Google. Tente novamente.';
+  },
+
+  returnToSimpleLogin(message=''){
+    try{if(window.GoogleDriveProvider&&typeof GoogleDriveProvider.resetLoginAttempt==='function')GoogleDriveProvider.resetLoginAttempt();}catch(e){}
+    try{setStorageMode(null);}catch(e){}
+    try{if(typeof closeModal==='function')closeModal();}catch(e){}
+    const modalRoot=document.getElementById('modal-root');if(modalRoot)modalRoot.innerHTML='';
+    this.mode='login';this.emailExpanded=false;this.info='';this.error=message||'';
+    this.render();
+    return true;
   },
 
   /* Painel "Instruções e mais opções": explica como o login funciona e dá a
@@ -1136,6 +1168,8 @@ const CloudAuth={
     }catch(e){ this.error=translateSupabaseError(e&&e.message?e.message:String(e)); this.render(); }
   }
 };
+window.CloudAuth=CloudAuth;
+window.returnToSimpleGoogleLogin=(message='')=>CloudAuth.returnToSimpleLogin(message);
 
 /* V6.3.0 — par local de enterCloudUser(): entra no Borion usando só os perfis já
    salvos neste dispositivo (S.profiles/LS_PROFILES), sem chamar nada do Supabase.

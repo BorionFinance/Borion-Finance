@@ -7,5 +7,5 @@ assert(!/await\s+CloudStorage\.init\(\);/.test(boot),'CloudStorage.init não pod
 assert(boot.includes("storageMode==='cloud'||storageMode==='supabase'||recovery"),'Supabase só pode inicializar no modo correspondente/recuperação');
 assert(!index.includes('src="https://cdn.jsdelivr.net/npm/@supabase'),'index não pode carregar SDK Supabase sempre');
 const localScripts=[...index.matchAll(/<script defer src="js\//g)].length;assert(localScripts>=30,'scripts locais devem usar defer preservando ordem');
-assert(index.includes('rel="preload" href="css/styles.css?v=6.42.0"')&&index.includes('rel="preload" href="borion-emblem.png"'),'somente CSS/logo críticos devem ser preload');
+assert(index.includes('rel="preload" href="css/styles.css?v=6.43.0"')&&index.includes('rel="preload" href="borion-emblem.png"'),'somente CSS/logo críticos devem ser preload');
 console.log('OK: boot fast path lê o modo primeiro, paraleliza preparações e não inicializa Supabase no modo Drive/offline.');

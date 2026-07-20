@@ -1,0 +1,45 @@
+VALIDAÇÃO FINAL — BORION FINANCE V6.43.0
+
+ESCOPO DA ATUALIZAÇÃO
+- Tela de Integrações da Amanda Estética.
+- Tela de Receitas e despesas do Marco Iris Tecnologia.
+- Ajuda contextual das configurações de integração.
+- Acabamento visual dos campos nos temas escuro e claro.
+- Versionamento, cache PWA, manifest e referências estáticas.
+
+VALIDAÇÕES EXECUTADAS
+1. Sintaxe JavaScript verificada em todos os arquivos de js/ e tests/.
+2. manifest.json validado como JSON.
+3. Suite automatizada completa executada: 34/34 arquivos de teste aprovados.
+4. Teste específico V6.43.0 confirmou:
+   - nome “Borion Finance” correto no destino;
+   - ausência de “Borium Finance” e “BORUM” na interface;
+   - amount exibido como Valor em moeda brasileira;
+   - clientName, date, recordType e paymentMethod traduzidos;
+   - income, finance e paid traduzidos;
+   - ausência de rótulos técnicos direction e recordType na tela;
+   - ajuda (?) presente em todas as seções solicitadas;
+   - modal de ajuda abre e contém passo a passo e exemplo prático;
+   - “Usar regra geral” substituído por texto explicativo.
+5. Teste de integração Marco Iris/Borion aprovado:
+   - receitas por recebimento confirmado;
+   - pagamentos parciais;
+   - Pix, Dinheiro, Débito e Crédito;
+   - bloqueio de duplicidade;
+   - despesas mantidas em revisão.
+6. Testes de sincronização, journal, merge, tombstones, Google Drive, fila durável,
+   multabas, cache PWA, boot otimizado, backup e proteção de dados aprovados.
+
+COMPATIBILIDADE
+- As chaves técnicas continuam intactas internamente.
+- Nenhum ID, schema, regra de deduplicação ou formato de integração foi alterado.
+- Amanda Estética e Marco Iris Tecnologia continuam usando o mesmo protocolo.
+- A atualização muda a apresentação ao usuário, sem converter nem regravar dados existentes.
+
+LIMITAÇÃO DO AMBIENTE DE TESTE
+- A autenticação real na conta Google Drive do usuário não foi executada, pois depende das
+  credenciais e permissões do ambiente publicado. O fluxo foi validado por testes automatizados
+  e pela regressão completa do código de integração e sincronização.
+
+RESULTADO
+APROVADO PARA PUBLICAÇÃO.

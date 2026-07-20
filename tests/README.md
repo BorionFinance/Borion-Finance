@@ -1,4 +1,4 @@
-# Testes do Borion Finance 6.42.0 — Boot e sincronização otimizados
+# Testes do Borion Finance 6.43.0 — Integrações claras e sincronização preservada
 
 Executar toda a suíte na raiz do projeto:
 
@@ -36,3 +36,15 @@ A suíte anterior continua cobrindo aplicação atômica, backup bruto pré-migr
 ## Limites do ambiente automatizado
 
 A API do Google Drive é simulada deterministicamente nos testes de segurança, paginação, concorrência, falhas e desempenho estrutural. O fluxo visual foi carregado em Chromium headless com os 36 scripts locais e sem erros JavaScript. OAuth real, latência pública do Google e dois aparelhos físicos exigem credenciais e ambiente de publicação; por isso não são declarados como testados neste pacote.
+
+
+## Cobertura específica da versão 6.43.0
+
+- nome correto “Borion Finance” em Amanda Estética e Marco Iris Tecnologia;
+- tradução de campos e valores técnicos para português de usuário final;
+- remoção de rótulos como `direction`, `recordType`, `income`, `finance` e `paid` da interface;
+- ajuda contextual com passo a passo e exemplos;
+- renderização dos modais de ajuda;
+- estilos de inputs e selects nos temas escuro e claro;
+- versionamento e cache PWA 6.43.0;
+- regressão integral do motor de sincronização e integração Marco Iris/Borion.

@@ -1,0 +1,29 @@
+BORION FINANCE V6.43.0 — INTEGRAÇÕES CLARAS
+
+1. Nome do destino corrigido para “Borion Finance” em todas as telas de integração.
+2. Campos técnicos da Amanda Estética foram traduzidos para linguagem de usuário final:
+   - amount → Valor
+   - clientName → Cliente
+   - date → Data do lançamento
+   - paymentMethod → Forma de pagamento
+   - recordType → Tipo de registro
+   - status → Status
+3. Valores técnicos também foram traduzidos sem alterar os dados internos:
+   - income → Entrada / Receita
+   - expense → Saída / Despesa
+   - finance → Lançamento financeiro
+   - paid → Pago / Recebido
+   - open → Em aberto
+4. “Usar regra geral” foi substituído por “Seguir a regra de entrada/saída definida acima”.
+5. Adicionados botões de ajuda (?) com passo a passo e exemplos em:
+   - Dados recebidos do aplicativo
+   - Tipos de lançamento
+   - Categorias e origem da receita
+   - Formas de pagamento e destino financeiro
+   - Status
+   - Receitas automáticas do Marco Iris
+   - Despesas aguardando revisão do Marco Iris
+6. Campos, listas e seletores receberam acabamento visual compatível com os temas escuro e claro do Borion.
+7. A tela do Marco Iris agora mostra claramente Origem: Marco Iris Tecnologia e Destino: Borion Finance.
+8. Nenhuma chave técnica, ID de integração ou regra de importação foi alterada; a compatibilidade com Amanda Estética e Marco Iris foi preservada.
+9. Versão, cache PWA, manifest, assets e rodapé atualizados para 6.43.0.

@@ -1,0 +1,121 @@
+
+=== test_atomic_account_apply_v6401.js ===
+OK: aplicação de conta é atômica; interrupção, quota, IDs duplicados e dados órfãos não deixam migração parcial.
+
+=== test_backup_gate_v6401.js ===
+OK: backup pré-migração preserva bytes exatos, valida checksum/restauração, é idempotente e bloqueia o boot antes de qualquer migração quando falha.
+
+=== test_boot_fast_path_v642.js ===
+OK: boot fast path lê o modo primeiro, paraleliza preparações e não inicializa Supabase no modo Drive/offline.
+
+=== test_boot_progress_v642.js ===
+OK: BootProgress 6.42 tem etapas reais, acessibilidade, erro/recuperação e não segura o boot por animação fictícia.
+
+=== test_checksum_schema_v640.js ===
+OK: checksum canônico é determinístico e a migração de schema 6400 é idempotente e não-destrutiva.
+
+=== test_current_file_cache_v642.js ===
+OK: current.json reutiliza fileId persistido e evita listagem por nome no boot recorrente.
+
+=== test_data_guard.js ===
+OK: todos os testes de BorionDataGuard passaram.
+
+=== test_data_guard_integration.js ===
+OK: todos os testes de integração do guard no google-drive-provider passaram.
+
+=== test_data_guard_v640.js ===
+OK: integridade do índice de perfis (item 13)
+OK: queda suspeita detectada por perfil, mesmo compensada no agregado (item 13)
+OK: detecção de IDs duplicados (item 13)
+OK: detecção de referências quebradas (item 13)
+OK: detecção de valores inválidos (NaN/Infinity) (item 13)
+OK: todos os testes do Data Guard por perfil (item 13) passaram.
+
+=== test_drive_call_count_v642.js ===
+OK: topologia canônica persistida elimina redescobertas/listagens no caminho normal.
+
+=== test_drive_pagination_v6401.js ===
+OK: paginação completa retorna 2.500 itens, deduplica, falha fechada em página incompleta e trata 429/500/403 corretamente.
+
+=== test_drive_sync_fail_safe.js ===
+OK: sincronização fail-safe v6.40.2 preserva pendências, retoma migração interrompida, persiste o schema no boot e separa operação protegida de snapshot confirmado.
+
+=== test_durable_queue_v640.js ===
+OK: fila durável sobrevive ao fechamento da aba, só é liberada após confirmação remota real, e deviceId é estável entre sessões enquanto sessionId é renovado.
+
+=== test_google_lazy_load_v642.js ===
+OK: Google Identity, Picker e Supabase são carregados separadamente e somente quando necessários.
+
+=== test_help_center.js ===
+OK: Central do Borion renderiza guias, história e 629 verificações.
+
+=== test_importador_legado.js ===
+OK: CSV, OFX e TXT continuam interpretando.
+
+=== test_interconnections_ui_v643.js ===
+OK: integrações exibem Borion Finance, português claro, exemplos amigáveis, ajuda contextual e controles sem termos técnicos.
+
+=== test_journal_archive_v642.js ===
+OK: operação só é arquivada após releitura/checksum e confirmação do operationId.
+
+=== test_journal_legacy_applied_folder_v642.js ===
+OK: estrutura 6.40/6.41 ganha pasta applied gradualmente e depois reutiliza o ID persistido.
+
+=== test_journal_skip_applied_v642.js ===
+OK: 5.000 operações aplicadas foram ignoradas pelo nome e apenas 2 pendentes foram baixadas/validadas.
+
+=== test_journal_v6401.js ===
+OK: journal ignora relógio como verdade, recupera operação tardia, detecta colisão/pastas duplicadas, tolera consistência eventual e compacta sem exclusão definitiva.
+
+=== test_live_sync_adaptive_v642.js ===
+OK: sincronização ao vivo usa poll adaptativo 2 s / 4,5 s / 12 s e impede sobreposição.
+
+=== test_live_update.js ===
+OK: todos os testes de checkForRemoteUpdate (atualização ao vivo) passaram.
+
+=== test_merge_engine_v640.js ===
+OK cenário A (perfis diferentes)
+OK cenário B (registros diferentes, mesmo perfil)
+OK cenário C (campos diferentes no mesmo registro)
+OK cenário D (mesmo campo alterado nos dois lados — conflito, sem perda)
+OK cenário E (edição x exclusão — bloqueado, registrado, preservado)
+OK cenário F (idempotência: duas exclusões e operação repetida)
+OK: perfil que só existe remotamente nunca é descartado
+OK: mesclagem protegida contra prototype pollution (item 21)
+OK: todos os cenários de mesclagem de três vias (item 27.1) passaram sem perda de dados.
+
+=== test_merge_schema_v6401.js ===
+OK: merge explícito preserva categorias, módulos, cards, configurações, ordens e vínculos; conflitos no mesmo campo ficam registrados.
+
+=== test_migration_preservation_v6401.js ===
+OK: migração real é determinística entre dispositivos, idempotente, preserva duplicatas legítimas, totais, configurações, vínculos e contas com 2/5 perfis.
+
+=== test_mit_borion_integration_v641.js ===
+OK: MIT/Borion importa receitas por REC, aceita pagamentos parciais, mapeia Pix/Dinheiro/Débito/Crédito, bloqueia duplicidade e mantém despesas em revisão.
+
+=== test_multitab_v6401.js ===
+OK: eleição mantém uma única líder, follower apenas delega, heartbeat/lock transferem liderança sem duplicar processamento.
+
+=== test_profile_delete_propagation_v6402.js ===
+OK: exclusão de perfil é enfileirada e confirmada imediatamente, usa operationId único, não ressuscita e fecha o perfil aberto em outras abas/dispositivos.
+
+=== test_real_delete_tombstones_v6401.js ===
+OK: exclusões reais e implícitas criam tombstones; registro antigo não ressuscita e edição concorrente vira conflito preservado.
+
+=== test_remote_update_queue_v642.js ===
+OK: RemoteUpdateQueue preserva formulário sujo, espera a confirmação local e aplica quando é seguro.
+
+=== test_request_timeout_v642.js ===
+OK: GoogleDriveFS.request cancela requisição travada com AbortController e erro específico.
+
+=== test_service_worker_fast_cache_v642.js ===
+OK: service worker usa HTML network-first com timeout, estáticos SWR e ignora APIs externas.
+
+=== test_version_v640.js ===
+OK: nenhuma referência a 6.38.4 sobrou nos arquivos funcionais.
+OK: versão 6.43.0 ("6.43 — Integrações Claras") está presente em todos os locais esperados.
+OK: os 4 módulos novos do motor de sincronização estão registrados no index.html e no cache do service worker.
+OK: nenhuma limpeza do Drive usa exclusão definitiva.
+OK: versionamento consistente (item 31), cache novo e limpeza recuperável.
+
+OK: 34/34 arquivos de teste passaram.

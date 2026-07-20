@@ -1,0 +1,25 @@
+'use strict';
+const fs=require('fs'),vm=require('vm'),path=require('path');
+function assert(c,m){if(!c)throw new Error('FALHOU: '+m);}
+const context={console,crypto:global.crypto,setTimeout,clearTimeout,setInterval,clearInterval,structuredClone:global.structuredClone};
+context.window=context;context.globalThis=context;context.document={addEventListener(){},querySelectorAll(){return[]},getElementById(){return null}};context.addEventListener=()=>{};
+context.CARTEIRA_CONTA_ID='carteira';context.FORMAS_PAGAMENTO=['Pix','Dinheiro','Débito','Crédito'];context.defaultCategories=()=>({receita:['Atendimento'],fixa:[],variavel:['Manutenção']});context.baseCatColor=()=> '#888';context.todayISO=()=> '2026-07-20';
+const data={transacoes:[],contas:[{id:'carteira',nome:'Carteira',isCarteira:true},{id:'bank1',nome:'Nubank'}],reservas:{boxes:[],moves:[]},categorias:{receita:['Atendimento'],fixa:[],variavel:['Manutenção']},interconnections:{sources:{'amanda-estetica':{sourceAppId:'amanda-estetica',mappingReady:true,accountId:'bank1',mappings:{},discovered:{directions:['income'],transactionKinds:[{key:'finance',value:'finance',label:'finance',field:'recordType',direction:'income'}],categories:[{key:'atendimento',value:'Atendimento',label:'Atendimento',field:'category',direction:'income'}],paymentMethods:[{key:'pix',value:'Pix',label:'Pix',field:'paymentMethod',direction:'income'}],statuses:[{key:'paid',value:'paid',label:'paid',field:'status',direction:'income'}],fields:[{key:'amount',sourceName:'amount',sample:'120'},{key:'clientName',sourceName:'clientName',sample:'Pedro Henrique Bardella'},{key:'date',sourceName:'date',sample:'2026-02-13'},{key:'recordType',sourceName:'recordType',sample:'finance'}]}}},imported:{},ignored:{},pending:[],audit:[]}};
+context.S={profiles:[{id:'p1',name:'Perfil Teste'}],currentProfile:{id:'p1',name:'Perfil Teste'},data};context.getProfileData=()=>data;context.setProfileData=()=>{};context.migrateData=x=>x;context.emptyData=()=>({});context.BackupFS={markDirty(){}};
+vm.createContext(context);vm.runInContext(fs.readFileSync(path.join(__dirname,'../js/24-interconnections.js'),'utf8'),context,{filename:'24-interconnections.js'});
+context.BorionInterop.setSettingsSource('amanda-estetica');context.BorionInterop.setSettingsTab('links');const html=context.BorionInterop.renderSettings();
+assert(html.includes('<b>Borion Finance</b>'),'destino deve usar o nome correto Borion Finance');
+assert(!html.includes('Borium Finance')&&!html.includes('BORUM'),'não pode existir grafia incorreta no painel');
+assert(html.includes('Valor')&&(html.includes('R$ 120,00')||html.includes('R$ 120,00')),'amount deve aparecer como Valor em moeda brasileira');
+assert(html.includes('Cliente')&&html.includes('Data do lançamento')&&html.includes('13/02/2026'),'campos técnicos devem ser traduzidos');
+assert(html.includes('Lançamento financeiro')&&html.includes('Pago / Recebido'),'valores técnicos finance/paid devem ser traduzidos');
+assert(!html.includes('Origem · direction')&&!html.includes('Origem · recordType')&&!html.includes('Valor técnico recebido'),'rótulos internos não podem aparecer ao usuário');
+assert(html.includes("openMappingHelp('types')")&&html.includes("openMappingHelp('categories')")&&html.includes("openMappingHelp('payments')")&&html.includes("openMappingHelp('status')"),'cada seção deve ter ajuda contextual');
+assert(html.includes('Seguir a regra de entrada/saída definida acima'),'regra geral deve ter explicação clara');
+const api=context.BorionInterop.__test;assert(api.friendlyFieldName('paymentMethod')==='Forma de pagamento','tradutor de campos deve funcionar');assert(api.friendlySourceValue('paid','status')==='Pago / Recebido','tradutor de valores deve funcionar');
+const modalRoot={child:null,replaceChildren(node){this.child=node;}};
+context.document.getElementById=id=>id==='modal-root'?modalRoot:null;
+context.document.createElement=()=>({className:'',innerHTML:'',querySelectorAll(){return[];}});
+assert(context.BorionInterop.openMappingHelp('payments')===true,'ajuda contextual deve abrir');
+assert(modalRoot.child&&modalRoot.child.innerHTML.includes('Passo a passo')&&modalRoot.child.innerHTML.includes('Pix → Pix → Conta · Nubank'),'modal de ajuda deve conter instruções e exemplo prático');
+console.log('OK: integrações exibem Borion Finance, português claro, exemplos amigáveis, ajuda contextual e controles sem termos técnicos.');

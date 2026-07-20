@@ -18,7 +18,7 @@ const APP_NAME = 'Borion Finance';
 /* V5.36.0 — id fixo da conta "Carteira" (dinheiro físico). Nunca muda entre migrações,
    nunca é excluída pelo usuário e serve para diferenciar dinheiro físico de banco/cartão. */
 const CARTEIRA_CONTA_ID = 'carteira-fixa';
-const FORMAS_PAGAMENTO = ['Dinheiro','Pix','Débito','Crédito'];
+const FORMAS_PAGAMENTO = ['Dinheiro','Pix','Débito','Crédito','Transferência'];
 const DEFAULT_ICON_COLORS = { liquidez:'#22c55e', bens:'#3b6bf0', investimentos:'#cca160', dividas:'#ef4444', receita:'#22c55e', despesas:'#ef4444', investir:'#3b6bf0', saldo:'#eef1f4' };
 const ICON_COLOR_LABELS = { liquidez:'Saldo em Contas', bens:'Bens', investimentos:'Investimentos', dividas:'Dívidas', receita:'Receita', despesas:'Despesas', investir:'Investir', saldo:'Saldo' };
 const FONT_STACKS = {

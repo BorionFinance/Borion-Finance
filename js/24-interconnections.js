@@ -63,7 +63,7 @@
   function sourceName(sourceAppId){ return SOURCES[sourceAppId]?.name || sourceAppId || 'aplicativo externo'; }
   function displaySourceValue(value){ return String(value || '').trim() || '(Sem informação)'; }
 
-  /* V6.43.0 — vocabulário de usuário final para a tela de vínculos.
+  /* V6.44.0 — vocabulário de usuário final para a tela de vínculos.
      As chaves originais continuam intactas internamente para não quebrar a integração. */
   const FRIENDLY_FIELD_LABELS = Object.freeze({
     amount:'Valor', value:'Valor', total:'Valor total', price:'Preço', cost:'Custo',
@@ -126,26 +126,134 @@
   }
 
   const MIT_REVENUE_METHODS = Object.freeze([
-    {key:'pix', label:'Pix', form:'Pix'},
-    {key:'money', label:'Dinheiro', form:'Dinheiro', fixedTarget:'wallet'},
-    {key:'debit', label:'Débito', form:'Débito'},
-    ...Array.from({length:12}, (_, index) => ({key:`credit${index + 1}`, label:`Crédito ${index + 1}x`, form:'Crédito'}))
+    {key:'pix', label:'Pix', originalForm:'Pix'},
+    {key:'money', label:'Dinheiro', originalForm:'Dinheiro', fixedDestination:'wallet'},
+    {key:'debit', label:'Débito', originalForm:'Débito'},
+    ...Array.from({length:12}, (_, index) => ({key:`credit${index + 1}`, label:`Crédito ${index + 1}x`, originalForm:'Crédito'}))
   ]);
-  function defaultMitRevenueRules(){
-    return Object.fromEntries(MIT_REVENUE_METHODS.map(method => [method.key, {
-      key:method.key, label:method.label, category:'Serviços Marco Iris', form:method.form,
-      target:method.fixedTarget || '__default__'
-    }]));
+  const MIT_ENTRY_METHODS = Object.freeze(['Pix','Dinheiro','Débito','Crédito','Transferência']);
+  function mitMethodDefinition(key){ return MIT_REVENUE_METHODS.find(method=>method.key===key)||MIT_REVENUE_METHODS[0]; }
+  function canonicalMitEntryMethod(value){
+    const wanted=normalize(value);
+    return MIT_ENTRY_METHODS.find(method=>normalize(method)===wanted)||'';
   }
-  function normalizeMitRevenueRules(input){
-    const base=defaultMitRevenueRules(), value=input&&typeof input==='object'?input:{};
+  function defaultMitRevenueRules(config={}){
+    return Object.fromEntries(MIT_REVENUE_METHODS.map(method => {
+      const wallet=method.fixedDestination==='wallet';
+      const accountId=wallet?CARTEIRA_CONTA_ID:String(config.accountId||'');
+      return [method.key, {
+        key:method.key,label:method.label,category:'Serviços Marco Iris',
+        entryMethodMode:wallet?'custom':'original',entryMethod:wallet?'Dinheiro':null,
+        destinationKind:wallet?'wallet':'account',accountId:wallet?CARTEIRA_CONTA_ID:(accountId||null),reserveId:null,
+        target:wallet?'wallet':(accountId?`account:${accountId}`:'__default__')
+      }];
+    }));
+  }
+  function mitLegacyDestination(current,method,config){
+    const explicitKind=String(current.destinationKind||'').toLowerCase();
+    if(['wallet','account','reserve'].includes(explicitKind)){
+      if(explicitKind==='wallet') return {kind:'wallet',accountId:CARTEIRA_CONTA_ID,reserveId:null};
+      if(explicitKind==='reserve') return {kind:'reserve',accountId:null,reserveId:String(current.reserveId||'')||null};
+      return {kind:'account',accountId:String(current.accountId||config.accountId||'')||null,reserveId:null};
+    }
+    const target=String(current.target||'');
+    if(target==='wallet'||target==='__carteira__') return {kind:'wallet',accountId:CARTEIRA_CONTA_ID,reserveId:null};
+    if(target.startsWith('account:')) return {kind:'account',accountId:target.slice(8)||null,reserveId:null};
+    if(target.startsWith('reserve:')) return {kind:'reserve',accountId:null,reserveId:target.slice(8)||null};
+    if(target==='__default__'||target==='default') return {kind:'account',accountId:String(config.accountId||'')||null,reserveId:null};
+    if(current.reserveId) return {kind:'reserve',accountId:null,reserveId:String(current.reserveId),};
+    if(current.accountId&&current.accountId!=='__default__'){
+      if(current.accountId==='__carteira__'||String(current.accountId)===String(CARTEIRA_CONTA_ID)) return {kind:'wallet',accountId:CARTEIRA_CONTA_ID,reserveId:null};
+      return {kind:'account',accountId:String(current.accountId),reserveId:null};
+    }
+    if(method.fixedDestination==='wallet') return {kind:'wallet',accountId:CARTEIRA_CONTA_ID,reserveId:null};
+    return {kind:'account',accountId:String(config.accountId||'')||null,reserveId:null};
+  }
+  function normalizeMitRevenueRules(input,config={}){
+    const base=defaultMitRevenueRules(config),value=input&&typeof input==='object'?input:{};
     Object.keys(base).forEach(key=>{
-      const current=value[key]&&typeof value[key]==='object'?value[key]:{};
-      base[key]=Object.assign(base[key],current,{key,form:base[key].form});
-      if(key==='money') base[key].target='wallet';
-      base[key].category=String(base[key].category||'Serviços Marco Iris').trim()||'Serviços Marco Iris';
+      const method=mitMethodDefinition(key),current=value[key]&&typeof value[key]==='object'?value[key]:{};
+      const destination=mitLegacyDestination(current,method,config);
+      let entryMethodMode=current.entryMethodMode==='custom'?'custom':(current.entryMethodMode==='original'?'original':'');
+      let entryMethod=canonicalMitEntryMethod(current.entryMethod);
+      if(!entryMethodMode){
+        const legacyForm=canonicalMitEntryMethod(current.form);
+        if(legacyForm){
+          entryMethodMode=legacyForm===method.originalForm?'original':'custom';
+          entryMethod=entryMethodMode==='custom'?legacyForm:'';
+        }else{
+          entryMethodMode=method.fixedDestination==='wallet'?'custom':'original';
+        }
+      }
+      if(entryMethodMode==='original') entryMethod=null;
+      else entryMethod=entryMethod||method.originalForm;
+      if(destination.kind==='wallet'){
+        entryMethodMode='custom';entryMethod='Dinheiro';destination.accountId=CARTEIRA_CONTA_ID;destination.reserveId=null;
+      }
+      const target=destination.kind==='wallet'?'wallet':(destination.kind==='reserve'?`reserve:${destination.reserveId||''}`:(destination.accountId?`account:${destination.accountId}`:'__default__'));
+      base[key]={
+        key,label:method.label,category:String(current.category||base[key].category||'').trim()||'Serviços Marco Iris',
+        entryMethodMode,entryMethod,
+        destinationKind:destination.kind,accountId:destination.accountId||null,reserveId:destination.reserveId||null,target
+      };
     });
     return base;
+  }
+  function mitOriginalInstallments(record,key=mitMethodKey(record)){
+    const direct=Number(record?.installments);
+    if(Number.isFinite(direct)&&direct>0) return Math.max(1,Math.min(12,Math.trunc(direct)));
+    const match=String(key||'').match(/^credit(\d{1,2})$/);
+    return match?Math.max(1,Math.min(12,Number(match[1])||1)):1;
+  }
+  function resolveMitEntryMethod(rule,record){
+    if(rule?.destinationKind==='wallet') return 'Dinheiro';
+    if(rule?.entryMethodMode==='custom') return canonicalMitEntryMethod(rule.entryMethod);
+    return paymentForm(record?.paymentMethod||mitMethodDefinition(mitMethodKey(record)).originalForm);
+  }
+  function mitAccountActive(account){ return !!(account&&!account.archivedAt&&account.active!==false); }
+  function mitWalletAccount(account){ return !!(account&&(String(account.id)===String(CARTEIRA_CONTA_ID)||account.isCarteira)); }
+  function mitReserveActive(reserve){ return !!(reserve&&!reserve.archivedAt&&reserve.active!==false); }
+  function mitReservesEnabled(data){ return !!(data?.modules?.reserves!==false&&data?.reservas?.enabled!==false); }
+  function mitReserveLinkedAccount(data,reserve){
+    if(!reserve) return null;
+    const direct=accountByIdIn(data,reserve.accountId);
+    if(mitAccountActive(direct)&&!mitWalletAccount(direct)) return direct;
+    const byName=(data.contas||[]).find(account=>mitAccountActive(account)&&!mitWalletAccount(account)&&normalize(account.nome)===normalize(reserve.banco));
+    return byName||null;
+  }
+  function mitRuleTarget(rule){
+    if(rule.destinationKind==='wallet') return {kind:'wallet',id:CARTEIRA_CONTA_ID};
+    if(rule.destinationKind==='reserve') return {kind:'reserve',id:String(rule.reserveId||'')};
+    return {kind:'account',id:String(rule.accountId||'')};
+  }
+  function validateMitRevenueRules(data,config,rulesInput=config?.mitRevenueRules){
+    const rules=normalizeMitRevenueRules(rulesInput,config||{});
+    const categories=Array.isArray(data?.categorias?.receita)?data.categorias.receita:[];
+    for(const method of MIT_REVENUE_METHODS){
+      const rule=rules[method.key],label=method.label;
+      if(!categories.includes(rule.category)) throw new Error(`Escolha uma categoria válida para ${label}.`);
+      if(!['original','custom'].includes(rule.entryMethodMode)) throw new Error(`Escolha como o valor de ${label} entra no Borion.`);
+      if(rule.entryMethodMode==='custom'&&!canonicalMitEntryMethod(rule.entryMethod)) throw new Error(`Escolha como o valor de ${label} entra no Borion.`);
+      if(rule.destinationKind==='wallet'){
+        const wallet=accountByIdIn(data,CARTEIRA_CONTA_ID);
+        if(!mitAccountActive(wallet)) throw new Error('A Carteira não está disponível no perfil de destino.');
+        rule.entryMethodMode='custom';rule.entryMethod='Dinheiro';rule.accountId=CARTEIRA_CONTA_ID;rule.reserveId=null;rule.target='wallet';
+      }else if(rule.destinationKind==='account'){
+        const account=accountByIdIn(data,rule.accountId);
+        if(!mitAccountActive(account)||mitWalletAccount(account)) throw new Error(`Escolha a conta que receberá ${label}.`);
+        rule.reserveId=null;rule.target=`account:${account.id}`;
+      }else if(rule.destinationKind==='reserve'){
+        if(!mitReservesEnabled(data)) throw new Error(`Ative o módulo de Reservas antes de usar a reserva de ${label}.`);
+        const reserve=reserveByIdIn(data,rule.reserveId);
+        if(!mitReserveActive(reserve)) throw new Error(`Escolha a reserva que receberá ${label}.`);
+        const account=mitReserveLinkedAccount(data,reserve);
+        if(!account) throw new Error(`A reserva escolhida para ${label} não possui uma conta vinculada válida.`);
+        rule.accountId=null;rule.target=`reserve:${reserve.id}`;
+      }else{
+        throw new Error(`Escolha onde o valor de ${label} entra no Borion.`);
+      }
+    }
+    return rules;
   }
   function ensureMitState(data){
     const interop=ensureInterop(data);
@@ -232,7 +340,7 @@
     config.discovered = normalizeDiscovered(config.discovered);
     config.mappingReady = config.mappingReady === true;
     config.importMode = 'smart-native';
-    if(config.sourceAppId === 'marco-iris') config.mitRevenueRules = normalizeMitRevenueRules(config.mitRevenueRules);
+    if(config.sourceAppId === 'marco-iris') config.mitRevenueRules = normalizeMitRevenueRules(config.mitRevenueRules,config);
     // V6.34 — padrão é excluir automaticamente aqui quando o registro some na
     // origem; só fica "preserve" se o usuário desligar explicitamente no toggle.
     config.deletionPolicy = config.deletionPolicy === 'preserve' ? 'preserve' : 'delete';
@@ -260,7 +368,11 @@
     });
     return rows;
   }
-  function findSourceConfig(sourceAppId){ return allSourceConfigs().find(row => row.sourceAppId === sourceAppId) || null; }
+  function findSourceConfig(sourceAppId){
+    const rows=allSourceConfigs().filter(row=>row.sourceAppId===sourceAppId);
+    const currentId=S.currentProfile?.id;
+    return rows.find(row=>String(row.profile.id)===String(currentId))||rows[0]||null;
+  }
 
   function openHandleDb(){
     return new Promise((resolve, reject) => {
@@ -645,11 +757,12 @@
     return (data.transacoes||[]).find(tx=>tx&&tx.integrationSourceAppId==='marco-iris'&&String(tx.integrationReceiptId||tx.integrationEntityId||'')===wanted)||null;
   }
   function makeMitIncomeTransaction(data,config,record){
-    const key=mitMethodKey(record),rules=normalizeMitRevenueRules(config.mitRevenueRules),rule=rules[key]||rules.pix;
-    const target=key==='money'?{kind:'wallet',id:CARTEIRA_CONTA_ID}:normalizeTarget({target:rule.target},rule.form);
+    const key=mitMethodKey(record),rules=validateMitRevenueRules(data,config,config.mitRevenueRules),rule=rules[key]||rules.pix;
+    const target=mitRuleTarget(rule),entryMethod=resolveMitEntryMethod(rule,record);
+    if(!entryMethod) throw new Error(`Escolha como o valor de ${mitMethodDefinition(key).label} entra no Borion.`);
     const converted=Object.assign({},record,{
       date:record.paymentDate||record.date,
-      _borionType:'receita',_mappedCategory:rule.category,_mappedPaymentForm:rule.form,
+      _borionType:'receita',_mappedCategory:rule.category,_mappedPaymentForm:entryMethod,
       _mappedAccountId:target.kind==='account'?target.id:config.accountId,_mappedTarget:target,
       _mappedRevenueOrigin:'propria',_mappedSettled:true,_mappingVersion:SPEC.mappingVersion
     });
@@ -660,12 +773,18 @@
     tx.integrationClientName=record.clientName||'';
     tx.integrationExternalReference=record.externalReference||'';
     tx.integrationPaymentMethodOriginal=record.paymentMethod||'';
+    tx.integrationOriginalPaymentMethod=record.paymentMethod||'';
+    tx.integrationOriginalInstallments=mitOriginalInstallments(record,key);
+    tx.integrationEntryMethod=entryMethod;
+    tx.integrationEntryMethodMode=rule.entryMethodMode;
+    tx.integrationDestinationKind=rule.destinationKind;
     return tx;
   }
   function reconcileMitSnapshot(data,config,snapshot){
     validateSnapshot(snapshot,config.sourceAppId);
     ensureSourceConfig(config);
     if(!config.mappingReady) throw new Error('Configure as receitas do Marco Iris antes de sincronizar esta integração.');
+    config.mitRevenueRules=validateMitRevenueRules(data,config,config.mitRevenueRules);
     const interop=ensureInterop(data),state=importedState(data,config.sourceAppId),mitState=ensureMitState(data);
     state.records ||= {};
     const results=[],pendingById=new Map((interop.pending||[]).filter(item=>item.sourceAppId==='marco-iris').map(item=>[String(item.entityId),item]));
@@ -1147,6 +1266,18 @@
       steps:['“Manter o status enviado” preserva Pago/Recebido ou Em aberto conforme o aplicativo de origem.','“Marcar sempre como Pago/Recebido” força todos os itens desse status como concluídos.','“Marcar sempre como Em aberto” cria o lançamento sem baixa financeira.','“Não importar” ignora lançamentos que chegarem com esse status.'],
       example:['Pago / Recebido → Manter o status enviado pelo aplicativo','Pendente → Marcar sempre como Em aberto']
     },
+    mitEntryMethod:{
+      title:'Como o valor entra no Borion',
+      summary:'A forma recebida no Marco Iris mostra como o cliente pagou. Aqui você escolhe como o valor realmente entrou no seu financeiro.',
+      steps:['Use “Manter forma original” para converter Pix em Pix, Dinheiro em Dinheiro, Débito em Débito e qualquer Crédito parcelado em Crédito.','Escolha outra forma quando a liquidação real for diferente da venda.','A forma original e a quantidade de parcelas continuam preservadas para consulta e auditoria.'],
+      example:['Crédito 3x no Marco Iris → Pix no Borion','Débito no Marco Iris → Transferência no Borion']
+    },
+    mitDestination:{
+      title:'Onde o valor entra',
+      summary:'Escolha se o valor será adicionado à Carteira, a uma conta bancária ou diretamente a uma reserva.',
+      steps:['Carteira registra automaticamente como Dinheiro em espécie.','Conta exige a escolha de uma conta ativa do perfil de destino.','Reserva exige uma reserva ativa e usa a conta vinculada a ela.'],
+      example:['Pix → Conta · Mercado Pago','Pix → Reserva · Casa','Dinheiro → Carteira']
+    },
     mitReceipts:{
       title:'Receitas automáticas do Marco Iris',
       summary:'Cada pagamento confirmado no Marco Iris entra automaticamente no Borion Finance, sem esperar a ordem de serviço inteira ser quitada.',
@@ -1228,34 +1359,100 @@
     return `<div class="interop-pane interop-links-pane"><div class="interop-links-intro"><div><h4>Configuração da integração com ${escHtml(sourceName(sourceAppId))}</h4><p>Confira o que chega do aplicativo e escolha, à direita, como cada informação será registrada no Borion Finance. As regras são usadas na primeira importação de cada lançamento.</p></div><span class="pill ${c.mappingReady?'ok':'warn'}">${c.mappingReady?'Configurado':'Revisão necessária'}</span></div><div class="interop-map-legend"><div class="origin"><small>ORIGEM</small><b>${escHtml(sourceName(sourceAppId))}</b><span>Dados enviados pelo aplicativo, exibidos em linguagem simples.</span></div><div class="destination"><small>DESTINO</small><b>Borion Finance</b><span>Como o lançamento será salvo: tipo, categoria, status, forma e destino financeiro.</span></div></div><datalist id="interop-cat-income">${categoryDatalist(row.data,'income')}</datalist><datalist id="interop-cat-expense">${categoryDatalist(row.data,'expense')}</datalist><section class="interop-map-section">${interopSectionHeading('Dados recebidos do aplicativo','fields')}<p>Somente leitura. Use esta amostra para confirmar que a conexão está trazendo as informações corretas.</p><div class="interop-field-grid">${fieldRows||'<div class="interop-map-empty">Nenhuma informação adicional identificada.</div>'}</div></section><section class="interop-map-section">${interopSectionHeading('Tipos de lançamento','types')}<p>Escolha se cada entrada ou saída será uma receita, uma despesa variável ou não será importada.</p>${directionRows}${kindRows}</section><section class="interop-map-section">${interopSectionHeading('Categorias e origem da receita','categories')}<p>Associe cada categoria recebida à categoria correspondente do Borion e defina a origem das receitas.</p>${categoryRows||'<div class="interop-map-empty">Nenhuma categoria encontrada.</div>'}</section><section class="interop-map-section">${interopSectionHeading('Formas de pagamento e destino financeiro','payments')}<p>Defina a forma usada no Borion e em qual conta, carteira ou reserva o valor será registrado.</p>${paymentRows||'<div class="interop-map-empty">Nenhuma forma de pagamento encontrada.</div>'}</section><section class="interop-map-section">${interopSectionHeading('Status','status')}<p>Escolha se o Borion deve manter o status recebido, forçar um status ou ignorar o lançamento.</p>${statusRows||'<div class="interop-map-empty">Nenhum status encontrado.</div>'}</section><div class="interop-save-bar"><button class="btn-outline btn-sm" onclick="BorionInterop.inspectSource('${sourceAppId}')">Atualizar dados da origem</button><button class="btn btn-primary" onclick="BorionInterop.saveMappings('${sourceAppId}',{sync:true})">Salvar vínculos e sincronizar</button></div></div>`;
   }
 
-  function mitTargetOptions(data,selected){
-    const value=String(selected||'__default__'),options=[['__default__','Conta padrão da integração']];
-    (data.contas||[]).filter(account=>account&&!account.isCarteira&&!account.archivedAt&&account.active!==false).forEach(account=>options.push([`account:${account.id}`,`Conta · ${account.nome||'Sem nome'}`]));
-    (data.reservas?.boxes||[]).filter(box=>box&&!box.archivedAt&&box.active!==false).forEach(box=>options.push([`reserve:${box.id}`,`Reserva · ${box.nome||'Sem nome'}${box.banco?' · '+box.banco:''}`]));
-    return options.map(([id,label])=>`<option value="${escHtml(id)}" ${value===id?'selected':''}>${escHtml(label)}</option>`).join('');
+  function mitCategoryOptions(data,selected){
+    const categories=Array.isArray(data.categorias?.receita)?data.categorias.receita:[];
+    const missing=selected&&!categories.includes(selected)?`<option value="" selected disabled>Categoria removida — escolha outra</option>`:'';
+    const placeholder=!selected?'<option value="" selected disabled>Escolha uma categoria</option>':'';
+    return placeholder+missing+categories.map(category=>`<option value="${escHtml(category)}" ${selected===category?'selected':''}>${escHtml(category)}</option>`).join('');
+  }
+  function mitEntryMethodOptions(rule){
+    const selected=rule.entryMethodMode==='custom'?`custom:${rule.entryMethod}`:'original';
+    const options=[['original','Manter forma original'],...MIT_ENTRY_METHODS.map(method=>[`custom:${method}`,method])];
+    const missing=!options.some(([value])=>value===selected)?`<option value="" selected disabled>Forma removida — escolha outra</option>`:'';
+    return missing+options.map(([value,label])=>`<option value="${escHtml(value)}" ${selected===value?'selected':''}>${escHtml(label)}</option>`).join('');
+  }
+  function mitAccountOptions(data,selected){
+    const accounts=(data.contas||[]).filter(account=>mitAccountActive(account)&&!mitWalletAccount(account));
+    const missing=selected&&!accounts.some(account=>String(account.id)===String(selected))?'<option value="" selected disabled>Conta removida — escolha outra</option>':'';
+    const placeholder=!selected?'<option value="" selected disabled>Escolha uma conta</option>':'';
+    return placeholder+missing+accounts.map(account=>`<option value="${escHtml(account.id)}" ${String(account.id)===String(selected)?'selected':''}>${escHtml(account.nome||'Conta sem nome')}</option>`).join('');
+  }
+  function mitReserveOptions(data,selected){
+    const reserves=(data.reservas?.boxes||[]).filter(reserve=>mitReserveActive(reserve)&&mitReserveLinkedAccount(data,reserve));
+    const missing=selected&&!reserves.some(reserve=>String(reserve.id)===String(selected))?'<option value="" selected disabled>Reserva removida — escolha outra</option>':'';
+    const placeholder=!selected?'<option value="" selected disabled>Escolha uma reserva</option>':'';
+    return placeholder+missing+reserves.map(reserve=>`<option value="${escHtml(reserve.id)}" ${String(reserve.id)===String(selected)?'selected':''}>${escHtml((reserve.nome||'Reserva sem nome')+(reserve.banco?' — '+reserve.banco:''))}</option>`).join('');
+  }
+  function setMitDestination(button,key){
+    const row=button?.closest?.(`[data-mit-rule="${key}"]`)||button?.closest?.('[data-mit-rule]');
+    if(!row||button.disabled||button.getAttribute('aria-disabled')==='true') return false;
+    const kind=button.dataset.value,hidden=row.querySelector('[data-mit-destination-kind]'),entry=row.querySelector('[data-mit-entry-selection]');
+    const previous=hidden?.value;
+    row.querySelectorAll('[data-mit-destination-button]').forEach(item=>{const active=item===button;item.classList.toggle('active',active);item.setAttribute('aria-pressed',String(active));});
+    if(hidden) hidden.value=kind;
+    row.querySelectorAll('[data-mit-destination-panel]').forEach(panel=>panel.classList.toggle('hidden',panel.dataset.mitDestinationPanel!==kind));
+    const walletNote=row.querySelector('[data-mit-wallet-note]'); if(walletNote) walletNote.classList.toggle('hidden',kind!=='wallet');
+    if(entry){
+      if(kind==='wallet'){
+        if(previous!=='wallet'&&entry.value!=='custom:Dinheiro') row.dataset.previousEntrySelection=entry.value||'original';
+        entry.value='custom:Dinheiro';entry.disabled=true;entry.setAttribute('aria-disabled','true');
+      }else{
+        entry.disabled=false;entry.setAttribute('aria-disabled','false');
+        if(previous==='wallet') entry.value=row.dataset.previousEntrySelection||'original';
+      }
+    }
+    return true;
+  }
+  function rememberMitEntryMethod(select){
+    const row=select?.closest?.('[data-mit-rule]');
+    if(row&&select.value) row.dataset.previousEntrySelection=select.value;
+    return true;
   }
   function renderMitLinksTab(row){
     if(!row) return `<div class="interop-pane"><div class="interop-empty"><h4>Conecte o Marco Iris Tecnologia primeiro</h4><button class="btn btn-primary btn-sm" onclick="BorionInterop.setSettingsTab('connection')">Ir para Conexão</button></div></div>`;
-    const rules=normalizeMitRevenueRules(row.config.mitRevenueRules);
+    const rules=normalizeMitRevenueRules(row.config.mitRevenueRules,row.config);
     const pending=(ensureInterop(row.data).pending||[]).filter(item=>item.sourceAppId==='marco-iris');
+    const reservesEnabled=mitReservesEnabled(row.data),validReserves=(row.data.reservas?.boxes||[]).filter(reserve=>mitReserveActive(reserve)&&mitReserveLinkedAccount(row.data,reserve));
     const revenueRows=MIT_REVENUE_METHODS.map(method=>{
-      const rule=rules[method.key];
-      const fixed=method.key==='money';
-      return `<div class="mit-rule-row"><div class="mit-origin"><small>Forma recebida do Marco Iris</small><strong>${escHtml(method.label)}</strong></div><div class="interop-arrow" aria-hidden="true">→</div><label><small>Categoria no Borion</small><input type="text" list="mit-income-categories" data-mit-category="${method.key}" value="${escHtml(rule.category)}"></label><label><small>Forma no Borion</small><input value="${escHtml(method.form)}" disabled></label><label><small>Destino financeiro no Borion</small>${fixed?'<input value="Carteira" disabled>':`<select data-mit-target="${method.key}">${mitTargetOptions(row.data,rule.target)}</select>`}</label></div>`;
+      const rule=rules[method.key],kind=rule.destinationKind||'account',wallet=kind==='wallet';
+      const reserveDisabled=!reservesEnabled||!validReserves.length;
+      const walletNote=wallet?'':'hidden';
+      return `<div class="mit-rule-row" data-mit-rule="${escHtml(method.key)}" data-previous-entry-selection="${escHtml(rule.entryMethodMode==='custom'?`custom:${rule.entryMethod}`:'original')}">
+        <div class="mit-origin"><small>Forma recebida do Marco Iris</small><strong>${escHtml(method.label)}</strong><span>Somente leitura</span></div>
+        <label><small>Categoria de receita no Borion</small><select data-mit-category="${escHtml(method.key)}">${mitCategoryOptions(row.data,rule.category)}</select></label>
+        <label><span class="mit-field-label"><small>Como o valor entra no Borion</small><button type="button" class="interop-help-btn mit-inline-help" onclick="BorionInterop.openMappingHelp('mitEntryMethod')" aria-label="Ajuda sobre como o valor entra no Borion" title="Ver explicação">?</button></span><select data-mit-entry-selection="${escHtml(method.key)}" onchange="BorionInterop.rememberMitEntryMethod(this)" ${wallet?'disabled aria-disabled="true"':''}>${mitEntryMethodOptions(rule)}</select><span class="mit-wallet-note ${walletNote}" data-mit-wallet-note>Entradas na Carteira são registradas automaticamente como dinheiro em espécie.</span></label>
+        <div class="mit-destination-field"><span class="mit-field-label"><small>Onde o valor entra</small><button type="button" class="interop-help-btn mit-inline-help" onclick="BorionInterop.openMappingHelp('mitDestination')" aria-label="Ajuda sobre onde o valor entra" title="Ver explicação">?</button></span><div class="segmented-toggle revenue-destination-toggle mit-destination-toggle" role="group" aria-label="Onde o valor de ${escHtml(method.label)} entra"><button type="button" class="seg-btn ${kind==='wallet'?'active':''}" data-mit-destination-button data-value="wallet" aria-pressed="${kind==='wallet'}" onclick="BorionInterop.setMitDestination(this,'${escHtml(method.key)}')">Carteira</button><button type="button" class="seg-btn ${kind==='account'?'active':''}" data-mit-destination-button data-value="account" aria-pressed="${kind==='account'}" onclick="BorionInterop.setMitDestination(this,'${escHtml(method.key)}')">Conta</button><button type="button" class="seg-btn ${kind==='reserve'?'active':''}" data-mit-destination-button data-value="reserve" aria-pressed="${kind==='reserve'}" aria-disabled="${reserveDisabled}" ${reserveDisabled?'disabled':''} title="${!reservesEnabled?'Ative o módulo de Reservas':(!validReserves.length?'Crie uma reserva primeiro':'') }" onclick="BorionInterop.setMitDestination(this,'${escHtml(method.key)}')">Reserva</button></div><input type="hidden" data-mit-destination-kind="${escHtml(method.key)}" value="${escHtml(kind)}">${!reservesEnabled?'<span class="mit-destination-warning">Reservas estão desativadas. Configurações antigas são preservadas, mas não podem ser salvas até o módulo ser ativado.</span>':(!validReserves.length?'<span class="mit-destination-warning">Crie uma reserva primeiro para usar este destino.</span>':'')}</div>
+        <div class="mit-specific-destination"><div class="payment-source-panel ${kind==='account'?'':'hidden'}" data-mit-destination-panel="account"><label><small>Conta que receberá</small><select data-mit-account="${escHtml(method.key)}">${mitAccountOptions(row.data,rule.accountId)}</select></label></div><div class="payment-source-panel ${kind==='reserve'?'':'hidden'}" data-mit-destination-panel="reserve"><label><small>Reserva que receberá</small><select data-mit-reserve="${escHtml(method.key)}">${mitReserveOptions(row.data,rule.reserveId)}</select></label></div><div class="payment-source-panel mit-wallet-panel ${kind==='wallet'?'':'hidden'}" data-mit-destination-panel="wallet"><strong>Carteira</strong><span>Conta fixa: dinheiro em espécie</span></div></div>
+      </div>`;
     }).join('');
     const pendingRows=pending.length?pending.map(item=>`<div class="mit-pending-row"><div><strong>${escHtml(item.name||item.description)}</strong><small>${escHtml(item.localPurchase||'Sem local informado')}</small></div><span>${typeof brl==='function'?brl(Number(item.amount)||0):('R$ '+(Number(item.amount)||0).toFixed(2).replace('.',','))}</span><span>${escHtml(item.date||'')}</span><span>Marco Iris</span><span class="pill ${item.status==='Pago'?'ok':'warn'}">${escHtml(item.status||'Em aberto')}</span><button class="btn btn-primary btn-sm" onclick="BorionInterop.openMitExpenseImport('${escHtml(item.aggregateId)}')">Revisar</button></div>`).join(''):'<div class="interop-map-empty">Nenhuma despesa aguardando revisão.</div>';
-    return `<div class="interop-pane mit-integration-pane"><div class="interop-links-intro"><div><h4>Receitas automáticas e despesas revisadas</h4><p>Pagamentos confirmados no Marco Iris entram automaticamente. Despesas só entram depois da sua revisão.</p></div><span class="pill ${row.config.mappingReady?'ok':'warn'}">${row.config.mappingReady?'Configurado':'Configuração necessária'}</span></div><div class="interop-map-legend"><div class="origin"><small>ORIGEM</small><b>Marco Iris Tecnologia</b><span>Pagamentos e despesas registrados no aplicativo.</span></div><div class="destination"><small>DESTINO</small><b>Borion Finance</b><span>Receitas automáticas; despesas aguardando confirmação.</span></div></div><datalist id="mit-income-categories">${categoryDatalist(row.data,'income')}</datalist><section class="interop-map-section">${interopSectionHeading('Como as receitas serão registradas no Borion','mitReceipts','receitas automáticas do Marco Iris')}<p>Escolha a categoria e o destino financeiro de cada forma de pagamento recebida.</p><div class="mit-rules-list">${revenueRows}</div><div class="interop-save-bar"><button class="btn-outline btn-sm" onclick="BorionInterop.inspectSource('marco-iris')">Atualizar dados da origem</button><button class="btn btn-primary" onclick="BorionInterop.saveMitSettings({sync:true})">Salvar configuração e sincronizar</button></div></section><section class="interop-map-section"><div class="mit-pending-head"><div>${interopSectionHeading('Aguardando Revisão','mitExpenses','despesas aguardando revisão')}<p>Despesas nunca entram automaticamente. Revise categoria, origem financeira, tipo e status.</p></div><span class="pill ${pending.length?'warn':'ok'}">${pending.length} pendente(s)</span></div><div class="mit-pending-labels"><span>Nome</span><span>Valor</span><span>Data</span><span>Origem</span><span>Status</span><span></span></div><div class="mit-pending-list">${pendingRows}</div></section></div>`;
+    return `<div class="interop-pane mit-integration-pane"><div class="interop-links-intro"><div><h4>Receitas automáticas e despesas revisadas</h4><p>Pagamentos confirmados no Marco Iris entram automaticamente. Despesas só entram depois da sua revisão.</p></div><span class="pill ${row.config.mappingReady?'ok':'warn'}">${row.config.mappingReady?'Configurado':'Configuração necessária'}</span></div><div class="interop-map-legend"><div class="origin"><small>ORIGEM</small><b>Marco Iris Tecnologia</b><span>Forma recebida, parcelas, OSV, cliente e referência original.</span></div><div class="destination"><small>DESTINO</small><b>Borion Finance</b><span>Categoria, forma financeira efetiva e destino escolhidos por você.</span></div></div><section class="interop-map-section">${interopSectionHeading('Como as receitas serão registradas no Borion','mitReceipts','receitas automáticas do Marco Iris')}<p>Escolha a categoria, como o valor realmente entra no Borion e onde ele será adicionado. A forma original recebida no Marco Iris será preservada para consulta e auditoria.</p><div class="mit-rules-list">${revenueRows}</div><div class="interop-save-bar"><button class="btn-outline btn-sm" onclick="BorionInterop.inspectSource('marco-iris')">Atualizar dados da origem</button><button class="btn btn-primary" onclick="BorionInterop.saveMitSettings({sync:true})">Salvar configuração e sincronizar</button></div></section><section class="interop-map-section"><div class="mit-pending-head"><div>${interopSectionHeading('Aguardando Revisão','mitExpenses','despesas aguardando revisão')}<p>Despesas nunca entram automaticamente. Revise categoria, origem financeira, tipo e status.</p></div><span class="pill ${pending.length?'warn':'ok'}">${pending.length} pendente(s)</span></div><div class="mit-pending-labels"><span>Nome</span><span>Valor</span><span>Data</span><span>Origem</span><span>Status</span><span></span></div><div class="mit-pending-list">${pendingRows}</div></section></div>`;
   }
   async function saveMitSettings({sync=false}={}){
     const row=findSourceConfig('marco-iris');
     if(!row) throw new Error('Integração com o Marco Iris não configurada.');
-    const rules=normalizeMitRevenueRules(row.config.mitRevenueRules);
-    document.querySelectorAll('[data-mit-category]').forEach(input=>{ const key=input.dataset.mitCategory; if(rules[key]) rules[key].category=String(input.value||'Serviços Marco Iris').trim()||'Serviços Marco Iris'; });
-    document.querySelectorAll('[data-mit-target]').forEach(select=>{ const key=select.dataset.mitTarget; if(rules[key]) rules[key].target=select.value||'__default__'; });
-    rules.money.form='Dinheiro'; rules.money.target='wallet';
-    row.config.mitRevenueRules=rules; row.config.mappingReady=true; row.config.mappingSavedAt=nowIso();
+    const draft=normalizeMitRevenueRules(row.config.mitRevenueRules,row.config);
+    document.querySelectorAll('[data-mit-rule]').forEach(ruleRow=>{
+      const key=ruleRow.dataset.mitRule,rule=draft[key]; if(!rule) return;
+      rule.category=String(ruleRow.querySelector('[data-mit-category]')?.value||'').trim();
+      const entrySelection=String(ruleRow.querySelector('[data-mit-entry-selection]')?.value||'');
+      if(entrySelection==='original'){rule.entryMethodMode='original';rule.entryMethod=null;}
+      else if(entrySelection.startsWith('custom:')){rule.entryMethodMode='custom';rule.entryMethod=entrySelection.slice(7);}
+      else {rule.entryMethodMode='';rule.entryMethod=null;}
+      rule.destinationKind=String(ruleRow.querySelector('[data-mit-destination-kind]')?.value||'');
+      if(rule.destinationKind==='wallet'){
+        rule.entryMethodMode='custom';rule.entryMethod='Dinheiro';rule.accountId=CARTEIRA_CONTA_ID;rule.reserveId=null;rule.target='wallet';
+      }else if(rule.destinationKind==='account'){
+        rule.accountId=String(ruleRow.querySelector('[data-mit-account]')?.value||'')||null;rule.reserveId=null;rule.target=rule.accountId?`account:${rule.accountId}`:'__default__';
+      }else if(rule.destinationKind==='reserve'){
+        rule.reserveId=String(ruleRow.querySelector('[data-mit-reserve]')?.value||'')||null;rule.accountId=null;rule.target=rule.reserveId?`reserve:${rule.reserveId}`:'reserve:';
+      }
+    });
+    const candidate=Object.assign({},row.config,{mitRevenueRules:draft});
+    const validated=validateMitRevenueRules(row.data,candidate,draft);
+    row.config.mitRevenueRules=validated;row.config.mappingReady=true;row.config.mappingSavedAt=nowIso();
     saveProfileData(row.profile.id,row.data);
-    if(typeof toast==='function') toast('Configuração do Marco Iris salva. Receitas pagas serão automáticas.');
+    if(typeof toast==='function') toast('Configuração salva. As receitas do Marco Iris serão registradas com a forma de entrada e o destino escolhidos.');
     if(sync) return await syncSource('marco-iris',{silent:false});
     if(typeof renderView==='function') renderView();
     return true;
@@ -1496,14 +1693,14 @@
   window.BorionInterop = Object.freeze({
     spec:SPEC, sources:SOURCES, sourceName,
     renderSettings, setSettingsSource, setSettingsTab, setDeletionPolicy, openMappingHelp,
-    setupDialog, configure, inspectSource, saveMappings, saveMitSettings, openMitExpenseImport,
+    setupDialog, configure, inspectSource, saveMappings, saveMitSettings, setMitDestination, rememberMitEntryMethod, openMitExpenseImport,
     syncSource, syncAll, disconnect,
     markImportedDeletion, openImportedDeleteDialog,
     captureImportReference, transferImportReference,
     start,
     __test:{
       hash, stableStringify, ensureInterop, validateSnapshot,
-      discoverSnapshot, mappedRecord, reconcileSnapshot, reconcileMitSnapshot, makeMitIncomeTransaction, mitMethodKey, sourceLabel, friendlyFieldName, friendlySourceValue, normalizeTarget, resolveFinancialTarget,
+      discoverSnapshot, mappedRecord, reconcileSnapshot, reconcileMitSnapshot, makeMitIncomeTransaction, mitMethodKey, normalizeMitRevenueRules, validateMitRevenueRules, resolveMitEntryMethod, mitOriginalInstallments, mitRuleTarget, sourceLabel, friendlyFieldName, friendlySourceValue, normalizeTarget, resolveFinancialTarget,
       txDelta, adjust, applyReserveLink, paymentForm, targetAccountId, makeTransaction,
       markImportedDeletion, editableSnapshotHash, reverseImportedTransaction
     }

@@ -20,7 +20,7 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../js/24-interconnections.j
 const api=context.BorionInterop.__test;
 const data={
   transacoes:[],contas:[{id:'carteira',nome:'Carteira',isCarteira:true},{id:'bank1',nome:'Nubank'}],
-  liquidez:[],categorias:{receita:[],fixa:[],variavel:[]},categoryColors:{receita:{},fixa:{},variavel:{}},
+  liquidez:[],categorias:{receita:['Serviços MIT'],fixa:[],variavel:[]},categoryColors:{receita:{},fixa:{},variavel:{}},
   reservas:{boxes:[{id:'reserve1',nome:'Reserva MIT',banco:'Nubank',accountId:'bank1',valorAtual:0}],moves:[]},
   interconnections:{sources:{},imported:{},ignored:{},pending:[],audit:[]}
 };
@@ -30,6 +30,9 @@ const config={sourceAppId:'marco-iris',mappingReady:true,accountId:'bank1',mitRe
   debit:{category:'Serviços MIT',target:'reserve:reserve1'},
   credit2:{category:'Serviços MIT',target:'account:bank1'}
 }};
+['pix','money','debit',...Array.from({length:12},(_,i)=>'credit'+(i+1))].forEach(key=>{
+  if(!config.mitRevenueRules[key]) config.mitRevenueRules[key]={category:'Serviços MIT',target:'account:bank1'};
+});
 const instance='inst-test';
 function rec(id,extra={}){
   return Object.assign({aggregateId:`marco-iris:${instance}:receipt:${id}`,entityId:id,receiptId:id,direction:'income',amount:150,date:'2026-07-20',paymentDate:'2026-07-20',status:'paid',settled:true,active:true,description:'OSV-000286 • Cliente Teste',orderNumber:'OSV-000286',clientName:'Cliente Teste',paymentMethod:'Pix',externalReference:`OSV-000286:${id}`},extra);

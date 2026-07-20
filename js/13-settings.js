@@ -14,7 +14,7 @@ const HelpCenterLoader = {
     this.promise = new Promise((resolve,reject)=>{
       if(!document.querySelector('link[data-borion-help-css]')){
         const link=document.createElement('link');
-        link.rel='stylesheet'; link.href='css/help-center.css?v=6.43.0'; link.dataset.borionHelpCss='1';
+        link.rel='stylesheet'; link.href='css/help-center.css?v=6.44.0'; link.dataset.borionHelpCss='1';
         document.head.appendChild(link);
       }
       const existing=document.querySelector('script[data-borion-help-script]');
@@ -24,7 +24,7 @@ const HelpCenterLoader = {
         return;
       }
       const script=document.createElement('script');
-      script.src='js/26-help-center.js?v=6.43.0'; script.async=true; script.dataset.borionHelpScript='1';
+      script.src='js/26-help-center.js?v=6.44.0'; script.async=true; script.dataset.borionHelpScript='1';
       script.onload=()=>window.BorionHelp?resolve(window.BorionHelp):reject(new Error('A Central do Borion não iniciou.'));
       script.onerror=()=>{ script.remove(); reject(new Error('Falha ao carregar a Central do Borion.')); };
       document.head.appendChild(script);
@@ -555,6 +555,8 @@ function categoryUsageDetails(typeKey, name){
   if(typeKey==='receita'){
     add('receitas', (S.data.transacoes||[]).filter(t=>t.tipo==='receita' && t.categoria===name).length);
     add('cheques recebidos', (S.data.cheques&&S.data.cheques.items||[]).filter(c=>c.tipo==='recebido' && c.categoria===name).length);
+    const mitRules=S.data.interconnections?.sources?.['marco-iris']?.mitRevenueRules||{};
+    add('regras da integração Marco Iris', Object.values(mitRules).filter(rule=>rule&&rule.category===name).length);
   } else if(typeKey==='fixa'){
     add('despesas fixas', (S.data.fixas||[]).filter(f=>f.categoria===name).length);
   } else if(typeKey==='variavel'){
@@ -570,6 +572,8 @@ function updateCategoryReferences(typeKey, oldName, newName){
   if(typeKey==='receita'){
     (S.data.transacoes||[]).forEach(t=>{ if(t.tipo==='receita' && t.categoria===oldName) t.categoria=newName; });
     if(S.data.cheques&&Array.isArray(S.data.cheques.items)) S.data.cheques.items.forEach(c=>{ if(c.tipo==='recebido' && c.categoria===oldName) c.categoria=newName; });
+    const mitRules=S.data.interconnections?.sources?.['marco-iris']?.mitRevenueRules||{};
+    Object.values(mitRules).forEach(rule=>{ if(rule&&rule.category===oldName) rule.category=newName; });
   } else if(typeKey==='fixa'){
     (S.data.fixas||[]).forEach(f=>{ if(f.categoria===oldName) f.categoria=newName; });
   } else if(typeKey==='variavel'){
@@ -622,37 +626,33 @@ Settings.renameCategory = function(typeKey, oldName){
     }
   });
 };
+function deleteCategoryAndMoveReferences(typeKey,name,usage){
+  if(!S.data.categorias[typeKey]) S.data.categorias[typeKey]=[];
+  if(!S.data.categorias[typeKey].includes('Outro')) S.data.categorias[typeKey].push('Outro');
+  updateCategoryReferences(typeKey,name,'Outro');
+  S.data.categorias[typeKey]=S.data.categorias[typeKey].filter(category=>category!==name);
+  if(S.data.categoryColors&&S.data.categoryColors[typeKey]) delete S.data.categoryColors[typeKey][name];
+  const mitCount=typeKey==='receita'?Object.values(S.data.interconnections?.sources?.['marco-iris']?.mitRevenueRules||{}).filter(rule=>rule&&rule.category==='Outro').length:0;
+  saveCurrentData();renderView();
+  const linkedRules=(usage?.parts||[]).find(part=>part.includes('regras da integração Marco Iris'));
+  toast(linkedRules?`Categoria excluída. ${linkedRules.split(' ')[0]} regra(s) da integração Marco Iris foram alteradas para “Outro”.`:'Categoria excluída. Referências vinculadas foram alteradas para “Outro”.');
+}
 Settings.showCategoryLinkedWarning = function(typeKey, name, usage){
-  const detail = usage && usage.parts && usage.parts.length ? ` Encontrado: ${usage.parts.join(', ')}.` : '';
-  const box = el(`
-    <div class="modal-overlay">
-      <div class="modal-box confirm-box confirm-gold">
-        <div class="modal-head"><h2>Categoria em uso</h2><button id="cw_close">&times;</button></div>
-        <p class="confirm-text"><b>Categoria vinculada a lançamentos/despesas.</b><br>Desvincule para excluir.${esc(detail)}</p>
-        <div class="info-box">Para manter seu histórico certo, o Borion não troca automaticamente essa categoria para “Outro”. Primeiro edite ou remova os lançamentos vinculados.</div>
-        <div class="confirm-actions">
-          <button class="btn btn-secondary btn-block" id="cw_ok">Entendi</button>
-          <button class="btn btn-primary btn-block" id="cw_go">Ver lançamentos</button>
-        </div>
-      </div>
-    </div>`);
-  $('#modal-root').innerHTML=''; $('#modal-root').appendChild(box); attachModalGuard(box);
-  $('#cw_close').onclick=closeModal; $('#cw_ok').onclick=closeModal;
-  $('#cw_go').onclick=()=>{ closeModal(); S.view='budget'; S.budgetTab=(typeKey==='receita'?'receita':typeKey); renderApp(); };
+  const detail=usage&&usage.parts&&usage.parts.length?usage.parts.join(', '):'referências vinculadas';
+  openConfirmModal({
+    title:'Excluir categoria vinculada',
+    text:`A categoria "${name}" está em uso (${detail}). Ao excluir, todos esses vínculos serão movidos para “Outro”, inclusive regras da integração Marco Iris.`,
+    confirmLabel:'Excluir e mover para Outro',cancelLabel:'Cancelar',variant:'danger',
+    onConfirm(){ deleteCategoryAndMoveReferences(typeKey,name,usage); }
+  });
 };
 Settings.deleteCategory = function(typeKey, name){
-  const usage = categoryUsageDetails(typeKey, name);
-  if(usage.total>0){ Settings.showCategoryLinkedWarning(typeKey, name, usage); return; }
+  if(name==='Outro'){ alert('A categoria “Outro” é necessária como destino seguro e não pode ser excluída.'); return; }
+  const usage=categoryUsageDetails(typeKey,name);
+  if(usage.total>0){ Settings.showCategoryLinkedWarning(typeKey,name,usage); return; }
   openConfirmModal({
-    title:'Excluir categoria',
-    text:`Excluir a categoria "${name}"? Ela não possui lançamentos vinculados.`,
-    confirmLabel:'Excluir categoria', cancelLabel:'Cancelar', variant:'danger',
-    onConfirm(){
-      S.data.categorias[typeKey]=(S.data.categorias[typeKey]||[]).filter(c=>c!==name);
-      if(!S.data.categorias[typeKey].includes('Outro')) S.data.categorias[typeKey].push('Outro');
-      if(S.data.categoryColors&&S.data.categoryColors[typeKey]) delete S.data.categoryColors[typeKey][name];
-      saveCurrentData(); renderView(); toast('Categoria excluída.');
-    }
+    title:'Excluir categoria',text:`Excluir a categoria "${name}"?`,confirmLabel:'Excluir categoria',cancelLabel:'Cancelar',variant:'danger',
+    onConfirm(){ deleteCategoryAndMoveReferences(typeKey,name,usage); }
   });
 };
 Settings.deleteCloudAccountFlow = function(){
@@ -1056,7 +1056,7 @@ window.Settings = Settings;
 /* ================= V6.33.1 — refinamento extra de Configurações, padronização de ordenação
    e bloco flutuante de Anotações persistente entre abas ================= */
 (function(){
-  const SETTINGS_VERSION = '6.43.0';
+  const SETTINGS_VERSION = '6.44.0';
 
   function floatingNotesPrefs(create=false){
     const fallback={enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};
@@ -1128,7 +1128,7 @@ window.Settings = Settings;
     else if(S.settingsTab==='backup') content = renderSettingsBackup();
     else if(S.settingsTab==='integrations') content = window.BorionInterop ? BorionInterop.renderSettings() : '<div class="settings-section">Integração indisponível.</div>';
     else if(S.settingsTab==='help') content = window.BorionHelp ? BorionHelp.render() : HelpCenterLoader.placeholder();
-    return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. ${SETTINGS_VERSION} • Central do Borion</div><footer class="app-release-footer" aria-label="Informações do Borion">
+    return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. ${SETTINGS_VERSION} • Formas e Destinos das Receitas Integradas</div><footer class="app-release-footer" aria-label="Informações do Borion">
 <div><strong>Versão:</strong> ${SETTINGS_VERSION}</div>
 <div><strong>Lançamento:</strong> 20/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>

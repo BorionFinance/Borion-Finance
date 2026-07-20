@@ -1,0 +1,320 @@
+BORION FINANCE V6.42.0 — BOOT E SINCRONIZAÇÃO OTIMIZADOS
+Data da revisão: 20/07/2026
+Base utilizada: Borion Finance v6.41.0 — Integração MIT
+
+======================================================================
+1. ESCOPO
+======================================================================
+
+Esta versão foi construída diretamente sobre a v6.41.0. O objetivo foi reduzir
+o tempo percebido e real de abertura, tornar o progresso visível, diminuir
+consultas redundantes ao Google Drive e acelerar a propagação entre dispositivos,
+sem remover as proteções de dados introduzidas nas versões 6.40.x e 6.41.0.
+
+Foram preservados:
+- Google Drive como fonte remota oficial;
+- current.json como snapshot consolidado;
+- journal de operações imutáveis;
+- operationId idempotente;
+- fila durável no IndexedDB;
+- recuperação após interrupção;
+- merge de três vias;
+- tombstones e exclusão real de perfil;
+- checksum SHA-256;
+- validação antes e depois da gravação;
+- proteção contra base vazia e quedas suspeitas;
+- backup obrigatório antes de migração;
+- backups rotativos e backup diário imutável;
+- múltiplas abas;
+- integração MIT da v6.41.0;
+- leitura de bases e operações antigas das versões 6.40/6.41.
+
+======================================================================
+2. NOVA ABERTURA E PROGRESSO REAL
+======================================================================
+
+Novo arquivo: js/01i-boot-progress-v642.js
+
+Inclui:
+- BootProgress.start();
+- BootProgress.setStage();
+- BootProgress.setDetail();
+- BootProgress.setProgress();
+- BootProgress.setSlowState();
+- BootProgress.complete();
+- BootProgress.fail();
+- BootProgress.retry();
+- reconexão Google e retorno ao login;
+- aria-live="polite";
+- mensagens de lentidão aos 5, 10 e 20 segundos;
+- erro com etapa, texto compreensível e detalhe técnico sanitizado;
+- telemetria local com performance.mark() e performance.measure().
+
+A splash fictícia de R$ 0,00 até R$ 1.000.000,00 foi removida. Também foram
+removidos os atrasos fixos de aproximadamente 1.100 ms + 220 ms + 350 ms.
+A inicialização real começa imediatamente; existe apenas um fade final curto,
+executado depois que a abertura já terminou.
+
+A tela de boot agora existe diretamente no HTML, antes dos módulos JavaScript,
+e mostra etapas vinculadas às operações reais: dispositivo, armazenamento,
+Google Identity, token, pasta, current.json, integridade, journal, aplicação e
+renderização.
+
+======================================================================
+3. BOOT PARALELO E SERVIÇOS NÃO BLOQUEANTES
+======================================================================
+
+Arquivo principal alterado: js/14-events-boot-pwa.js
+
+- O modo de armazenamento é lido antes da inicialização remota.
+- Preparação do deviceId, sessionId, IndexedDB/fila, armazenamento local e Google
+  Identity é iniciada em paralelo quando seguro.
+- BackupFS e registro/atualização do service worker não seguram o login.
+- Operações de preparação possuem limites de tempo para não deixar o boot preso.
+- Tarefas opcionais continuam em segundo plano.
+- O seletor de perfis não aguarda backup diário, limpeza ou atualização do SW.
+
+======================================================================
+4. SUPABASE SOB DEMANDA
+======================================================================
+
+Arquivos alterados: index.html e js/17-borion-cloud.js
+
+- O SDK do Supabase não é mais carregado pelo index.html.
+- No modo google_drive, nenhuma sessão Supabase é consultada.
+- No modo offline, Google e Supabase não são inicializados.
+- Quando o modo Supabase é escolhido explicitamente, ensureSupabaseLoaded()
+  injeta o SDK uma única vez, reaproveita a mesma Promise, possui timeout e
+  tratamento de falha.
+- CloudStorage continua disponível para compatibilidade.
+
+======================================================================
+5. GOOGLE IDENTITY SEPARADO DO PICKER
+======================================================================
+
+Arquivo alterado: js/01c-google-drive-provider.js
+
+- ensureIdentityLoaded() carrega somente Google Identity Services.
+- ensurePickerLoaded() carrega gapi e o Picker somente quando necessário.
+- Usuário recorrente com pasta vinculada não carrega o Picker.
+- Primeira conexão e troca explícita de pasta continuam abrindo o Picker.
+- Promises reutilizáveis impedem scripts duplicados.
+- Token e confirmação de usuário possuem timeout explícito.
+
+======================================================================
+6. PASTA E CURRENT.JSON — CAMINHO RÁPIDO
+======================================================================
+
+- A validação da pasta retorna e reutiliza os metadados, eliminando a segunda
+  consulta sequencial usada apenas para obter o nome.
+- 404 remove o vínculo inválido; 401 pede nova autenticação; 403 preserva o
+  vínculo e informa falta de permissão; 429/5xx/rede usam retry e não apagam o ID.
+- O ID do current.json é persistido por pasta em:
+  borion_gdrive_current_file_<folderId>
+- Aberturas recorrentes consultam diretamente os metadados pelo fileId.
+- A busca por nome é usada somente como fallback.
+- Duplicidades de current.json são detectadas; a seleção canônica é
+  determinística e os demais arquivos são preservados.
+- Campos de metadados foram limitados ao necessário.
+
+======================================================================
+7. JOURNAL OTIMIZADO SEM REDUZIR A SEGURANÇA
+======================================================================
+
+Arquivo alterado: js/01g-drive-journal-v640.js
+
+- operationIdFromFileName() aceita somente op_<operationId>.json válido.
+- listPendingOperationFiles() extrai o operationId do nome.
+- consolidate() compara o ID com __syncMeta640.appliedOperationIds antes de
+  baixar o arquivo.
+- Operações aplicadas não são baixadas, parseadas, recalculadas ou mescladas.
+- Operações pendentes continuam sendo baixadas, comparadas com o nome,
+  validadas por checksum e aplicadas pelo merge existente.
+- Topologia do journal é persistida e reutilizada em memória/localStorage.
+- discoverTopology({force:true}) saiu do caminho normal de escrita e consolidação.
+- Redescoberta completa ocorre apenas na primeira configuração ou após falha
+  estrutural/inconsistência.
+- writeOperation() cria diretamente o UUID na primeira tentativa.
+- Em repetição, primeiro valida remoteFileId; depois procura pelo nome.
+- Compatibilidade com estruturas 6.40/6.41 foi mantida.
+
+Teste crítico executado:
+- 5.000 operações aplicadas + 2 pendentes;
+- 5.002 metadados listados;
+- 5.000 ignorados pelo nome;
+- somente 2 arquivos baixados e validados;
+- resultado consolidado preservado.
+
+======================================================================
+8. ARQUIVAMENTO APÓS CONFIRMAÇÃO
+======================================================================
+
+Estrutura suportada:
+Borion_Sync/
+  operations/
+    applied/
+  snapshots/
+  conflicts/
+
+Uma operação só é movida para applied depois de:
+1. entrar no snapshot;
+2. o current.json ser atualizado;
+3. o current.json ser relido;
+4. o checksum ser validado;
+5. o operationId ser encontrado no snapshot confirmado.
+
+Falha no arquivamento não é fatal. O arquivo permanece em operations, é ignorado
+pelo nome no próximo ciclo e o arquivamento é retomado em segundo plano.
+A pasta applied é criada gradualmente sem migração destrutiva.
+
+======================================================================
+9. FILA DURÁVEL E ESTADOS DE RECUPERAÇÃO
+======================================================================
+
+Arquivo alterado: js/01f-sync-queue-v640.js
+
+Registros agora suportam:
+- operationId;
+- remoteFileId;
+- remoteProtectedAt;
+- consolidatedAt;
+- state.
+
+Estados internos:
+LOCAL_PENDING, UPLOADING_OPERATION, DRIVE_PROTECTED, MERGING,
+SNAPSHOT_WRITING, SNAPSHOT_CONFIRMED, ARCHIVING_OPERATION,
+COMPLETED e ERROR.
+
+A fila só conclui após confirmação real. O status visual diferencia alteração
+local, operação protegida, consolidação, confirmação e arquivamento.
+
+======================================================================
+10. POLL ADAPTATIVO E ATUALIZAÇÃO REMOTA SEGURA
+======================================================================
+
+Arquivo alterado: js/01c-google-drive-provider.js
+Novo arquivo: js/01j-remote-update-v642.js
+
+- Poll com setTimeout adaptativo, sem chamadas sobrepostas:
+  - ativo: 2 s por 30 s após abertura, salvamento, retorno à aba ou mudança remota;
+  - normal: 4,5 s com a aba em uso;
+  - ocioso: 12 s;
+  - retorno do segundo plano: verificação imediata.
+- Nenhum novo poll começa durante leitura, sync, autosave ou renovação relevante.
+- BorionEditGuard registra formulários realmente sujos.
+- Busca, filtro, ordenação e navegação não bloqueiam atualização financeira.
+- RemoteUpdateQueue baixa e valida o snapshot, mantém em memória e aplica depois
+  que o formulário é salvo, fechado, cancelado ou fica seguro.
+- A fila remota também espera a alteração local ser protegida/confirmada antes de
+  aplicar um snapshot remoto.
+- Perfil, mês, ano, filtros e aba são preservados quando possível.
+- Perfil excluído em outro dispositivo fecha modal com segurança, limpa o perfil
+  ativo, volta ao seletor e informa a remoção.
+
+======================================================================
+11. ESTADO VISUAL DE SINCRONIZAÇÃO
+======================================================================
+
+O selo do Google Drive diferencia:
+- conectando/buscando;
+- salvo neste dispositivo;
+- protegendo no Drive;
+- alteração protegida;
+- consolidando;
+- snapshot confirmado;
+- atualização recebida;
+- aguardando finalizar edição;
+- offline;
+- reconexão necessária;
+- conflito preservado;
+- salvamento bloqueado por segurança.
+
+Quando existe pendência, o selo informa a quantidade conhecida da fila. O título
+mostra a hora da última confirmação e a duração do último salvamento.
+"Sincronizado agora" só aparece após releitura e checksum confirmado.
+
+======================================================================
+12. TIMEOUTS, RETRY E TELEMETRIA LOCAL
+======================================================================
+
+GoogleDriveFS.request() agora usa AbortController:
+- metadados: 11 s;
+- listagem: 15 s;
+- download: 25 s;
+- upload: 35 s;
+- demais operações: 15 s.
+
+Erros específicos: DRIVE_TIMEOUT, DOWNLOAD_TIMEOUT, UPLOAD_TIMEOUT e AUTH_TIMEOUT.
+Retry exponencial limitado foi preservado para 429, 500, 502, 503, 504 e falhas
+transitórias de rede.
+
+BorionPerf registra localmente, sem enviar a servidor:
+- boot total e etapas;
+- resource timing e primeiro paint quando disponível;
+- requisições/retries/bytes;
+- itens e pastas listados;
+- operações listadas/ignoradas/baixadas/arquivadas;
+- checksum, merge, persistência e renderização;
+- sincronização e eventos de mudança remota.
+
+O resumo detalhado só é exibido em modo debug, por ?borionDebug=sync.
+Tokens, senhas, conteúdo financeiro e current.json não são registrados.
+
+======================================================================
+13. SERVICE WORKER E SCRIPTS
+======================================================================
+
+Arquivo alterado: sw.js
+
+- CACHE_NAME atualizado para 6.42.0.
+- HTML: network-first com timeout de 2,5 s e fallback para cache.
+- JS/CSS/imagens/ícones/manifest versionados: stale-while-revalidate.
+- Origens Google, Google APIs, Supabase e demais externas não são interceptadas.
+- current.json remoto não é cacheado.
+- referências estáticas foram atualizadas para ?v=6.42.0.
+- Todos os scripts locais usam defer e preservam a ordem declarada.
+- CSS e logotipo recebem preload.
+- Não foi feito lazy loading improvisado de módulos funcionais.
+
+======================================================================
+14. DECISÃO SOBRE ENTITY-PATCH-V2
+======================================================================
+
+O formato entity-patch-v2 não foi ativado nesta versão. O full-snapshot-v1 foi
+mantido para operações novas e antigas porque a alteração de formato exigiria
+cobertura adicional de todas as coleções, migrações e conflitos por campo.
+A prioridade foi eliminar downloads e redescobertas desnecessárias sem introduzir
+risco de perda de dados.
+
+Foi adicionada uma rotina de compactação de appliedOperationIds com bloqueios
+explícitos, mas ela não remove IDs automaticamente apenas por idade. Exige
+snapshot válido, backup confirmado, operações arquivadas e período de segurança.
+
+======================================================================
+15. ARQUIVOS ADICIONADOS
+======================================================================
+
+js/01i-boot-progress-v642.js
+js/01j-remote-update-v642.js
+
+tests/test_boot_progress_v642.js
+tests/test_boot_fast_path_v642.js
+tests/test_google_lazy_load_v642.js
+tests/test_current_file_cache_v642.js
+tests/test_journal_skip_applied_v642.js
+tests/test_journal_archive_v642.js
+tests/test_journal_legacy_applied_folder_v642.js
+tests/test_drive_call_count_v642.js
+tests/test_live_sync_adaptive_v642.js
+tests/test_remote_update_queue_v642.js
+tests/test_service_worker_fast_cache_v642.js
+tests/test_request_timeout_v642.js
+
+======================================================================
+16. VERSÃO
+======================================================================
+
+Aplicativo: 6.42.0
+Nome: 6.42 — Boot e Sync Otimizados
+Cache PWA: 6.42.0
+Manifest e referências estáticas: 6.42.0

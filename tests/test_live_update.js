@@ -15,10 +15,12 @@ function makeSandbox(opts={}){
   const toasts = [];
 
   const sandbox={
-    console, Object, Array, String, Number, JSON, Math, Promise, Date,
-    addEventListener(){},
+    console, Object, Array, String, Number, JSON, Math, Promise, Date, Set, setTimeout(){return 1;}, clearTimeout(){},
+    CustomEvent:function(type,options){this.type=type;this.detail=options&&options.detail;},
+    addEventListener(){}, dispatchEvent(){},
     localStorage:{ getItem:k=>store[k]??null, setItem:(k,v)=>{store[k]=String(v);}, removeItem:k=>{delete store[k];} },
     document:{
+      readyState:'complete', __borionEditGuardInstalled:false,
       hidden: domState.hidden,
       querySelector:(sel)=>{
         if(sel==='.modal-overlay') return domState.modalOpen ? {} : null;
@@ -26,6 +28,7 @@ function makeSandbox(opts={}){
         return null;
       },
       activeElement: domState.activeTag ? { tagName: domState.activeTag, isContentEditable:false } : null,
+      querySelectorAll(){ return []; },
       addEventListener(){}
     },
     navigator:{ onLine:true },
@@ -48,6 +51,7 @@ function makeSandbox(opts={}){
   sandbox.window=sandbox;
   vm.createContext(sandbox);
   vm.runInContext(loadSource('01d-data-guard.js'),sandbox,{filename:'01d-data-guard.js'});
+  vm.runInContext(loadSource('01j-remote-update-v642.js'),sandbox,{filename:'01j-remote-update-v642.js'});
   const providerSource = loadSource('01c-google-drive-provider.js') + '\nwindow.GoogleDriveFS=GoogleDriveFS;\nwindow.GoogleDriveAuth=GoogleDriveAuth;\n';
   vm.runInContext(providerSource,sandbox,{filename:'01c-google-drive-provider.js'});
   sandbox.GoogleDriveAuth.user = { sub:'test-user', email:'test@example.invalid' };
@@ -107,7 +111,7 @@ function assert(cond,msg){ if(!cond) throw new Error('FALHOU: '+msg); }
   assert(changed===false, 'com dirty=true, checkForRemoteUpdate não deveria fazer nada');
 }
 
-// 4) Mudou remotamente, mas tem um modal aberto -> NÃO aplica agora (adia)
+// 4) Mudou remotamente e há formulário realmente sujo -> baixa/valida, mas enfileira sem aplicar
 {
   const sb = makeSandbox({ modalOpen:true });
   const provider = sb.GoogleDriveProvider;
@@ -115,14 +119,18 @@ function assert(cond,msg){ if(!cond) throw new Error('FALHOU: '+msg); }
   provider.currentFileMeta = { modifiedTime: '2026-01-01T00:00:00.000Z' };
   sb.S.currentProfile = { id:'pedro', name:'Pedro' };
   sb.S.data = { transacoes: [] };
+  sb.BorionEditGuard.markDirty('lancamento');
+  let reads=0;
   sb.GoogleDriveFS.getFileMeta = async ()=>({ modifiedTime: '2026-01-01T00:05:00.000Z' });
-  sb.GoogleDriveFS.readFile = async ()=>{ throw new Error('não deveria ler o conteúdo com um modal aberto'); };
+  sb.GoogleDriveFS.readFile = async ()=>{reads++;return {type:'borion-account-backup',profiles:[{id:'pedro',name:'Pedro'}],dataByProfile:{pedro:{transacoes:[{id:'remoto'}]}}};};
   const changed = await provider.checkForRemoteUpdate();
-  assert(changed===false, 'com um modal aberto, a atualização deveria ser adiada, não aplicada');
-  assert(provider.currentFileMeta.modifiedTime==='2026-01-01T00:00:00.000Z', 'currentFileMeta não deveria mudar (adiado, não descartado — a próxima checagem tenta de novo)');
+  assert(changed===false, 'formulário sujo deve adiar a aplicação');
+  assert(reads===1 && sb.RemoteUpdateQueue.hasPending(), 'snapshot remoto deve ser baixado, validado e mantido em fila');
+  assert(sb.S.data.transacoes.length===0, 'formulário em andamento não pode ser sobrescrito');
+  sb.RemoteUpdateQueue.clear();
 }
 
-// 5) Mudou remotamente, campo de texto focado -> NÃO aplica agora
+// 5) Campo de pesquisa/input apenas focado, sem formulário sujo -> NÃO bloqueia atualização
 {
   const sb = makeSandbox({ activeTag:'INPUT' });
   const provider = sb.GoogleDriveProvider;
@@ -131,9 +139,10 @@ function assert(cond,msg){ if(!cond) throw new Error('FALHOU: '+msg); }
   sb.S.currentProfile = { id:'pedro', name:'Pedro' };
   sb.S.data = { transacoes: [] };
   sb.GoogleDriveFS.getFileMeta = async ()=>({ modifiedTime: '2026-01-01T00:05:00.000Z' });
-  sb.GoogleDriveFS.readFile = async ()=>{ throw new Error('não deveria ler o conteúdo com um campo em edição'); };
+  sb.GoogleDriveFS.readFile = async ()=>({type:'borion-account-backup',profiles:[{id:'pedro',name:'Pedro'}],dataByProfile:{pedro:{transacoes:[{id:'novo-pesquisa'}]}}});
   const changed = await provider.checkForRemoteUpdate();
-  assert(changed===false, 'com um <input> focado, a atualização deveria ser adiada');
+  assert(changed===true, 'input apenas focado não pode bloquear atualização financeira');
+  assert(sb.S.data.transacoes.length===1, 'dados remotos devem ser aplicados com campo de pesquisa focado');
 }
 
 // 6) Perfil ativo foi removido em outro dispositivo -> volta pro Gate com aviso

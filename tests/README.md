@@ -1,4 +1,4 @@
-# Testes do Borion Finance 6.40.2 — Dados e Segurança
+# Testes do Borion Finance 6.42.0 — Boot e sincronização otimizados
 
 Executar toda a suíte na raiz do projeto:
 
@@ -6,28 +6,33 @@ Executar toda a suíte na raiz do projeto:
 node tests/run_all.js
 ```
 
-Verificar sintaxe de todos os JavaScript:
+Verificar a sintaxe de todos os JavaScript:
 
 ```bash
 find js -type f -name '*.js' -print0 | xargs -0 -n1 node --check
 node --check sw.js
 ```
 
-## Cobertura principal da correção 6.40.2
+## Cobertura específica da versão 6.42.0
 
-- `test_atomic_account_apply_v6401.js`: preparação integral em memória, rollback de quota, migração interrompida, IDs de perfil duplicados e dados órfãos.
-- `test_backup_gate_v6401.js`: backup exato antes da migração, JSON malformado/snapshot truncado, checksum, releitura, idempotência e bloqueio da migração quando o backup falha.
-- `test_drive_pagination_v6401.js`: 2.500 arquivos em três páginas, deduplicação, ordenação estável, limite de segurança, falha fechada em página incompleta e política de retry HTTP.
-- `test_journal_v6401.js`: relógio atrasado, operação aparecendo tardiamente, duplicata, operação já aplicada, árvores duplicadas, adulteração e compactação interrompida.
-- `test_migration_preservation_v6401.js`: IDs determinísticos em dois ambientes, duplicatas legítimas distintas, migração idempotente e preservação de contas com dois e cinco perfis.
-- `test_merge_schema_v6401.js`: merge de categorias, configurações, módulos, cartões, ordenação, vínculos e conflitos no mesmo campo.
-- `test_multitab_v6401.js`: uma única líder, delegação da aba secundária, heartbeat, expiração do lease, transferência de liderança e ausência de duplicação.
-- `test_real_delete_tombstones_v6401.js`: exclusão pela ação central real, captura de remoções implícitas, tombstones por entidade e perfil, tentativa de ressurreição e edição concorrente contra exclusão.
-- `test_profile_delete_propagation_v6402.js`: exclusão imediata no Drive, operationId compartilhado entre tombstone e operação, bloqueio de ressurreição de perfil e retirada automática do perfil aberto em outra aba/dispositivo.
-- `test_drive_sync_fail_safe.js`: fila local, 401, retorno da rede, edição durante upload, operação protegida com consolidação falhando, persistência da migração no boot e retomada após PATCH interrompido.
+- `test_boot_progress_v642.js`: primeira tela estática, etapas reais, acessibilidade, estados de lentidão, erro e recuperação, sem espera artificial.
+- `test_boot_fast_path_v642.js`: modo de armazenamento lido antes dos serviços remotos e preparação paralela do boot.
+- `test_google_lazy_load_v642.js`: Supabase sob demanda; Google Identity separado do Picker.
+- `test_current_file_cache_v642.js`: reutilização direta do ID persistido do `current.json`.
+- `test_drive_call_count_v642.js`: topologia canônica em cache sem redescoberta no caminho normal.
+- `test_journal_skip_applied_v642.js`: 5.000 operações aplicadas e duas pendentes; somente duas leituras de conteúdo.
+- `test_journal_archive_v642.js`: arquivamento somente após snapshot relido, checksum válido e `operationId` confirmado.
+- `test_journal_legacy_applied_folder_v642.js`: compatibilidade gradual com estruturas 6.40/6.41 sem pasta `applied`.
+- `test_live_sync_adaptive_v642.js`: agendamento por `setTimeout` em 2 s, 4,5 s e 12 s, sem chamadas sobrepostas.
+- `test_remote_update_queue_v642.js`: formulário sujo preservado, espera da confirmação local e aplicação remota segura.
+- `test_live_update.js`: integração da fila remota, exclusão de perfil e campo de pesquisa focado sem bloqueio indevido.
+- `test_request_timeout_v642.js`: cancelamento real com `AbortController` e erro específico de timeout.
+- `test_service_worker_fast_cache_v642.js`: HTML network-first com timeout, arquivos estáticos SWR e APIs externas fora do cache.
 
-A suíte também mantém os testes anteriores de importação, ajuda, Data Guard, atualização ao vivo, fila durável, checksum, merge e versionamento.
+## Proteções mantidas
+
+A suíte anterior continua cobrindo aplicação atômica, backup bruto pré-migração, paginação, fila durável, journal, merge de três vias, tombstones, exclusão de perfil entre dispositivos, múltiplas abas, detecção de base suspeita, importadores e integração MIT.
 
 ## Limites do ambiente automatizado
 
-Os testes de Google Drive usam simulações determinísticas da API, inclusive paginação, erros 401/403/429/500 e árvores duplicadas. O teste final com credenciais reais, duas abas e dois dispositivos deve ser executado no navegador conforme `REVISAO_V6.40.2.md`.
+A API do Google Drive é simulada deterministicamente nos testes de segurança, paginação, concorrência, falhas e desempenho estrutural. O fluxo visual foi carregado em Chromium headless com os 36 scripts locais e sem erros JavaScript. OAuth real, latência pública do Google e dois aparelhos físicos exigem credenciais e ambiente de publicação; por isso não são declarados como testados neste pacote.

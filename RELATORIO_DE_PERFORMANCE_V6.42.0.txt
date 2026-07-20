@@ -1,0 +1,441 @@
+RELATÓRIO DE PERFORMANCE — BORION FINANCE V6.42.0
+Data: 20/07/2026
+Base comparada: v6.41.0
+
+======================================================================
+1. MÉTODO E LIMITES
+======================================================================
+
+Foram usados quatro tipos de evidência:
+1. inspeção direta da arquitetura v6.41.0;
+2. contagem estática de scripts, esperas e chamadas do caminho crítico;
+3. testes determinísticos com mocks da API do Google Drive;
+4. carregamento local dos 36 scripts em Chromium 144 headless.
+
+Não houve acesso à conta Google, pasta privada ou dois dispositivos físicos.
+Portanto, tempos de OAuth, Drive real e propagação PC/celular não foram
+inventados. Eles estão instrumentados em BorionPerf e serão preenchidos no uso
+real. Os números em milissegundos abaixo são medidos apenas quando o ambiente
+permitiu; os demais são comparações arquitetônicas e metas verificáveis.
+
+Ativação do diagnóstico real:
+- abrir com ?borionDebug=sync;
+- consultar BorionPerf.summary() no console;
+- nenhum dado é enviado para servidor externo.
+
+======================================================================
+2. BOOT — ANTES E DEPOIS
+======================================================================
+
+2.1 Primeira tela visível
+
+ANTES:
+- index.html não continha a tela real de boot;
+- a interface dependia de JavaScript e da splash antiga.
+
+DEPOIS:
+- shell de carregamento existe no HTML e pode aparecer assim que o navegador
+  processa o corpo;
+- teste em Chromium, viewport 390 x 844: tela visível, sem erro;
+- o tempo de set_content do harness foi aproximadamente 0,46 s, mas esse valor
+  inclui a montagem artificial do documento e não representa first paint de uma
+  hospedagem real;
+- Performance Paint Timing registra first-paint no uso real.
+
+Meta: abaixo de 150 ms em PWA com cache disponível.
+Status: arquitetura preparada; confirmação depende da origem publicada/aparelho.
+
+2.2 Espera fixa da splash
+
+ANTES:
+- animação: ~1.100 ms;
+- espera: ~220 ms;
+- fade: ~350 ms;
+- início do fluxo real atrasado em ~1.670 ms.
+
+DEPOIS:
+- espera mínima obrigatória: 0 ms;
+- boot real inicia imediatamente;
+- fade final padrão: 180 ms, somente depois de tudo pronto.
+
+Ganho determinístico no caminho crítico: ~1.670 ms removidos.
+
+2.3 Scripts locais
+
+ANTES:
+- 35 tags de script;
+- 34 scripts locais;
+- 1 script externo Supabase;
+- somente 1 tag com defer;
+- JavaScript local: 35 arquivos, 1.282.271 bytes.
+
+DEPOIS:
+- 36 tags, todas locais;
+- 36/36 com defer, ordem preservada;
+- 0 script externo no carregamento inicial;
+- JavaScript local: 37 arquivos, aproximadamente 1,33 MB;
+- aumento de código corresponde aos controladores de boot, telemetria, fila
+  remota e testes; o parsing do HTML deixou de esperar os scripts.
+
+Chromium funcional:
+- 36/36 scripts carregados;
+- zero page errors;
+- zero avisos no console do fluxo validado.
+
+======================================================================
+3. AUTENTICAÇÃO E SERVIÇOS REMOTOS
+======================================================================
+
+3.1 Supabase
+
+ANTES, no modo Google Drive:
+- 1 download externo do SDK Supabase no index.html;
+- CloudStorage.init() podia consultar sessão e registrar listeners sem necessidade.
+
+DEPOIS, no modo Google Drive:
+- 0 downloads Supabase;
+- 0 auth.getSession();
+- 0 listeners Supabase;
+- ensureSupabaseLoaded() só executa no modo explicitamente Supabase.
+
+3.2 Google Identity Services
+
+ANTES:
+- GIS, gapi e Picker carregados no mesmo fluxo sequencial.
+
+DEPOIS:
+- GIS é carregado isoladamente;
+- Promise reutilizada;
+- timeout de 12 s para o script;
+- token com timeout de 20 s;
+- confirmação de usuário com timeout de 10 s.
+
+Tempo real de GIS/token/usuário: instrumentado nas etapas
+`google_identity_script`, `google_token` e `google_userinfo`.
+
+3.3 Google Picker
+
+ANTES, usuário recorrente:
+- 1 carregamento de https://apis.google.com/js/api.js;
+- 1 gapi.load('picker');
+- ambos bloqueavam o fluxo mesmo com pasta salva.
+
+DEPOIS, usuário recorrente:
+- 0 carregamentos do Picker;
+- carregado somente na primeira conexão ou troca explícita de pasta.
+
+======================================================================
+4. LOCALIZAÇÃO DA PASTA E CURRENT.JSON
+======================================================================
+
+4.1 Pasta vinculada
+
+ANTES:
+- getFileMeta(folderId) para verificar existência;
+- outra getFileMeta(folderId) para obter nome/metadados;
+- 2 requisições sequenciais ao mesmo recurso.
+
+DEPOIS:
+- getValidatedFolderMeta(folderId) retorna existência + metadata;
+- o mesmo resultado valida, nomeia e atualiza cache;
+- 1 requisição.
+
+Redução: 50% das chamadas de metadata da pasta no boot recorrente.
+
+4.2 current.json
+
+ANTES:
+- findChild(folderId, 'current.json') executava listagem por nome em toda abertura.
+
+DEPOIS, fast path:
+- lê borion_gdrive_current_file_<folderId>;
+- consulta metadata diretamente pelo fileId;
+- baixa o arquivo sem pesquisa por nome;
+- fallback por nome somente em cache ausente, 404 ou inconsistência.
+
+Chamadas para localizar o arquivo no boot recorrente:
+- antes: 1 listagem por nome;
+- depois: 1 metadata direta;
+- listagem: 0 no caminho normal.
+
+Duplicidade é detectada no fallback e resolvida deterministicamente sem apagar
+arquivos.
+
+4.3 Download e integridade
+
+O current.json continua sendo baixado e validado. Essa leitura não foi removida.
+Foram adicionadas medições de:
+- bytes baixados;
+- tempo de current_download;
+- checksumMs;
+- preparação e aplicação do payload.
+
+Nenhum resultado real foi informado sem a base privada. O objetivo aqui não foi
+pular a validação, mas eliminar buscas e serviços anteriores a ela.
+
+======================================================================
+5. JOURNAL — RESULTADO CRÍTICO
+======================================================================
+
+Cenário medido:
+- 5.000 operações já aplicadas;
+- 2 operações pendentes;
+- 5.002 arquivos de operação na listagem.
+
+ANTES, v6.41.0:
+- 5.002 arquivos baixados;
+- 5.002 JSON parseados;
+- até 5.002 checksums de operação recalculados;
+- só depois 5.000 eram reconhecidos como aplicados.
+
+DEPOIS, v6.42.0:
+- 5.002 metadados listados;
+- 5.000 operationIds identificados pelo nome e ignorados;
+- 2 arquivos baixados;
+- 2 JSON parseados;
+- 2 operações validadas e mescladas.
+
+Redução de downloads de operação: 5.000 arquivos, ou 99,96%.
+Teste isolado do cenário: aproximadamente 0,15 s no ambiente local.
+Resultado final e checksums: aprovados.
+
+A listagem de metadados continua porque é a forma segura de descobrir operações
+novas sem depender exclusivamente do relógio. A diferença é que o conteúdo antigo
+não trafega novamente.
+
+======================================================================
+6. TOPOLOGIA DO JOURNAL
+======================================================================
+
+ANTES:
+- writeOperation() chamava discoverTopology({force:true});
+- consolidate() chamava listPendingOperationFiles(), que também forçava topologia;
+- cada descoberta listava Borion_Sync, operations, snapshots e conflicts;
+- repetição normal gerava várias listagens estruturais.
+
+DEPOIS:
+- IDs canônicos persistidos e em memória;
+- 0 redescobertas estruturais no caminho normal com cache válido;
+- redescoberta somente na primeira configuração, 404, 403, inconsistência ou
+  diagnóstico/manutenção;
+- teste de contagem confirmou reutilização sem chamadas adicionais.
+
+======================================================================
+7. CHAMADAS AO DRIVE POR SINCRONIZAÇÃO
+======================================================================
+
+Caminho normal sem concorrência, topologia e current.json já em cache:
+
+ANTES:
+- pelo menos 2 descobertas estruturais forçadas;
+- pesquisa do nome da operação antes de criar;
+- criação da operação;
+- leitura do current.json;
+- listagem de operações;
+- download de todas as operações históricas N;
+- atualização do current.json;
+- releitura de confirmação;
+- chamadas adicionais para topologia/duplicatas.
+
+O total crescia linearmente com N, principalmente por N downloads de conteúdo.
+
+DEPOIS — chamadas bloqueantes típicas:
+1. criar operação imutável;
+2. ler current.json;
+3. listar metadados de operations;
+4. baixar somente a operação pendente P=1;
+5. atualizar current.json;
+6. reler current.json para confirmação.
+
+Total típico: 6 chamadas bloqueantes, mais 1 movimentação de arquivamento em
+segundo plano. Não há descoberta forçada nem busca por nome na primeira tentativa.
+Com concorrência, P cresce somente conforme as operações realmente pendentes.
+
+Nota: retries por 429/5xx/rede podem aumentar o total; BorionPerf conta cada
+requisição e retry real.
+
+======================================================================
+8. GRAVAÇÃO E FILA DURÁVEL
+======================================================================
+
+ANTES:
+- o caminho da operação começava por descoberta forçada e busca por nome.
+
+DEPOIS:
+- operação UUID é criada diretamente na primeira tentativa;
+- remoteFileId é guardado na fila;
+- repetição valida esse ID antes de buscar por nome;
+- estados medem proteção, merge, escrita, confirmação e arquivamento;
+- UI atualiza localmente antes da rede;
+- operação protegida não é confundida com snapshot confirmado.
+
+Meta de operação protegida em rede normal: até 1,5 s.
+Meta de snapshot confirmado: até 3 s.
+Status: caminho crítico reduzido e instrumentado; tempo real depende da API/rede.
+
+======================================================================
+9. DETECÇÃO EM OUTRO DISPOSITIVO
+======================================================================
+
+ANTES:
+- setInterval fixo de aproximadamente 6 s;
+- atualização podia ser adiada indefinidamente por qualquer input focado.
+
+DEPOIS:
+- setTimeout adaptativo e sem sobreposição;
+- 2 s no modo ativo por 30 s;
+- 4,5 s no modo normal;
+- 12 s no modo ocioso;
+- verificação imediata ao retornar à aba;
+- mudança remota é baixada/validada e enfileirada quando há formulário sujo;
+- campo de busca não bloqueia.
+
+Janela arquitetônica esperada em dois dispositivos ativos: 2 a 5 s, somada à
+latência da API e ao tempo de download/validação.
+Tempo real PC -> celular: instrumentado por eventos `remote_update_detected` e
+contadores de aplicação; exige teste com dois dispositivos reais.
+
+======================================================================
+10. CHECKSUM, MERGE, PERSISTÊNCIA E RENDERIZAÇÃO
+======================================================================
+
+ANTES:
+- checksum era recalculado para cada operação histórica baixada;
+- operações aplicadas ainda eram parseadas;
+- etapas não possuíam medição central;
+- qualquer atualização podia gerar bloqueio excessivo por foco.
+
+DEPOIS:
+- checksum de operação só para pendentes;
+- checksum do snapshot antes/depois continua obrigatório;
+- counters `checksumMs` e `mergeMs`;
+- stages de journal, sync, aplicação e renderização;
+- aplicação remota preserva perfil/estado visual e respeita formulário realmente
+  sujo;
+- renderGate/renderView não são chamados pela tela de progresso.
+
+Tempos reais de prepareAccountPayload6401(), commitPreparedAccountPayload6401(),
+IndexedDB e renderização são coletáveis por BorionPerf no uso publicado.
+Não foi atribuído valor artificial sem uma base real.
+
+======================================================================
+11. SERVICE WORKER E ABERTURA DO PWA
+======================================================================
+
+ANTES:
+- network-first para HTML, scripts e estilos;
+- cada abertura podia esperar rede para recursos estáticos versionados.
+
+DEPOIS:
+- HTML: network-first com timeout de 2,5 s e cache fallback;
+- estáticos versionados: stale-while-revalidate;
+- Google/Supabase/API externa: não interceptados;
+- cache 6.42.0 separado da 6.41;
+- shell evita tela branca quando os recursos já existem no cache.
+
+Meta PWA com cache: abertura visual imediata.
+Status: estratégia aprovada por teste; medição real depende de instalação HTTPS.
+
+======================================================================
+12. TAMANHO DE OPERAÇÃO FULL-SNAPSHOT-V1
+======================================================================
+
+O formato atual carrega basePayload + payload. Sem compressão, o tamanho fica
+próximo de duas vezes o current.json, somado ao envelope JSON.
+
+Estimativas determinísticas:
+- current.json de 250 KiB -> operação aproximada de 500 KiB;
+- current.json de 1 MiB -> operação aproximada de 2 MiB;
+- current.json de 5 MiB -> operação aproximada de 10 MiB.
+
+Fórmula de crescimento bruto:
+Tamanho diário ≈ tamanho médio da operação x operações por dia.
+
+Exemplo com current.json de 1 MiB e 20 operações/dia:
+- operação média: ~2 MiB;
+- 1 dia: ~40 MiB;
+- 7 dias: ~280 MiB;
+- 30 dias: ~1,17 GiB.
+
+O arquivamento organiza operações confirmadas, mas não as apaga definitivamente.
+A migração para entity-patch-v2 não foi ativada porque não estava completamente
+coberta para todas as estruturas. Segurança teve prioridade.
+
+======================================================================
+13. CRESCIMENTO DE APPLIEDOPERATIONIDS
+======================================================================
+
+Estimativa de UUIDs serializados:
+- 1.000 IDs: ~38 KiB;
+- 5.000 IDs: ~190 KiB;
+- 10.000 IDs: ~381 KiB;
+- 50.000 IDs: ~1,86 MiB.
+
+Foi criada uma compactação segura e explicitamente condicionada. Ela não remove
+IDs apenas por data e não roda automaticamente sem:
+- snapshot válido;
+- backup confirmado;
+- operações arquivadas;
+- período de segurança;
+- checkpoint confiável.
+
+Assim, a v6.42 reduz o tráfego agora sem trocar segurança por uma limpeza agressiva.
+
+======================================================================
+14. RESUMO COMPARATIVO
+======================================================================
+
+BOOT
+Antes: +1.670 ms fixos antes do fluxo real.
+Depois: 0 ms de espera mínima; 180 ms de fade somente após conclusão.
+
+SUPABASE NO DRIVE
+Antes: 1 SDK externo + inicialização/sessão possível.
+Depois: 0.
+
+PICKER RECORRENTE
+Antes: gapi + picker em toda abertura.
+Depois: 0; somente primeira conexão/troca de pasta.
+
+PASTA
+Antes: 2 chamadas de metadata.
+Depois: 1.
+
+CURRENT.JSON
+Antes: 1 listagem por nome em toda abertura.
+Depois: 1 metadata direta; 0 listagem no fast path.
+
+TOPOLOGIA
+Antes: redescobertas forçadas por escrita/consolidação.
+Depois: 0 no caminho normal com cache válido.
+
+JOURNAL 5.000 + 2
+Antes: 5.002 downloads.
+Depois: 2 downloads.
+
+SINCRONIZAÇÃO NORMAL SEM CONCORRÊNCIA
+Antes: total variável e linear com o histórico N.
+Depois: cerca de 6 chamadas bloqueantes + 1 arquivamento em segundo plano.
+
+DETECÇÃO ATIVA
+Antes: intervalo fixo ~6 s.
+Depois: 2 s ativo, 4,5 s normal, 12 s ocioso.
+
+TESTES
+Antes da entrega: 33/33 arquivos aprovados em ~3,8 s.
+
+======================================================================
+15. CONCLUSÃO
+======================================================================
+
+A maior redução não veio de diminuir validações. Veio de impedir trabalho
+redundante antes da validação:
+- serviços externos desnecessários não carregam;
+- IDs conhecidos são reutilizados;
+- estruturas estáveis não são redescobertas;
+- operações aplicadas não são baixadas;
+- polling acelera quando importa e desacelera quando ocioso;
+- snapshot remoto nunca passa por cima de formulário sujo.
+
+As metas de 3 a 5 segundos estão tecnicamente sustentadas pelo novo caminho, mas
+devem ser confirmadas na conta, rede e dispositivos reais com BorionPerf.

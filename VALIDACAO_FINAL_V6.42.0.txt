@@ -1,0 +1,225 @@
+VALIDAÇÃO FINAL — BORION FINANCE V6.42.0
+Data: 20/07/2026
+
+======================================================================
+1. AMBIENTE UTILIZADO
+======================================================================
+
+Sistema de teste: Linux isolado
+Node.js: v22.16.0
+Chromium: 144.0.7559.96, modo headless
+Python de apoio: 3.13.5
+
+A validação foi executada sobre a cópia final que compõe o ZIP.
+
+======================================================================
+2. RESULTADO AUTOMATIZADO
+======================================================================
+
+Arquivos de teste executados: 33
+Aprovados: 33
+Falhos: 0
+Tempo total da suíte final: aproximadamente 3,8 segundos no ambiente isolado
+
+Todos os arquivos JavaScript do diretório js/ e o sw.js passaram em node --check.
+
+Testes executados:
+01. test_atomic_account_apply_v6401.js
+02. test_backup_gate_v6401.js
+03. test_boot_fast_path_v642.js
+04. test_boot_progress_v642.js
+05. test_checksum_schema_v640.js
+06. test_current_file_cache_v642.js
+07. test_data_guard.js
+08. test_data_guard_integration.js
+09. test_data_guard_v640.js
+10. test_drive_call_count_v642.js
+11. test_drive_pagination_v6401.js
+12. test_drive_sync_fail_safe.js
+13. test_durable_queue_v640.js
+14. test_google_lazy_load_v642.js
+15. test_help_center.js
+16. test_importador_legado.js
+17. test_journal_archive_v642.js
+18. test_journal_legacy_applied_folder_v642.js
+19. test_journal_skip_applied_v642.js
+20. test_journal_v6401.js
+21. test_live_sync_adaptive_v642.js
+22. test_live_update.js
+23. test_merge_engine_v640.js
+24. test_merge_schema_v6401.js
+25. test_migration_preservation_v6401.js
+26. test_mit_borion_integration_v641.js
+27. test_multitab_v6401.js
+28. test_profile_delete_propagation_v6402.js
+29. test_real_delete_tombstones_v6401.js
+30. test_remote_update_queue_v642.js
+31. test_request_timeout_v642.js
+32. test_service_worker_fast_cache_v642.js
+33. test_version_v640.js
+
+======================================================================
+3. CENÁRIOS FUNCIONAIS COBERTOS
+======================================================================
+
+APROVADO — usuário recorrente, caminho rápido simulado:
+- Supabase ausente no modo Drive;
+- Picker ausente quando já existe pasta;
+- metadados da pasta reutilizados;
+- fileId do current.json reutilizado;
+- boot por etapas reais.
+
+APROVADO — primeira conexão simulada:
+- Picker carregado somente quando não há pasta;
+- vínculo e cache persistidos.
+
+APROVADO — token/timeout:
+- GIS separado do Picker;
+- timeout de autenticação;
+- AbortController nas requisições Drive;
+- vínculo não é esquecido por falha genérica.
+
+APROVADO — rede lenta/sem internet por mocks determinísticos:
+- timeout específico;
+- retry limitado;
+- fila local preservada;
+- retomada sem duplicação;
+- nenhum overwrite inseguro.
+
+APROVADO — 5.000 operações aplicadas + 2 pendentes:
+- 5.000 ignoradas antes do download;
+- somente 2 baixadas;
+- checksum e resultado final corretos.
+
+APROVADO — concorrência:
+- perfis diferentes;
+- registros diferentes;
+- campos diferentes no mesmo registro;
+- mesmo campo gera conflito preservado;
+- edição versus exclusão preserva os dois lados para revisão.
+
+APROVADO — exclusão entre dispositivos:
+- tombstone propagado;
+- perfil não ressuscita;
+- perfil aberto é encerrado com segurança;
+- demais perfis permanecem.
+
+APROVADO — formulário aberto:
+- snapshot remoto é validado e enfileirado;
+- conteúdo do formulário não é apagado;
+- aplicação ocorre quando a edição fica segura.
+
+APROVADO — campo de pesquisa focado:
+- não bloqueia atualização financeira por não ser formulário sujo.
+
+APROVADO — falha após criar operação:
+- remoteFileId e estado DRIVE_PROTECTED preservados;
+- próxima sessão retoma a consolidação;
+- operationId não é duplicado.
+
+APROVADO — falha após atualizar current.json:
+- operação já aplicada é reconhecida pelo nome;
+- arquivo não é baixado novamente;
+- arquivamento é retomado.
+
+APROVADO — base corrompida/migração:
+- aplicação atômica;
+- backup bruto obrigatório;
+- checksum antes/depois;
+- overwrite bloqueado em falha.
+
+APROVADO — service worker:
+- HTML network-first com timeout/fallback;
+- estáticos versionados em SWR;
+- APIs externas não interceptadas;
+- cache 6.42 separado;
+- fallback impede tela branca quando o shell já está em cache.
+
+APROVADO — integração MIT:
+- receitas automáticas;
+- pagamentos parciais independentes;
+- mapeamento de meios de pagamento;
+- IDs de integração;
+- prevenção de duplicidade;
+- despesas continuam assistidas/em revisão.
+
+======================================================================
+4. VALIDAÇÃO NO CHROMIUM
+======================================================================
+
+- 36/36 scripts locais carregados na ordem declarada;
+- zero erros de página;
+- zero avisos no console do fluxo validado;
+- BootProgress disponível;
+- BorionPerf disponível;
+- CloudAuth disponível;
+- versão 6.42.0 detectada;
+- tela de login renderizada;
+- tela mobile de boot validada em viewport 390 x 844;
+- contraste do símbolo e texto conferido;
+- barra, spinner, mensagens e layout responsivo visíveis.
+
+O teste funcional do navegador usou um documento montado localmente com os
+recursos do projeto. O ambiente isolado bloqueou a navegação para uma origem
+HTTP externa/local completa por política administrativa, portanto a instalação
+real do PWA por URL não foi efetuada nesse ambiente.
+
+======================================================================
+5. LIMITES HONESTOS DA VALIDAÇÃO
+======================================================================
+
+Não foi possível executar, dentro do ambiente isolado:
+- login OAuth real com a conta Google do proprietário;
+- acesso real à pasta financeira do Google Drive;
+- sincronização física simultânea em computador e celular reais;
+- medição real de latência da internet do usuário;
+- instalação PWA por uma URL publicada do GitHub Pages/Cloudflare.
+
+Esses fluxos dependem de credenciais, consentimento OAuth, pasta privada e dois
+dispositivos do usuário. Nenhum token ou dado financeiro foi solicitado ou
+incluído no pacote.
+
+Em substituição, as regras de autenticação, chamadas Drive, fila, journal,
+conflito, exclusão, falhas e propagação foram cobertas por testes determinísticos
+e inspeção do navegador. A telemetria BorionPerf foi adicionada para registrar os
+tempos reais quando a versão for aberta na conta verdadeira.
+
+======================================================================
+6. COMPATIBILIDADE
+======================================================================
+
+Desktop: validado no Chromium headless; layout e scripts aprovados.
+Mobile: viewport 390 x 844 validada; tela de boot responsiva aprovada.
+Tablet: regras CSS responsivas preservadas; não houve dispositivo físico no teste.
+PWA: estratégia e cache aprovados por teste estático; instalação real depende de
+origem HTTPS publicada.
+Bases antigas: migração/compatibilidade 6.40.x e 6.41.0 coberta pelos testes.
+Integração MIT: aprovada.
+Múltiplas abas: aprovada.
+Exclusão entre dispositivos: aprovada por simulação determinística.
+Recuperação após falha: aprovada.
+
+======================================================================
+7. REVISÃO DE ENTREGA
+======================================================================
+
+- estrutura única borion_app/;
+- sem node_modules;
+- sem arquivos temporários de editor;
+- sem tokens;
+- sem dados de teste de usuários reais;
+- sem logs pessoais;
+- referências 6.42.0 consistentes;
+- arquivos de relatório incluídos;
+- pronto para ser publicado na mesma estrutura usada pela v6.41.0.
+
+======================================================================
+8. CONCLUSÃO
+======================================================================
+
+RESULTADO: APROVADO NOS TESTES AUTOMATIZADOS E NA VALIDAÇÃO LOCAL DISPONÍVEL.
+
+A versão elimina os gargalos arquitetônicos confirmados, mantém as proteções de
+dados e reduz drasticamente o custo do journal em bases com histórico grande.
+A confirmação final de metas em segundos deve ser feita após publicação, usando
+a própria telemetria local, com OAuth e dois dispositivos reais.

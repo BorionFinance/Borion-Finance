@@ -1,4 +1,4 @@
-/* Borion Finance — Google Drive Provider (V6.40.2 — Dados e Segurança)
+/* Borion Finance — Google Drive Provider (V6.42.0 — Boot e Sync Otimizados)
 
    Arquitetura 6.40.2: current.json é apenas o snapshot consolidado. Toda alteração
    é protegida primeiro como operação imutável, identificada por operationId, e só
@@ -48,7 +48,10 @@ const GOOGLE_DRIVE_AUTOSAVE_SLOTS = 20;
    nenhum conteúdo é baixado à toa). Se o `modifiedTime` mudou, é porque outro
    dispositivo salvou — aí sim busca o conteúdo novo e atualiza a tela sozinho. Ver
    checkForRemoteUpdate() mais abaixo. */
-const GOOGLE_DRIVE_LIVE_POLL_MS = 6 * 1000;
+const GOOGLE_DRIVE_LIVE_POLL_ACTIVE_MS = 2 * 1000;
+const GOOGLE_DRIVE_LIVE_POLL_NORMAL_MS = 4500;
+const GOOGLE_DRIVE_LIVE_POLL_IDLE_MS = 12000;
+const GOOGLE_DRIVE_LIVE_ACTIVE_WINDOW_MS = 30 * 1000;
 /* V6.20.0 — novo: além do autosave automático acima, cada Ctrl+S (forceSyncNow)
    agora também grava num rodízio PRÓPRIO de até 40 slots (forcesave-1.json ...
    forcesave-40.json), separado do autosave normal — histórico só dos momentos em que
@@ -62,6 +65,17 @@ const LS_GDRIVE_USER = 'borion_gdrive_user'; // cache do último usuário Google
 function gdriveReadFolderId(sub){ return localStorage.getItem(LS_GDRIVE_FOLDER_PREFIX + sub) || null; }
 function gdriveWriteFolderId(sub, id){ localStorage.setItem(LS_GDRIVE_FOLDER_PREFIX + sub, id); }
 function gdriveForgetFolderId(sub){ localStorage.removeItem(LS_GDRIVE_FOLDER_PREFIX + sub); }
+
+const LS_GDRIVE_CURRENT_FILE_PREFIX='borion_gdrive_current_file_';
+function gdriveCurrentFileKey(folderId){return LS_GDRIVE_CURRENT_FILE_PREFIX+folderId;}
+function gdriveReadCurrentFileCache(folderId){
+  try{const obj=JSON.parse(localStorage.getItem(gdriveCurrentFileKey(folderId))||'null');return obj&&obj.fileId?obj:null;}catch(e){return null;}
+}
+function gdriveWriteCurrentFileCache(folderId,meta){
+  if(!folderId||!meta||!meta.id)return;
+  try{localStorage.setItem(gdriveCurrentFileKey(folderId),JSON.stringify({fileId:meta.id,name:meta.name||'current.json',modifiedTime:meta.modifiedTime||null,createdTime:meta.createdTime||null,confirmedAt:new Date().toISOString()}));}catch(e){}
+}
+function gdriveForgetCurrentFileCache(folderId){try{localStorage.removeItem(gdriveCurrentFileKey(folderId));}catch(e){}}
 
 /* V6.11.0 — persiste o ID da subpasta "backups", keyed pela pasta principal (não pela
    conta) — assim, qualquer sessão que conecte na mesma pasta principal reaproveita a
@@ -113,105 +127,124 @@ function gdriveConsolidationKey(folderId){ return LS_GDRIVE_CONSOLIDATION_PREFIX
 
 /* ---------------- Autenticação (Google Identity Services) ---------------- */
 const GoogleDriveAuth = {
-  tokenClient: null,
-  accessToken: null,
-  tokenExpiresAt: 0,
-  user: null, // {sub, email, name, picture}
-  _gisReady: false,
-  _gapiReady: false,
+  tokenClient:null,accessToken:null,tokenExpiresAt:0,user:null,_gisReady:false,_gapiReady:false,
+  _scriptPromises:new Map(),_identityPromise:null,_pickerPromise:null,_tokenPromise:null,
 
-  loadScript(src){
-    return new Promise((resolve, reject)=>{
-      if(document.querySelector(`script[src="${src}"]`)){ resolve(); return; }
-      const s = document.createElement('script');
-      s.src = src; s.async = true; s.defer = true;
-      s.onload = ()=>resolve();
-      s.onerror = ()=>reject(new Error('Falha ao carregar script do Google (' + src + '). Verifique sua internet.'));
-      document.head.appendChild(s);
+  loadScript(src,timeoutMs=12000){
+    if(this._scriptPromises.has(src)) return this._scriptPromises.get(src);
+    const promise=new Promise((resolve,reject)=>{
+      const existing=document.querySelector(`script[src="${src}"]`);
+      if(existing&&existing.dataset.borionLoaded==='1'){resolve();return;}
+      const script=existing||document.createElement('script');
+      let settled=false;
+      const done=(err)=>{if(settled)return;settled=true;clearTimeout(timer);if(err)reject(err);else{script.dataset.borionLoaded='1';resolve();}};
+      const timer=setTimeout(()=>done(Object.assign(new Error('O script do Google demorou além do limite seguro.'),{code:'AUTH_TIMEOUT'})),timeoutMs);
+      script.addEventListener('load',()=>done(),{once:true});
+      script.addEventListener('error',()=>done(new Error('Falha ao carregar script do Google. Verifique sua internet.')),{once:true});
+      if(!existing){script.src=src;script.async=true;script.defer=true;document.head.appendChild(script);}
+      else if((src.includes('/gsi/client')&&window.google&&google.accounts)||(src.includes('/js/api.js')&&window.gapi))done();
     });
+    this._scriptPromises.set(src,promise);
+    promise.catch(()=>this._scriptPromises.delete(src));
+    return promise;
   },
 
-  async ensureLoaded(){
-    if(!this._gisReady){
-      await this.loadScript('https://accounts.google.com/gsi/client');
-      this._gisReady = true;
+  async ensureIdentityLoaded(){
+    if(this._gisReady&&window.google&&google.accounts&&google.accounts.oauth2)return true;
+    if(!this._identityPromise){
+      this._identityPromise=(async()=>{
+        if(window.BootProgress)BootProgress.setStage('google_identity');
+        if(window.BorionPerf)BorionPerf.startStage('google_identity_script');
+        await this.loadScript('https://accounts.google.com/gsi/client',12000);
+        if(!(window.google&&google.accounts&&google.accounts.oauth2))throw Object.assign(new Error('Google Identity Services não ficou disponível.'),{code:'AUTH_SCRIPT_INVALID'});
+        this._gisReady=true;
+        if(window.BorionPerf)BorionPerf.endStage('google_identity_script');
+        return true;
+      })();
+      this._identityPromise.catch(()=>{this._identityPromise=null;});
     }
-    if(!this._gapiReady){
-      await this.loadScript('https://apis.google.com/js/api.js');
-      await new Promise((resolve)=>{ gapi.load('picker', resolve); });
-      this._gapiReady = true;
-    }
+    return this._identityPromise;
   },
 
-  /* interactive=true abre popup de consentimento; false tenta renovar token em
-     silêncio (só funciona se a pessoa já autorizou antes nesta sessão do navegador). */
-  requestToken(interactive){
-    return new Promise((resolve, reject)=>{
-      let settled = false;
-      const finishOk = (token)=>{
-        if(settled) return;
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve(token);
-      };
-      const finishError = (error)=>{
-        if(settled) return;
-        settled = true;
-        clearTimeout(timeoutId);
-        reject(error instanceof Error ? error : new Error(String(error||'Falha no acesso ao Google.')));
-      };
-      const timeoutId = setTimeout(()=>finishError(new Error('O Google não respondeu à renovação do acesso. Reconecte sua conta.')), 20000);
-      try{
-        this.tokenClient = google.accounts.oauth2.initTokenClient({
-          client_id: GOOGLE_CLIENT_ID,
-          scope: GOOGLE_DRIVE_SCOPES,
-          callback: (resp)=>{
-            if(resp && resp.error){ finishError(new Error('Google recusou o acesso: ' + resp.error)); return; }
-            if(!resp || !resp.access_token){ finishError(new Error('O Google não devolveu um token de acesso válido.')); return; }
-            this.accessToken = resp.access_token;
-            this.tokenExpiresAt = Date.now() + ((resp.expires_in || 3300) * 1000);
-            finishOk(resp.access_token);
-          },
-          error_callback: (err)=>{ finishError(new Error((err && (err.message||err.type)) || 'Login com Google cancelado ou falhou.')); }
+  async ensurePickerLoaded(){
+    if(this._gapiReady&&window.google&&google.picker)return true;
+    if(!this._pickerPromise){
+      this._pickerPromise=(async()=>{
+        await this.ensureIdentityLoaded();
+        if(window.BorionPerf)BorionPerf.startStage('google_picker_script');
+        await this.loadScript('https://apis.google.com/js/api.js',15000);
+        await new Promise((resolve,reject)=>{
+          let settled=false;
+          const timer=setTimeout(()=>{if(!settled){settled=true;reject(Object.assign(new Error('O seletor de pastas do Google demorou além do limite.'),{code:'AUTH_TIMEOUT'}));}},12000);
+          try{gapi.load('picker',()=>{if(settled)return;settled=true;clearTimeout(timer);resolve();});}catch(e){clearTimeout(timer);reject(e);}
         });
-        this.tokenClient.requestAccessToken({ prompt: interactive ? 'consent' : '' });
-      }catch(e){ finishError(e); }
+        this._gapiReady=true;
+        if(window.BorionPerf)BorionPerf.endStage('google_picker_script');
+        return true;
+      })();
+      this._pickerPromise.catch(()=>{this._pickerPromise=null;});
+    }
+    return this._pickerPromise;
+  },
+
+  async ensureLoaded(){return this.ensureIdentityLoaded();},
+
+  requestToken(interactive){
+    if(this._tokenPromise)return this._tokenPromise;
+    this._tokenPromise=new Promise((resolve,reject)=>{
+      let settled=false;
+      const finish=(err,token)=>{if(settled)return;settled=true;clearTimeout(timeoutId);this._tokenPromise=null;if(err)reject(err);else resolve(token);};
+      const timeoutId=setTimeout(()=>finish(Object.assign(new Error('O Google não respondeu à renovação do acesso. Reconecte sua conta.'),{code:'AUTH_TIMEOUT'})),20000);
+      try{
+        this.tokenClient=google.accounts.oauth2.initTokenClient({
+          client_id:GOOGLE_CLIENT_ID,scope:GOOGLE_DRIVE_SCOPES,
+          callback:(resp)=>{
+            if(resp&&resp.error){finish(Object.assign(new Error('Google recusou o acesso: '+resp.error),{code:'AUTH_REJECTED'}));return;}
+            if(!resp||!resp.access_token){finish(Object.assign(new Error('O Google não devolveu um token de acesso válido.'),{code:'AUTH_TOKEN_INVALID'}));return;}
+            this.accessToken=resp.access_token;this.tokenExpiresAt=Date.now()+((resp.expires_in||3300)*1000);finish(null,resp.access_token);
+          },
+          error_callback:(err)=>finish(Object.assign(new Error((err&&(err.message||err.type))||'Login com Google cancelado ou falhou.'),{code:'AUTH_FAILED'}))
+        });
+        this.tokenClient.requestAccessToken({prompt:interactive?'consent':''});
+      }catch(e){finish(e);}
     });
+    return this._tokenPromise;
   },
 
   async login(interactive){
-    await this.ensureLoaded();
+    await this.ensureIdentityLoaded();
+    if(window.BootProgress)BootProgress.setStage('google_token',{detail:interactive?'Aguardando a confirmação da conta Google':'Renovando o acesso ao Google Drive'});
+    if(window.BorionPerf)BorionPerf.startStage('google_token');
     await this.requestToken(interactive);
+    if(window.BorionPerf)BorionPerf.endStage('google_token');
     return await this.fetchUserInfo();
   },
 
   async ensureFreshToken(interactive=false){
-    if(this.accessToken && Date.now() < this.tokenExpiresAt - 60000) return this.accessToken;
-    await this.ensureLoaded();
+    if(this.accessToken&&Date.now()<this.tokenExpiresAt-60000)return this.accessToken;
+    await this.ensureIdentityLoaded();
     return await this.requestToken(!!interactive);
   },
 
-  invalidateToken(){
-    this.accessToken = null;
-    this.tokenExpiresAt = 0;
-  },
+  invalidateToken(){this.accessToken=null;this.tokenExpiresAt=0;},
 
   async fetchUserInfo(){
-    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { Authorization: 'Bearer ' + this.accessToken }
-    });
-    if(!res.ok) throw new Error('Não foi possível confirmar a conta Google (status ' + res.status + ').');
-    const info = await res.json();
-    this.user = { sub: info.sub, email: info.email, name: info.name || info.email, picture: info.picture || '' };
-    writeJSON(LS_GDRIVE_USER, this.user);
+    if(window.BorionPerf)BorionPerf.startStage('google_userinfo');
+    const controller=typeof AbortController!=='undefined'?new AbortController():null;
+    const timer=controller?setTimeout(()=>controller.abort(),10000):null;
+    let res;
+    try{res=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+this.accessToken},signal:controller?controller.signal:undefined});}
+    catch(e){if(e&&e.name==='AbortError')throw Object.assign(new Error('O Google demorou para confirmar sua conta.'),{code:'AUTH_TIMEOUT'});throw e;}
+    finally{if(timer)clearTimeout(timer);}
+    if(!res.ok)throw Object.assign(new Error('Não foi possível confirmar a conta Google (status '+res.status+').'),{status:res.status,code:res.status===401?'AUTH_REQUIRED':'AUTH_USERINFO_FAILED'});
+    const info=await res.json();
+    this.user={sub:info.sub,email:info.email,name:info.name||info.email,picture:info.picture||''};
+    writeJSON(LS_GDRIVE_USER,this.user);
+    if(window.BorionPerf)BorionPerf.endStage('google_userinfo');
     return this.user;
   },
 
-  signOut(){
-    if(this.accessToken){ try{ google.accounts.oauth2.revoke(this.accessToken, ()=>{}); }catch(e){} }
-    this.accessToken = null; this.tokenExpiresAt = 0; this.user = null;
-    localStorage.removeItem(LS_GDRIVE_USER);
-  }
+  signOut(){if(this.accessToken){try{google.accounts.oauth2.revoke(this.accessToken,()=>{});}catch(e){}}this.accessToken=null;this.tokenExpiresAt=0;this.user=null;localStorage.removeItem(LS_GDRIVE_USER);}
 };
 
 /* ---------------- Chamadas cruas à Drive API ---------------- */
@@ -221,26 +254,50 @@ const GoogleDriveFS = {
     return { Authorization: 'Bearer ' + token };
   },
 
-  /* V6.38.1 — todas as chamadas ao Drive passam por aqui. Se o Google invalidar
-     um token antes do horário estimado, a chamada 401 limpa o token e tenta uma
-     renovação silenciosa uma única vez, em vez de deixar a sessão presa usando um
-     token aparentemente válido porém recusado. */
-  async request(url, options={}){
-    let response=null;
+  /* V6.42.0 — timeout, cancelamento, retry limitado e telemetria local. */
+  async request(url,options={}){
+    const method=String(options.method||'GET').toUpperCase();
+    const isList=/\/drive\/v3\/files\?/.test(url)&&/q=/.test(url);
+    const isDownload=/alt=media/.test(url);
+    const isUpload=/\/upload\/drive\/v3\//.test(url);
+    const isMeta=!isList&&!isDownload&&!isUpload&&method==='GET';
+    const kind=options.kind||(isUpload?'upload':isDownload?'download':isList?'list':isMeta?'metadata':'other');
+    const timeoutMs=Number(options.timeoutMs)||(kind==='metadata'?11000:kind==='list'?15000:kind==='download'?25000:kind==='upload'?35000:15000);
+    const maxAttempts=Math.max(1,Math.min(5,Number(options.maxAttempts)||3));
     const retryable=new Set([429,500,502,503,504]);
-    let authRetried=false;
-    for(let attempt=0;attempt<5;attempt++){
+    const bodyBytes=options.body==null?0:(typeof options.body==='string'?(typeof TextEncoder!=='undefined'?new TextEncoder().encode(options.body).byteLength:options.body.length):(options.body.byteLength||options.body.size||0));
+    let response=null,authRetried=false,lastError=null;
+    for(let attempt=0;attempt<maxAttempts;attempt++){
+      if(window.BorionPerf){BorionPerf.countDriveRequest(kind);if(bodyBytes)BorionPerf.recordPayloadSize('upload',bodyBytes);}
       const headers=Object.assign({},options.headers||{},await this.authHeaders());
-      try{response=await fetch(url,Object.assign({},options,{headers}));}
+      const controller=typeof AbortController!=='undefined'?new AbortController():null;
+      const timer=controller?setTimeout(()=>controller.abort(),timeoutMs):null;
+      const fetchOptions=Object.assign({},options,{headers});
+      delete fetchOptions.timeoutMs;delete fetchOptions.kind;delete fetchOptions.maxAttempts;
+      if(controller)fetchOptions.signal=controller.signal;
+      try{response=await fetch(url,fetchOptions);lastError=null;}
       catch(e){
-        if(attempt===4) throw e;
-        await new Promise(r=>setTimeout(r,Math.min(8000,400*Math.pow(2,attempt))));
+        lastError=e;
+        if(e&&e.name==='AbortError'){
+          const code=kind==='download'?'DOWNLOAD_TIMEOUT':kind==='upload'?'UPLOAD_TIMEOUT':'DRIVE_TIMEOUT';
+          lastError=Object.assign(new Error('O Google Drive demorou além do limite desta operação.'),{code,kind,timeoutMs});
+        }
+      }finally{if(timer)clearTimeout(timer);}
+      if(lastError){
+        if(attempt===maxAttempts-1)throw lastError;
+        if(window.BorionPerf)BorionPerf.count('driveRetries',1);
+        await new Promise(r=>setTimeout(r,Math.min(4000,350*Math.pow(2,attempt))));
         continue;
       }
-      if(response.status===401&&!authRetried){GoogleDriveAuth.invalidateToken();authRetried=true;continue;}
-      if(!retryable.has(response.status)||attempt===4) return response;
+      if(response.status===401&&!authRetried){GoogleDriveAuth.invalidateToken();authRetried=true;if(window.BorionPerf)BorionPerf.count('driveRetries',1);continue;}
+      if(!retryable.has(response.status)||attempt===maxAttempts-1){
+        const len=Number(response.headers&&response.headers.get&&response.headers.get('Content-Length'))||0;
+        if(len&&kind!=='download'&&window.BorionPerf)BorionPerf.recordPayloadSize('download',len);
+        return response;
+      }
+      if(window.BorionPerf)BorionPerf.count('driveRetries',1);
       const retryAfter=Number(response.headers&&response.headers.get&&response.headers.get('Retry-After'))||0;
-      await new Promise(r=>setTimeout(r,retryAfter?retryAfter*1000:Math.min(8000,500*Math.pow(2,attempt))));
+      await new Promise(r=>setTimeout(r,retryAfter?Math.min(8000,retryAfter*1000):Math.min(4000,450*Math.pow(2,attempt))));
     }
     return response;
   },
@@ -255,7 +312,9 @@ const GoogleDriveFS = {
 
   async findChild(parentId,name,mimeType){
     const files=await this.findChildren(parentId,name,mimeType);
-    return files[0]||null;
+    const first=files[0]||null;
+    if(first&&files.length>1){try{Object.defineProperty(first,'__borionMatches',{value:files,enumerable:false,configurable:true});}catch(e){first.__borionMatches=files;}}
+    return first;
   },
 
   async createFolder(parentId, name){
@@ -277,17 +336,18 @@ const GoogleDriveFS = {
   async readFile(fileId){
     const res = await this.request('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media');
     if(!res.ok) throw Object.assign(new Error('Falha ao ler arquivo do Google Drive (status ' + res.status + ').'),{status:res.status});
-    return await res.json();
+    const text=await res.text();if(window.BorionPerf)BorionPerf.recordPayloadSize('download',typeof TextEncoder!=='undefined'?new TextEncoder().encode(text).byteLength:text.length);
+    try{return JSON.parse(text);}catch(e){throw Object.assign(new Error('O arquivo recebido do Google Drive não contém JSON válido.'),{code:'DRIVE_JSON_INVALID',cause:e});}
   },
 
   async readFileText(fileId){
     const res=await this.request('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media');
     if(!res.ok) throw Object.assign(new Error('Falha ao ler bytes do arquivo no Google Drive (status '+res.status+').'),{status:res.status});
-    return await res.text();
+    const text=await res.text();if(window.BorionPerf)BorionPerf.recordPayloadSize('download',typeof TextEncoder!=='undefined'?new TextEncoder().encode(text).byteLength:text.length);return text;
   },
 
   async getFileMeta(fileId){
-    const res = await this.request('https://www.googleapis.com/drive/v3/files/' + fileId + '?fields=id,name,modifiedTime,createdTime,mimeType,trashed,parents');
+    const res = await this.request('https://www.googleapis.com/drive/v3/files/' + fileId + '?fields=id,name,modifiedTime,createdTime,mimeType,trashed,parents,size');
     if(!res.ok){
       const err = new Error('Falha ao consultar metadados do arquivo no Drive (status ' + res.status + ').');
       err.status = res.status;
@@ -354,6 +414,10 @@ const GoogleDriveFS = {
       for(const f of (data.files||[])){if(!f||!f.id||seen.has(f.id))continue;seen.add(f.id);all.push(f);if(all.length>maxItems)throw Object.assign(new Error('Limite de segurança de itens do Google Drive excedido.'),{code:'DRIVE_LIST_LIMIT'});}
       pageToken=data.nextPageToken||null;
     }while(pageToken);
+    if(window.BorionPerf){
+      BorionPerf.count('driveItemsListed',all.length);
+      BorionPerf.count('foldersListed',all.reduce((n,item)=>n+(item&&item.mimeType==='application/vnd.google-apps.folder'?1:0),0));
+    }
     return all.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''))||String(a.createdTime||'').localeCompare(String(b.createdTime||''))||String(a.id).localeCompare(String(b.id)));
   },
 
@@ -388,7 +452,8 @@ const GoogleDriveFS = {
 
 /* Abre o seletor nativo do Google ("Picker") pra pessoa escolher a pasta que foi
    compartilhada com ela. Só roda na primeira conexão — depois o folderId fica salvo. */
-function openDriveFolderPicker(){
+async function openDriveFolderPicker(){
+  await GoogleDriveAuth.ensurePickerLoaded();
   return new Promise((resolve, reject)=>{
     const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
       .setSelectFolderEnabled(true)
@@ -550,14 +615,8 @@ function handleRemovedActiveProfile6402(result,source='remote_update'){
    Se não for seguro agora, a próxima checagem (poucos segundos depois) tenta de
    novo sozinha — nenhuma atualização é perdida, só adiada. */
 function borionLiveUpdateSafeToApplyNow(){
-  if(document.querySelector('.modal-overlay')) return false;
-  const active = document.activeElement;
-  if(active){
-    const tag = (active.tagName||'').toUpperCase();
-    if(tag==='INPUT' || tag==='TEXTAREA' || tag==='SELECT') return false;
-    if(active.isContentEditable) return false;
-  }
-  return true;
+  if(window.BorionEditGuard&&typeof BorionEditGuard.isSafeForRemoteApply==='function')return BorionEditGuard.isSafeForRemoteApply();
+  return !document.querySelector('.modal-overlay');
 }
 
 /* ---------------- Provider principal ---------------- */
@@ -596,6 +655,8 @@ const GoogleDriveProvider = {
   _queueOperationId: null,
   _consolidateCount: 0,
   pendingMergeConflicts: [],
+  _liveActiveUntil:0,_lastUserActivityAt:Date.now(),_livePollBound:false,_livePollStartedAt:0,
+  _pendingRemoteSnapshot:null,_lastSyncStartedAt:0,_lastSyncDurationMs:0,_pendingQueueCount:0,
 
   isConnected(){ return !!(GoogleDriveAuth.user && this.folderId); },
 
@@ -629,6 +690,13 @@ const GoogleDriveProvider = {
     return /status\s*401|oauth|token|google recusou|login com google|renova|popup|access[_ -]?denied|interaction[_ -]?required/i.test(msg);
   },
 
+  async _refreshPendingQueueCount(){
+    if(!window.BorionDurableQueue||typeof BorionDurableQueue.pendingOnly!=='function')return this._pendingQueueCount||0;
+    try{this._pendingQueueCount=(await BorionDurableQueue.pendingOnly()).length;}catch(e){}
+    this._refreshStatusUI();
+    return this._pendingQueueCount||0;
+  },
+
   _refreshStatusUI(){
     if(typeof document==='undefined'||typeof document.getElementById!=='function')return;
     const el=document.getElementById('cloud_status_badge');if(!el||!this.isConnected())return;
@@ -639,12 +707,13 @@ const GoogleDriveProvider = {
     if(state==='RECOVERY'||state==='JOURNAL_ERROR'){el.className='cloud-status offline';el.textContent=state==='RECOVERY'?'Modo de recuperação':'Erro no journal';el.title=this.lastSyncError||'O último snapshot válido foi preservado.';return;}
     if(this.authRequired||state==='AUTH_REQUIRED'){el.className='cloud-status offline';el.textContent='Google Drive — reconectar';el.title=this.lastSyncError||'Autenticação necessária.';return;}
     if(!navigator.onLine||state==='OFFLINE_PENDING'){el.className='cloud-status offline';el.textContent='Salvo neste dispositivo';el.title='Offline. A alteração está preservada localmente e será enviada quando a internet voltar.';return;}
+    if((window.RemoteUpdateQueue&&RemoteUpdateQueue.hasPending())||state==='REMOTE_CHANGED'){el.className='cloud-status syncing';el.textContent='Aguardando finalizar edição';el.title='Atualização recebida e validada; será aplicada assim que o formulário em edição for finalizado.';return;}
     if(state==='PROTECTING_DRIVE'){el.className='cloud-status syncing';el.textContent='Protegendo alteração no Drive';el.title='Criando a operação imutável no Google Drive.';return;}
     if(state==='DRIVE_PROTECTED'||this.hasPersistedConsolidation()){el.className='cloud-status syncing';el.textContent='Alteração protegida no Drive';el.title='A operação existe no Drive, mas o snapshot ainda precisa ser consolidado.';return;}
     if(state==='MERGING'){el.className='cloud-status syncing';el.textContent='Consolidando dados';el.title='Aplicando operações ao snapshot e validando checksum.';return;}
-    if(this.dirty||this._syncInFlight||this.hasPersistedPending()||state==='QUEUED'){el.className='cloud-status syncing';el.textContent='Operação pendente';el.title='Salvo neste dispositivo; aguardando proteção e consolidação no Drive.';return;}
+    if(this.dirty||this._syncInFlight||this.hasPersistedPending()||state==='QUEUED'){const n=this._pendingQueueCount||1;el.className='cloud-status syncing';el.textContent=n===1?'1 alteração pendente':n+' alterações pendentes';el.title='Salvo neste dispositivo; '+n+' alteração(ões) aguardando proteção e consolidação no Drive.';return;}
     if(this.lastSyncError){el.className='cloud-status offline';el.textContent='Erro de sincronização';el.title=this.lastSyncError;return;}
-    el.className='cloud-status local';el.textContent='Sincronizado com o Drive';el.title='Snapshot consolidado e confirmado'+(this.lastSyncAt?' às '+new Date(this.lastSyncAt).toLocaleTimeString('pt-BR'):'')+'.';
+    el.className='cloud-status local';el.textContent='Sincronizado agora';el.title='Snapshot consolidado, relido e validado'+(this.lastSyncAt?' às '+new Date(this.lastSyncAt).toLocaleTimeString('pt-BR'):'')+(this._lastSyncDurationMs?' em '+Math.round(this._lastSyncDurationMs)+' ms':'')+'.';
   },
 
   _clearRetry(){
@@ -681,6 +750,8 @@ const GoogleDriveProvider = {
 
   _recordSyncSuccess(){
     this.lastSyncAt=Date.now();
+    if(this._lastSyncStartedAt)this._lastSyncDurationMs=Math.max(0,Date.now()-this._lastSyncStartedAt);
+    if(typeof this.boostLivePolling==='function')this.boostLivePolling();
     this.lastSyncError='';
     this.authRequired=false;
     this._clearRetry();
@@ -743,72 +814,90 @@ const GoogleDriveProvider = {
     }
   },
 
+  async getValidatedFolderMeta(folderId){
+    try{
+      const meta=await GoogleDriveFS.getFileMeta(folderId);
+      if(!meta||!meta.id||meta.trashed||meta.mimeType!=='application/vnd.google-apps.folder')return {exists:false,meta:null};
+      return {exists:true,meta};
+    }catch(e){if(e&&e.status===404)return {exists:false,meta:null};throw e;}
+  },
+
+  async _resolveCurrentFile(){
+    if(window.BootProgress)BootProgress.setStage('current_meta');
+    if(window.BorionPerf)BorionPerf.startStage('current_file_lookup');
+    const cached=gdriveReadCurrentFileCache(this.folderId);
+    if(cached&&cached.fileId){
+      try{
+        const meta=await GoogleDriveFS.getFileMeta(cached.fileId);
+        const parentOk=!Array.isArray(meta.parents)||meta.parents.includes(this.folderId);
+        if(meta&&meta.id&&meta.name==='current.json'&&!meta.trashed&&parentOk){
+          if(window.BorionPerf)BorionPerf.count('currentFileCacheHits',1);
+          gdriveWriteCurrentFileCache(this.folderId,meta);
+          if(window.BorionPerf)BorionPerf.endStage('current_file_lookup',{cache:'hit'});
+          return meta;
+        }
+        gdriveForgetCurrentFileCache(this.folderId);
+      }catch(e){
+        if(e&&e.status===404)gdriveForgetCurrentFileCache(this.folderId);
+        else throw e;
+      }
+    }
+    if(window.BorionPerf)BorionPerf.count('currentFileCacheMisses',1);
+    const first=await GoogleDriveFS.findChild(this.folderId,'current.json');
+    if(!first){if(window.BorionPerf)BorionPerf.endStage('current_file_lookup',{cache:'miss',empty:true});return null;}
+    const files=(first.__borionMatches&&Array.isArray(first.__borionMatches))?first.__borionMatches:[first];
+    const sorted=files.slice().sort((a,b)=>String(a.createdTime||'').localeCompare(String(b.createdTime||''))||String(a.id).localeCompare(String(b.id)));
+    const canonical=sorted[0];
+    if(sorted.length>1){
+      console.warn('[BORION][DRIVE] múltiplos current.json detectados; seleção determinística preservou todos.',sorted.map(x=>({id:x.id,createdTime:x.createdTime})));
+      if(window.BorionPerf)BorionPerf.event('duplicate_current_json',{count:sorted.length});
+    }
+    gdriveWriteCurrentFileCache(this.folderId,canonical);
+    if(window.BorionPerf)BorionPerf.endStage('current_file_lookup',{cache:'miss',duplicates:Math.max(0,sorted.length-1)});
+    return canonical;
+  },
+
   /* Login + (primeira vez) escolher pasta + carregar/ou perguntar o que fazer. Essa
      função já decide sozinha pra qual tela ir (Gate normal ou onboarding de pasta
      vazia) — quem chama connect() não precisa mais renderizar nada depois. */
-  async connect(interactive){
+  async connect(interactive,options={}){
+    if(window.BootProgress)BootProgress.setStage('google_identity');
     await GoogleDriveAuth.login(interactive);
-    // V6.40 — identidade estável do dispositivo (item 7 do pedido): UUID sem
-    // nenhuma informação pessoal, criado uma única vez, com cópia de
-    // recuperação no localStorage além do IndexedDB. sessionId é novo a cada
-    // carregamento do app. Ambos viajam dentro de cada operação gravada no
-    // journal (01g), permitindo saber quem/quando sem expor e-mail/nome nos
-    // arquivos de sincronização.
-    if(!this._deviceId && window.BorionDevice640) this._deviceId = await BorionDevice640.getOrCreateDeviceId();
-    if(window.BorionDevice640) BorionDevice640.newSessionId();
-    if(window.BorionMultiTab640 && !BorionMultiTab640.tabId){
+    const devicePromise=(async()=>{if(!this._deviceId&&window.BorionDevice640)this._deviceId=await BorionDevice640.getOrCreateDeviceId();if(window.BorionDevice640)BorionDevice640.newSessionId();})();
+    if(window.BorionMultiTab640&&!BorionMultiTab640.tabId){
       BorionMultiTab640.init({
-        onBecomeLeader: ()=>{ if(this.dirty || this.hasPersistedPending() || this.hasPersistedConsolidation()) this.resumePendingSync('multitab_leader'); },
-        onPendingFromFollower: ()=>{ if(this.hasPersistedPending()) this.dirty = true; this.resumePendingSync('multitab_follower_notify'); },
-        onAccountUpdated: meta=>this.applySharedAccountUpdateFromLeader6402(meta)
+        onBecomeLeader:()=>{if(this.dirty||this.hasPersistedPending()||this.hasPersistedConsolidation())this.resumePendingSync('multitab_leader');},
+        onPendingFromFollower:()=>{if(this.hasPersistedPending())this.dirty=true;this.resumePendingSync('multitab_follower_notify');},
+        onAccountUpdated:meta=>this.applySharedAccountUpdateFromLeader6402(meta)
       });
     }
-    const sub = GoogleDriveAuth.user.sub;
-    let folderId = gdriveReadFolderId(sub);
-    let justPicked = false;
+    const sub=GoogleDriveAuth.user.sub;let folderId=gdriveReadFolderId(sub),justPicked=false,folderMeta=null;
+    if(window.BootProgress)BootProgress.setStage('folder');
     if(folderId){
-      // V6.7.0 — a pasta salva pode ter sido excluída/movida (ex: você apagou uma
-      // pasta de teste no Drive). Sem essa checagem, o app tentava usar um ID que não
-      // existe mais e caía numa tela de "pasta vazia" enganosa. Confirma que a pasta
-      // ainda existe antes de pular o seletor.
-      const stillThere = await this._folderStillExists(folderId);
-      if(!stillThere){
-        gdriveForgetFolderId(sub);
-        folderId = null;
-      }
+      const validated=await this.getValidatedFolderMeta(folderId);
+      if(!validated.exists){gdriveForgetFolderId(sub);gdriveForgetCurrentFileCache(folderId);folderId=null;}
+      else folderMeta=validated.meta;
     }
     if(!folderId){
-      const folder = await openDriveFolderPicker();
-      folderId = folder.id;
-      gdriveWriteFolderId(sub, folderId);
-      justPicked = true;
+      if(window.BootProgress)BootProgress.setDetail('Aguardando você escolher a pasta compartilhada');
+      const folder=await openDriveFolderPicker();
+      folderId=folder.id;folderMeta={id:folder.id,name:folder.name||folder.displayName||'Pasta do Borion',mimeType:'application/vnd.google-apps.folder'};
+      gdriveWriteFolderId(sub,folderId);justPicked=true;
     }
-    this.folderId = folderId;
-    // V6.8.0 — nome da pasta é buscado sempre fresco (não fica salvo), pra sempre
-    // bater com o nome atual no Drive mesmo se você renomear a pasta depois. É pra
-    // resolver a confusão de "não sei onde tá salvando" — agora aparece em
-    // Configurações → Nuvem, com link direto pra abrir a pasta.
-    try{ const meta = await GoogleDriveFS.getFileMeta(folderId); this.folderName = meta.name; }
-    catch(e){ this.folderName = null; }
-    if(justPicked){
-      toast('Conectado à pasta "' + (this.folderName||'') + '" — confira em Configurações → Nuvem.');
-    }
+    await devicePromise;
+    this.folderId=folderId;this.folderName=folderMeta&&folderMeta.name||null;
+    if(justPicked&&typeof toast==='function')toast('Conectado à pasta \"'+(this.folderName||'')+'\" — confira em Configurações → Nuvem.');
     setStorageMode('google_drive');
-    // V6.20.0 — retoma a rotação de onde parou nesta pasta, em vez de sempre do slot 1
-    // (ver comentário em gdriveReadSlotIndex/gdriveWriteSlotIndex acima).
-    this.autosaveSlotIndex = gdriveReadSlotIndex(this.folderId, 'autosave');
-    this.forcesaveSlotIndex = gdriveReadSlotIndex(this.folderId, 'forcesave');
-    const result = await this.loadFromDrive();
-    this.startAutosaveLoop();
-    this.startLivePollLoop();
-    // O backup exato pré-migração já foi validado dentro de loadFromDrive(), antes de migrateData.
-    if(window.BackupFS) BackupFS.maybeDailyDriveSnapshot().catch(e=>console.warn('[GoogleDriveProvider] ponto diário imutável falhou (não crítico):',e));
-    if(result && result.empty){
-      renderGoogleDriveOnboarding();
-    } else {
-      S.gate = { mode: 'list', error: '' };
-      renderGate();
+    this.autosaveSlotIndex=gdriveReadSlotIndex(this.folderId,'autosave');this.forcesaveSlotIndex=gdriveReadSlotIndex(this.folderId,'forcesave');
+    const result=await this.loadFromDrive();
+    this.startAutosaveLoop();this.startLivePollLoop();this._refreshPendingQueueCount().catch(()=>{});
+    if(window.BorionDriveJournal640&&BorionDriveJournal640.ensureAppliedFolder)setTimeout(()=>BorionDriveJournal640.ensureAppliedFolder(this.folderId).catch(e=>console.warn('[GoogleDriveProvider] organização gradual do journal foi adiada:',e)),0);
+    if(window.BackupFS)BackupFS.maybeDailyDriveSnapshot().catch(e=>console.warn('[GoogleDriveProvider] ponto diário imutável falhou (não crítico):',e));
+    if(!options.suppressRender){
+      if(result&&result.empty)renderGoogleDriveOnboarding();
+      else{S.gate={mode:'list',error:''};renderGate();}
     }
+    return result;
   },
 
   /* V6.13.0 — bug real corrigido: essa função tratava QUALQUER erro (rede
@@ -820,23 +909,21 @@ const GoogleDriveProvider = {
      qualquer outro erro propaga (o connect() mostra uma mensagem de falha e tenta de
      novo depois, sem mexer no vínculo salvo). */
   async _folderStillExists(folderId){
-    try{
-      const meta = await GoogleDriveFS.getFileMeta(folderId);
-      return !!(meta && meta.id);
-    }catch(e){
-      if(e && e.status === 404) return false;
-      throw e;
-    }
+    const result=await this.getValidatedFolderMeta(folderId);
+    return result.exists;
   },
 
   /* Só localiza e lê o current.json — não cria nada. Retorna {empty:true} se a pasta
      ainda não tiver backup nenhum, pra quem chamou decidir o que mostrar. */
   async loadFromDrive(){
-    const file=await GoogleDriveFS.findChild(this.folderId,'current.json');
-    if(!file) return {empty:true};
-    this.currentFileId=file.id;this.currentFileMeta=file;
-
+    const file=await this._resolveCurrentFile();
+    if(!file)return {empty:true};
+    this.currentFileId=file.id;this.currentFileMeta=file;gdriveWriteCurrentFileCache(this.folderId,file);
+    if(window.BootProgress)BootProgress.setStage('current_download');
+    if(window.BorionPerf)BorionPerf.startStage('current_download');
     const rawText=await GoogleDriveFS.readFileText(file.id);
+    if(window.BorionPerf)BorionPerf.endStage('current_download');
+    if(window.BootProgress)BootProgress.setStage('integrity');
     let migrationBackupResult={notRequired:false};
     if(window.BackupFS){
       try{migrationBackupResult=await BackupFS.ensureRawSchemaMigrationBackup({rawText,sourceFileId:file.id});}
@@ -862,6 +949,7 @@ const GoogleDriveProvider = {
 
     let visibleSnapshot=remoteSnapshot,journalPending=false,journalError=null;
     try{
+      if(window.BootProgress)BootProgress.setStage('journal');
       if(window.BorionSyncState) BorionSyncState.set('MERGING',{source:'boot'});
       const result=await BorionDriveJournal640.consolidate(this.folderId,remoteSnapshot);
       const migrationRequired=!(migrationBackupResult&&migrationBackupResult.notRequired);
@@ -877,7 +965,8 @@ const GoogleDriveProvider = {
         const requiredId=result.newlyApplied.length?result.newlyApplied[result.newlyApplied.length-1].operationId:undefined;
         const confirmCheck=await BorionDriveJournal640.validateSnapshot(confirmed,requiredId);
         if(!confirmCheck.valid) throw new Error('Snapshot gravado não confirmou a migração/operação: '+confirmCheck.reason);
-        visibleSnapshot=confirmed;this.currentFileMeta=updated;
+        visibleSnapshot=confirmed;this.currentFileMeta=updated;gdriveWriteCurrentFileCache(this.folderId,updated);
+        if(result.newlyApplied.length)BorionDriveJournal640.archiveConfirmedOperations(this.folderId,confirmed,result.newlyApplied).catch(e=>console.warn('[GoogleDriveProvider] arquivamento pós-boot adiado:',e));
       }else visibleSnapshot=remoteSnapshot;
       this._lastConsolidatedPayload=visibleSnapshot;
       this._surfaceMergeConflicts(visibleSnapshot);
@@ -900,7 +989,9 @@ const GoogleDriveProvider = {
       this.dirty=true;
       try{localStorage.setItem(gdrivePendingKey(this.folderId),String(Date.now()));}catch(e){}
     }
-    try{applyAccountPayloadSilently(visibleSnapshot);}
+    if(window.BootProgress)BootProgress.setStage('apply');
+    if(window.BorionPerf)BorionPerf.startStage('account_apply');
+    try{applyAccountPayloadSilently(visibleSnapshot);if(window.BorionPerf)BorionPerf.endStage('account_apply');}
     catch(e){
       this.lastSyncError='Aplicação/migração local bloqueada: '+String(e&&e.message||e);
       if(window.BorionSyncState)BorionSyncState.set('RECOVERY',{error:this.lastSyncError,code:e&&e.code});
@@ -933,7 +1024,7 @@ const GoogleDriveProvider = {
       config: {}, profileCount: 0, profiles: [], dataByProfile: {}
     };
     const created = await GoogleDriveFS.createFile(this.folderId, 'current.json', empty);
-    this.currentFileId = created.id; this.currentFileMeta = created;
+    this.currentFileId = created.id;gdriveWriteCurrentFileCache(this.folderId,created); this.currentFileMeta = created;
     this.lastKnownProfileCount = 0;
     S.profiles = []; setProfiles([]); S.currentProfile = null; S.data = null;
   },
@@ -969,6 +1060,7 @@ const GoogleDriveProvider = {
       try{ this._operationBasePayload = JSON.parse(JSON.stringify(this._lastConsolidatedPayload)); }catch(e){ this._operationBasePayload = null; }
     }
     this.dirty = true;
+    this._pendingQueueCount=Math.max(1,this._pendingQueueCount||0);
     this.autosaveDirtySinceLast = true;
     this._autosaveRevision++;
     this._syncRevision++;
@@ -1061,87 +1153,86 @@ const GoogleDriveProvider = {
     }
   },
 
+  boostLivePolling(durationMs=GOOGLE_DRIVE_LIVE_ACTIVE_WINDOW_MS){
+    this._liveActiveUntil=Math.max(this._liveActiveUntil,Date.now()+Math.max(5000,Number(durationMs)||GOOGLE_DRIVE_LIVE_ACTIVE_WINDOW_MS));
+    if(this.liveTimer){clearTimeout(this.liveTimer);this.liveTimer=null;}
+    this._scheduleNextLivePoll(0);
+  },
+
+  _nextLivePollDelay(){
+    if(typeof document!=='undefined'&&document.hidden)return GOOGLE_DRIVE_LIVE_POLL_IDLE_MS;
+    if(Date.now()<this._liveActiveUntil||this.hasPersistedConsolidation()||this.dirty)return GOOGLE_DRIVE_LIVE_POLL_ACTIVE_MS;
+    if(Date.now()-this._lastUserActivityAt>2*60*1000)return GOOGLE_DRIVE_LIVE_POLL_IDLE_MS;
+    return GOOGLE_DRIVE_LIVE_POLL_NORMAL_MS;
+  },
+
+  _scheduleNextLivePoll(delay){
+    if(!this.isConnected()||typeof setTimeout!=='function')return;
+    if(this.liveTimer)clearTimeout(this.liveTimer);
+    this.liveTimer=setTimeout(()=>{this.liveTimer=null;this.checkForRemoteUpdate();},Number.isFinite(delay)?Math.max(0,delay):this._nextLivePollDelay());
+  },
+
   startLivePollLoop(){
-    this.stopLivePollLoop();
-    this.liveTimer = setInterval(()=>{ this.checkForRemoteUpdate(); }, GOOGLE_DRIVE_LIVE_POLL_MS);
+    this.stopLivePollLoop();this._livePollStartedAt=Date.now();this._liveActiveUntil=Date.now()+GOOGLE_DRIVE_LIVE_ACTIVE_WINDOW_MS;
+    if(window.RemoteUpdateQueue){RemoteUpdateQueue.setApplyHandler((snapshot,meta)=>this._applyRemoteSnapshot642(snapshot,meta,'queued_remote'));RemoteUpdateQueue.setCanApplyHandler(()=>!this.dirty&&!this._syncInFlight&&!this._autosaveInFlight&&!this.hasPersistedPending()&&!this.hasPersistedConsolidation());}
+    if(!this._livePollBound&&typeof document!=='undefined'){
+      this._livePollBound=true;
+      const activity=()=>{this._lastUserActivityAt=Date.now();};
+      ['pointerdown','keydown','touchstart'].forEach(type=>document.addEventListener(type,activity,{passive:true}));
+      document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){this._lastUserActivityAt=Date.now();this.boostLivePolling();}});
+      window.addEventListener('online',()=>this.boostLivePolling());
+    }
+    this._scheduleNextLivePoll(0);
   },
-  stopLivePollLoop(){
-    if(this.liveTimer){ clearInterval(this.liveTimer); this.liveTimer = null; }
+  stopLivePollLoop(){if(this.liveTimer){clearTimeout(this.liveTimer);this.liveTimer=null;}},
+
+  async _applyRemoteSnapshot642(data,freshMeta,source='live_remote'){
+    const result=applyAccountPayloadForLiveUpdate(data);
+    this.currentFileMeta=freshMeta||this.currentFileMeta;gdriveWriteCurrentFileCache(this.folderId,this.currentFileMeta);
+    this.lastKnownProfileCount=(data.profiles||[]).length;this._lastConsolidatedPayload=data;this._operationBasePayload=null;
+    if(window.BorionDataGuard){const counts=BorionDataGuard.countAccountRecords(data);this._lastGoodCounts=counts;BorionDataGuard.writeLastGoodCounts(this.folderId,counts);}
+    this._notifyAccountSnapshotApplied6402(result,source);
+    if(handleRemovedActiveProfile6402(result,source))return true;
+    if(S.currentProfile&&S.data){if(typeof requestAnimationFrame==='function')requestAnimationFrame(()=>renderView());else renderView();if(typeof toast==='function')toast('Atualizado agora com uma alteração feita em outro dispositivo.');}
+    else if(document.querySelector('.gate-wrap')&&(!S.gate||S.gate.mode==='list'))renderGate();
+    this.lastSyncAt=Date.now();this.lastSyncError='';this.authRequired=false;
+    if(window.BorionSyncState)BorionSyncState.set('SNAPSHOT_CONFIRMED',{source});
+    this._refreshStatusUI();this.boostLivePolling(15000);return true;
   },
 
-  /* Só confere METADADOS (this.currentFileMeta.modifiedTime) — a mesma chamada
-     barata que o syncNow() já usa pra detectar conflito, sem baixar o conteúdo à
-     toa. Só busca o conteúdo completo quando a data realmente mudou. Nunca roda
-     enquanto: não está conectado; existe uma alteração local pendente (dirty —
-     nesse caso é o próprio syncNow()/conflito que decide, não a atualização ao
-     vivo); já existe uma checagem ao vivo ou uma sincronização em andamento; a
-     aba está em segundo plano (document.hidden); ou já existe um conflito
-     aguardando decisão da pessoa. */
   async checkForRemoteUpdate(){
-    if(window.BorionMultiTab640&&!BorionMultiTab640.isLeader()) return false;
-    if(this.hasPersistedConsolidation()) return await this.syncNow({source:'live_journal',consolidationOnly:true});
-    if(!this.isConnected() || !this.currentFileId) return false;
-    if(this.dirty || this.conflict) return false;
-    if(this._liveCheckInFlight || this._syncInFlight || this._autosaveInFlight) return false;
-    if(typeof document!=='undefined' && document.hidden) return false;
-    this._liveCheckInFlight = true;
+    if(window.BorionMultiTab640&&!BorionMultiTab640.isLeader()){this._scheduleNextLivePoll();return false;}
+    if(window.RemoteUpdateQueue&&RemoteUpdateQueue.hasPending()){
+      const applied=await RemoteUpdateQueue.applyIfSafe();
+      this._scheduleNextLivePoll(applied?GOOGLE_DRIVE_LIVE_POLL_ACTIVE_MS:this._nextLivePollDelay());
+      return applied;
+    }
+    if(this.hasPersistedConsolidation()){const ok=await this.syncNow({source:'live_journal',consolidationOnly:true});this._scheduleNextLivePoll();return ok;}
+    if(!this.isConnected()||!this.currentFileId){return false;}
+    if(this.dirty||this.conflict||this._liveCheckInFlight||this._syncInFlight||this._autosaveInFlight){this._scheduleNextLivePoll();return false;}
+    if(typeof document!=='undefined'&&document.hidden){this._scheduleNextLivePoll();return false;}
+    this._liveCheckInFlight=true;
     try{
-      const freshMeta = await GoogleDriveFS.getFileMeta(this.currentFileId);
-      if(!this.currentFileMeta || !this.currentFileMeta.modifiedTime || !freshMeta.modifiedTime) return false;
-      if(freshMeta.modifiedTime === this.currentFileMeta.modifiedTime){
-        if(this.lastSyncError && !this.dirty){ this.lastSyncError=''; this.authRequired=false; this._refreshStatusUI(); }
-        return false; // nada novo
+      const freshMeta=await GoogleDriveFS.getFileMeta(this.currentFileId);
+      if(!this.currentFileMeta||!this.currentFileMeta.modifiedTime||!freshMeta.modifiedTime)return false;
+      if(freshMeta.modifiedTime===this.currentFileMeta.modifiedTime){if(this.lastSyncError&&!this.dirty){this.lastSyncError='';this.authRequired=false;this._refreshStatusUI();}return false;}
+      if(window.BorionSyncState)BorionSyncState.set('REMOTE_CHANGED',{detectedAt:Date.now()});
+      if(window.BorionPerf){BorionPerf.count('remoteUpdatesDetected',1);BorionPerf.event('remote_update_detected',{pollMode:this._liveMode||'adaptive'});}
+      const data=await GoogleDriveFS.readFile(this.currentFileId);
+      const check=validateBorionJson(data);if(!check.valid){console.warn('[GoogleDriveProvider] atualização remota rejeitada pela validação.');return false;}
+      if(window.BorionDriveJournal640){const integrity=await BorionDriveJournal640.validateSnapshot(data);if(!integrity.valid){console.warn('[GoogleDriveProvider] atualização remota rejeitada pelo checksum:',integrity.reason);return false;}}
+      if(!borionLiveUpdateSafeToApplyNow()){
+        if(window.RemoteUpdateQueue)RemoteUpdateQueue.enqueue(data,freshMeta);
+        this._refreshStatusUI();return false;
       }
-
-      // Algo mudou no Drive desde a última leitura deste dispositivo. Só aplica
-      // agora se não for atrapalhar a pessoa (modal aberto, campo em edição) —
-      // senão adia pra próxima checagem, poucos segundos depois, sem perder o
-      // sinal de que existe algo novo (currentFileMeta só é atualizado quando a
-      // atualização é realmente aplicada).
-      if(!borionLiveUpdateSafeToApplyNow()) return false;
-
-      const data = await GoogleDriveFS.readFile(this.currentFileId);
-      const check = validateBorionJson(data);
-      if(!check.valid){ console.warn('[GoogleDriveProvider] atualização ao vivo ignorada: current.json parecia inválido.'); return false; }
-
-      const result = applyAccountPayloadForLiveUpdate(data);
-      this.currentFileMeta = freshMeta;
-      this.lastKnownProfileCount = (data.profiles || []).length;
-      // V6.40 — como isto só roda com this.dirty===false (checado acima), não
-      // existe uma leva de alterações locais em andamento cuja base precisa
-      // ser preservada — é seguro adotar este snapshot como a nova base.
-      this._lastConsolidatedPayload = data;
-      this._operationBasePayload = null;
-      if(window.BorionDataGuard){
-        const counts = BorionDataGuard.countAccountRecords(data);
-        this._lastGoodCounts = counts;
-        BorionDataGuard.writeLastGoodCounts(this.folderId, counts);
-      }
-
-      this._notifyAccountSnapshotApplied6402(result,'live_remote');
-      if(handleRemovedActiveProfile6402(result,'live_remote')){
-        // A função central já limpou a tela e voltou para a seleção de perfis.
-      } else if(S.currentProfile && S.data){
-        renderView();
-        toast('Atualizado com uma alteração feita em outro dispositivo.');
-      } else if(document.querySelector('.gate-wrap') && (!S.gate || S.gate.mode==='list')){
-        // Fora do modo "list" (ex.: preenchendo senha ou criando perfil), os
-        // dados já foram atualizados silenciosamente acima — só a tela não é
-        // redesenhada agora, pra não apagar um formulário em andamento. Aparece
-        // sozinho na próxima vez que a pessoa voltar pra lista de perfis.
-        renderGate();
-      }
-      return true;
+      const applied=await this._applyRemoteSnapshot642(data,freshMeta,'live_remote');
+      if(applied&&window.BorionPerf)BorionPerf.count('remoteUpdatesApplied',1);
+      return applied;
     }catch(e){
-      // Falha de rede/token aqui não é grave — é só uma checagem de fundo; a
-      // próxima tentativa (poucos segundos depois) resolve sozinha.
-      console.warn('[GoogleDriveProvider] checagem de atualização ao vivo falhou (tenta de novo em breve):', e);
-      this.lastSyncError=String((e&&e.message)||e||'Falha ao consultar o Google Drive.');
-      this.authRequired=this._isAuthError(e);
-      this._refreshStatusUI();
-      return false;
+      console.warn('[GoogleDriveProvider] checagem de atualização ao vivo falhou (tentativa adaptativa continuará):',e);
+      this.lastSyncError=String((e&&e.message)||e||'Falha ao consultar o Google Drive.');this.authRequired=this._isAuthError(e);this._refreshStatusUI();return false;
     }finally{
-      this._liveCheckInFlight = false;
+      this._liveCheckInFlight=false;this._scheduleNextLivePoll();
     }
   },
 
@@ -1213,7 +1304,9 @@ const GoogleDriveProvider = {
      dispositivo continua existindo como arquivo e entra na próxima
      consolidação (deste ou de qualquer outro dispositivo). */
   async syncNow(options={}){
-    if(!this.isConnected()||!this.currentFileId) return false;
+    if(!this.isConnected()||!this.currentFileId)return false;
+    this._lastSyncStartedAt=Date.now();
+    if(window.BorionPerf)BorionPerf.startStage('sync_total',{source:options.source||'unknown'});
     if(window.BorionMultiTab640&&!BorionMultiTab640.isLeader()){
       BorionMultiTab640.requestSync({folderId:this.folderId,source:options.source||'syncNow'});
       return {delegated:true,synced:false};
@@ -1227,6 +1320,7 @@ const GoogleDriveProvider = {
     if(options.consolidationOnly){
       const requiredOperationId=this._readPersistedConsolidationOperationId();
       try{
+        if(window.BorionDurableQueue&&requiredOperationId)await BorionDurableQueue.setState(requiredOperationId,'MERGING').catch(()=>{});
         if(window.BorionSyncState)BorionSyncState.set('MERGING',{operationId:requiredOperationId,source:options.source||'retry'});
         const remoteRaw=await GoogleDriveFS.readFile(this.currentFileId);
         const remoteCheck=validateBorionJson(remoteRaw);if(!remoteCheck.valid)throw new Error('Snapshot remoto inválido: '+remoteCheck.errors.join(' '));
@@ -1237,11 +1331,14 @@ const GoogleDriveProvider = {
         // Entrou neste ramo porque existe um marcador durável de consolidação/reparo.
         // Portanto grava e relê mesmo quando a operação já constava como aplicada ou
         // quando a pendência era apenas persistir a migração 6401.
+        if(window.BorionDurableQueue&&requiredOperationId)await BorionDurableQueue.setState(requiredOperationId,'SNAPSHOT_WRITING').catch(()=>{});
         const updated=await GoogleDriveFS.updateFile(this.currentFileId,candidate);
         const confirmed=await GoogleDriveFS.readFile(this.currentFileId);
         const confirmedCheck=await BorionDriveJournal640.validateSnapshot(confirmed,requiredOperationId||undefined);
         if(!confirmedCheck.valid)throw new Error('Snapshot relido não confirmou a consolidação: '+confirmedCheck.reason);
-        this.currentFileMeta=updated||this.currentFileMeta;this._lastConsolidatedPayload=confirmed;this._operationBasePayload=JSON.parse(JSON.stringify(confirmed));
+        this.currentFileMeta=updated||this.currentFileMeta;gdriveWriteCurrentFileCache(this.folderId,this.currentFileMeta);this._lastConsolidatedPayload=confirmed;this._operationBasePayload=JSON.parse(JSON.stringify(confirmed));
+        if(window.BorionDurableQueue&&requiredOperationId)await BorionDurableQueue.markSnapshotConfirmed(requiredOperationId).catch(()=>{});
+        BorionDriveJournal640.archiveConfirmedOperations(this.folderId,confirmed,result.newlyApplied||[]).catch(e=>console.warn('[GoogleDriveProvider] arquivamento de operação será retomado:',e));
         this._surfaceMergeConflicts(confirmed);try{const applied=applyAccountPayloadForLiveUpdate(confirmed);this._notifyAccountSnapshotApplied6402(applied,'consolidation_retry');handleRemovedActiveProfile6402(applied,'consolidation_retry');}catch(e){console.warn('[GoogleDriveProvider] consolidação confirmada; atualização visual adiada:',e);}
         this._clearConsolidationPending();this.lastSyncError='';this._recordSyncSuccess();
         if(window.BorionSyncState)BorionSyncState.set('SNAPSHOT_CONFIRMED',{operationId:requiredOperationId,checksum:confirmedCheck.checksum});
@@ -1278,26 +1375,30 @@ const GoogleDriveProvider = {
         basePayload:this._operationBasePayload||this._lastConsolidatedPayload||null,payload,
         checksum:await BorionSyncCore.checksumOf(payload),forced:!!options.force
       };
-      await BorionDriveJournal640.writeOperation(this.folderId,operation);
+      const operationFile=await BorionDriveJournal640.writeOperation(this.folderId,operation);
       operationProtected=true;
       this._persistConsolidationPending(operationId);
-      if(window.BorionDurableQueue)await BorionDurableQueue.confirmRemote(operationId).catch(()=>{});
+      if(window.BorionDurableQueue)await BorionDurableQueue.confirmRemote(operationId,operationFile&&operationFile.id).catch(()=>{});
       if(window.BorionSyncState)BorionSyncState.set('DRIVE_PROTECTED',{operationId});
       this.lastSyncError='Alteração protegida no Drive; aguardando consolidação do snapshot.';
       this._refreshStatusUI();
 
+      if(window.BorionDurableQueue)await BorionDurableQueue.setState(operationId,'MERGING').catch(()=>{});
       if(window.BorionSyncState)BorionSyncState.set('MERGING',{operationId});
       const remoteRaw=await GoogleDriveFS.readFile(this.currentFileId);
       const remoteCheck=validateBorionJson(remoteRaw);if(!remoteCheck.valid)throw new Error('Snapshot remoto inválido: '+remoteCheck.errors.join(' '));
       const result=await BorionDriveJournal640.consolidate(this.folderId,remoteRaw);
       const precheck=await BorionDriveJournal640.validateSnapshot(result.consolidated,operationId);
       if(!precheck.valid)throw new Error('Consolidação não incorporou a operação '+operationId+': '+precheck.reason);
+      if(window.BorionDurableQueue)await BorionDurableQueue.setState(operationId,'SNAPSHOT_WRITING').catch(()=>{});
       const updated=await GoogleDriveFS.updateFile(this.currentFileId,result.consolidated);
       const confirmed=await GoogleDriveFS.readFile(this.currentFileId);
       const confirmedCheck=await BorionDriveJournal640.validateSnapshot(confirmed,operationId);
       if(!confirmedCheck.valid)throw new Error('O snapshot relido não confirmou a operação: '+confirmedCheck.reason);
 
-      this.currentFileMeta=updated;this._lastConsolidatedPayload=confirmed;this._operationBasePayload=JSON.parse(JSON.stringify(confirmed));
+      this.currentFileMeta=updated;gdriveWriteCurrentFileCache(this.folderId,updated);this._lastConsolidatedPayload=confirmed;this._operationBasePayload=JSON.parse(JSON.stringify(confirmed));
+      if(window.BorionDurableQueue)await BorionDurableQueue.markSnapshotConfirmed(operationId).catch(()=>{});
+      BorionDriveJournal640.archiveConfirmedOperations(this.folderId,confirmed,result.newlyApplied||[]).catch(e=>console.warn('[GoogleDriveProvider] operação confirmada; arquivamento será retomado:',e));
       this._clearConsolidationPending();
       this._surfaceMergeConflicts(confirmed);
       try{const applied=applyAccountPayloadForLiveUpdate(confirmed);this._notifyAccountSnapshotApplied6402(applied,'sync_confirmed');handleRemovedActiveProfile6402(applied,'sync_confirmed');}catch(e){console.warn('[GoogleDriveProvider] snapshot confirmado, mas atualização local da UI foi adiada:',e);}
@@ -1306,6 +1407,7 @@ const GoogleDriveProvider = {
       this.dirty=revision!==this._syncRevision;this._syncAgain=this.dirty;this._queueOperationId=null;
       if(!this.dirty)try{localStorage.removeItem(gdrivePendingKey(this.folderId));}catch(e){}
       this.lastSyncError='';this._recordSyncSuccess();
+      if(window.RemoteUpdateQueue&&RemoteUpdateQueue.hasPending())setTimeout(()=>RemoteUpdateQueue.applyIfSafe(),0);
       if(window.BorionSyncState)BorionSyncState.set('SNAPSHOT_CONFIRMED',{operationId,checksum:confirmedCheck.checksum});
       return !this.dirty;
     }catch(e){
@@ -1327,7 +1429,8 @@ const GoogleDriveProvider = {
       }
       return false;
     }finally{
-      this._syncInFlight=false;this._refreshStatusUI();
+      this._syncInFlight=false;this._refreshStatusUI();this._refreshPendingQueueCount().catch(()=>{});
+      if(window.BorionPerf)BorionPerf.endStage('sync_total',{durationMs:Date.now()-this._lastSyncStartedAt});
       if(this._syncAgain&&!this._forceRequested){this._syncAgain=false;this.dirty=true;setTimeout(()=>this.syncNow({source:'follow_up'}),0);}
       else if((this.dirty||this.hasPersistedConsolidation())&&!this.conflict&&!this.blockedSuspicious)this._scheduleRetry();
     }
@@ -1547,9 +1650,12 @@ const GoogleDriveProvider = {
       pending: this.dirty || this.hasPersistedPending() || this.hasPersistedConsolidation(),
       conflict: this.conflict,
       blockedSuspicious: this.blockedSuspicious || null,
-      lastSyncAt: this.lastSyncAt || 0,
-      lastSyncError: this.lastSyncError || '',
-      authRequired: !!this.authRequired
+      lastSyncAt:this.lastSyncAt||0,
+      lastSyncDurationMs:this._lastSyncDurationMs||0,
+      pendingRemoteUpdate:!!(window.RemoteUpdateQueue&&RemoteUpdateQueue.hasPending()),
+      livePollMode:Date.now()<this._liveActiveUntil?'active':(Date.now()-this._lastUserActivityAt>2*60*1000?'idle':'normal'),
+      lastSyncError:this.lastSyncError||'',
+      authRequired:!!this.authRequired
     };
   }
 };

@@ -62,38 +62,10 @@ function wireViewEvents(){
 /* A implementação de handleImport() fica mais abaixo, perto do boot/PWA
    (função única, com o fluxo "logado na nuvem" ciente do perfil ativo). */
 
-/* ---------------- SPLASH ---------------- */
+/* ---------------- BOOT VISUAL REAL ---------------- */
 function showSplash(next){
-  applyFont();
-  applyTheme();
-  applyInterfaceMode();
-  const root = $('#root');
-  root.innerHTML = `
-    <div id="splash">
-      <img src="borion-full.png" alt="Borion Finance"/>
-      <div class="splash-num">R$ 0,00</div>
-      <div class="splash-tag">Carregando</div>
-    </div>`;
-  const numEl = root.querySelector('.splash-num');
-  const duration = 1100;
-  const start = performance.now();
-  function tick(now){
-    const t = Math.min(1, (now-start)/duration);
-    const eased = 1 - Math.pow(1-t, 4);
-    numEl.textContent = brlPlain(eased*1000000);
-    if(t<1) requestAnimationFrame(tick);
-    else {
-      setTimeout(()=>{
-        const splash = document.getElementById('splash');
-        if(splash){
-          splash.style.transition = 'opacity .35s ease';
-          splash.style.opacity = '0';
-          setTimeout(next, 350);
-        } else next();
-      }, 220);
-    }
-  }
-  requestAnimationFrame(tick);
+  if(window.BootProgress)BootProgress.start({stage:'prepare'});
+  Promise.resolve().then(next);
 }
 
 /* ---------------- Aviso de salvamento final ao sair ---------------- */
@@ -181,108 +153,104 @@ window.addEventListener('pageshow', (e)=>{
 });
 
 /* ---------------- BOOT ---------------- */
+let borionServiceWorkerPromise=null;
+function registerBorionServiceWorker642(){
+  if(borionServiceWorkerPromise)return borionServiceWorkerPromise;
+  if(!('serviceWorker' in navigator))return Promise.resolve(null);
+  borionServiceWorkerPromise=navigator.serviceWorker.register('sw.js?v=6.42.0',{updateViaCache:'none'})
+    .then(registration=>{registration.update().catch(()=>{});let lastCheck=Date.now();document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&Date.now()-lastCheck>30*60*1000){lastCheck=Date.now();registration.update().catch(()=>{});}});return registration;})
+    .catch(err=>{console.warn('SW falhou:',err);return null;});
+  return borionServiceWorkerPromise;
+}
+
+function borionBootTaskTimeout(promise,timeoutMs,code,message){
+  let timer=null;
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise((_,reject)=>{timer=setTimeout(()=>reject(Object.assign(new Error(message||'Uma etapa local demorou além do limite seguro.'),{code:code||'BOOT_TASK_TIMEOUT'})),timeoutMs);})
+  ]).finally(()=>{if(timer)clearTimeout(timer);});
+}
+
+let borionBootRunning=false;
+async function runBorionBoot642(){
+  if(borionBootRunning)return;
+  borionBootRunning=true;
+  const storageMode=getStorageMode();
+  const retry=()=>runBorionBoot642();
+  const reconnect=async()=>{
+    const result=await GoogleDriveProvider.connect(true,{suppressRender:true});
+    if(window.BootProgress)await BootProgress.complete();
+    if(result&&result.empty)renderGoogleDriveOnboarding();else{S.gate={mode:'list',error:''};renderGate();}
+  };
+  const back=()=>{try{setStorageMode(null);}catch(e){}CloudAuth.render();};
+  if(window.BootProgress)BootProgress.start({storageMode,stage:'prepare',retry,reconnect,back});
+  try{
+    applyFont();applyTheme();applyInterfaceMode();
+    if(window.BootProgress)BootProgress.setStage('device');
+    // Backup local e atualização do service worker são importantes, porém não
+    // bloqueiam login nem seletor. As falhas ficam registradas e são retomadas depois.
+    const backupFolderInit=Promise.resolve().then(()=>window.BackupFS&&BackupFS.init?BackupFS.init():null).catch(e=>{if(window.BorionPerf)BorionPerf.event('backup_init_deferred',{error:String(e&&e.message||e)});return null;});
+    const swInit=registerBorionServiceWorker642();
+    const deviceInit=borionBootTaskTimeout((async()=>{if(window.BorionDevice640){await BorionDevice640.getOrCreateDeviceId();BorionDevice640.newSessionId();}return true;})(),10000,'DEVICE_STORAGE_TIMEOUT','O identificador seguro deste dispositivo demorou além do limite.');
+    const queueInit=borionBootTaskTimeout((async()=>{if(window.BorionDurableQueue){const stuck=await BorionDurableQueue.pendingOnly();if(stuck.length&&window.BorionPerf)BorionPerf.event('durable_queue_recovery',{count:stuck.length});}return true;})(),10000,'DURABLE_QUEUE_TIMEOUT','A fila segura de alterações demorou além do limite.');
+    const localPrep=Promise.resolve(true);
+    // Evita rejeições em tarefas de fundo sem bloquear o caminho crítico.
+    backupFolderInit.catch(()=>{});swInit.catch(()=>{});queueInit.catch(()=>{});
+    if(window.BootProgress)BootProgress.setStage('storage',{detail:'Preparando armazenamento local e verificando pendências'});
+
+    if(storageMode==='google_drive'){
+      // Identity, deviceId e IndexedDB são preparados em paralelo. BackupFS e SW
+      // continuam em segundo plano e não seguram a conexão com o Google.
+      const identity=GoogleDriveAuth.ensureIdentityLoaded();
+      const prep=await Promise.allSettled([deviceInit,queueInit,localPrep,identity]);
+      const criticalFailure=prep.find(x=>x.status==='rejected');
+      if(criticalFailure)throw criticalFailure.reason;
+      const result=await GoogleDriveProvider.connect(false,{suppressRender:true});
+      if(window.BootProgress){BootProgress.setStage('render');await BootProgress.complete();}
+      if(result&&result.empty)renderGoogleDriveOnboarding();else{S.gate={mode:'list',error:''};renderGate();}
+      ExitSaveGuard.refresh();
+      return;
+    }
+
+    if(storageMode==='offline'){
+      await Promise.allSettled([deviceInit,localPrep]);
+      if(window.BootProgress){BootProgress.setStage('render',{detail:'Preparando seus perfis deste dispositivo'});await BootProgress.complete();}
+      enterLocalMode();return;
+    }
+
+    const recovery=/type=recovery|password_recovery|PASSWORD_RECOVERY/i.test(location.hash+location.search);
+    if(storageMode==='cloud'||storageMode==='supabase'||recovery){
+      await Promise.allSettled([deviceInit,localPrep]);
+      if(window.BootProgress)BootProgress.setStage('google_identity',{label:'Conectando à nuvem Borion',detail:'Carregando o acesso do Supabase'});
+      await CloudStorage.init({force:true});
+      if(window.BootProgress)await BootProgress.complete();
+      if(CloudStorage.user&&CloudStorage.recoveryMode){CloudAuth.mode='changePassword';CloudAuth.info='Digite uma nova senha para finalizar a recuperação.';CloudAuth.error='';CloudAuth.render();return;}
+      if(CloudStorage.user){await enterCloudUser();ExitSaveGuard.refresh();if(CloudStorage.deleteEmailReturnPending&&window.Settings&&Settings.resumeDeleteAccountFromMagicLink)setTimeout(()=>Settings.resumeDeleteAccountFromMagicLink(),120);return;}
+      CloudAuth.render();return;
+    }
+
+    // Primeira abertura: nenhum SDK remoto é baixado antes da escolha do usuário.
+    await Promise.allSettled([deviceInit,localPrep]);
+    if(window.BootProgress)await BootProgress.complete();
+    CloudAuth.render();
+  }catch(error){
+    if(window.BootProgress)BootProgress.fail(error,{retry,reconnect,back,allowBack:true});
+    else renderGoogleDriveReconnect(error&&error.message||String(error));
+  }finally{borionBootRunning=false;}
+}
+
 (function boot(){
-  const backupFolderInit=BackupFS.init();
-  // V6.40 — item 19 do pedido (inicialização e recuperação): identidade do
-  // dispositivo/sessão é preparada cedo, antes de qualquer possível
-  // queueSave(), e a fila durável do IndexedDB é conferida por operações que
-  // ficaram como 'pending' de uma sessão anterior (aba fechada no meio de um
-  // envio) — se existir alguma, só registra um aviso técnico no console por
-  // ora (o próprio GoogleDriveProvider.connect()/resumePendingSync() já
-  // retoma o envio de verdade assim que a conexão com o Drive é restabelecida
-  // logo abaixo). Nada bloqueia o boot: é só melhor esforço, silencioso.
-  const deviceInit=(async()=>{
-    try{
-      if(window.BorionDevice640){
-        await BorionDevice640.getOrCreateDeviceId();
-        BorionDevice640.newSessionId();
-      }
-      if(window.BorionDurableQueue){
-        const stuck = await BorionDurableQueue.pendingOnly();
-        if(stuck.length) console.warn('[BORION][BOOT][RECOVERING] '+stuck.length+' operação(ões) pendente(s) de uma sessão anterior — serão retomadas ao reconectar ao Google Drive.', stuck.map(s=>s.operationId));
-      }
-    }catch(e){ console.warn('[BORION][BOOT][DEVICE_INIT_WARN]', e); }
-  })();
   Notifs.closePanelOnOutsideClick();
   BankFilter.closePanelOnOutsideClick();
-  document.addEventListener('click', GlobalSearch.outsideClickHandler);
-  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && window.MobileMenu) MobileMenu.close(); });
-  document.addEventListener('keydown', (e)=>{
-    if((e.ctrlKey||e.metaKey) && (e.key==='s'||e.key==='S')){
-      e.preventDefault();
-      forceManualSave();
-    }
-  });
-  window.addEventListener('resize', ()=>{
-    if(window.innerWidth>980 && window.MobileMenu) MobileMenu.close();
-    else if(typeof window.syncGlobalScrollLockState==='function') window.syncGlobalScrollLockState({source:'boot.resize'});
-  });
-  if(window.matchMedia){
-    const mq = window.matchMedia('(prefers-color-scheme: light)');
-    const handler = ()=>{ if(S.config && S.config.theme==='system') applyTheme(); };
-    if(mq.addEventListener) mq.addEventListener('change', handler);
-    else if(mq.addListener) mq.addListener(handler);
-  }
-  showSplash(async ()=>{
-    await backupFolderInit;
-    await deviceInit;
-    await CloudStorage.init();
-    if(CloudStorage.user && CloudStorage.recoveryMode){
-      CloudAuth.mode='changePassword';
-      CloudAuth.info='Digite uma nova senha para finalizar a recuperação.';
-      CloudAuth.error='';
-      CloudAuth.render();
-      return;
-    }
-    if(CloudStorage.user){
-      await enterCloudUser();
-      ExitSaveGuard.refresh();
-      if(CloudStorage.deleteEmailReturnPending && window.Settings && Settings.resumeDeleteAccountFromMagicLink){
-        setTimeout(()=>Settings.resumeDeleteAccountFromMagicLink(),120);
-      }
-      return;
-    }
-    // V6.4.0 — se a pessoa já conectou o Google Drive antes, tenta renovar o acesso
-    // em silêncio (sem popup) e recarregar o current.json da pasta. Se a sessão do
-    // Google expirou ou algo falhar, mostra uma tela simples pra reconectar — nunca
-    // trava o app numa tela em branco nem mistura com o fluxo Supabase/local.
-    if(getStorageMode()==='google_drive'){
-      try{
-        await GoogleDriveProvider.connect(false);
-      }catch(e){
-        renderGoogleDriveReconnect(e.message||String(e));
-      }
-      return;
-    }
-    // V6.3.0 — se a pessoa já escolheu "usar sem conta" antes, pula a tela de login
-    // Supabase e vai direto pro seletor de perfil local. Só ativa depois de uma escolha
-    // explícita (ver botão "Usar sem conta" em CloudAuth.render); sem isso, comportamento
-    // de sempre (mostrar CloudAuth) continua idêntico.
-    if(getStorageMode()==='offline'){
-      enterLocalMode();
-      return;
-    }
-    CloudAuth.render();
-  });
+  document.addEventListener('click',GlobalSearch.outsideClickHandler);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&window.MobileMenu)MobileMenu.close();});
+  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&(e.key==='s'||e.key==='S')){e.preventDefault();forceManualSave();}});
+  window.addEventListener('resize',()=>{if(window.innerWidth>980&&window.MobileMenu)MobileMenu.close();else if(typeof window.syncGlobalScrollLockState==='function')window.syncGlobalScrollLockState({source:'boot.resize'});});
+  if(window.matchMedia){const mq=window.matchMedia('(prefers-color-scheme: light)');const handler=()=>{if(S.config&&S.config.theme==='system')applyTheme();};if(mq.addEventListener)mq.addEventListener('change',handler);else if(mq.addListener)mq.addListener(handler);}
+  runBorionBoot642();
 })();
 
-/* ---- PWA: service worker registration + "add to home screen" helper ---- */
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
-    try{
-      const registration=await navigator.serviceWorker.register('sw.js?v=6.40.2',{updateViaCache:'none'});
-      /* V6.23.8 — app instalado verifica atualização sempre que abre. O botão
-         “Salvar e atualizar” também chama registration.update() antes do reload. */
-      registration.update().catch(()=>{});
-      let lastCheck=Date.now();
-      document.addEventListener('visibilitychange',()=>{
-        if(document.visibilityState==='visible' && Date.now()-lastCheck>30*60*1000){
-          lastCheck=Date.now(); registration.update().catch(()=>{});
-        }
-      });
-    }catch(err){ console.warn('SW falhou:', err); }
-  });
-}
+/* ---- PWA registrado de forma não bloqueante por registerBorionServiceWorker642(). ---- */
 
 /* V6.9.0 — "Limpar dados deste navegador": zera qualquer perfil/estado salvo só
    neste dispositivo (perfis locais, conta Google/Supabase lembrada, cache do PWA) sem

@@ -1,0 +1,22 @@
+BORION FINANCE — v6.41.0
+
+INTEGRAÇÃO MIT REESTRUTURADA
+- Receitas importadas automaticamente somente quando o REC está Pago e possui Data de Pagamento.
+- Cada REC é uma chave única permanente; nova sincronização nunca duplica receita.
+- Pagamentos parciais e múltiplos pagamentos da mesma OSV são independentes.
+- Configuração simplificada por Pix, Dinheiro, Débito e Crédito de 1x a 12x.
+- Dinheiro sempre entra em Dinheiro → Carteira; apenas a categoria é configurável.
+- Pix, Débito e Crédito permitem categoria e destino em Conta ou Reserva.
+- Despesas do MIT, pagas ou Em aberto, ficam em Aguardando Revisão.
+- Nova janela Importar Despesa com tipo Fixa/Variável, nome, local, categoria, valor, data, origem financeira e status.
+- Depois da importação manual, a despesa é marcada como importada e não reaparece.
+- Sincronização automática ajustada para 15 segundos, além dos gatilhos de abertura, reconexão e visibilidade.
+- Integração Amanda Estética preservada no fluxo anterior.
+
+VALIDAÇÃO
+- REC único e prevenção de duplicidade.
+- Dois pagamentos parciais na mesma OSV.
+- Receita aguardando Data de Pagamento.
+- Despesa aberta em revisão.
+- Importação posterior quando o pagamento passa para Pago.
+- Suite existente de segurança e sincronização preservada.

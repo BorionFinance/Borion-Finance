@@ -3059,3 +3059,44 @@ html[data-theme="light"] .sb-item.active{
 .settings-help-tab{display:flex!important;align-items:center!important;gap:9px!important;margin-top:3px!important;border-top:1px solid rgba(255,255,255,.075)!important;border-radius:0 0 12px 12px!important;padding-top:13px!important;}
 .settings-help-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 24px;width:24px;height:24px;border-radius:50%;border:1px solid rgba(217,180,107,.28);background:rgba(217,180,107,.08);color:var(--gold-bright);font-weight:950;}
 @media(max-width:760px){.settings-help-tab{border-top:0!important;border-radius:12px!important;padding-top:11px!important;}}
+
+/* v6.41 — integração MIT: receitas automáticas e despesas assistidas */
+.mit-integration-pane{display:grid;gap:18px}
+.mit-rules-list{display:grid;gap:10px}
+.mit-rule-row{display:grid;grid-template-columns:minmax(125px,.7fr) 28px repeat(3,minmax(150px,1fr));gap:10px;align-items:end;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+.mit-rule-row label,.mit-origin{display:grid;gap:5px;min-width:0}
+.mit-rule-row small,.mit-origin small,.mit-pending-row small{color:var(--muted);font-size:.75rem;font-weight:700}
+.mit-origin strong{padding:10px 0}
+.mit-rule-row input:disabled{opacity:.85;cursor:not-allowed}
+.mit-pending-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.mit-pending-head h5,.mit-pending-head p{margin:0}.mit-pending-head p{margin-top:5px;color:var(--muted)}
+.mit-pending-labels,.mit-pending-row{display:grid;grid-template-columns:minmax(210px,2fr) minmax(90px,.7fr) minmax(105px,.8fr) minmax(80px,.6fr) minmax(100px,.7fr) auto;gap:10px;align-items:center}
+.mit-pending-labels{padding:0 12px 8px;color:var(--muted);font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+.mit-pending-list{display:grid;gap:8px}
+.mit-pending-row{padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+.mit-pending-row>div{display:grid;gap:3px;min-width:0}.mit-pending-row strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mit-expense-modal{max-width:720px}.mit-expense-modal .payment-source-toggle{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:980px){.mit-rule-row{grid-template-columns:minmax(120px,1fr) 24px repeat(2,minmax(145px,1fr))}.mit-rule-row label:last-child{grid-column:3/-1}.mit-pending-labels{display:none}.mit-pending-row{grid-template-columns:1fr auto}.mit-pending-row>span:not(.pill){display:block}.mit-pending-row .pill,.mit-pending-row button{justify-self:end}}
+@media(max-width:640px){.mit-rule-row{grid-template-columns:1fr}.mit-rule-row .interop-arrow{display:none}.mit-rule-row label:last-child{grid-column:auto}.mit-pending-row{grid-template-columns:1fr}.mit-pending-row .pill,.mit-pending-row button{justify-self:start}.mit-expense-modal .payment-source-toggle{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* ===== Borion 6.42.0 — boot real e responsivo ===== */
+.borion-boot{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;min-height:100dvh;padding:24px;background:radial-gradient(circle at 50% 22%,rgba(218,177,75,.15),transparent 34%),var(--bg,#060a10);color:var(--text,#f5f7fb);opacity:1;transition:opacity .18s ease}
+.borion-boot.is-complete{opacity:0;pointer-events:none}
+.borion-boot-card{width:min(520px,100%);text-align:center;padding:clamp(24px,5vw,42px);border:1px solid rgba(218,177,75,.18);border-radius:28px;background:color-mix(in srgb,var(--panel,#101722) 94%,transparent);box-shadow:0 26px 80px rgba(0,0,0,.32)}
+.borion-boot-logo-wrap{width:112px;height:112px;margin:0 auto 14px;display:grid;place-items:center;border-radius:28px;background:linear-gradient(145deg,rgba(255,255,255,.12),rgba(218,177,75,.13));box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),0 12px 32px rgba(0,0,0,.24)}
+.borion-boot-logo{display:block;width:92px;height:92px;object-fit:contain;filter:brightness(1.17) contrast(1.08);border-radius:20px}
+.borion-boot-brand{font-size:.8rem;font-weight:800;letter-spacing:.24em;color:#d9b75f;margin-bottom:19px}
+.borion-boot-spinner{width:36px;height:36px;margin:0 auto 18px;border-radius:50%;border:3px solid rgba(218,177,75,.2);border-top-color:#d9b75f;animation:borionBootSpin .9s linear infinite;will-change:transform}
+.borion-boot h1{font-size:clamp(1.25rem,4vw,1.65rem);line-height:1.2;margin:0 0 8px}.borion-boot p{margin:0}
+#borion-boot-detail{min-height:2.8em;color:var(--muted,#a9b2c2);line-height:1.45}
+.borion-boot-progress{height:8px;margin:22px 0 12px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden}
+.borion-boot-progress>span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#a77e20,#f3d77f);transition:width .22s ease;box-shadow:0 0 14px rgba(218,177,75,.32)}
+.borion-boot-meta{display:flex;justify-content:center;gap:12px;min-height:1.4em;font-size:.78rem;color:var(--muted,#929cab)}
+.borion-boot-safe{margin-top:13px!important;font-size:.84rem;color:var(--muted,#929cab)}
+.borion-boot-slow{margin-top:16px;padding:11px 13px;border-radius:12px;background:rgba(218,177,75,.09);color:#e4ca86;font-size:.86rem;line-height:1.4}
+.borion-boot-error{margin-top:18px;text-align:left}.borion-boot-error-stage{padding:10px 12px;border-radius:12px;background:rgba(221,80,80,.09);color:#f0aaaa;font-size:.86rem}
+.borion-boot-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:13px}.borion-boot-actions button{min-height:42px;border:0;border-radius:12px;padding:10px 12px;font:inherit;font-weight:700;cursor:pointer;background:#d9b75f;color:#15120b}.borion-boot-actions button.secondary{background:rgba(255,255,255,.08);color:inherit}.borion-boot-error pre{white-space:pre-wrap;word-break:break-word;max-height:160px;overflow:auto;margin:12px 0 0;padding:12px;border-radius:12px;background:rgba(0,0,0,.24);font-size:.72rem;color:var(--muted,#a9b2c2)}
+@keyframes borionBootSpin{to{transform:rotate(360deg)}}
+@media (max-width:560px){.borion-boot{padding:14px}.borion-boot-card{padding:26px 18px;border-radius:22px}.borion-boot-logo-wrap{width:94px;height:94px}.borion-boot-logo{width:78px;height:78px}.borion-boot-actions{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){.borion-boot-spinner{animation-duration:1.8s}.borion-boot,.borion-boot-progress>span{transition:none}}
+html[data-theme="light"] .borion-boot{background:radial-gradient(circle at 50% 22%,rgba(176,130,23,.12),transparent 34%),#f5f1e8;color:#161b23}html[data-theme="light"] .borion-boot-card{background:rgba(255,255,255,.9);box-shadow:0 26px 70px rgba(58,45,15,.14)}html[data-theme="light"] .borion-boot-progress{background:rgba(30,35,45,.1)}

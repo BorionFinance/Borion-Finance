@@ -1,127 +1,44 @@
-// Service worker do Borion Finance.
-// Versão modular: cacheia o HTML, CSS e os arquivos JS separados.
-// Estratégia: stale-while-revalidate.
-//
-// Ao editar o app e quiser forçar atualização do cache, aumente o número abaixo.
-const CACHE_NAME = 'borion-finance-v6-40-2-dados-e-seguranca';
-
-const ASSETS = [
-  "./",
-  "./index.html",
-  "./manifest.json",
-  "./css/styles.css?v=6.40.2",
-  "./css/borion-hub.css?v=6.40.2",
-  "./js/00-utils.js?v=6.40.2",
-  "./js/borion-hub.js?v=6.40.2",
-  "./js/01-storage-data-state.js?v=6.40.2",
-  "./js/01b-storage-provider.js?v=6.40.2",
-  "./js/01c-google-drive-provider.js?v=6.40.2",
-  "./js/01d-data-guard.js?v=6.40.2",
-  "./js/01e-sync-core-v640.js?v=6.40.2",
-  "./js/01f-sync-queue-v640.js?v=6.40.2",
-  "./js/01g-drive-journal-v640.js?v=6.40.2",
-  "./js/01h-multitab-v640.js?v=6.40.2",
-  "./js/02-backup-local.js?v=6.40.2",
-  "./js/03-modals-shared.js?v=6.40.2",
-  "./js/04-gate-shell.js?v=6.40.2",
-  "./js/05-calculations-charts.js?v=6.40.2",
-  "./js/06-overview.js?v=6.40.2",
-  "./js/07-budget.js?v=6.40.2",
-  "./js/08-investments.js?v=6.40.2",
-  "./js/09-patrimony-goals.js?v=6.40.2",
-  "./js/10-cards-accounts.js?v=6.40.2",
-  "./js/11-agenda-notifications.js?v=6.40.2",
-  "./js/12-bank-filter-search.js?v=6.40.2",
-  "./js/13-settings.js?v=6.40.2",
-  "./js/14-events-boot-pwa.js?v=6.40.2",
-  "./js/15-cheques.js?v=6.40.2",
-  "./js/16-import-statement.js?v=6.40.2",
-  "./js/17-borion-cloud.js?v=6.40.2",
-  "./js/18-order-preferences.js?v=6.40.2",
-  "./js/19-subscriptions.js?v=6.40.2",
-  "./js/20-smartphone-mode.js?v=6.40.2",
-  "./js/21-smartphone-history.js?v=6.40.2",
-  "./js/22-mobile-experience.js?v=6.40.2",
-  "./js/23-profile-import-review.js?v=6.40.2",
-  "./js/24-interconnections.js?v=6.40.2",
-  "./js/25-module-layout.js?v=6.40.2",
-  "./css/help-center.css?v=6.40.2",
-  "./js/26-help-center.js?v=6.40.2",
-  "./borion-emblem.png",
-  "./borion-full.png",
-  "./icon-192.png",
-    "./icon-512-maskable.png",
-  "./favicon-32.png",
-  "./borion.ico"
+// Borion Finance 6.42.0 — cache rápido sem interceptar APIs externas.
+const CACHE_NAME='borion-finance-v6-42-0-boot-sync-otimizados';
+const VERSION='6.42.0';
+const ASSETS=[
+  './','./index.html','./manifest.json',
+  './css/styles.css?v=6.42.0','./css/borion-hub.css?v=6.42.0','./css/help-center.css?v=6.42.0',
+  './js/00-utils.js?v=6.42.0','./js/01i-boot-progress-v642.js?v=6.42.0','./js/01j-remote-update-v642.js?v=6.42.0',
+  './js/01-storage-data-state.js?v=6.42.0','./js/01b-storage-provider.js?v=6.42.0','./js/01c-google-drive-provider.js?v=6.42.0',
+  './js/01d-data-guard.js?v=6.42.0','./js/01e-sync-core-v640.js?v=6.42.0','./js/01f-sync-queue-v640.js?v=6.42.0',
+  './js/01g-drive-journal-v640.js?v=6.42.0','./js/01h-multitab-v640.js?v=6.42.0','./js/02-backup-local.js?v=6.42.0',
+  './js/03-modals-shared.js?v=6.42.0','./js/04-gate-shell.js?v=6.42.0','./js/05-calculations-charts.js?v=6.42.0',
+  './js/06-overview.js?v=6.42.0','./js/07-budget.js?v=6.42.0','./js/08-investments.js?v=6.42.0',
+  './js/09-patrimony-goals.js?v=6.42.0','./js/10-cards-accounts.js?v=6.42.0','./js/11-agenda-notifications.js?v=6.42.0',
+  './js/12-bank-filter-search.js?v=6.42.0','./js/13-settings.js?v=6.42.0','./js/14-events-boot-pwa.js?v=6.42.0',
+  './js/15-cheques.js?v=6.42.0','./js/16-import-statement.js?v=6.42.0','./js/17-borion-cloud.js?v=6.42.0',
+  './js/18-order-preferences.js?v=6.42.0','./js/19-subscriptions.js?v=6.42.0','./js/20-smartphone-mode.js?v=6.42.0',
+  './js/21-smartphone-history.js?v=6.42.0','./js/22-mobile-experience.js?v=6.42.0','./js/23-profile-import-review.js?v=6.42.0',
+  './js/24-interconnections.js?v=6.42.0','./js/25-module-layout.js?v=6.42.0','./js/26-help-center.js?v=6.42.0',
+  './js/borion-hub.js?v=6.42.0','./borion-emblem.png','./borion-full.png','./icon-192.png','./icon-512-maskable.png','./favicon-32.png','./borion.ico'
 ];
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => Promise.all(
-        ASSETS.map((asset) =>
-          cache.add(asset).catch((err) => console.warn('Não foi possível cachear:', asset, err))
-        )
-      ))
-      .then(() => self.skipWaiting())
-  );
-});
+self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE_NAME).then(cache=>Promise.all(ASSETS.map(asset=>cache.add(asset).catch(()=>null)))).then(()=>self.skipWaiting()));});
+self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
-});
+function fetchWithTimeout(request,timeoutMs){
+  const controller=typeof AbortController!=='undefined'?new AbortController():null;
+  const timer=controller?setTimeout(()=>controller.abort(),timeoutMs):null;
+  return fetch(request,controller?{signal:controller.signal}:undefined).finally(()=>{if(timer)clearTimeout(timer);});
+}
+function cacheResponse(request,response){if(response&&response.ok){const copy=response.clone();caches.open(CACHE_NAME).then(cache=>cache.put(request,copy));}return response;}
+function networkFirstDocument(request){return fetchWithTimeout(request,2500).then(response=>cacheResponse(request,response)).catch(()=>caches.match(request).then(cached=>cached||caches.match('./index.html')));}
+function staleWhileRevalidate(request){return caches.match(request).then(cached=>{const network=fetch(request).then(response=>cacheResponse(request,response)).catch(()=>null);return cached||network;});}
 
-self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
-
-  const request = event.request;
-  const url = new URL(request.url);
-
-  // V6.37.0 — CORREÇÃO CRÍTICA: antes, este service worker interceptava e
-  // cacheava QUALQUER requisição GET, inclusive as chamadas à API do Google
-  // Drive (mesmo arquivo, mesma URL a cada leitura de current.json — ex.:
-  // .../files/{id}?alt=media). Isso podia servir uma versão ANTIGA da conta
-  // (ou de metadados usados para detectar conflito) direto do cache do
-  // navegador, em vez de buscar a de verdade no Drive — exatamente o tipo de
-  // problema que motivou tirar qualquer cache local do caminho de decisão.
-  // Chamadas de outra origem (googleapis.com, accounts.google.com etc.) agora
-  // nunca são interceptadas nem cacheadas por este service worker; o
-  // navegador as trata normalmente, sempre indo à rede.
-  if (url.origin !== self.location.origin) return;
-
-  const freshFirst = request.destination === 'document' || request.destination === 'script' || request.destination === 'style';
-
-  if (freshFirst) {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response && response.status === 200) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return response;
-        })
-        .catch(() => caches.match(request))
-    );
-    return;
-  }
-
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      const network = fetch(request)
-        .then((response) => {
-          if (response && response.status === 200) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return response;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
-  );
+self.addEventListener('fetch',event=>{
+  if(event.request.method!=='GET')return;
+  const request=event.request,url=new URL(request.url);
+  // Google Drive, Identity, Picker, Supabase e qualquer outra origem externa nunca
+  // passam pelo cache do PWA; dados financeiros remotos jamais são cacheados aqui.
+  if(url.origin!==self.location.origin)return;
+  if(request.mode==='navigate'||request.destination==='document'){event.respondWith(networkFirstDocument(request));return;}
+  const versioned=/[?&]v=6\.42\.0(?:&|$)/.test(url.search)||['script','style','image','font','manifest'].includes(request.destination);
+  if(versioned){event.respondWith(staleWhileRevalidate(request));return;}
+  event.respondWith(fetch(request).then(response=>cacheResponse(request,response)).catch(()=>caches.match(request)));
 });

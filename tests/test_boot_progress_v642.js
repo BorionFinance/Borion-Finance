@@ -1,0 +1,11 @@
+'use strict';
+const fs=require('fs'),path=require('path');const root=path.resolve(__dirname,'..');
+const read=f=>fs.readFileSync(path.join(root,f),'utf8');const assert=(c,m)=>{if(!c)throw new Error('FALHOU: '+m)};
+const progressModule=read('js/01i-boot-progress-v642.js'),boot=read('js/14-events-boot-pwa.js'),html=read('index.html');
+['start','setStage','setDetail','setProgress','setSlowState','complete','fail','retry'].forEach(name=>assert(progressModule.includes(name+'('),'BootProgress deve expor '+name));
+assert(progressModule.includes('aria-live')&&html.includes('aria-live="polite"'),'boot deve anunciar progresso por aria-live polite');
+assert(progressModule.includes('5000')&&progressModule.includes('10000')&&progressModule.includes('20000'),'estados de lentidão reais devem existir em 5/10/20 s');
+assert(html.includes('id="borion-boot"'),'HTML deve trazer a primeira tela visível sem esperar JS remoto');
+assert(!boot.includes('eased*1000000')&&!boot.includes('const duration = 1100'),'contador fictício e espera fixa devem ter sido removidos');
+assert(progressModule.includes('performance.mark')&&progressModule.includes('performance.measure'),'telemetria deve usar performance.mark/measure');
+console.log('OK: BootProgress 6.42 tem etapas reais, acessibilidade, erro/recuperação e não segura o boot por animação fictícia.');

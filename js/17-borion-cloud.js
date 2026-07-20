@@ -8,6 +8,26 @@ const BORION_CLOUD_META = 'borion_cloud_meta_v2';
 const BORION_CLOUD_PENDING = 'borion_cloud_pending_v2';
 const BORION_DELETE_PENDING = 'borion_delete_account_pending_v1';
 
+let _borionSupabaseLoadPromise=null;
+async function ensureSupabaseLoaded(){
+  if(window.supabase&&window.supabase.createClient)return window.supabase;
+  if(_borionSupabaseLoadPromise)return _borionSupabaseLoadPromise;
+  _borionSupabaseLoadPromise=new Promise((resolve,reject)=>{
+    const src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+    const existing=document.querySelector(`script[src="${src}"]`);
+    const script=existing||document.createElement('script');
+    let settled=false;
+    const finish=(err)=>{if(settled)return;settled=true;clearTimeout(timer);if(err){_borionSupabaseLoadPromise=null;reject(err);}else if(window.supabase&&window.supabase.createClient)resolve(window.supabase);else{_borionSupabaseLoadPromise=null;reject(new Error('O SDK do Supabase carregou sem expor createClient.'));}};
+    const timer=setTimeout(()=>finish(Object.assign(new Error('O Supabase demorou além do limite de carregamento.'),{code:'SUPABASE_TIMEOUT'})),15000);
+    script.addEventListener('load',()=>finish(),{once:true});
+    script.addEventListener('error',()=>finish(new Error('Falha ao carregar o Supabase. Verifique sua internet.')),{once:true});
+    if(!existing){script.src=src;script.async=true;script.defer=true;document.head.appendChild(script);}
+    else if(window.supabase&&window.supabase.createClient)finish();
+  });
+  return _borionSupabaseLoadPromise;
+}
+window.ensureSupabaseLoaded=ensureSupabaseLoaded;
+
 /* V6.3.0 — protege perfis criados no modo local (sem conta) de serem apagados da lista
    (LS_PROFILES) quando essa pessoa loga numa conta Supabase no mesmo navegador. Só
    preserva perfis com cloud !== true que ainda não estão na lista da nuvem — nunca
@@ -75,28 +95,26 @@ const CloudStorage = {
   status:'offline', statusText:'Offline', dirty:false, syncTimer:null,
   lastSyncAt:null, pendingReason:'', recoveryMode:false, deleteEmailReturnPending:false, schemaError:null, profilePasswordColumnsReady:null,
 
-  async init(){
-    this.recoveryMode = /type=recovery|password_recovery|PASSWORD_RECOVERY/i.test(location.hash + location.search);
-    if(!window.supabase || !window.supabase.createClient){ this.setStatus('offline','Supabase não carregou'); return null; }
-    this.client = window.supabase.createClient(BORION_SUPABASE_URL, BORION_SUPABASE_KEY, { auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true} });
-    window.addEventListener('online', ()=>{ this.setStatus('syncing','Internet voltou'); this.syncNow(); this.retryPendingProfileMeta(); });
-    window.addEventListener('offline', ()=>{ this.setStatus('offline','Offline — salvando neste dispositivo'); });
-    window.addEventListener('beforeunload', e=>{
-      if(window.__borionConfirmedExit){ if(this.hasPendingSync()) this.syncNow(); return; }
-      if(this.hasPendingSync()){ e.preventDefault(); e.returnValue='Existem dados do Borion ainda não sincronizados na nuvem.'; return e.returnValue; }
-    });
-    window.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden' && this.user && S && S.data) this.syncNow(); });
-    window.addEventListener('pagehide', ()=>{ if(this.user && S && S.data) this.syncNow(); });
-    this.client.auth.onAuthStateChange((event, session)=>{
-      if(event==='PASSWORD_RECOVERY'){
-        this.user = session && session.user ? session.user : this.user; this.recoveryMode=true;
-        setTimeout(()=>{ CloudAuth.mode='changePassword'; CloudAuth.info='Digite uma nova senha para finalizar a recuperação.'; CloudAuth.error=''; CloudAuth.render(); },80);
-      }
-    });
-    const { data } = await this.client.auth.getSession();
-    this.user = data && data.session ? data.session.user : null;
-    this.deleteEmailReturnPending = this.consumeDeleteAccountMagicLinkReturn();
-    this.setStatus(navigator.onLine ? (this.user?'online':'offline') : 'offline', this.user?'Nuvem pronta':'Offline');
+  async init(options={}){
+    const force=!!options.force;
+    this.recoveryMode=/type=recovery|password_recovery|PASSWORD_RECOVERY/i.test(location.hash+location.search);
+    const mode=typeof getStorageMode==='function'?getStorageMode():null;
+    if(!force&&!this.recoveryMode&&mode!=='cloud'&&mode!=='supabase'){
+      this.client=null;this.user=null;return null;
+    }
+    await ensureSupabaseLoaded();
+    if(this.client)return this.user;
+    this.client=window.supabase.createClient(BORION_SUPABASE_URL,BORION_SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+    window.addEventListener('online',()=>{this.setStatus('syncing','Internet voltou');this.syncNow();this.retryPendingProfileMeta();});
+    window.addEventListener('offline',()=>{this.setStatus('offline','Offline — salvando neste dispositivo');});
+    window.addEventListener('beforeunload',e=>{if(window.__borionConfirmedExit){if(this.hasPendingSync())this.syncNow();return;}if(this.hasPendingSync()){e.preventDefault();e.returnValue='Existem dados do Borion ainda não sincronizados na nuvem.';return e.returnValue;}});
+    window.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&this.user&&S&&S.data)this.syncNow();});
+    window.addEventListener('pagehide',()=>{if(this.user&&S&&S.data)this.syncNow();});
+    this.client.auth.onAuthStateChange((event,session)=>{if(event==='PASSWORD_RECOVERY'){this.user=session&&session.user?session.user:this.user;this.recoveryMode=true;setTimeout(()=>{CloudAuth.mode='changePassword';CloudAuth.info='Digite uma nova senha para finalizar a recuperação.';CloudAuth.error='';CloudAuth.render();},80);}});
+    const {data}=await this.client.auth.getSession();
+    this.user=data&&data.session?data.session.user:null;
+    this.deleteEmailReturnPending=this.consumeDeleteAccountMagicLinkReturn();
+    this.setStatus(navigator.onLine?(this.user?'online':'offline'):'offline',this.user?'Nuvem pronta':'Offline');
     return this.user;
   },
 
@@ -997,7 +1015,7 @@ const CloudStorage = {
    do app verificam window.CloudStorage antes de decidir salvar na nuvem, sem
    isso o Borion entrava em modo local e nada era persistido no Supabase. */
 window.CloudStorage = CloudStorage;
-console.log('[BORION_CLOUD][BOOT][WINDOW_EXPORT]', { hasCloudStorage: !!window.CloudStorage });
+
 
 const CloudAuth={
   mode:'login', error:'', info:'',
@@ -1107,6 +1125,7 @@ const CloudAuth={
     const email=(document.getElementById('cloud_email')||{}).value?.trim(); const password=(document.getElementById('cloud_password')||{}).value||''; const password2=(document.getElementById('cloud_password2')||{}).value||''; const name=(document.getElementById('cloud_name')||{}).value?.trim();
     this.error=''; this.info='';
     try{
+      await CloudStorage.init({force:true});
       if(this.mode==='changePassword'){ if(password!==password2) throw new Error('As senhas não conferem.'); await CloudStorage.updatePassword(password); this.info='Senha alterada com sucesso.'; await enterCloudUser(); return; }
       if(!email) throw new Error('Digite seu e-mail.');
       if(this.mode==='reset'){ await CloudStorage.resetPassword(email); this.info='Se esse e-mail existir, o Supabase enviará um link de recuperação.'; this.render(); return; }

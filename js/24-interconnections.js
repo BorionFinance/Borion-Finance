@@ -9,7 +9,7 @@
      ======================================================================== */
   const SPEC = Object.freeze({
     schemaVersion: 1,
-    bridgeVersion: '2.1.0',
+    bridgeVersion: '2.2.0',
     mappingVersion: 2,
     folderName: 'Borion_Integracoes'
   });
@@ -63,6 +63,46 @@
   function sourceName(sourceAppId){ return SOURCES[sourceAppId]?.name || sourceAppId || 'aplicativo externo'; }
   function displaySourceValue(value){ return String(value || '').trim() || '(Sem informação)'; }
 
+  const MIT_REVENUE_METHODS = Object.freeze([
+    {key:'pix', label:'Pix', form:'Pix'},
+    {key:'money', label:'Dinheiro', form:'Dinheiro', fixedTarget:'wallet'},
+    {key:'debit', label:'Débito', form:'Débito'},
+    ...Array.from({length:12}, (_, index) => ({key:`credit${index + 1}`, label:`Crédito ${index + 1}x`, form:'Crédito'}))
+  ]);
+  function defaultMitRevenueRules(){
+    return Object.fromEntries(MIT_REVENUE_METHODS.map(method => [method.key, {
+      key:method.key, label:method.label, category:'MIT', form:method.form,
+      target:method.fixedTarget || '__default__'
+    }]));
+  }
+  function normalizeMitRevenueRules(input){
+    const base=defaultMitRevenueRules(), value=input&&typeof input==='object'?input:{};
+    Object.keys(base).forEach(key=>{
+      const current=value[key]&&typeof value[key]==='object'?value[key]:{};
+      base[key]=Object.assign(base[key],current,{key,form:base[key].form});
+      if(key==='money') base[key].target='wallet';
+      base[key].category=String(base[key].category||'MIT').trim()||'MIT';
+    });
+    return base;
+  }
+  function ensureMitState(data){
+    const interop=ensureInterop(data);
+    interop.mitImported ||= {receipts:{},expenses:{}};
+    interop.mitImported.receipts ||= {};
+    interop.mitImported.expenses ||= {};
+    return interop.mitImported;
+  }
+  function mitMethodKey(record){
+    const text=normalize(record?.paymentMethod);
+    if(text.includes('dinheiro')) return 'money';
+    if(text.includes('debito')) return 'debit';
+    if(text.includes('credito')){
+      const match=text.match(/(?:credito\s*)?(\d{1,2})\s*x/);
+      const count=Math.max(1,Math.min(12,Number(match?.[1]||record?.installments||1)||1));
+      return `credit${count}`;
+    }
+    return 'pix';
+  }
   function defaultMappings(){
     return {
       version: SPEC.mappingVersion,
@@ -130,6 +170,7 @@
     config.discovered = normalizeDiscovered(config.discovered);
     config.mappingReady = config.mappingReady === true;
     config.importMode = 'smart-native';
+    if(config.sourceAppId === 'marco-iris') config.mitRevenueRules = normalizeMitRevenueRules(config.mitRevenueRules);
     // V6.34 — padrão é excluir automaticamente aqui quando o registro some na
     // origem; só fica "preserve" se o usuário desligar explicitamente no toggle.
     config.deletionPolicy = config.deletionPolicy === 'preserve' ? 'preserve' : 'delete';
@@ -537,7 +578,106 @@
     ) || null;
   }
 
+  function findMitImportedIncome(data, receiptId){
+    const wanted=String(receiptId||'');
+    return (data.transacoes||[]).find(tx=>tx&&tx.integrationSourceAppId==='marco-iris'&&String(tx.integrationReceiptId||tx.integrationEntityId||'')===wanted)||null;
+  }
+  function makeMitIncomeTransaction(data,config,record){
+    const key=mitMethodKey(record),rules=normalizeMitRevenueRules(config.mitRevenueRules),rule=rules[key]||rules.pix;
+    const target=key==='money'?{kind:'wallet',id:CARTEIRA_CONTA_ID}:normalizeTarget({target:rule.target},rule.form);
+    const converted=Object.assign({},record,{
+      date:record.paymentDate||record.date,
+      _borionType:'receita',_mappedCategory:rule.category,_mappedPaymentForm:rule.form,
+      _mappedAccountId:target.kind==='account'?target.id:config.accountId,_mappedTarget:target,
+      _mappedRevenueOrigin:'propria',_mappedSettled:true,_mappingVersion:SPEC.mappingVersion
+    });
+    const tx=makeTransaction(data,config,converted);
+    tx.nome=record.description||`${record.orderNumber||'Sem OSV'} • ${record.clientName||'Cliente não informado'}`;
+    tx.integrationReceiptId=String(record.receiptId||record.entityId||'');
+    tx.integrationOrderNumber=record.orderNumber||'';
+    tx.integrationClientName=record.clientName||'';
+    tx.integrationExternalReference=record.externalReference||'';
+    tx.integrationPaymentMethodOriginal=record.paymentMethod||'';
+    return tx;
+  }
+  function reconcileMitSnapshot(data,config,snapshot){
+    validateSnapshot(snapshot,config.sourceAppId);
+    ensureSourceConfig(config);
+    if(!config.mappingReady) throw new Error('Configure as receitas do MIT antes de sincronizar esta integração.');
+    const interop=ensureInterop(data),state=importedState(data,config.sourceAppId),mitState=ensureMitState(data);
+    state.records ||= {};
+    const results=[],pendingById=new Map((interop.pending||[]).filter(item=>item.sourceAppId==='marco-iris').map(item=>[String(item.entityId),item]));
+    const incomingExpenseIds=new Set();
+    (snapshot.records||[]).forEach(record=>{
+      const entityId=String(record.receiptId||record.entityId||'');
+      if(record.direction==='expense'){
+        incomingExpenseIds.add(entityId);
+        if(record.active===false||normalize(record.status)==='cancelled'){
+          pendingById.delete(entityId); delete state.records[record.aggregateId];
+          results.push({aggregateId:record.aggregateId,entityId,status:'cancelled',borionTransactionId:'',message:'Despesa cancelada na origem; retirada da revisão.'});
+          return;
+        }
+        if(mitState.expenses[entityId]){
+          pendingById.delete(entityId);
+          state.records[record.aggregateId]=Object.assign({},state.records[record.aggregateId]||{},{status:'imported',entityId,importedAt:mitState.expenses[entityId].importedAt||''});
+          results.push({aggregateId:record.aggregateId,entityId,status:'unchanged',borionTransactionId:mitState.expenses[entityId].borionId||'',message:'Despesa já importada manualmente.'});
+          return;
+        }
+        const pending={
+          sourceAppId:'marco-iris',aggregateId:record.aggregateId,entityId,
+          name:record.name||record.description||'Despesa MIT',description:record.description||record.name||'Despesa MIT',
+          localPurchase:record.localPurchase||'',category:record.category||'',amount:Number(record.amount)||0,
+          date:record.date||record.dueDate||todayISO(),origin:'MIT',status:record.settled?'Pago':'Em aberto',
+          paymentMethod:record.paymentMethod||'',externalReference:record.externalReference||'',record:clone(record),
+          updatedAt:record.sourceUpdatedAt||snapshot.generatedAt||nowIso()
+        };
+        pendingById.set(entityId,pending);
+        state.records[record.aggregateId]={status:'waiting',entityId,fingerprint:record.fingerprint||hash(record),updatedAt:pending.updatedAt};
+        results.push({aggregateId:record.aggregateId,entityId,status:'waiting',borionTransactionId:'',message:'Aguardando revisão manual no Borion.'});
+        return;
+      }
+
+      const receiptId=entityId;
+      const nativeTx=findMitImportedIncome(data,receiptId);
+      if(nativeTx||mitState.receipts[receiptId]){
+        const txId=nativeTx?.id||mitState.receipts[receiptId]?.borionId||'';
+        mitState.receipts[receiptId] ||= {borionId:txId,importedAt:nativeTx?.integrationImportedAt||nowIso()};
+        state.records[record.aggregateId]={status:'imported',txId,entityId:receiptId,importedAt:mitState.receipts[receiptId].importedAt};
+        results.push({aggregateId:record.aggregateId,entityId:receiptId,status:'unchanged',borionTransactionId:txId,message:'REC já importado; duplicidade bloqueada.'});
+        return;
+      }
+      if(record.active===false||record.settled!==true||!record.paymentDate){
+        state.records[record.aggregateId]={status:'waiting',entityId:receiptId,reason:'not-paid',updatedAt:record.sourceUpdatedAt||''};
+        results.push({aggregateId:record.aggregateId,entityId:receiptId,status:'waiting',borionTransactionId:'',message:'Recebimento ainda sem Data de Pagamento.'});
+        return;
+      }
+      const tx=makeMitIncomeTransaction(data,config,record);
+      data.transacoes=Array.isArray(data.transacoes)?data.transacoes:[];
+      if(data.transacoes.some(item=>item.id===tx.id)) tx.id += '-' + hash(receiptId+nowIso());
+      data.transacoes.push(tx);
+      if(!applyNew(data,tx)){ data.transacoes=data.transacoes.filter(item=>item.id!==tx.id); throw new Error('Não foi possível aplicar o destino financeiro da receita '+receiptId+'.'); }
+      mitState.receipts[receiptId]={borionId:tx.id,aggregateId:record.aggregateId,importedAt:tx.integrationImportedAt,externalReference:record.externalReference||''};
+      state.records[record.aggregateId]={status:'imported',txId:tx.id,entityId:receiptId,importedAt:tx.integrationImportedAt,fingerprint:tx.integrationOriginalFingerprint};
+      results.push({aggregateId:record.aggregateId,entityId:receiptId,status:'created',borionTransactionId:tx.id,message:'Receita recebida e importada automaticamente.'});
+    });
+    [...pendingById.keys()].forEach(entityId=>{ if(!incomingExpenseIds.has(entityId)) pendingById.delete(entityId); });
+    interop.pending=(interop.pending||[]).filter(item=>item.sourceAppId!=='marco-iris').concat([...pendingById.values()]);
+    state.instanceId=snapshot.instanceId; state.lastRevision=Number(snapshot.revision)||0;
+    state.lastContentHash=snapshot.contentHash||hash({records:snapshot.records,tombstones:snapshot.tombstones});
+    state.lastSyncAt=nowIso(); state.lastError='';
+    config.lastSyncAt=state.lastSyncAt; config.lastRevision=state.lastRevision; config.lastError='';
+    config.lastResult={
+      created:results.filter(x=>x.status==='created').length,deleted:0,
+      waiting:results.filter(x=>x.status==='waiting').length,
+      unchanged:results.filter(x=>x.status==='unchanged').length,ignored:0,sourceDeleted:0
+    };
+    interop.audit.unshift({id:'interop-mit-'+Date.now(),at:state.lastSyncAt,sourceAppId:'marco-iris',revision:state.lastRevision,mode:'automatic-income-assisted-expense',result:clone(config.lastResult)});
+    interop.audit=interop.audit.slice(0,300);
+    return {results,pending:[...pendingById.values()],summary:config.lastResult};
+  }
+
   function reconcileSnapshot(data, config, snapshot){
+    if(config.sourceAppId === 'marco-iris') return reconcileMitSnapshot(data, config, snapshot);
     validateSnapshot(snapshot, config.sourceAppId);
     ensureSourceConfig(config);
     if(!config.mappingReady) throw new Error('Configure e salve a aba Vínculos antes de sincronizar esta integração.');
@@ -699,14 +839,14 @@
     uiSourceAppId = sourceAppId;
     uiTab = 'links';
     if(typeof renderView === 'function') renderView();
-    if(!silent && typeof toast === 'function') toast(`${sourceName(sourceAppId)}: campos da origem lidos. Configure os Vínculos.`);
+    if(!silent && typeof toast === 'function') toast(sourceAppId==='marco-iris'?'MIT atualizado. Configure as receitas e revise as despesas.':`${sourceName(sourceAppId)}: campos da origem lidos. Configure os Vínculos.`);
     return snapshot;
   }
 
   async function syncSource(sourceAppId, {silent=false}={}){
     const row = findSourceConfig(sourceAppId);
     if(!row) throw new Error('Esta integração ainda não foi configurada.');
-    if(!row.config.mappingReady) throw new Error('Abra a aba Vínculos, confira os mapeamentos e clique em “Salvar vínculos e sincronizar”.');
+    if(!row.config.mappingReady) throw new Error(sourceAppId==='marco-iris'?'Abra “Receitas e despesas” e salve a configuração das receitas.':'Abra a aba Vínculos, confira os mapeamentos e clique em “Salvar vínculos e sincronizar”.');
     if(syncing) throw new Error('Outra integração já está sincronizando.');
     syncing = true;
     try{
@@ -917,9 +1057,15 @@
   function renderConnectionTab(sourceAppId, row){
     const source = SOURCES[sourceAppId];
     if(!row){
-      return `<div class="interop-pane"><div class="interop-empty"><div class="interop-empty-icon">⇄</div><h4>${escHtml(source.name)} ainda não está conectado</h4><p>Conecte a pasta gerada pelo aplicativo. Nenhum lançamento será importado antes de você revisar e salvar os Vínculos.</p><div class="interop-actions"><button class="btn-outline btn-sm" onclick="BorionInterop.setupDialog('${sourceAppId}','local')">Conectar pasta local</button><button class="btn btn-primary btn-sm" onclick="BorionInterop.setupDialog('${sourceAppId}','drive')">Conectar Google Drive</button></div></div></div>`;
+      const intro=sourceAppId==='marco-iris'?'Conecte a pasta gerada pelo MIT. Depois configure apenas as categorias e destinos das receitas; despesas sempre exigirão revisão.':'Conecte a pasta gerada pelo aplicativo. Nenhum lançamento será importado antes de você revisar e salvar os Vínculos.';
+      return `<div class="interop-pane"><div class="interop-empty"><div class="interop-empty-icon">⇄</div><h4>${escHtml(source.name)} ainda não está conectado</h4><p>${intro}</p><div class="interop-actions"><button class="btn-outline btn-sm" onclick="BorionInterop.setupDialog('${sourceAppId}','local')">Conectar pasta local</button><button class="btn btn-primary btn-sm" onclick="BorionInterop.setupDialog('${sourceAppId}','drive')">Conectar Google Drive</button></div></div></div>`;
     }
     const c = row.config;
+    if(sourceAppId==='marco-iris'){
+      const r=c.lastResult||{},pending=(ensureInterop(row.data).pending||[]).filter(item=>item.sourceAppId==='marco-iris').length;
+      const setup=c.mappingReady?'<span class="pill ok">Receitas configuradas</span>':'<span class="pill warn">Configuração pendente</span>';
+      return `<div class="interop-pane"><div class="interop-status-grid"><div><span>Perfil de destino</span><strong>${escHtml(row.profile.name)}</strong></div><div><span>Conta padrão</span><strong>${escHtml(accountName(row.data,c.accountId)||'Carteira')}</strong></div><div><span>Meio</span><strong>${c.transport==='drive'?'Google Drive':'Pasta local'}</strong></div><div><span>Automação</span><strong>${setup}</strong></div></div><div class="gold-box interop-sync-box"><b>Última sincronização:</b> ${escHtml(dateText(c.lastSyncAt))}<br><span>${Number(r.created||0)} receita(s) nova(s) · ${Number(r.unchanged||0)} já processado(s) · ${pending} despesa(s) aguardando revisão</span>${c.lastError?`<br><b>Erro:</b> ${escHtml(c.lastError)}`:''}</div><div class="info-box"><b>Regra ativa:</b> receitas com Data de Pagamento entram automaticamente por REC. Despesas nunca entram sem revisão.</div><div class="interop-actions"><button class="btn btn-primary btn-sm" onclick="BorionInterop.syncSource('marco-iris')" ${c.mappingReady?'':'disabled title="Configure as receitas primeiro"'}>Sincronizar agora</button><button class="btn-outline btn-sm" onclick="BorionInterop.setSettingsTab('links')">Configurar receitas e revisar despesas</button><button class="btn-outline btn-sm" onclick="BorionInterop.setupDialog('marco-iris','${c.transport}')">Reconfigurar conexão</button><button class="btn-outline btn-sm" onclick="BorionInterop.disconnect('marco-iris')">Desconectar</button></div>${!c.mappingReady?'<div class="interop-next-step"><b>Próximo passo:</b> abra <b>Receitas e despesas</b>, selecione categorias e destinos e salve.</div>':''}</div>`;
+    }
     const r = c.lastResult || {};
     const mappingLabel = c.mappingReady ? '<span class="pill ok">Vínculos configurados</span>' : '<span class="pill warn">Vínculos pendentes</span>';
     const deletionOn = c.deletionPolicy !== 'preserve';
@@ -958,17 +1104,136 @@
     return `<div class="interop-pane interop-links-pane"><div class="interop-links-intro"><div><h4>Mapeamento completo de ${escHtml(sourceName(sourceAppId))}</h4><p>À esquerda, o dado permanece exatamente como chegou da origem. À direita, você define como ele será gravado no Borion. As regras valem apenas na primeira importação de cada ID.</p></div><span class="pill ${c.mappingReady?'ok':'warn'}">${c.mappingReady?'Configurado':'Revisão necessária'}</span></div><div class="interop-map-legend"><div class="origin"><small>ORIGEM</small><b>${escHtml(sourceName(sourceAppId))}</b><span>Nome e valor original enviados pelo aplicativo.</span></div><div class="destination"><small>DESTINO</small><b>Borium Finance</b><span>Tipo, categoria, status, forma, conta, carteira ou reserva.</span></div></div><datalist id="interop-cat-income">${categoryDatalist(row.data,'income')}</datalist><datalist id="interop-cat-expense">${categoryDatalist(row.data,'expense')}</datalist><section class="interop-map-section"><h5>Campos detectados na origem</h5><p>Prévia fiel dos nomes e valores presentes no arquivo externo. Nenhuma conversão é aplicada nesta área.</p><div class="interop-field-grid">${fieldRows||'<div class="interop-map-empty">Nenhum campo adicional identificado.</div>'}</div></section><section class="interop-map-section"><h5>Tipos de lançamento</h5><p>Define se cada entrada ou saída vira Receita, Despesa variável ou não é importada.</p>${directionRows}${kindRows}</section><section class="interop-map-section"><h5>Categorias e origem da receita</h5><p>Mapeia cada categoria externa para uma categoria e, nas entradas, para a origem correta da receita.</p>${categoryRows||'<div class="interop-map-empty">Nenhuma categoria encontrada.</div>'}</section><section class="interop-map-section"><h5>Formas de pagamento e destino financeiro</h5><p>Uma mesma forma pode ter regras diferentes para entradas e saídas. Escolha conta, carteira ou reserva; rendimentos enviados a uma reserva aparecem também no histórico de rendimentos.</p>${paymentRows||'<div class="interop-map-empty">Nenhuma forma de pagamento encontrada.</div>'}</section><section class="interop-map-section"><h5>Status</h5><p>Respeite o estado enviado, force Pago/Em aberto ou ignore um estado específico.</p>${statusRows||'<div class="interop-map-empty">Nenhum status encontrado.</div>'}</section><div class="interop-save-bar"><button class="btn-outline btn-sm" onclick="BorionInterop.inspectSource('${sourceAppId}')">Atualizar campos da origem</button><button class="btn btn-primary" onclick="BorionInterop.saveMappings('${sourceAppId}',{sync:true})">Salvar vínculos e sincronizar</button></div></div>`;
   }
 
+  function mitTargetOptions(data,selected){
+    const value=String(selected||'__default__'),options=[['__default__','Conta padrão da integração']];
+    (data.contas||[]).filter(account=>account&&!account.isCarteira&&!account.archivedAt&&account.active!==false).forEach(account=>options.push([`account:${account.id}`,`Conta · ${account.nome||'Sem nome'}`]));
+    (data.reservas?.boxes||[]).filter(box=>box&&!box.archivedAt&&box.active!==false).forEach(box=>options.push([`reserve:${box.id}`,`Reserva · ${box.nome||'Sem nome'}${box.banco?' · '+box.banco:''}`]));
+    return options.map(([id,label])=>`<option value="${escHtml(id)}" ${value===id?'selected':''}>${escHtml(label)}</option>`).join('');
+  }
+  function renderMitLinksTab(row){
+    if(!row) return `<div class="interop-pane"><div class="interop-empty"><h4>Conecte o MIT primeiro</h4><button class="btn btn-primary btn-sm" onclick="BorionInterop.setSettingsTab('connection')">Ir para Conexão</button></div></div>`;
+    const rules=normalizeMitRevenueRules(row.config.mitRevenueRules);
+    const pending=(ensureInterop(row.data).pending||[]).filter(item=>item.sourceAppId==='marco-iris');
+    const revenueRows=MIT_REVENUE_METHODS.map(method=>{
+      const rule=rules[method.key];
+      const fixed=method.key==='money';
+      return `<div class="mit-rule-row"><div class="mit-origin"><small>Origem</small><strong>${escHtml(method.label)}</strong></div><div class="interop-arrow">→</div><label><small>Categoria</small><input type="text" list="mit-income-categories" data-mit-category="${method.key}" value="${escHtml(rule.category)}"></label><label><small>Forma de pagamento</small><input value="${escHtml(method.form)}" disabled></label><label><small>Destino financeiro</small>${fixed?'<input value="Carteira" disabled>':`<select data-mit-target="${method.key}">${mitTargetOptions(row.data,rule.target)}</select>`}</label></div>`;
+    }).join('');
+    const pendingRows=pending.length?pending.map(item=>`<div class="mit-pending-row"><div><strong>${escHtml(item.name||item.description)}</strong><small>${escHtml(item.localPurchase||'Sem local informado')}</small></div><span>${typeof brl==='function'?brl(Number(item.amount)||0):('R$ '+(Number(item.amount)||0).toFixed(2).replace('.',','))}</span><span>${escHtml(item.date||'')}</span><span>MIT</span><span class="pill ${item.status==='Pago'?'ok':'warn'}">${escHtml(item.status||'Em aberto')}</span><button class="btn btn-primary btn-sm" onclick="BorionInterop.openMitExpenseImport('${escHtml(item.aggregateId)}')">Revisar</button></div>`).join(''):'<div class="interop-map-empty">Nenhuma despesa aguardando revisão.</div>';
+    return `<div class="interop-pane mit-integration-pane"><div class="interop-links-intro"><div><h4>Receitas automáticas</h4><p>Configure uma vez. Cada REC pago entra automaticamente e nunca é importado duas vezes.</p></div><span class="pill ${row.config.mappingReady?'ok':'warn'}">${row.config.mappingReady?'Configurado':'Configuração necessária'}</span></div><datalist id="mit-income-categories">${categoryDatalist(row.data,'income')}</datalist><section class="interop-map-section"><h5>Origem MIT → destino Borion</h5><div class="mit-rules-list">${revenueRows}</div><div class="interop-save-bar"><button class="btn-outline btn-sm" onclick="BorionInterop.inspectSource('marco-iris')">Atualizar dados</button><button class="btn btn-primary" onclick="BorionInterop.saveMitSettings({sync:true})">Salvar configuração e sincronizar</button></div></section><section class="interop-map-section"><div class="mit-pending-head"><div><h5>Aguardando Revisão</h5><p>Despesas nunca entram automaticamente. Revise categoria, origem financeira, tipo e status.</p></div><span class="pill ${pending.length?'warn':'ok'}">${pending.length} pendente(s)</span></div><div class="mit-pending-labels"><span>Nome</span><span>Valor</span><span>Data</span><span>Origem</span><span>Status</span><span></span></div><div class="mit-pending-list">${pendingRows}</div></section></div>`;
+  }
+  async function saveMitSettings({sync=false}={}){
+    const row=findSourceConfig('marco-iris');
+    if(!row) throw new Error('Integração MIT não configurada.');
+    const rules=normalizeMitRevenueRules(row.config.mitRevenueRules);
+    document.querySelectorAll('[data-mit-category]').forEach(input=>{ const key=input.dataset.mitCategory; if(rules[key]) rules[key].category=String(input.value||'MIT').trim()||'MIT'; });
+    document.querySelectorAll('[data-mit-target]').forEach(select=>{ const key=select.dataset.mitTarget; if(rules[key]) rules[key].target=select.value||'__default__'; });
+    rules.money.form='Dinheiro'; rules.money.target='wallet';
+    row.config.mitRevenueRules=rules; row.config.mappingReady=true; row.config.mappingSavedAt=nowIso();
+    saveProfileData(row.profile.id,row.data);
+    if(typeof toast==='function') toast('Configuração do MIT salva. Receitas pagas serão automáticas.');
+    if(sync) return await syncSource('marco-iris',{silent:false});
+    if(typeof renderView==='function') renderView();
+    return true;
+  }
+  function mitExpenseIntegrationMeta(item){
+    const record=item.record||{};
+    return {
+      integrationImported:true,integrationManaged:false,integrationImportMode:'native-assisted',
+      integrationAggregateId:item.aggregateId,integrationSourceAppId:'marco-iris',integrationEntityId:item.entityId,
+      integrationExpenseId:item.entityId,integrationImportedAt:nowIso(),integrationExternalReference:item.externalReference||record.externalReference||'',
+      integrationOriginalStatus:item.status||record.status||'',integrationOriginalPaymentMethod:item.paymentMethod||record.paymentMethod||'',
+      integrationOriginalSourceValues:clone(sourceBag(record)),integrationMappingVersion:SPEC.mappingVersion
+    };
+  }
+  function ensureMitExpenseCategory(data,type,category){
+    data.categorias ||= defaultCategories();
+    const bucket=type==='fixa'?'fixa':'variavel';
+    data.categorias[bucket]=Array.isArray(data.categorias[bucket])?data.categorias[bucket]:[];
+    const value=String(category||'Outro').trim()||'Outro';
+    if(!data.categorias[bucket].includes(value)) data.categorias[bucket].push(value);
+    data.categoryColors ||= {receita:{},fixa:{},variavel:{}}; data.categoryColors[bucket] ||= {};
+    if(!data.categoryColors[bucket][value]) data.categoryColors[bucket][value]=baseCatColor(value);
+    return value;
+  }
+  function completeMitExpenseImport(row,item,borionId){
+    const interop=ensureInterop(row.data),mitState=ensureMitState(row.data),state=importedState(row.data,'marco-iris');
+    mitState.expenses[String(item.entityId)]={borionId:borionId||'',aggregateId:item.aggregateId,importedAt:nowIso()};
+    state.records[item.aggregateId]=Object.assign({},state.records[item.aggregateId]||{},{status:'imported',entityId:item.entityId,txId:borionId||'',importedAt:mitState.expenses[String(item.entityId)].importedAt});
+    interop.pending=(interop.pending||[]).filter(pending=>!(pending.sourceAppId==='marco-iris'&&pending.aggregateId===item.aggregateId));
+    saveProfileData(row.profile.id,row.data);
+    if(S.currentProfile&&String(S.currentProfile.id)===String(row.profile.id)) saveCurrentData();
+  }
+  function openMitExpenseImport(aggregateId){
+    const row=findSourceConfig('marco-iris');
+    if(!row) return;
+    if(!S.currentProfile||String(S.currentProfile.id)!==String(row.profile.id)){ if(typeof toast==='function')toast('Abra o perfil '+row.profile.name+' para revisar esta despesa.'); return; }
+    const item=(ensureInterop(row.data).pending||[]).find(pending=>pending.sourceAppId==='marco-iris'&&pending.aggregateId===aggregateId);
+    if(!item){ if(typeof toast==='function') toast('Esta despesa não está mais aguardando revisão.'); return; }
+    const data=row.data,accounts=(data.contas||[]).filter(a=>a&&!a.archivedAt&&a.active!==false),reserves=(data.reservas?.boxes||[]).filter(r=>r&&!r.archivedAt&&r.active!==false),cards=(data.cartoes||[]).filter(c=>c&&!c.archivedAt&&c.active!==false);
+    const initialStatus=item.status==='Pago'?'Pago':'Em aberto';
+    const root=document.getElementById('modal-root'),overlay=document.createElement('div'); overlay.className='modal-overlay transaction-modal-overlay';
+    overlay.innerHTML=`<div class="modal-box transaction-modal mit-expense-modal"><div class="modal-head"><h2>Importar Despesa</h2><button data-close>&times;</button></div><p class="modal-sub">Revise os campos recebidos do MIT. A despesa só será criada após clicar em Importar.</p><div class="field"><label>Tipo</label><div class="segmented-toggle" id="mit_exp_type_group"><button type="button" class="seg-btn active" data-value="variavel">Despesa Variável</button><button type="button" class="seg-btn" data-value="fixa">Despesa Fixa</button></div><input type="hidden" id="mit_exp_type" value="variavel"></div><div class="field"><label>Nome</label><input id="mit_exp_name" value="${escHtml(item.name||item.description||'Despesa MIT')}"></div><div class="field"><label>Local da Compra</label><input id="mit_exp_local" value="${escHtml(item.localPurchase||'')}"></div><div class="field"><label>Categoria</label><input id="mit_exp_category" list="mit-exp-categories" value=""><datalist id="mit-exp-categories">${[...(data.categorias?.variavel||[]),...(data.categorias?.fixa||[])].filter((v,i,a)=>a.indexOf(v)===i).map(v=>`<option value="${escHtml(v)}"></option>`).join('')}</datalist></div><div class="field"><label>Valor</label><input id="mit_exp_value" type="number" min="0.01" step="0.01" value="${Number(item.amount)||0}"></div><div class="field"><label>Data</label><input id="mit_exp_date" type="date" value="${escHtml(item.date||todayISO())}"></div><div class="field"><label>De onde será pago</label><div class="segmented-toggle payment-source-toggle" id="mit_exp_source_group"><button type="button" class="seg-btn active" data-value="carteira">Carteira</button><button type="button" class="seg-btn" data-value="conta">Conta</button><button type="button" class="seg-btn" data-value="reserva" ${reserves.length?'':'disabled'}>Reserva</button><button type="button" class="seg-btn" data-value="credito" ${cards.length?'':'disabled'}>Crédito</button></div><input type="hidden" id="mit_exp_source" value="carteira"></div><div id="mit_exp_account_panel" class="payment-source-panel hidden"><div class="field"><label>Conta</label><select id="mit_exp_account">${accounts.filter(a=>!a.isCarteira).map(a=>`<option value="${escHtml(a.id)}">${escHtml(a.nome||'Conta')}</option>`).join('')}</select></div><div class="field"><label>Forma</label><select id="mit_exp_account_form"><option>Pix</option><option>Débito</option></select></div></div><div id="mit_exp_reserve_panel" class="payment-source-panel hidden"><div class="field"><label>Reserva</label><select id="mit_exp_reserve">${reserves.map(r=>`<option value="${escHtml(r.id)}">${escHtml(r.nome||'Reserva')}</option>`).join('')}</select></div></div><div id="mit_exp_credit_panel" class="payment-source-panel hidden"><div class="field"><label>Cartão de crédito</label><select id="mit_exp_card">${cards.map(c=>`<option value="${escHtml(c.id)}">${escHtml(c.banco||c.nome||'Cartão')}</option>`).join('')}</select></div></div><div class="field"><label>Status deste mês</label><div class="segmented-toggle" id="mit_exp_status_group"><button type="button" class="seg-btn ${initialStatus==='Pago'?'active':''}" data-value="Pago">Pago</button><button type="button" class="seg-btn ${initialStatus==='Em aberto'?'active':''}" data-value="Em aberto">Em Aberto</button></div><input type="hidden" id="mit_exp_status" value="${initialStatus}"></div><div class="row-btns"><button class="btn btn-primary btn-block" id="mit_exp_import">Importar</button></div></div>`;
+    root.replaceChildren(overlay); if(typeof attachModalGuard==='function') attachModalGuard(overlay);
+    const q=id=>overlay.querySelector(id),wire=(group,hidden,change)=>q(group)?.querySelectorAll('.seg-btn:not([disabled])').forEach(btn=>btn.onclick=()=>{q(group).querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');q(hidden).value=btn.dataset.value;change?.(btn.dataset.value);});
+    overlay.querySelectorAll('[data-close]').forEach(btn=>btn.onclick=()=>closeModal());
+    wire('#mit_exp_type_group','#mit_exp_type'); wire('#mit_exp_status_group','#mit_exp_status');
+    wire('#mit_exp_source_group','#mit_exp_source',source=>{q('#mit_exp_account_panel').classList.toggle('hidden',source!=='conta');q('#mit_exp_reserve_panel').classList.toggle('hidden',source!=='reserva');q('#mit_exp_credit_panel').classList.toggle('hidden',source!=='credito');});
+    q('#mit_exp_import').onclick=()=>{
+      const type=q('#mit_exp_type').value,name=String(q('#mit_exp_name').value||'Despesa MIT').trim(),localPurchase=String(q('#mit_exp_local').value||'').trim(),category=ensureMitExpenseCategory(data,type,q('#mit_exp_category').value),value=Math.round((Number(q('#mit_exp_value').value)||0)*100)/100,date=q('#mit_exp_date').value||todayISO(),source=q('#mit_exp_source').value,status=q('#mit_exp_status').value==='Pago'?'Pago':'Em aberto',meta=mitExpenseIntegrationMeta(item);
+      if(value<=0){ alert('Digite um valor maior que zero.'); return; }
+      let borionId='';
+      const beforeImport=clone(data);
+      try{
+        if(source==='credito'){
+          const card=cards.find(c=>String(c.id)===String(q('#mit_exp_card').value)); if(!card) throw new Error('Escolha um cartão válido.');
+          card.parcelas=Array.isArray(card.parcelas)?card.parcelas:[];
+          const parcel={id:uid(),descricao:name,local:localPurchase,categoria:category,valorParcela:value,parcelaTotal:1,dataCompra:date.slice(0,7),dataCompraCompleta:date,diaEntrada:Math.max(1,Number(date.slice(8,10))||1),apareceDespesas:true,despesaTipo:type,statusPagamento:status,statusFaturaPorCompetencia:{},despesaTransacaoId:null,despesaTransacaoIds:[],despesaFixaId:null};
+          card.parcelas.push(parcel); linkParcelaToDespesa(card,parcel);
+          if(type==='fixa'){
+            const fixed=(data.fixas||[]).find(f=>f.id===parcel.despesaFixaId); if(!fixed) throw new Error('Falha ao criar a despesa fixa no cartão.'); Object.assign(fixed,meta); borionId=fixed.id;
+          }else{
+            (parcel.despesaTransacaoIds||[]).forEach(id=>{const tx=(data.transacoes||[]).find(t=>t.id===id);if(tx)Object.assign(tx,meta);}); borionId=parcel.despesaTransacaoId||'';
+          }
+        }else if(type==='fixa'){
+          let accountId=null,banco='',origemPagamento='conta',formaPagamento=null,reserve=null;
+          if(source==='carteira'){ accountId=CARTEIRA_CONTA_ID; if(!accountByIdIn(data,accountId))throw new Error('A Carteira não está disponível.'); banco=accountName(data,accountId); formaPagamento='Dinheiro'; }
+          else if(source==='conta'){ accountId=q('#mit_exp_account').value; if(!accountByIdIn(data,accountId))throw new Error('Escolha uma conta válida.'); banco=accountName(data,accountId); formaPagamento=q('#mit_exp_account_form').value; }
+          else { reserve=reserves.find(r=>String(r.id)===String(q('#mit_exp_reserve').value)); if(!reserve) throw new Error('Escolha uma reserva válida.'); origemPagamento='reserva'; banco=reserve.banco||''; }
+          const fixed=Object.assign({id:uid(),nome:name,localCompra,category,categoria:category,valor:value,dia:Math.max(1,Number(date.slice(8,10))||1),dataCadastro:date,startMonth:date.slice(0,7),endMonth:null,accountId:origemPagamento==='conta'?accountId:null,banco,formaPagamento:origemPagamento==='conta'?formaPagamento:null,origemPagamento,reservaOrigemId:reserve?.id||null},meta);
+          data.fixas=Array.isArray(data.fixas)?data.fixas:[]; data.fixaPagamentos=Array.isArray(data.fixaPagamentos)?data.fixaPagamentos:[]; data.fixas.push(fixed); borionId=fixed.id;
+          if(status==='Pago'&&!payFixaOcorrencia(fixed,fixed.startMonth,{persist:false,notify:false})){data.fixas=data.fixas.filter(f=>f.id!==fixed.id);throw new Error('Não foi possível aplicar o pagamento da despesa fixa.');}
+        }else{
+          let accountId=null,banco='',origemPagamento='conta',formaPagamento=null,reserve=null;
+          if(source==='carteira'){accountId=CARTEIRA_CONTA_ID;if(!accountByIdIn(data,accountId))throw new Error('A Carteira não está disponível.');banco=accountName(data,accountId);formaPagamento='Dinheiro';}
+          else if(source==='conta'){accountId=q('#mit_exp_account').value;if(!accountByIdIn(data,accountId))throw new Error('Escolha uma conta válida.');banco=accountName(data,accountId);formaPagamento=q('#mit_exp_account_form').value;}
+          else {reserve=reserves.find(r=>String(r.id)===String(q('#mit_exp_reserve').value));if(!reserve)throw new Error('Escolha uma reserva válida.');origemPagamento='reserva';banco=reserve.banco||'';}
+          const tx=Object.assign({id:uid(),tipo:'variavel',nome:name,localCompra,categoria:category,valor:value,data,statusPagamento:status,accountId:origemPagamento==='conta'?accountId:null,banco,origemPagamento,formaPagamento:origemPagamento==='conta'?formaPagamento:null,reservaOrigemId:reserve?.id||null,reservaOrigemMoveId:null},meta);
+          data.transacoes=Array.isArray(data.transacoes)?data.transacoes:[];data.transacoes.push(tx);borionId=tx.id;
+          if(status==='Pago'&&!applyNew(data,tx)){data.transacoes=data.transacoes.filter(t=>t.id!==tx.id);throw new Error('Não foi possível aplicar o saldo da despesa.');}
+        }
+        completeMitExpenseImport(row,item,borionId); closeModal(); if(typeof renderView==='function')renderView(); if(typeof toast==='function')toast('Despesa do MIT importada com sucesso.');
+      }catch(error){
+        Object.keys(data).forEach(key=>delete data[key]); Object.assign(data,beforeImport); S.data=data;
+        if(typeof renderView==='function')renderView();
+        alert(error.message||String(error));
+      }
+    };
+  }
+
   function renderSourceWorkspace(sourceAppId){
     const source = SOURCES[sourceAppId];
     const row = findSourceConfig(sourceAppId);
-    return `<div class="settings-section interop-workspace"><div class="interop-workspace-head"><div><h3>${escHtml(source.name)}</h3><p class="desc">Configurações específicas desta integração.</p></div>${row ? '<span class="pill ok">Conectado</span>' : '<span class="pill">Não conectado</span>'}</div><div class="interop-subtabs"><button class="${uiTab === 'connection' ? 'active' : ''}" onclick="BorionInterop.setSettingsTab('connection')">Conexão</button><button class="${uiTab === 'links' ? 'active' : ''}" onclick="BorionInterop.setSettingsTab('links')">Vínculos</button></div>${uiTab === 'links' ? renderLinksTab(sourceAppId, row) : renderConnectionTab(sourceAppId, row)}</div>`;
+    const linksLabel=sourceAppId==='marco-iris'?'Receitas e despesas':'Vínculos';
+    const linksContent=sourceAppId==='marco-iris'?renderMitLinksTab(row):renderLinksTab(sourceAppId,row);
+    return `<div class="settings-section interop-workspace"><div class="interop-workspace-head"><div><h3>${escHtml(source.name)}</h3><p class="desc">Configurações específicas desta integração.</p></div>${row ? '<span class="pill ok">Conectado</span>' : '<span class="pill">Não conectado</span>'}</div><div class="interop-subtabs"><button class="${uiTab === 'connection' ? 'active' : ''}" onclick="BorionInterop.setSettingsTab('connection')">Conexão</button><button class="${uiTab === 'links' ? 'active' : ''}" onclick="BorionInterop.setSettingsTab('links')">${linksLabel}</button></div>${uiTab === 'links' ? linksContent : renderConnectionTab(sourceAppId, row)}</div>`;
   }
 
   function renderSettings(){
     if(!SOURCES[uiSourceAppId]) uiSourceAppId = 'amanda-estetica';
-    return `<div class="settings-page interop-settings-page"><div class="settings-section settings-hero-section"><h3>Integrações inteligentes</h3><p class="desc">Os aplicativos enviam registros; o Borion converte cada campo conforme seus Vínculos e cria lançamentos nativos, editáveis e sem sincronização de volta.</p></div><div class="interop-app-tabs">${Object.entries(SOURCES).map(([id, source]) => {
+    return `<div class="settings-page interop-settings-page"><div class="settings-section settings-hero-section"><h3>Integrações inteligentes</h3><p class="desc">Receitas recebidas entram automaticamente. Despesas do MIT ficam aguardando revisão; outras integrações continuam usando seus próprios vínculos.</p></div><div class="interop-app-tabs">${Object.entries(SOURCES).map(([id, source]) => {
       const row = findSourceConfig(id);
-      return `<button class="interop-app-tab ${uiSourceAppId === id ? 'active' : ''}" onclick="BorionInterop.setSettingsSource('${id}')"><span>${escHtml(source.name)}</span><small>${row ? (row.config.mappingReady ? 'Conectado e configurado' : 'Conectado · vínculos pendentes') : 'Não conectado'}</small></button>`;
+      return `<button class="interop-app-tab ${uiSourceAppId === id ? 'active' : ''}" onclick="BorionInterop.setSettingsSource('${id}')"><span>${escHtml(source.name)}</span><small>${row ? (row.config.mappingReady ? 'Conectado e configurado' : (id==='marco-iris'?'Conectado · configurar receitas':'Conectado · vínculos pendentes')) : 'Não conectado'}</small></button>`;
     }).join('')}</div>${renderSourceWorkspace(uiSourceAppId)}<div class="settings-section interop-rules-summary"><h3>Como a sincronização funciona</h3><div class="interop-rule-grid"><div><b>1. Identifica</b><span>Confere o ID permanente do registro externo.</span></div><div><b>2. Converte</b><span>Aplica tipos, categorias, status, formas e contas configuradas.</span></div><div><b>3. Torna nativo</b><span>O lançamento pode ser editado livremente no Borion.</span></div><div><b>4. Não duplica</b><span>O ID continua registrado mesmo após qualquer edição local.</span></div></div></div></div>`;
   }
 
@@ -1099,7 +1364,7 @@
   }
   function start(){
     setTimeout(() => syncAll({silent:true}), 2500);
-    setInterval(() => syncAll({silent:true}), 60000);
+    setInterval(() => syncAll({silent:true}), 15000);
     document.addEventListener('visibilitychange', () => { if(!document.hidden) syncAll({silent:true}); });
     window.addEventListener('online', () => syncAll({silent:true}));
   }
@@ -1107,14 +1372,14 @@
   window.BorionInterop = Object.freeze({
     spec:SPEC, sources:SOURCES, sourceName,
     renderSettings, setSettingsSource, setSettingsTab, setDeletionPolicy,
-    setupDialog, configure, inspectSource, saveMappings,
+    setupDialog, configure, inspectSource, saveMappings, saveMitSettings, openMitExpenseImport,
     syncSource, syncAll, disconnect,
     markImportedDeletion, openImportedDeleteDialog,
     captureImportReference, transferImportReference,
     start,
     __test:{
       hash, stableStringify, ensureInterop, validateSnapshot,
-      discoverSnapshot, mappedRecord, reconcileSnapshot, sourceLabel, normalizeTarget, resolveFinancialTarget,
+      discoverSnapshot, mappedRecord, reconcileSnapshot, reconcileMitSnapshot, makeMitIncomeTransaction, mitMethodKey, sourceLabel, normalizeTarget, resolveFinancialTarget,
       txDelta, adjust, applyReserveLink, paymentForm, targetAccountId, makeTransaction,
       markImportedDeletion, editableSnapshotHash, reverseImportedTransaction
     }

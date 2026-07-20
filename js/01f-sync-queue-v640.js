@@ -1,5 +1,5 @@
 /* Borion Finance — Fila durável, identidade de dispositivo e máquina de estados
-   (V6.40.2 — Dados e Segurança)
+   (V6.42.0 — Boot e Sync Otimizados)
 
    Depende de js/01e-sync-core-v640.js (uuid640, checksumOf). Não depende do
    Google Drive nem de nenhum outro provider — só de IndexedDB. Isso permite
@@ -148,48 +148,61 @@ const BorionSyncState = {
    imutável foi criado com sucesso no Drive (ver 01g) — não apenas "o
    current.json foi sobrescrito", que é justamente o passo inseguro que este
    projeto está eliminando. */
+const BORION_QUEUE_STATES=['LOCAL_PENDING','UPLOADING_OPERATION','DRIVE_PROTECTED','MERGING','SNAPSHOT_WRITING','SNAPSHOT_CONFIRMED','ARCHIVING_OPERATION','COMPLETED','ERROR'];
+
 const BorionDurableQueue = {
   async enqueue(op){
-    const record = Object.assign({
-      status: 'pending', attempts: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-    }, op);
-    await borionIdb640Put('pending_operations', record);
-    try{ localStorage.setItem('borion_queue_marker_v640', String(Date.now())); }catch(e){}
+    const id=op&&String(op.operationId||op.id||'');
+    if(!id)throw new Error('Fila durável recebeu operação sem ID.');
+    const existing=await borionIdb640Get('pending_operations',id).catch(()=>null);
+    const record=Object.assign({
+      id,operationId:id,status:'pending',state:'LOCAL_PENDING',attempts:0,
+      createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),
+      remoteFileId:null,remoteProtectedAt:null,consolidatedAt:null
+    },existing||{},op,{id,operationId:id});
+    if(!record.state)record.state='LOCAL_PENDING';
+    await borionIdb640Put('pending_operations',record);
+    try{localStorage.setItem('borion_queue_marker_v640',String(Date.now()));}catch(e){}
     return record;
   },
-  async markAttempt(operationId, error){
-    const rec = await borionIdb640Get('pending_operations', operationId);
-    if(!rec) return null;
-    rec.attempts = (rec.attempts||0)+1;
-    rec.lastError = error ? (error.message||String(error)) : null;
-    rec.updatedAt = new Date().toISOString();
-    await borionIdb640Put('pending_operations', rec);
+  async get(operationId){return await borionIdb640Get('pending_operations',String(operationId));},
+  async setState(operationId,state,extra={}){
+    if(BORION_QUEUE_STATES.indexOf(state)===-1)throw new Error('Estado de fila inválido: '+state);
+    const id=String(operationId),rec=await borionIdb640Get('pending_operations',id);
+    if(!rec)return null;
+    Object.assign(rec,extra,{state,updatedAt:new Date().toISOString()});
+    if(state==='ERROR')rec.status='pending';
+    if(state==='COMPLETED')rec.status='completed';
+    await borionIdb640Put('pending_operations',rec);
     return rec;
   },
-  async confirmRemote(operationId){
-    // Não apaga: arquiva com status 'confirmed'. A limpeza definitiva só
-    // acontece depois de uma consolidação validada (ver 01g), como pede o
-    // item 6.2 ("limpeza apenas depois de backup validado").
-    const rec = await borionIdb640Get('pending_operations', operationId);
-    if(!rec) return null;
-    rec.status = 'confirmed';
-    rec.confirmedAt = new Date().toISOString();
-    await borionIdb640Put('pending_operations', rec);
+  async markAttempt(operationId,error){
+    const rec=await borionIdb640Get('pending_operations',String(operationId));
+    if(!rec)return null;
+    rec.attempts=(rec.attempts||0)+1;rec.lastError=error?(error.message||String(error)):null;
+    rec.state='ERROR';rec.updatedAt=new Date().toISOString();
+    await borionIdb640Put('pending_operations',rec);return rec;
+  },
+  async markDriveProtected(operationId,remoteFileId){
+    return await this.setState(operationId,'DRIVE_PROTECTED',{status:'confirmed',remoteFileId:remoteFileId||null,remoteProtectedAt:new Date().toISOString(),lastError:null});
+  },
+  async confirmRemote(operationId,remoteFileId){return await this.markDriveProtected(operationId,remoteFileId);},
+  async markSnapshotConfirmed(operationId){
+    return await this.setState(operationId,'SNAPSHOT_CONFIRMED',{consolidatedAt:new Date().toISOString(),status:'confirmed'});
+  },
+  async complete(operationId,extra={}){
+    const rec=await this.setState(operationId,'COMPLETED',Object.assign({completedAt:new Date().toISOString()},extra));
     return rec;
   },
-  async archive(operationId){ return await borionIdb640Delete('pending_operations', operationId); },
-  async pendingOnly(){ return (await borionIdb640GetAll('pending_operations')).filter(r=>r.status==='pending'); },
-  async all(){ return await borionIdb640GetAll('pending_operations'); },
-  async moveToDeadLetter(operationId, reason){
-    const rec = await borionIdb640Get('pending_operations', operationId);
-    if(!rec) return null;
-    rec.deadLetterReason = reason;
-    rec.deadLetterAt = new Date().toISOString();
-    await borionIdb640Put('dead_letter', rec);
-    await borionIdb640Delete('pending_operations', operationId);
-    return rec;
+  async archive(operationId){return await borionIdb640Delete('pending_operations',String(operationId));},
+  async pendingOnly(){return (await borionIdb640GetAll('pending_operations')).filter(r=>r.status==='pending'||!r.status);},
+  async all(){return await borionIdb640GetAll('pending_operations');},
+  async moveToDeadLetter(operationId,reason){
+    const rec=await borionIdb640Get('pending_operations',String(operationId));if(!rec)return null;
+    rec.deadLetterReason=reason;rec.deadLetterAt=new Date().toISOString();rec.state='ERROR';
+    await borionIdb640Put('dead_letter',rec);await borionIdb640Delete('pending_operations',String(operationId));return rec;
   }
-};
+}
 
 window.BorionIDB640 = {
   open: borionIdb640Open, put: borionIdb640Put, get: borionIdb640Get,
@@ -199,3 +212,4 @@ window.BorionDevice640 = { getOrCreateDeviceId: borionGetOrCreateDeviceId, newSe
 window.BorionSyncState = BorionSyncState;
 window.BORION_SYNC_STATE_LABELS = BORION_SYNC_STATE_LABELS;
 window.BorionDurableQueue = BorionDurableQueue;
+window.BORION_QUEUE_STATES=BORION_QUEUE_STATES;

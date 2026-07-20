@@ -1,0 +1,15 @@
+BORION FINANCE v6.41.0 — VALIDAÇÃO FINAL
+
+Aprovado:
+- 35 arquivos JavaScript verificados sem erro de sintaxe.
+- 21 de 21 arquivos da suíte automatizada aprovados.
+- Receita automática por REC, sem duplicidade.
+- Pagamentos parciais, Pix, Dinheiro, Débito e Crédito parcelado.
+- Receita em aberto aguardando pagamento antes da importação.
+- Despesas pagas e em aberto mantidas em Aguardando Revisão.
+- Despesa importada manualmente não reaparece.
+- Segurança, sincronização, fila durável, merge e exclusão de perfil preservados.
+- Estrutura responsiva revisada para desktop e mobile.
+
+Observação:
+- A validação automatizada não autentica uma conta Google Drive real nem substitui um teste final com as duas contas de produção conectadas.

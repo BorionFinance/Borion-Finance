@@ -3065,20 +3065,23 @@ html[data-theme="light"] .sb-item.active{
 .settings-help-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 24px;width:24px;height:24px;border-radius:50%;border:1px solid rgba(217,180,107,.28);background:rgba(217,180,107,.08);color:var(--gold-bright);font-weight:950;}
 @media(max-width:760px){.settings-help-tab{border-top:0!important;border-radius:12px!important;padding-top:11px!important;}}
 
-/* v6.41 — integração MIT: receitas automáticas e despesas assistidas */
+/* v6.44.5 — integração MIT: tabela de receitas automáticas e despesas assistidas */
 .mit-integration-pane{display:grid;gap:18px}
-.mit-rules-list{display:grid;gap:12px}
-.mit-rule-row{display:grid;grid-template-columns:minmax(135px,.8fr) minmax(165px,1fr) minmax(185px,1.08fr) minmax(220px,1.25fr) minmax(175px,1fr);gap:12px;align-items:start;padding:14px;border:1px solid var(--line);border-radius:16px;background:var(--card)}
-.mit-rule-row label,.mit-origin,.mit-destination-field,.mit-specific-destination{display:grid;gap:6px;min-width:0}
-.mit-rule-row small,.mit-origin small,.mit-pending-row small{color:var(--muted);font-size:.75rem;font-weight:700}
-.mit-origin strong{padding:8px 0 2px;font-size:.98rem}.mit-origin span{color:var(--muted-2);font-size:.7rem}
-.mit-field-label{display:flex;align-items:center;gap:6px;min-height:23px}.mit-field-label small{min-width:0}
-.mit-inline-help{width:20px;height:20px;flex-basis:20px;font-size:11px}
-.mit-rule-row input:disabled,.mit-rule-row select:disabled{opacity:.78;cursor:not-allowed}
-.mit-destination-toggle{min-height:42px}.mit-destination-toggle .seg-btn{padding:9px 7px;font-size:12px}.mit-destination-toggle .seg-btn:disabled{opacity:.42;cursor:not-allowed}
-.mit-specific-destination .payment-source-panel{margin:0;padding:10px;min-height:66px}.mit-specific-destination .payment-source-panel label{gap:5px}
+.mit-connection-status{grid-template-columns:repeat(3,minmax(0,1fr))}
+.mit-rules-table-wrap{width:100%;overflow:visible;border:1px solid var(--line);border-radius:16px;background:var(--card)}
+.mit-rules-table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed}
+.mit-rules-table th,.mit-rules-table td{padding:13px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+.mit-rules-table th{position:sticky;top:0;z-index:2;background:color-mix(in srgb,var(--card) 96%,var(--gold) 4%);color:var(--muted);font-size:.72rem;font-weight:850;letter-spacing:.035em;text-transform:uppercase}
+.mit-rules-table th:first-child{width:23%;border-radius:15px 0 0 0}.mit-rules-table th:nth-child(2){width:29%}.mit-rules-table th:last-child{width:48%;border-radius:0 15px 0 0}
+.mit-rules-table tbody tr:last-child td{border-bottom:0}
+.mit-rules-table tbody tr:hover td{background:rgba(217,180,107,.025)}
+.mit-origin-cell{display:grid;gap:4px}.mit-origin-cell strong{font-size:.95rem}.mit-origin-cell small,.mit-pending-row small{color:var(--muted);font-size:.72rem;font-weight:700}
+.mit-category-cell select,.mit-destination-cell select{width:100%;min-height:42px}
+.mit-destination-cell{display:grid;gap:9px}
+.mit-destination-toggle{min-height:42px}.mit-destination-toggle .seg-btn{padding:9px 7px;font-size:12px}.mit-destination-toggle .seg-btn:disabled{opacity:.46;cursor:not-allowed}
+.mit-specific-destination{display:grid;gap:7px;min-width:0}.mit-specific-destination .payment-source-panel{margin:0;padding:10px;min-height:64px}.mit-specific-destination .payment-source-panel label{display:block;margin-bottom:5px}
 .mit-wallet-panel{display:grid;align-content:center;gap:3px}.mit-wallet-panel strong{font-size:.85rem}.mit-wallet-panel span{color:var(--muted);font-size:.72rem}
-.mit-wallet-note,.mit-destination-warning{display:block;color:var(--muted);font-size:.7rem;line-height:1.4}.mit-destination-warning{color:var(--warn,#d8a45f)}.mit-wallet-note.hidden,.mit-destination-warning.hidden{display:none}
+.mit-destination-warning{display:block;color:var(--warn,#d8a45f);font-size:.72rem;line-height:1.4}.mit-destination-warning.hidden{display:none}
 .mit-pending-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .mit-pending-head h5,.mit-pending-head p{margin:0}.mit-pending-head p{margin-top:5px;color:var(--muted)}
 .mit-pending-labels,.mit-pending-row{display:grid;grid-template-columns:minmax(210px,2fr) minmax(90px,.7fr) minmax(105px,.8fr) minmax(80px,.6fr) minmax(100px,.7fr) auto;gap:10px;align-items:center}
@@ -3086,8 +3089,8 @@ html[data-theme="light"] .sb-item.active{
 .mit-pending-list{display:grid;gap:8px}
 .mit-pending-row{padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
 .mit-pending-row>div{display:grid;gap:3px;min-width:0}.mit-pending-row strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-@media(max-width:1180px){.mit-rule-row{grid-template-columns:repeat(2,minmax(0,1fr))}.mit-origin{grid-column:1/-1}.mit-specific-destination{align-self:end}.mit-pending-labels{display:none}.mit-pending-row{grid-template-columns:1fr auto}.mit-pending-row>span:not(.pill){display:block}.mit-pending-row .pill,.mit-pending-row button{justify-self:end}}
-@media(max-width:640px){.mit-rule-row{grid-template-columns:1fr;padding:12px}.mit-origin{grid-column:auto}.mit-destination-toggle{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.mit-pending-row{grid-template-columns:1fr}.mit-pending-row .pill,.mit-pending-row button{justify-self:start}.mit-expense-modal .payment-source-toggle{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:1180px){.mit-connection-status{grid-template-columns:repeat(2,minmax(0,1fr))}.mit-pending-labels{display:none}.mit-pending-row{grid-template-columns:1fr auto}.mit-pending-row>span:not(.pill){display:block}.mit-pending-row .pill,.mit-pending-row button{justify-self:end}}
+@media(max-width:760px){.mit-connection-status{grid-template-columns:1fr}.mit-rules-table-wrap{border:0;background:transparent}.mit-rules-table,.mit-rules-table tbody,.mit-rules-table tr,.mit-rules-table td{display:block;width:100%}.mit-rules-table thead{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.mit-rule-table-row{margin-bottom:10px;border:1px solid var(--line);border-radius:14px;background:var(--card);overflow:hidden}.mit-rules-table td{padding:11px 12px;border-bottom:0}.mit-origin-cell{padding-bottom:6px!important}.mit-category-cell{padding-top:6px!important}.mit-destination-cell{padding-top:6px!important}.mit-destination-toggle{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.mit-category-cell select,.mit-destination-cell select{font-size:16px;min-height:46px}.mit-pending-row{grid-template-columns:1fr}.mit-pending-row .pill,.mit-pending-row button{justify-self:start}.mit-expense-modal .payment-source-toggle{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 /* ===== Borion 6.42.0 — boot real e responsivo ===== */
 .borion-boot{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;min-height:100dvh;padding:24px;background:radial-gradient(circle at 50% 22%,rgba(218,177,75,.15),transparent 34%),var(--bg,#060a10);color:var(--text,#f5f7fb);opacity:1;transition:opacity .18s ease}
@@ -3118,14 +3121,14 @@ html[data-theme="light"] .borion-boot{background:radial-gradient(circle at 50% 2
 .interop-help-btn{appearance:none;display:inline-flex;align-items:center;justify-content:center;flex:0 0 23px;width:23px;height:23px;border-radius:50%;border:1px solid rgba(217,180,107,.32);background:rgba(217,180,107,.09);color:var(--gold-bright);font:900 12px/1 inherit;cursor:pointer;transition:transform .16s ease,background-color .16s ease,border-color .16s ease,box-shadow .16s ease}
 .interop-help-btn:hover{transform:translateY(-1px);background:rgba(217,180,107,.17);border-color:rgba(217,180,107,.58);box-shadow:0 7px 18px rgba(0,0,0,.18)}
 .interop-help-btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--bg),0 0 0 4px rgba(217,180,107,.44)}
-.interop-map-row select,.interop-map-row input,.mit-rule-row select,.mit-rule-row input{width:100%;min-height:42px;background:linear-gradient(180deg,rgba(18,28,38,.98),rgba(11,18,26,.98));border:1px solid rgba(255,255,255,.09);border-radius:10px;color:var(--text);padding:10px 12px;font-size:13px;font-weight:620;outline:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.025);transition:border-color .16s ease,box-shadow .16s ease,background-color .16s ease;color-scheme:dark}
-.interop-map-row select,.mit-rule-row select{padding-right:34px}
-.interop-map-row select:hover,.interop-map-row input:hover,.mit-rule-row select:hover,.mit-rule-row input:hover{border-color:rgba(217,180,107,.30)}
-.interop-map-row select:focus,.interop-map-row input:focus,.mit-rule-row select:focus,.mit-rule-row input:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,164,92,.12)}
-.interop-map-row select option,.mit-rule-row select option{background:#101923;color:#f5f6f7}
-.interop-map-row input:disabled,.mit-rule-row input:disabled{opacity:.78;background:rgba(255,255,255,.035);color:var(--muted);cursor:not-allowed}
+.interop-map-row select,.interop-map-row input,.mit-rules-table select,.mit-rules-table input{width:100%;min-height:42px;background:linear-gradient(180deg,rgba(18,28,38,.98),rgba(11,18,26,.98));border:1px solid rgba(255,255,255,.09);border-radius:10px;color:var(--text);padding:10px 12px;font-size:13px;font-weight:620;outline:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.025);transition:border-color .16s ease,box-shadow .16s ease,background-color .16s ease;color-scheme:dark}
+.interop-map-row select,.mit-rules-table select{padding-right:34px}
+.interop-map-row select:hover,.interop-map-row input:hover,.mit-rules-table select:hover,.mit-rules-table input:hover{border-color:rgba(217,180,107,.30)}
+.interop-map-row select:focus,.interop-map-row input:focus,.mit-rules-table select:focus,.mit-rules-table input:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,164,92,.12)}
+.interop-map-row select option,.mit-rules-table select option{background:#101923;color:#f5f6f7}
+.interop-map-row input:disabled,.mit-rules-table input:disabled{opacity:.78;background:rgba(255,255,255,.035);color:var(--muted);cursor:not-allowed}
 .interop-source-value{border-radius:10px;padding:7px 9px;background:rgba(255,255,255,.018)}
-.interop-source-value small,.interop-map-row label small,.mit-rule-row label small,.mit-origin small{font-weight:780}
+.interop-source-value small,.interop-map-row label small,.mit-rules-table label small,.mit-origin-cell small{font-weight:780}
 .interop-field-preview{min-height:62px;align-items:center}
 .interop-field-preview strong{font-size:12px;color:var(--text)}
 .interop-field-preview span{color:var(--muted);font-weight:650}
@@ -3144,7 +3147,7 @@ html[data-theme="light"] .borion-boot{background:radial-gradient(circle at 50% 2
 .interop-help-example span{font-size:12.5px;color:var(--text);line-height:1.45}
 .interop-help-modal .form-actions{margin-top:14px;justify-content:flex-end}
 .interop-help-modal .form-actions .btn{min-width:120px}
-html[data-theme="light"] .interop-map-row select,html[data-theme="light"] .interop-map-row input,html[data-theme="light"] .mit-rule-row select,html[data-theme="light"] .mit-rule-row input{background:rgba(255,255,255,.94);border-color:rgba(122,85,29,.18);color:var(--text);color-scheme:light;box-shadow:0 4px 14px rgba(54,37,12,.035)}
-html[data-theme="light"] .interop-map-row select option,html[data-theme="light"] .mit-rule-row select option{background:#fff;color:#1e2228}
+html[data-theme="light"] .interop-map-row select,html[data-theme="light"] .interop-map-row input,html[data-theme="light"] .mit-rules-table select,html[data-theme="light"] .mit-rules-table input{background:rgba(255,255,255,.94);border-color:rgba(122,85,29,.18);color:var(--text);color-scheme:light;box-shadow:0 4px 14px rgba(54,37,12,.035)}
+html[data-theme="light"] .interop-map-row select option,html[data-theme="light"] .mit-rules-table select option{background:#fff;color:#1e2228}
 html[data-theme="light"] .interop-source-value{background:rgba(122,85,29,.025)}
-@media(max-width:760px){.interop-help-modal{width:min(94vw,720px);padding:17px}.interop-help-modal .form-actions .btn{width:100%}.interop-section-title{align-items:flex-start}.interop-help-btn{margin-top:-2px}.interop-map-row select,.interop-map-row input,.mit-rule-row select,.mit-rule-row input{font-size:16px;min-height:46px}}
+@media(max-width:760px){.interop-help-modal{width:min(94vw,720px);padding:17px}.interop-help-modal .form-actions .btn{width:100%}.interop-section-title{align-items:flex-start}.interop-help-btn{margin-top:-2px}.interop-map-row select,.interop-map-row input,.mit-rules-table select,.mit-rules-table input{font-size:16px;min-height:46px}}

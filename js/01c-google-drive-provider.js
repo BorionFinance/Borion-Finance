@@ -1226,7 +1226,7 @@ const GoogleDriveProvider = {
     if(handleRemovedActiveProfile6402(result,source))return true;
     // V6.44.3 — mesma proteção de js/24-interconnections.js: uma atualização vinda
     // de outro dispositivo não pode repintar a tela por cima de uma edição não
-    // salva na aba Integrações (ex.: "Como o valor entra no Borion"). Os dados já
+    // salva na aba Integrações (por exemplo, vínculos de categorias e destinos). Os dados já
     // foram aplicados acima; só a repintura fica pendente até a pessoa sair da tela.
     const editingIntegrationSettings=typeof S!=='undefined'&&S.view==='settings'&&S.settingsTab==='integrations';
     if(S.currentProfile&&S.data){if(!editingIntegrationSettings){if(typeof requestAnimationFrame==='function')requestAnimationFrame(()=>renderView());else renderView();}if(typeof toast==='function')toast('Atualizado agora com uma alteração feita em outro dispositivo.');}

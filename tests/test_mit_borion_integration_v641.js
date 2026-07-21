@@ -78,5 +78,7 @@ context.S.profiles=[{id:'p1',name:'Perfil Teste'}];context.S.currentProfile={id:
 context.BorionInterop.setSettingsSource('marco-iris');
 context.BorionInterop.setSettingsTab('links');
 const html=context.BorionInterop.renderSettings();
-assert(html.includes('Receitas e despesas')&&html.includes('Crédito 12x')&&html.includes('Aguardando Revisão'),'painel simplificado do MIT deve renderizar regras e fila de revisão');
+assert(html.includes('Configurar receitas e revisar despesas')&&html.includes('Crédito (À Vista)')&&html.includes('Crédito 12x')&&html.includes('Aguardando Revisão'),'painel simplificado do MIT deve renderizar tabela e fila de revisão');
+assert((html.match(/class="mit-rule-table-row"/g)||[]).length===15,'a tabela MIT deve renderizar exatamente 15 linhas');
+assert(!html.includes('Como o valor entra no Borion')&&!html.includes('Manter forma original'),'a interface não pode manter o seletor removido');
 console.log('OK: MIT/Borion importa receitas por REC, aceita pagamentos parciais, mapeia Pix/Dinheiro/Débito/Crédito, bloqueia duplicidade e mantém despesas em revisão.');

@@ -1,5 +1,5 @@
 'use strict';
-/* V6.45.0 — Despesas do Marco Iris deixam de exigir revisão manual para
+/* V6.45.1 — Despesas do Marco Iris deixam de exigir revisão manual para
    Carteira/Pix/Débito/Reserva (Crédito continua manual de propósito).
    Também cobre a correção do ReferenceError em "localCompra" que travava
    toda importação manual de despesa fora do Crédito. */

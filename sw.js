@@ -1,22 +1,22 @@
-// Borion Finance 6.45.0 — integração segura do Marco Iris, fila persistente e journal compacto.
-const CACHE_NAME='borion-finance-v6-45-0-integracao-segura-mit';
-const VERSION='6.45.0';
+// Borion Finance 6.45.1 — integração segura do Marco Iris, fila persistente e journal compacto.
+const CACHE_NAME='borion-finance-v6-45-1-persistencia-segura-mit';
+const VERSION='6.45.1';
 const ASSETS=[
   './','./index.html','./manifest.json',
-  './css/styles.css?v=6.45.0','./css/borion-hub.css?v=6.45.0','./css/help-center.css?v=6.45.0',
-  './js/00-utils.js?v=6.45.0','./js/01i-boot-progress-v642.js?v=6.45.0','./js/01j-remote-update-v642.js?v=6.45.0',
-  './js/01-storage-data-state.js?v=6.45.0','./js/01b-storage-provider.js?v=6.45.0','./js/01c-google-drive-provider.js?v=6.45.0',
-  './js/01d-data-guard.js?v=6.45.0','./js/01e-sync-core-v640.js?v=6.45.0','./js/01f-sync-queue-v640.js?v=6.45.0',
-  './js/01g-drive-journal-v640.js?v=6.45.0','./js/01h-multitab-v640.js?v=6.45.0','./js/02-backup-local.js?v=6.45.0',
-  './js/03-modals-shared.js?v=6.45.0','./js/04-gate-shell.js?v=6.45.0','./js/05-calculations-charts.js?v=6.45.0',
-  './js/06-overview.js?v=6.45.0','./js/07-budget.js?v=6.45.0','./js/08-investments.js?v=6.45.0',
-  './js/09-patrimony-goals.js?v=6.45.0','./js/10-cards-accounts.js?v=6.45.0','./js/11-agenda-notifications.js?v=6.45.0',
-  './js/12-bank-filter-search.js?v=6.45.0','./js/13-settings.js?v=6.45.0','./js/14-events-boot-pwa.js?v=6.45.0',
-  './js/15-cheques.js?v=6.45.0','./js/16-import-statement.js?v=6.45.0','./js/17-borion-cloud.js?v=6.45.0',
-  './js/18-order-preferences.js?v=6.45.0','./js/19-subscriptions.js?v=6.45.0','./js/20-smartphone-mode.js?v=6.45.0',
-  './js/21-smartphone-history.js?v=6.45.0','./js/22-mobile-experience.js?v=6.45.0','./js/23-profile-import-review.js?v=6.45.0',
-  './js/24-interconnections.js?v=6.45.0','./js/25-module-layout.js?v=6.45.0','./js/26-help-center.js?v=6.45.0',
-  './js/borion-hub.js?v=6.45.0','./borion-emblem.png','./borion-full.png','./icon-192.png','./icon-512-maskable.png','./favicon-32.png','./borion.ico'
+  './css/styles.css?v=6.45.1','./css/borion-hub.css?v=6.45.1','./css/help-center.css?v=6.45.1',
+  './js/00-utils.js?v=6.45.1','./js/01i-boot-progress-v642.js?v=6.45.1','./js/01j-remote-update-v642.js?v=6.45.1',
+  './js/01-storage-data-state.js?v=6.45.1','./js/01b-storage-provider.js?v=6.45.1','./js/01c-google-drive-provider.js?v=6.45.1',
+  './js/01d-data-guard.js?v=6.45.1','./js/01e-sync-core-v640.js?v=6.45.1','./js/01f-sync-queue-v640.js?v=6.45.1',
+  './js/01g-drive-journal-v640.js?v=6.45.1','./js/01h-multitab-v640.js?v=6.45.1','./js/02-backup-local.js?v=6.45.1',
+  './js/03-modals-shared.js?v=6.45.1','./js/04-gate-shell.js?v=6.45.1','./js/05-calculations-charts.js?v=6.45.1',
+  './js/06-overview.js?v=6.45.1','./js/07-budget.js?v=6.45.1','./js/08-investments.js?v=6.45.1',
+  './js/09-patrimony-goals.js?v=6.45.1','./js/10-cards-accounts.js?v=6.45.1','./js/11-agenda-notifications.js?v=6.45.1',
+  './js/12-bank-filter-search.js?v=6.45.1','./js/13-settings.js?v=6.45.1','./js/14-events-boot-pwa.js?v=6.45.1',
+  './js/15-cheques.js?v=6.45.1','./js/16-import-statement.js?v=6.45.1','./js/17-borion-cloud.js?v=6.45.1',
+  './js/18-order-preferences.js?v=6.45.1','./js/19-subscriptions.js?v=6.45.1','./js/20-smartphone-mode.js?v=6.45.1',
+  './js/21-smartphone-history.js?v=6.45.1','./js/22-mobile-experience.js?v=6.45.1','./js/23-profile-import-review.js?v=6.45.1',
+  './js/24-interconnections.js?v=6.45.1','./js/25-module-layout.js?v=6.45.1','./js/26-help-center.js?v=6.45.1',
+  './js/borion-hub.js?v=6.45.1','./borion-emblem.png','./borion-full.png','./icon-192.png','./icon-512-maskable.png','./favicon-32.png','./borion.ico'
 ];
 
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE_NAME).then(cache=>Promise.all(ASSETS.map(asset=>cache.add(asset).catch(()=>null)))).then(()=>self.skipWaiting()));});

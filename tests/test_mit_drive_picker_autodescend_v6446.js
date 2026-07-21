@@ -1,5 +1,5 @@
 'use strict';
-/* V6.45.0 — A conexão por Google Drive não descia sozinha até a subpasta
+/* V6.45.1 — A conexão por Google Drive não descia sozinha até a subpasta
    Borion_Integracoes quando a pessoa escolhia a pasta principal do app de
    origem (a conexão por pasta local já fazia isso desde a 6.44.5). Este
    teste cobre os três cenários: pasta certa direto, pasta principal (desce

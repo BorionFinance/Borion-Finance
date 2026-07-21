@@ -445,7 +445,7 @@
     root.ignored ||= {};
     root.pending ||= [];
     root.audit ||= [];
-    // V6.45.2 — modo de aprovação de importação: '' (ainda não decidido pelo usuário),
+    // V6.45.3 — modo de aprovação de importação: '' (ainda não decidido pelo usuário),
     // 'auto' (sincronização silenciosa importa sozinha, como sempre foi) ou 'ask'
     // (a sincronização automática nunca importa sozinha; ela só avisa que há
     // lançamentos novos disponíveis e espera confirmação explícita). Existe para
@@ -946,6 +946,48 @@
     state.companyInstanceId=incoming;state.instanceId=incoming;config.companyInstanceId=incoming;config.lastDeviceId=String(snapshot.deviceId||'');
     return incoming;
   }
+
+  // V6.45.3 — troca de instalação somente com confirmação explícita. A base financeira
+  // já importada permanece no Borion como lançamento nativo; apenas os vínculos técnicos
+  // e filas da instalação antiga são encerrados para que IDs antigos não contaminem a
+  // nova origem. Nenhum lançamento do snapshot novo é importado nesta etapa.
+  function applyConfirmedInstanceRebind(data,config,snapshot){
+    const sourceAppId=String(config?.sourceAppId||snapshot?.sourceAppId||'').trim();
+    if(sourceAppId!=='marco-iris') throw new Error('A reconexão de instalação é exclusiva do Marco Iris Tecnologia.');
+    validateSnapshot(snapshot,sourceAppId);
+    const incoming=snapshotCompanyInstance(snapshot);
+    if(!incoming) throw new Error('A nova instalação não informou um identificador válido.');
+    const interop=ensureInterop(data),oldState=importedState(data,sourceAppId);
+    const previous=String(config.companyInstanceId||oldState.companyInstanceId||oldState.instanceId||'').trim();
+    interop.instanceHistory=Array.isArray(interop.instanceHistory)?interop.instanceHistory:[];
+    interop.instanceHistory.unshift({
+      sourceAppId,previousCompanyInstanceId:previous,newCompanyInstanceId:incoming,
+      changedAt:nowIso(),previousRevision:Number(oldState.lastRevision||0),
+      previousRecordCount:Object.keys(oldState.records||{}).length,
+      previousPendingCount:(interop.pending||[]).filter(item=>item&&item.sourceAppId===sourceAppId).length,
+      reason:'confirmed_reinstall'
+    });
+    interop.instanceHistory=interop.instanceHistory.slice(0,30);
+    interop.pending=(interop.pending||[]).filter(item=>!item||item.sourceAppId!==sourceAppId);
+    interop.ignored[sourceAppId]={};
+    interop.imported[sourceAppId]={companyInstanceId:incoming,instanceId:incoming,lastRevision:0,lastContentHash:'',records:{},lastSyncAt:'',lastError:''};
+    interop.mitImported={receipts:{},expenses:{}};
+    config.companyInstanceId=incoming;
+    config.boundAt=nowIso();
+    config.reconfiguredAt=nowIso();
+    config.lastDeviceId=String(snapshot.deviceId||'');
+    config.lastRevision=0;
+    config.lastContentHash='';
+    config.lastSyncAt='';
+    config.lastAttemptAt='';
+    config.lastResult={created:0,createdReceipts:0,createdExpenses:0,deleted:0,unchanged:0,pendingExpenses:0,ignoredBeforeCutoff:0,errors:0,processed:0};
+    config.lastError='';
+    config.reconnectRequired=false;
+    config.pendingCompanyInstanceId='';
+    config.previousCompanyInstanceId='';
+    config.reconnectDetectedAt='';
+    return {previousCompanyInstanceId:previous,companyInstanceId:incoming};
+  }
   function existingAckResults(data,state,snapshot){
     const pending=(ensureInterop(data).pending||[]).filter(x=>x.sourceAppId===snapshot.sourceAppId);
     const pendingKeys=new Set(pending.flatMap(x=>[String(x.aggregateId||''),String(x.sourceRecordId||''),String(x.entityId||'')]).filter(Boolean));
@@ -1437,6 +1479,12 @@
   async function syncSource(sourceAppId, {silent=false,button=null}={}){
     const row=findSourceConfig(sourceAppId);
     if(!row) throw new Error('Esta integração ainda não foi configurada.');
+    if(sourceAppId==='marco-iris'&&row.config.reconnectRequired){
+      const error=new Error('Existe uma nova instalação aguardando confirmação. Abra Configurações > Integrações > Marco Iris Tecnologia > Conexão e confirme a troca.');
+      error.code='INSTANCE_RECONNECT_REQUIRED';
+      if(!silent) await confirmInstanceReconnect(sourceAppId);
+      throw error;
+    }
     if(!row.config.mappingReady) throw new Error(sourceAppId==='marco-iris'?'Abra “Configurar receitas e revisar despesas”, escolha as categorias e os destinos financeiros e clique em “Salvar opções”.':'Abra a aba Vínculos, confira os mapeamentos e clique em “Salvar opções”.');
     if(sourceAppId==='marco-iris'&&!silent&&mitFormDirty){
       const error=new Error('Existem alterações não salvas. Clique em “Salvar opções” antes de sincronizar.');
@@ -1503,8 +1551,17 @@
       const current=findSourceConfig(sourceAppId)||row;
       current.config.lastError=error.message||String(error);
       current.config.lastAttemptAt=nowIso();
+      if(error?.code==='INSTANCE_CONFLICT'){
+        current.config.reconnectRequired=true;
+        current.config.previousCompanyInstanceId=String(error.expectedCompanyInstanceId||'');
+        current.config.pendingCompanyInstanceId=String(error.receivedCompanyInstanceId||'');
+        current.config.reconnectDetectedAt=nowIso();
+      }
       saveProfileData(current.profile.id,current.data);
-      if(!silent&&typeof alert==='function') alert(current.config.lastError);
+      if(!silent){
+        if(error?.code==='INSTANCE_CONFLICT') await confirmInstanceReconnect(sourceAppId);
+        else if(typeof alert==='function') alert(current.config.lastError);
+      }
       throw error;
     }finally{
       syncing=false;syncingSourceAppId='';setAsyncButtonState(button,false);
@@ -1570,7 +1627,25 @@
     saveProfileData(profileId, data);
     uiSourceAppId = sourceAppId;
     uiTab = 'links';
-    await inspectSource(sourceAppId, {silent:true});
+    const inspectedSnapshot=await inspectSource(sourceAppId, {silent:true});
+    const connectedRow=findSourceConfig(sourceAppId);
+    if(sourceAppId==='marco-iris'&&connectedRow){
+      const incoming=snapshotCompanyInstance(inspectedSnapshot);
+      const state=importedState(connectedRow.data,sourceAppId);
+      const bound=String(connectedRow.config.companyInstanceId||state.companyInstanceId||state.instanceId||'').trim();
+      if(bound&&incoming&&incoming!==bound){
+        connectedRow.config.reconnectRequired=true;
+        connectedRow.config.previousCompanyInstanceId=bound;
+        connectedRow.config.pendingCompanyInstanceId=incoming;
+        connectedRow.config.reconnectDetectedAt=nowIso();
+        connectedRow.config.lastError='A pasta selecionada pertence a uma nova instalação do Marco Iris Tecnologia. Confirme a troca antes de sincronizar.';
+        saveProfileData(connectedRow.profile.id,connectedRow.data);
+        uiTab='connection';
+        if(typeof renderView==='function') renderView();
+        if(typeof toast==='function') toast('Nova instalação encontrada. Confirme a reconexão na aba Conexão.');
+        return;
+      }
+    }
     if(typeof toast === 'function') toast(`${sourceName(sourceAppId)} conectado. Agora confira e salve os Vínculos.`);
   }
 
@@ -1606,6 +1681,40 @@
       try{ await configure(sourceAppId, transport, psel.value, asel.value); closeModal(); }
       catch(error){ alert(error.message || String(error)); btn.disabled = false; btn.textContent = 'Tentar novamente'; }
     };
+  }
+
+  async function confirmInstanceReconnect(sourceAppId='marco-iris'){
+    const row=findSourceConfig(sourceAppId);
+    if(!row) throw new Error('Esta integração ainda não foi configurada.');
+    if(sourceAppId!=='marco-iris') throw new Error('Esta confirmação só se aplica ao Marco Iris Tecnologia.');
+    const snapshot=await readSnapshot(row);
+    validateSnapshot(snapshot,sourceAppId);
+    const incoming=snapshotCompanyInstance(snapshot);
+    const state=importedState(row.data,sourceAppId);
+    const previous=String(row.config.companyInstanceId||state.companyInstanceId||state.instanceId||'').trim();
+    if(!incoming) throw new Error('A nova instalação não informou um identificador válido.');
+    if(previous===incoming){
+      row.config.reconnectRequired=false;row.config.pendingCompanyInstanceId='';row.config.previousCompanyInstanceId='';row.config.reconnectDetectedAt='';row.config.lastError='';
+      saveProfileData(row.profile.id,row.data);
+      if(typeof renderView==='function') renderView();
+      if(typeof toast==='function') toast('Esta instalação já está vinculada ao Borion.');
+      return true;
+    }
+    const perform=()=>{
+      const live=findSourceConfig(sourceAppId)||row;
+      applyConfirmedInstanceRebind(live.data,live.config,snapshot);
+      saveProfileData(live.profile.id,live.data);
+      if(S.currentProfile&&String(S.currentProfile.id)===String(live.profile.id)) saveCurrentData();
+      forceImmediateSync();
+      uiSourceAppId=sourceAppId;uiTab='connection';
+      if(typeof renderView==='function') renderView();
+      if(typeof toast==='function') toast('Nova instalação vinculada. Revise a data de corte e clique em Sincronizar agora.');
+    };
+    const text='O Borion confirmou que a pasta escolhida pertence a uma instalação nova do Marco Iris Tecnologia. Nenhum dado foi importado. Ao continuar, os lançamentos já existentes no Borion serão preservados, mas filas e vínculos técnicos da instalação antiga serão encerrados. A data de corte e as regras financeiras atuais serão mantidas.';
+    if(typeof openConfirmModal==='function'){
+      openConfirmModal({title:'Confirmar nova instalação',text,confirmLabel:'Vincular nova instalação',cancelLabel:'Cancelar',variant:'gold',onConfirm:perform});
+    }else if(typeof confirm!=='function'||confirm(text)) perform();
+    return true;
   }
 
   function disconnect(sourceAppId){
@@ -1653,7 +1762,7 @@
   function confirmCutoffChange(message){
     return typeof confirm!=='function' || confirm(message);
   }
-  // V6.45.2 — além do saveProfileData (grava local na hora), força uma sincronização
+  // V6.45.3 — além do saveProfileData (grava local na hora), força uma sincronização
   // imediata com o Drive em vez de esperar o debounce normal de fila (1.2s). Um
   // ajuste crítico como a data de corte não deve ficar nem um instante exposto a uma
   // atualização remota concorrente sobrescrever o que acabou de ser salvo.
@@ -1699,7 +1808,7 @@
     return true;
   }
 
-  // V6.45.2 — modo de aprovação de importação (item pedido junto com a data de
+  // V6.45.3 — modo de aprovação de importação (item pedido junto com a data de
   // corte): 'auto' mantém o comportamento de sempre (sincronização silenciosa
   // importa sozinha o que passar no corte); 'ask' faz a sincronização automática
   // nunca importar sozinha — ela só avisa que há lançamentos novos disponíveis e
@@ -1720,7 +1829,7 @@
     if(typeof renderView === 'function') renderView();
     return true;
   }
-  // V6.45.2 — na primeira vez que o perfil tem alguma integração configurada e
+  // V6.45.3 — na primeira vez que o perfil tem alguma integração configurada e
   // ainda não decidiu entre "automático" e "perguntar sempre", pergunta uma única
   // vez ao abrir o app (ver postLoginSequence). Depois disso, a escolha fica salva
   // e só muda se a pessoa mudar explicitamente na tela de Integrações.
@@ -1871,10 +1980,14 @@
       const defaultAccount=accountByIdIn(row.data,c.accountId);
       let statusLabel='Ativa',statusClass='ok';
       if(syncing&&syncingSourceAppId==='marco-iris'){statusLabel='Sincronizando';statusClass='warn';}
+      else if(c.reconnectRequired){statusLabel='Reconexão necessária';statusClass='warn';}
       else if(c.lastError){statusLabel='Erro na última sincronização';statusClass='danger';}
       else if(!c.mappingReady||!mitAccountActive(defaultAccount)){statusLabel='Configuração pendente';statusClass='warn';}
       const processed=Number(r.processed??(Number(r.created||0)+Number(r.unchanged||0)+Number(r.waiting||0)+Number(r.ignored||0)));
-      return `<div class="interop-pane"><div class="interop-status-grid mit-connection-status"><div><span>Perfil de destino</span><strong>${escHtml(row.profile.name)}</strong></div><div><span>Conta padrão</span><strong>${escHtml(accountName(row.data,c.accountId)||'Não definida')}</strong></div><div><span>Meio</span><strong>${c.transport==='drive'?'Google Drive':'Pasta local'}</strong></div><div><span>Última sincronização</span><strong>${escHtml(dateText(c.lastSyncAt))}</strong></div><div><span>Quantidade de registros processados</span><strong>${processed}</strong></div><div><span>Status da automação</span><strong><span class="pill ${statusClass}">${statusLabel}</span></strong></div></div><div class="gold-box interop-sync-box"><b>Resumo da última sincronização</b><br><span>${Number(r.created||0)} receita(s) nova(s) · ${Number(r.createdExpenses||0)} despesa(s) nova(s) · ${Number(r.unchanged||0)} já processado(s) · ${Number(r.pendingExpenses??pending)} despesa(s) aguardando revisão · ${Number((r.ignoredBeforeCutoff??r.ignored)||0)} ignorado(s) pelo corte · ${Number(r.errors||0)} erro(s)</span>${c.lastError?`<br><b>Erro:</b> ${escHtml(c.lastError)}`:''}</div><div class="info-box"><b>Regra ativa:</b> cada pagamento Pago com Data de Pagamento entra individualmente; a OSV não precisa estar totalmente quitada. Despesas via Carteira, Pix, Débito e Reserva entram sozinhas quando configuradas em "Como as despesas serão registradas"; despesas no Crédito sempre pedem revisão rápida.</div><div class="interop-actions"><button class="btn btn-primary btn-sm" onclick="BorionInterop.syncSource('marco-iris',{button:this})" ${c.mappingReady?'':'disabled title="Configure as receitas primeiro"'}>Sincronizar agora</button><button class="btn-outline btn-sm" onclick="BorionInterop.setupDialog('marco-iris','${c.transport}')">Reconfigurar conexão</button><button class="btn-outline btn-sm" onclick="BorionInterop.disconnect('marco-iris')">Desconectar</button></div>${!c.mappingReady?'<div class="interop-next-step"><b>Próximo passo:</b> abra a aba <b>Configurar receitas e revisar despesas</b>, escolha as categorias e os destinos financeiros e clique em <b>Salvar opções</b>.</div>':''}</div>`;
+      const reconnectBox=c.reconnectRequired?`<div class="gold-box interop-sync-box"><b>Nova instalação encontrada</b><br><span>O Borion leu a nova pasta, mas bloqueou a importação para impedir que uma instalação diferente assumisse o vínculo sem autorização. Nenhum lançamento foi processado.</span><div class="interop-actions" style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="BorionInterop.confirmInstanceReconnect('marco-iris')">Confirmar nova instalação</button></div></div>`:'';
+      const syncDisabled=!c.mappingReady||c.reconnectRequired;
+      const syncTitle=c.reconnectRequired?'Confirme a nova instalação antes de sincronizar':'Configure as receitas primeiro';
+      return `<div class="interop-pane"><div class="interop-status-grid mit-connection-status"><div><span>Perfil de destino</span><strong>${escHtml(row.profile.name)}</strong></div><div><span>Conta padrão</span><strong>${escHtml(accountName(row.data,c.accountId)||'Não definida')}</strong></div><div><span>Meio</span><strong>${c.transport==='drive'?'Google Drive':'Pasta local'}</strong></div><div><span>Última sincronização</span><strong>${escHtml(dateText(c.lastSyncAt))}</strong></div><div><span>Quantidade de registros processados</span><strong>${processed}</strong></div><div><span>Status da automação</span><strong><span class="pill ${statusClass}">${statusLabel}</span></strong></div></div>${reconnectBox}<div class="gold-box interop-sync-box"><b>Resumo da última sincronização</b><br><span>${Number(r.created||0)} receita(s) nova(s) · ${Number(r.createdExpenses||0)} despesa(s) nova(s) · ${Number(r.unchanged||0)} já processado(s) · ${Number(r.pendingExpenses??pending)} despesa(s) aguardando revisão · ${Number((r.ignoredBeforeCutoff??r.ignored)||0)} ignorado(s) pelo corte · ${Number(r.errors||0)} erro(s)</span>${c.lastError?`<br><b>Erro:</b> ${escHtml(c.lastError)}`:''}</div><div class="info-box"><b>Regra ativa:</b> cada pagamento Pago com Data de Pagamento entra individualmente; a OSV não precisa estar totalmente quitada. Despesas via Carteira, Pix, Débito e Reserva entram sozinhas quando configuradas em "Como as despesas serão registradas"; despesas no Crédito sempre pedem revisão rápida.</div><div class="interop-actions"><button class="btn btn-primary btn-sm" onclick="BorionInterop.syncSource('marco-iris',{button:this})" ${syncDisabled?`disabled title="${syncTitle}"`:''}>Sincronizar agora</button><button class="btn-outline btn-sm" onclick="BorionInterop.setupDialog('marco-iris','${c.transport}')">Reconfigurar conexão</button><button class="btn-outline btn-sm" onclick="BorionInterop.disconnect('marco-iris')">Desconectar</button></div>${!c.mappingReady?'<div class="interop-next-step"><b>Próximo passo:</b> abra a aba <b>Configurar receitas e revisar despesas</b>, escolha as categorias e os destinos financeiros e clique em <b>Salvar opções</b>.</div>':''}</div>`;
     }
     const r = c.lastResult || {};
     const mappingLabel = c.mappingReady ? '<span class="pill ok">Vínculos configurados</span>' : '<span class="pill warn">Vínculos pendentes</span>';
@@ -2271,7 +2384,7 @@
     return targets.length > 0;
   }
 
-  // V6.45.2 — quando o perfil está em modo "perguntar sempre", a sincronização
+  // V6.45.3 — quando o perfil está em modo "perguntar sempre", a sincronização
   // automática nunca aplica os lançamentos: faz um cálculo "a seco" (clonando os
   // dados, sem gravar nada) usando a MESMA reconciliação de uma sincronização
   // real, só para descobrir quantos lançamentos novos existem dentro do corte.
@@ -2310,6 +2423,7 @@
     const out = [];
     for(const row of rows){
       if(!row.config.mappingReady) continue;
+      if(row.sourceAppId==='marco-iris'&&row.config.reconnectRequired) continue;
       if(silent && ensureInterop(row.data).importApprovalMode==='ask'){ await checkAskModeSource(row); continue; }
       try{ out.push(await syncSource(row.sourceAppId, {silent})); }
       catch(error){ console.warn('[BORION_INTEROP] Auto sync:', error); }
@@ -2327,7 +2441,7 @@
     spec:SPEC, sources:SOURCES, sourceName,
     renderSettings, setSettingsSource, setSettingsTab, setDeletionPolicy, openMappingHelp,
     setupDialog, configure, inspectSource, saveMappings, saveMitSettings, saveMitExpenseSettings, setMitDestination, markMitFormDirty, openMitExpenseImport,
-    syncSource, syncAll, disconnect,
+    syncSource, syncAll, disconnect, confirmInstanceReconnect,
     setImportCutoff, setImportCutoffNow, clearImportCutoff,
     setImportApprovalMode, maybePromptImportMode,
     markImportedDeletion, openImportedDeleteDialog,
@@ -2338,7 +2452,7 @@
       discoverSnapshot, mappedRecord, reconcileSnapshot, reconcileMitSnapshot, makeMitIncomeTransaction, mitMethodKey, normalizeMitRevenueRules, validateMitRevenueRules, resolveMitEntryMethod, mitOriginalInstallments, mitRuleTarget, sourceLabel, friendlyFieldName, friendlySourceValue, normalizeTarget, resolveFinancialTarget,
       txDelta, adjust, applyReserveLink, paymentForm, targetAccountId, makeTransaction,
       markImportedDeletion, editableSnapshotHash, reverseImportedTransaction,
-      beforeImportCutoff, checkAskModeSource,
+      beforeImportCutoff, checkAskModeSource, applyConfirmedInstanceRebind,
       mitExpenseMethodKey, normalizeMitExpenseRules, validateMitExpenseRules, commitMitExpenseAuto, applyMitFixedExpensePayment
     }
   });

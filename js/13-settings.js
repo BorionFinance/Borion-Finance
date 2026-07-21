@@ -14,7 +14,7 @@ const HelpCenterLoader = {
     this.promise = new Promise((resolve,reject)=>{
       if(!document.querySelector('link[data-borion-help-css]')){
         const link=document.createElement('link');
-        link.rel='stylesheet'; link.href='css/help-center.css?v=6.45.2'; link.dataset.borionHelpCss='1';
+        link.rel='stylesheet'; link.href='css/help-center.css?v=6.45.3'; link.dataset.borionHelpCss='1';
         document.head.appendChild(link);
       }
       const existing=document.querySelector('script[data-borion-help-script]');
@@ -24,7 +24,7 @@ const HelpCenterLoader = {
         return;
       }
       const script=document.createElement('script');
-      script.src='js/26-help-center.js?v=6.45.2'; script.async=true; script.dataset.borionHelpScript='1';
+      script.src='js/26-help-center.js?v=6.45.3'; script.async=true; script.dataset.borionHelpScript='1';
       script.onload=()=>window.BorionHelp?resolve(window.BorionHelp):reject(new Error('A Central do Borion não iniciou.'));
       script.onerror=()=>{ script.remove(); reject(new Error('Falha ao carregar a Central do Borion.')); };
       document.head.appendChild(script);
@@ -78,8 +78,8 @@ function renderSettings(){
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
   else if(S.settingsTab==='integrations') content = window.BorionInterop ? BorionInterop.renderSettings() : '<div class="settings-section">Integração indisponível.</div>'; // protected interop seam
   else if(S.settingsTab==='help') content = window.BorionHelp ? BorionHelp.render() : HelpCenterLoader.placeholder();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.45.2 — Aprovação de Importação MIT</div><footer class="app-release-footer" aria-label="Informações do Borion">
-<div><strong>Versão:</strong> 6.45.2</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.45.3 — Reconexão Segura MIT</div><footer class="app-release-footer" aria-label="Informações do Borion">
+<div><strong>Versão:</strong> 6.45.3</div>
 <div><strong>Lançamento:</strong> 20/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -1056,7 +1056,7 @@ window.Settings = Settings;
 /* ================= V6.33.1 — refinamento extra de Configurações, padronização de ordenação
    e bloco flutuante de Anotações persistente entre abas ================= */
 (function(){
-  const SETTINGS_VERSION = '6.45.2';
+  const SETTINGS_VERSION = '6.45.3';
 
   function floatingNotesPrefs(create=false){
     const fallback={enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};

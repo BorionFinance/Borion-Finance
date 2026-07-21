@@ -7,7 +7,7 @@ const root=path.resolve(__dirname,'..');
 function read(p){ return fs.readFileSync(path.join(root,p),'utf8'); }
 function assert(cond,msg){ if(!cond) throw new Error('FALHOU: '+msg); }
 
-const NEW_VERSION='6.45.2';
+const NEW_VERSION='6.45.3';
 const OLD_VERSION='6.45.1';
 
 (function noStaleVersionReferences(){
@@ -31,8 +31,8 @@ const OLD_VERSION='6.45.1';
   assert(swJs.includes('6-45-2'), 'sw.js deve ter um CACHE_NAME novo (nome de cache muda a cada versão — item 26)');
   assert(manifestJson.version===NEW_VERSION, 'manifest.json "version" deve ser '+NEW_VERSION);
   assert(backupLocal.includes("BORION_APP_VERSION = '"+NEW_VERSION+"'"), 'BORION_APP_VERSION deve ser '+NEW_VERSION);
-  assert(settings.includes('6.45.2'), 'tela de Configurações deve exibir a versão 6.45.2 visível ao usuário');
-  console.log('OK: versão '+NEW_VERSION+' ("6.45.2 — Aprovação de Importação MIT") está presente em todos os locais esperados.');
+  assert(settings.includes('6.45.3'), 'tela de Configurações deve exibir a versão 6.45.3 visível ao usuário');
+  console.log('OK: versão '+NEW_VERSION+' ("6.45.3 — Reconexão Segura MIT") está presente em todos os locais esperados.');
 })();
 
 (function newModulesAreRegisteredEverywhere(){

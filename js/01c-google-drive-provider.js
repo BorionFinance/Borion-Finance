@@ -1075,8 +1075,8 @@ const GoogleDriveProvider = {
   },
 
   /* Chamado de dentro de saveCurrentData() (mesmo gancho que o Supabase usa) — só
-     marca como pendente e agenda 250ms antes de mandar pro Drive, pra não fazer uma
-     chamada de rede a cada tecla digitada. Continua em 250ms (V6.38.1) — a
+     marca como pendente e agenda 1200ms antes de mandar pro Drive, pra não fazer uma
+     chamada de rede a cada tecla digitada. Passa a 1200ms (V6.38.1) — a
      V6.40 não muda esse tempo, só o que acontece quando o timer dispara (ver
      syncNow abaixo): em vez de "ler modifiedTime e sobrescrever", agora grava
      uma operação imutável e consolida com merge de três vias. */
@@ -1119,11 +1119,11 @@ const GoogleDriveProvider = {
     }
     const _leader=!window.BorionMultiTab640||BorionMultiTab640.isLeader();
     if(!_leader){ BorionMultiTab640.requestSync({folderId:this.folderId,operationId:this._queueOperationId}); clearTimeout(this.syncTimer); }
-    else { clearTimeout(this.syncTimer); this.syncTimer=setTimeout(()=>this.syncNow({source:'queue'}),250); }
+    else { clearTimeout(this.syncTimer); this.syncTimer=setTimeout(()=>this.syncNow({source:'queue'}),1200); }
     this.scheduleAutosaveSoon();
   },
 
-  /* V6.10.0 — rede de segurança extra, além do current.json (que já salva ~250ms
+  /* V6.10.0 — rede de segurança extra, além do current.json (que salva após debounce
      depois de qualquer mudança): a cada GOOGLE_DRIVE_AUTOSAVE_INTERVAL_MS, se algo
      mudou desde o último autosave, grava um snapshot completo num rodízio de slots
      fixos (autosave-1 → autosave-2 → ... → autosave-20 → autosave-1 de novo — V6.20.0:
@@ -1339,6 +1339,31 @@ const GoogleDriveProvider = {
      dispositivo consolidando ao mesmo tempo, nada se perde: a operação deste
      dispositivo continua existindo como arquivo e entra na próxima
      consolidação (deste ou de qualquer outro dispositivo). */
+  async _writeCurrentSafely(candidate,requiredOperationId){
+    const currentBefore=await GoogleDriveFS.readFile(this.currentFileId);
+    const beforeCheck=await BorionDriveJournal640.validateSnapshot(currentBefore);
+    if(!beforeCheck.valid&&!(beforeCheck.reason==='checksum_ausente'&&validateBorionJson(currentBefore).valid))throw new Error('O current.json atual é inválido; substituição bloqueada: '+beforeCheck.reason);
+    const backupName='current.previous.json',tempName='current.pending-validation.json';
+    let backupFile=await GoogleDriveFS.findChild(this.folderId,backupName,'application/json');
+    if(backupFile)await GoogleDriveFS.updateFile(backupFile.id,currentBefore);else backupFile=await GoogleDriveFS.createFile(this.folderId,backupName,currentBefore);
+    const backupRead=await GoogleDriveFS.readFile(backupFile.id),backupCheck=await BorionDriveJournal640.validateSnapshot(backupRead);
+    if(!backupCheck.valid&&!(backupCheck.reason==='checksum_ausente'&&validateBorionJson(backupRead).valid))throw new Error('Backup anterior do current.json não foi validado; gravação cancelada.');
+    let tempFile=await GoogleDriveFS.findChild(this.folderId,tempName,'application/json');
+    if(tempFile)await GoogleDriveFS.updateFile(tempFile.id,candidate);else tempFile=await GoogleDriveFS.createFile(this.folderId,tempName,candidate);
+    const tempRead=await GoogleDriveFS.readFile(tempFile.id),tempCheck=await BorionDriveJournal640.validateSnapshot(tempRead,requiredOperationId||undefined);
+    if(!tempCheck.valid)throw new Error('Arquivo temporário do current.json é inválido: '+tempCheck.reason);
+    const updated=await GoogleDriveFS.updateFile(this.currentFileId,tempRead);
+    const confirmed=await GoogleDriveFS.readFile(this.currentFileId),confirmedCheck=await BorionDriveJournal640.validateSnapshot(confirmed,requiredOperationId||undefined);
+    if(!confirmedCheck.valid)throw new Error('O current.json relido não confirmou a gravação: '+confirmedCheck.reason);
+    try{await GoogleDriveFS.trashFile(tempFile.id);}catch(_e){}
+    return {updated,confirmed,confirmedCheck,backupFile};
+  },
+  _scheduleAppliedMaintenance(snapshot){
+    const key='borion_journal_maintenance_'+String(this.folderId||''),last=Number(localStorage.getItem(key)||0);if(Date.now()-last<24*60*60*1000)return;
+    localStorage.setItem(key,String(Date.now()));
+    BorionDriveJournal640.cleanupAppliedOperations(this.folderId,snapshot,{backupValidated:true,deviceGraceSatisfied:true,retentionMs:7*24*60*60*1000,maxKeep:200}).then(result=>{if(result&&result.errors&&result.errors.length)console.warn('[GoogleDriveProvider] manutenção parcial:',result);}).catch(error=>console.warn('[GoogleDriveProvider] manutenção de operações adiada:',error));
+  },
+
   async syncNow(options={}){
     if(!this.isConnected()||!this.currentFileId)return false;
     this._lastSyncStartedAt=Date.now();
@@ -1368,13 +1393,11 @@ const GoogleDriveProvider = {
         // Portanto grava e relê mesmo quando a operação já constava como aplicada ou
         // quando a pendência era apenas persistir a migração 6401.
         if(window.BorionDurableQueue&&requiredOperationId)await BorionDurableQueue.setState(requiredOperationId,'SNAPSHOT_WRITING').catch(()=>{});
-        const updated=await GoogleDriveFS.updateFile(this.currentFileId,candidate);
-        const confirmed=await GoogleDriveFS.readFile(this.currentFileId);
-        const confirmedCheck=await BorionDriveJournal640.validateSnapshot(confirmed,requiredOperationId||undefined);
-        if(!confirmedCheck.valid)throw new Error('Snapshot relido não confirmou a consolidação: '+confirmedCheck.reason);
+        const safeWrite=await this._writeCurrentSafely(candidate,requiredOperationId||undefined);
+        const updated=safeWrite.updated,confirmed=safeWrite.confirmed,confirmedCheck=safeWrite.confirmedCheck;
         this.currentFileMeta=updated||this.currentFileMeta;gdriveWriteCurrentFileCache(this.folderId,this.currentFileMeta);this._lastConsolidatedPayload=confirmed;this._operationBasePayload=JSON.parse(JSON.stringify(confirmed));
         if(window.BorionDurableQueue&&requiredOperationId)await BorionDurableQueue.markSnapshotConfirmed(requiredOperationId).catch(()=>{});
-        BorionDriveJournal640.archiveConfirmedOperations(this.folderId,confirmed,result.newlyApplied||[]).catch(e=>console.warn('[GoogleDriveProvider] arquivamento de operação será retomado:',e));
+        BorionDriveJournal640.archiveConfirmedOperations(this.folderId,confirmed,result.newlyApplied||[]).then(()=>this._scheduleAppliedMaintenance(confirmed)).catch(e=>console.warn('[GoogleDriveProvider] arquivamento de operação será retomado:',e));
         this._surfaceMergeConflicts(confirmed);try{const applied=applyAccountPayloadForLiveUpdate(confirmed);this._notifyAccountSnapshotApplied6402(applied,'consolidation_retry');handleRemovedActiveProfile6402(applied,'consolidation_retry');}catch(e){console.warn('[GoogleDriveProvider] consolidação confirmada; atualização visual adiada:',e);}
         this._clearConsolidationPending();this.lastSyncError='';this._recordSyncSuccess();
         if(window.BorionSyncState)BorionSyncState.set('SNAPSHOT_CONFIRMED',{operationId:requiredOperationId,checksum:confirmedCheck.checksum});
@@ -1404,12 +1427,20 @@ const GoogleDriveProvider = {
       this.blockedSuspicious=null;
       operationId=this._queueOperationId||BorionSyncCore.uuid640();this._queueOperationId=operationId;
       if(window.BorionDurableQueue)await BorionDurableQueue.enqueue({id:operationId,operationId,deviceId:this._deviceId||null,sessionId:window.BorionDevice640?BorionDevice640.sessionId():null,profileId:(S.currentProfile&&S.currentProfile.id)||null,schemaVersion:BorionSyncCore.BORION_DATA_SCHEMA_VERSION}).catch(()=>{});
+      const deltaBase=this._operationBasePayload||this._lastConsolidatedPayload||null;
+      const delta=BorionSyncCore.createAccountDelta(deltaBase,payload);
+      if(!BorionSyncCore.accountDeltaHasChanges(delta)){
+        this.dirty=false;this._syncAgain=false;this._queueOperationId=null;
+        try{localStorage.removeItem(gdrivePendingKey(this.folderId));}catch(_e){}
+        this.lastSyncError='';this._recordSyncSuccess();
+        if(window.BorionSyncState)BorionSyncState.set('SNAPSHOT_CONFIRMED',{unchanged:true});
+        return true;
+      }
       const operation={
         operationId,deviceId:this._deviceId||null,sessionId:window.BorionDevice640?BorionDevice640.sessionId():null,
         profileId:(S.currentProfile&&S.currentProfile.id)||null,createdAt:new Date().toISOString(),
-        schemaVersion:BorionSyncCore.BORION_DATA_SCHEMA_VERSION,format:'full-snapshot-v1',
-        basePayload:this._operationBasePayload||this._lastConsolidatedPayload||null,payload,
-        checksum:await BorionSyncCore.checksumOf(payload),forced:!!options.force
+        schemaVersion:BorionSyncCore.BORION_DATA_SCHEMA_VERSION,format:'account-delta-v2',delta,
+        checksum:await BorionSyncCore.checksumOf(delta),forced:!!options.force
       };
       const operationFile=await BorionDriveJournal640.writeOperation(this.folderId,operation);
       operationProtected=true;
@@ -1427,14 +1458,12 @@ const GoogleDriveProvider = {
       const precheck=await BorionDriveJournal640.validateSnapshot(result.consolidated,operationId);
       if(!precheck.valid)throw new Error('Consolidação não incorporou a operação '+operationId+': '+precheck.reason);
       if(window.BorionDurableQueue)await BorionDurableQueue.setState(operationId,'SNAPSHOT_WRITING').catch(()=>{});
-      const updated=await GoogleDriveFS.updateFile(this.currentFileId,result.consolidated);
-      const confirmed=await GoogleDriveFS.readFile(this.currentFileId);
-      const confirmedCheck=await BorionDriveJournal640.validateSnapshot(confirmed,operationId);
-      if(!confirmedCheck.valid)throw new Error('O snapshot relido não confirmou a operação: '+confirmedCheck.reason);
+      const safeWrite=await this._writeCurrentSafely(result.consolidated,operationId);
+      const updated=safeWrite.updated,confirmed=safeWrite.confirmed,confirmedCheck=safeWrite.confirmedCheck;
 
       this.currentFileMeta=updated;gdriveWriteCurrentFileCache(this.folderId,updated);this._lastConsolidatedPayload=confirmed;this._operationBasePayload=JSON.parse(JSON.stringify(confirmed));
       if(window.BorionDurableQueue)await BorionDurableQueue.markSnapshotConfirmed(operationId).catch(()=>{});
-      BorionDriveJournal640.archiveConfirmedOperations(this.folderId,confirmed,result.newlyApplied||[]).catch(e=>console.warn('[GoogleDriveProvider] operação confirmada; arquivamento será retomado:',e));
+      BorionDriveJournal640.archiveConfirmedOperations(this.folderId,confirmed,result.newlyApplied||[]).then(()=>this._scheduleAppliedMaintenance(confirmed)).catch(e=>console.warn('[GoogleDriveProvider] operação confirmada; arquivamento será retomado:',e));
       this._clearConsolidationPending();
       this._surfaceMergeConflicts(confirmed);
       try{const applied=applyAccountPayloadForLiveUpdate(confirmed);this._notifyAccountSnapshotApplied6402(applied,'sync_confirmed');handleRemovedActiveProfile6402(applied,'sync_confirmed');}catch(e){console.warn('[GoogleDriveProvider] snapshot confirmado, mas atualização local da UI foi adiada:',e);}

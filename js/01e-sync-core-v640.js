@@ -503,6 +503,112 @@ function mergeAccountPayload(basePayload,localPayload,remotePayload){
   return root;
 }
 
+function deltaValue(obj,key){return Object.prototype.hasOwnProperty.call(obj||{},key)?{present:true,value:safeClone(obj[key])}:{present:false};}
+function isPlainObject640(value){return !!value&&typeof value==='object'&&!Array.isArray(value);}
+function safeDeltaPath640(path){return Array.isArray(path)&&path.every(k=>typeof k==='string'&&k&&!BORION_DANGEROUS_KEYS.has(k));}
+function deleteAtPath640(target,path){
+  if(!safeDeltaPath640(path)||!path.length) return;
+  let cur=target;
+  for(let i=0;i<path.length-1;i++){
+    if(!cur||typeof cur!=='object') return;
+    cur=cur[path[i]];
+  }
+  if(cur&&typeof cur==='object') delete cur[path[path.length-1]];
+}
+function setPackedAtPath640(target,path,packed){
+  if(!safeDeltaPath640(path)||!path.length) return;
+  if(packed&&packed.present) bcorePathSet(target,path,safeClone(packed.value));
+  else deleteAtPath640(target,path);
+}
+function entityArrayCompatible640(base,local){
+  if(!Array.isArray(base)||!Array.isArray(local)) return false;
+  const all=[...base,...local];
+  return all.length>0&&all.every(item=>isPlainObject640(item)&&item.id!=null&&String(item.id).trim()&&!BORION_DANGEROUS_KEYS.has(String(item.id)));
+}
+function mapByStableId640(rows){
+  const out=new Map();
+  for(const row of rows||[]) if(row&&row.id!=null) out.set(String(row.id),row);
+  return out;
+}
+function collectCompactDelta640(base,local,path,changes,volatileRoot){
+  if(sameValue(base,local)) return;
+  if(Array.isArray(base)&&Array.isArray(local)&&entityArrayCompatible640(base,local)){
+    const bm=mapByStableId640(base),lm=mapByStableId640(local),ids=new Set([...bm.keys(),...lm.keys()]);
+    for(const id of ids){
+      const b=bm.has(id)?{present:true,value:safeClone(bm.get(id))}:{present:false};
+      const l=lm.has(id)?{present:true,value:safeClone(lm.get(id))}:{present:false};
+      if(!sameValue(b,l)) changes.push({kind:'entity',path:safeClone(path),id,base:b,local:l});
+    }
+    return;
+  }
+  if(isPlainObject640(base)&&isPlainObject640(local)){
+    const keys=new Set([...ownKeysSafe(base),...ownKeysSafe(local)]);
+    for(const key of keys){
+      if(path.length===0&&volatileRoot.has(key)) continue;
+      const bp=Object.prototype.hasOwnProperty.call(base,key),lp=Object.prototype.hasOwnProperty.call(local,key);
+      if(bp&&lp) collectCompactDelta640(base[key],local[key],path.concat(key),changes,volatileRoot);
+      else{
+        const b=bp?{present:true,value:safeClone(base[key])}:{present:false};
+        const l=lp?{present:true,value:safeClone(local[key])}:{present:false};
+        if(!sameValue(b,l)) changes.push({kind:'value',path:path.concat(key),base:b,local:l});
+      }
+    }
+    return;
+  }
+  changes.push({kind:'value',path:safeClone(path),base:{present:true,value:safeClone(base)},local:{present:true,value:safeClone(local)}});
+}
+function applyEntityPacked640(target,path,id,packed){
+  if(!safeDeltaPath640(path)||!path.length||BORION_DANGEROUS_KEYS.has(String(id))) return;
+  let list=bcorePathGet(target,path);
+  if(!Array.isArray(list)){list=[];bcorePathSet(target,path,list);}
+  const index=list.findIndex(item=>item&&String(item.id)===String(id));
+  if(packed&&packed.present){
+    const value=safeClone(packed.value);
+    if(index>=0) list[index]=value; else list.push(value);
+  }else if(index>=0) list.splice(index,1);
+}
+function createAccountDelta(basePayload,localPayload){
+  const base=basePayload||{profiles:[],dataByProfile:{},config:{}},local=localPayload||{profiles:[],dataByProfile:{},config:{}};
+  const volatile=new Set(['integrity','exportedAt','snapshotId','snapshotBaseDate','snapshotChecksum']);
+  const changes=[];
+  collectCompactDelta640(base,local,[],changes,volatile);
+  return {schemaVersion:2,format:'compact-path-delta-v2',changes,createdAt:new Date().toISOString()};
+}
+function accountDeltaHasChanges(delta){
+  if(!delta) return false;
+  if(Array.isArray(delta.changes)) return delta.changes.length>0;
+  return !!((delta.topLevel&&Object.keys(delta.topLevel).length)||(delta.profiles&&Object.keys(delta.profiles).length));
+}
+function mergeLegacyAccountDelta640(delta,remotePayload){
+  const remote=remotePayload||{profiles:[],dataByProfile:{},config:{}},base=safeClone(remote),local=safeClone(remote);
+  for(const [key,change] of Object.entries(delta?.topLevel||{})){
+    if(change?.base?.present) base[key]=safeClone(change.base.value); else delete base[key];
+    if(change?.local?.present) local[key]=safeClone(change.local.value); else delete local[key];
+  }
+  base.dataByProfile=base.dataByProfile||{};local.dataByProfile=local.dataByProfile||{};
+  for(const [id,change] of Object.entries(delta?.profiles||{})){
+    if(BORION_DANGEROUS_KEYS.has(id)) continue;
+    if(change?.base?.present) base.dataByProfile[id]=safeClone(change.base.value); else delete base.dataByProfile[id];
+    if(change?.local?.present) local.dataByProfile[id]=safeClone(change.local.value); else delete local.dataByProfile[id];
+  }
+  return mergeAccountPayload(base,local,remote);
+}
+function mergeAccountDelta(delta,remotePayload){
+  if(!delta||!Array.isArray(delta.changes)) return mergeLegacyAccountDelta640(delta,remotePayload);
+  const remote=remotePayload||{profiles:[],dataByProfile:{},config:{}},base=safeClone(remote),local=safeClone(remote);
+  for(const change of delta.changes){
+    if(!change||!safeDeltaPath640(change.path)||!change.path.length) continue;
+    if(change.kind==='entity'){
+      applyEntityPacked640(base,change.path,change.id,change.base);
+      applyEntityPacked640(local,change.path,change.id,change.local);
+    }else{
+      setPackedAtPath640(base,change.path,change.base);
+      setPackedAtPath640(local,change.path,change.local);
+    }
+  }
+  return mergeAccountPayload(base,local,remote);
+}
+
 function recordProfileTombstone(payload,profileId,deviceId,operationId,reason){
   if(!payload.__syncMeta640||typeof payload.__syncMeta640!=='object') payload.__syncMeta640={};
   if(!payload.__syncMeta640.profileTombstones) payload.__syncMeta640.profileTombstones={};
@@ -516,6 +622,6 @@ window.BorionSyncCore={
   emptySyncMeta,ensureSyncMeta,recordTombstone,recordProfileTombstone,
   normalizeAuthoritativeImportMarker,getAuthoritativeImportMarker,compareAuthoritativeImportMarkers,sameAuthoritativeImportMarker,markAuthoritativeImport,
   deterministicLegacyId,migrateRecordIdentity,migrateDataToSchema640,
-  mergeCollection,deepThreeWayMerge,mergeProfileData,mergeAccountPayload,
+  mergeCollection,deepThreeWayMerge,mergeProfileData,mergeAccountPayload,createAccountDelta,accountDeltaHasChanges,mergeAccountDelta,
   pathGet:bcorePathGet,pathSet:bcorePathSet,pathKey:bcorePathKey
 };

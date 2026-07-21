@@ -61,6 +61,6 @@ const assert=(condition,message)=>{if(!condition)throw new Error('FALHOU: '+mess
   assert(data.transacoes[0].integrationReceiptId==='ACK-001','lançamento deve preservar o identificador permanente');
   const secondSuccess=await context.BorionInterop.syncSource('marco-iris',{silent:true});
   assert(secondSuccess.summary.created===0&&data.transacoes.length===1,'sincronização posterior deve ser idempotente');
-  assert(ackWrites===3&&persisted>=3&&queued>=3,'ACK e persistência devem ocorrer em todas as tentativas controladas');
+  assert(ackWrites===3&&persisted>=2&&queued>=2,'ACK deve ocorrer em todas as tentativas, mas snapshot idêntico não pode enfileirar nova gravação no Drive');
   console.log('OK: falha ao gravar ACK não aplica estado financeiro parcial; nova tentativa importa uma vez e permanece idempotente.');
 })().catch(error=>{console.error(error);process.exit(1)});

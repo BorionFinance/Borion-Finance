@@ -1,0 +1,25 @@
+'use strict';
+const fs=require('fs'),vm=require('vm'),path=require('path');
+const assert=(c,m)=>{if(!c)throw new Error('FALHOU: '+m)};
+const source=fs.readFileSync(path.resolve(__dirname,'../js/24-interconnections.js'),'utf8');
+const context={console,crypto:global.crypto,setTimeout,clearTimeout,setInterval,clearInterval,structuredClone:global.structuredClone};
+context.window=context;context.globalThis=context;context.addEventListener=()=>{};
+context.document={addEventListener(){},querySelectorAll(){return[]},querySelector(){return null},getElementById(){return null},hidden:false};
+context.CARTEIRA_CONTA_ID='wallet';context.FORMAS_PAGAMENTO=['Dinheiro','Pix','Débito','Crédito'];context.defaultCategories=()=>({receita:[],fixa:[],variavel:[]});context.baseCatColor=()=> '#888';context.todayISO=()=> '2026-07-21';
+context.S={profiles:[],currentProfile:null,data:null};context.getProfileData=()=>null;context.setProfileData=()=>{};context.migrateData=v=>v;context.emptyData=()=>({});context.toast=()=>{};context.alert=()=>{};
+vm.createContext(context);vm.runInContext(source,context,{filename:'24-interconnections.js'});
+const methods=['pix','money','debit',...Array.from({length:12},(_,i)=>'credit'+(i+1))];
+const rules=Object.fromEntries(methods.map(key=>[key,{category:'Receitas MIT',destinationKind:key==='money'?'wallet':'account',accountId:key==='money'?'wallet':'bank1',reserveId:null,target:key==='money'?'wallet':'account:bank1'}]));
+const config={sourceAppId:'marco-iris',enabled:true,mappingReady:true,companyInstanceId:'official-company',accountId:'bank1',mitRevenueRules:rules,mitExpenseRules:{},mitExpenseMappingReady:false,importCutoffAt:''};
+const pending={sourceAppId:'marco-iris',companyInstanceId:'official-company',sourceRecordId:'marco:expense:DES-KEEP',aggregateId:'marco-iris:official-company:expense:DES-KEEP',entityId:'DES-KEEP',enteredAt:'2026-07-20T00:00:00Z',sourceRevision:5,reason:'manual_review',decisionHistory:[],record:{sourceRecordId:'marco:expense:DES-KEEP'}};
+const data={transacoes:[{id:'keep-tx',nome:'Preservar'}],contas:[{id:'wallet',nome:'Carteira',isCarteira:true},{id:'bank1',nome:'Banco'}],liquidez:[],categorias:{receita:['Receitas MIT'],fixa:[],variavel:[]},categoryColors:{receita:{},fixa:{},variavel:{}},modules:{},reservas:{boxes:[],moves:[]},interconnections:{sources:{'marco-iris':config},imported:{'marco-iris':{companyInstanceId:'official-company',instanceId:'official-company',lastRevision:5,lastContentHash:'old',records:{[pending.aggregateId]:{status:'waiting',entityId:'DES-KEEP'}}}},ignored:{},pending:[pending],audit:[],mitImported:{receipts:{},expenses:{}}}};
+const emptyOfficial={schema:'borion.interop.snapshot',schemaVersion:2,sourceAppId:'marco-iris',companyInstanceId:'official-company',deviceId:'device-a',revision:6,recordCount:0,isCompleteSnapshot:true,records:[],tombstones:[]};
+const result=context.BorionInterop.__test.reconcileMitSnapshot(data,config,emptyOfficial,{mode:'automatic'});
+assert(result.pending.length===1&&data.interconnections.pending.length===1,'snapshot vazio inesperado não pode apagar a fila persistente');
+assert(data.transacoes.length===1&&data.transacoes[0].id==='keep-tx','snapshot vazio não pode apagar lançamentos');
+const before=JSON.stringify(data);
+const foreign={schema:'borion.interop.snapshot',schemaVersion:2,sourceAppId:'marco-iris',companyInstanceId:'foreign-company',deviceId:'device-b',revision:7,recordCount:0,isCompleteSnapshot:true,records:[],tombstones:[]};
+let error=null;try{context.BorionInterop.__test.reconcileMitSnapshot(data,config,foreign,{mode:'automatic'});}catch(e){error=e;}
+assert(error&&error.code==='INSTANCE_CONFLICT','troca silenciosa de companyInstanceId deve ser bloqueada');
+assert(JSON.stringify(data)===before,'conflito de instância não pode alterar base, fila ou lançamentos');
+console.log('OK: snapshot vazio preserva fila e lançamento; companyInstanceId diferente é rejeitado sem mutação.');

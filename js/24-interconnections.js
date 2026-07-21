@@ -8,8 +8,8 @@
      A referência externa existe somente para impedir duplicidades e controlar exclusões.
      ======================================================================== */
   const SPEC = Object.freeze({
-    schemaVersion: 1,
-    bridgeVersion: '2.3.0',
+    schemaVersion: 2,
+    bridgeVersion: '3.0.0',
     mappingVersion: 3,
     folderName: 'Borion_Integracoes'
   });
@@ -100,7 +100,7 @@
         <button type="button" class="btn-outline btn-sm" onclick="BorionInterop.setImportCutoffNow('${escHtml(sourceAppId)}')">Só a partir de agora</button>
         ${cutoffAt ? `<button type="button" class="btn-outline btn-sm" onclick="BorionInterop.clearImportCutoff('${escHtml(sourceAppId)}')">Importar todo o histórico</button>` : ''}
       </div>
-      <small>${cutoffAt ? ('Corte atual: ' + escHtml(dateText(cutoffAt))) : 'Sem corte definido: todo o histórico pode ser importado automaticamente.'}</small>
+      <small>${cutoffAt ? ('Somente registros a partir de ' + escHtml(new Date(cutoffAt).toLocaleDateString('pt-BR')) + ' serão considerados.') : 'Sem corte definido: todo o histórico pode ser importado automaticamente.'}</small>
     </div>`;
   }
   function sourceName(sourceAppId){ return SOURCES[sourceAppId]?.name || sourceAppId || 'aplicativo externo'; }
@@ -226,7 +226,7 @@
     });
     return base;
   }
-  /* V6.44.6 — DESPESAS AUTOMÁTICAS DO MARCO IRIS
+  /* V6.45.0 — DESPESAS AUTOMÁTICAS DO MARCO IRIS
      Mesmo espírito das receitas: a pessoa escolhe uma vez para onde cada origem de
      pagamento vai (Carteira/Pix/Débito/Reserva) e, depois de salvo, a despesa entra
      sozinha no ciclo de sincronização — sem abrir um formulário por lançamento.
@@ -557,26 +557,43 @@
     return row.config.transport === 'drive' ? readDriveSnapshot(row) : readLocalSnapshot(row);
   }
 
+  function snapshotCompanyInstance(snapshot){ return String(snapshot?.companyInstanceId || snapshot?.instanceId || '').trim(); }
+  function snapshotContentHash(snapshot){
+    const company=snapshotCompanyInstance(snapshot);
+    return Number(snapshot?.schemaVersion)>=2
+      ? hash({companyInstanceId:company,records:snapshot.records||[],tombstones:snapshot.tombstones||[]})
+      : hash({records:snapshot.records||[],tombstones:snapshot.tombstones||[]});
+  }
+  function sourceRecordKey(record){ return String(record?.sourceRecordId || record?.aggregateId || record?.entityId || '').trim(); }
   function validateSnapshot(snapshot, sourceAppId){
     if(!snapshot || snapshot.schema !== 'borion.interop.snapshot') throw new Error('Arquivo não é um snapshot de interconexão do Borion.');
-    if(Number(snapshot.schemaVersion) !== 1) throw new Error('Versão de protocolo incompatível.');
+    const protocol=Number(snapshot.schemaVersion);
+    if(![1,2].includes(protocol)) throw new Error('Versão de protocolo incompatível.');
     if(snapshot.sourceAppId !== sourceAppId) throw new Error(`A pasta contém dados de ${snapshot.sourceAppId || 'outro aplicativo'}, não de ${sourceAppId}.`);
-    if(!snapshot.instanceId || !Array.isArray(snapshot.records) || !Array.isArray(snapshot.tombstones)) throw new Error('Snapshot incompleto ou corrompido.');
-    const ids = new Set();
-    const expectedPrefix = `${sourceAppId}:${snapshot.instanceId}:`;
-    snapshot.records.forEach(record => {
-      if(!record.aggregateId || !record.entityId) throw new Error('Existe um registro sem identificador permanente.');
-      if(!String(record.aggregateId).startsWith(expectedPrefix)) throw new Error('Snapshot rejeitado: identificador fora da instância de origem.');
-      if(ids.has(record.aggregateId)) throw new Error('Snapshot rejeitado: identificador de registro duplicado.');
-      ids.add(record.aggregateId);
+    const company=snapshotCompanyInstance(snapshot);
+    if(!company || !Array.isArray(snapshot.records) || !Array.isArray(snapshot.tombstones)) throw new Error('Snapshot incompleto ou corrompido.');
+    if(protocol>=2){
+      if(!snapshot.deviceId) throw new Error('Snapshot seguro sem identificador do dispositivo.');
+      if(Number(snapshot.recordCount)!==snapshot.records.length) throw new Error('Snapshot rejeitado: contagem de registros divergente.');
+      if(snapshot.isCompleteSnapshot!==true) throw new Error('Snapshot rejeitado: publicação incompleta.');
+    }
+    const ids=new Set(),expectedPrefix=`${sourceAppId}:${company}:`;
+    snapshot.records.forEach(record=>{
+      const stableId=sourceRecordKey(record);
+      if(!record.aggregateId || !record.entityId || !stableId) throw new Error('Existe um registro sem identificador permanente.');
+      if(!String(record.aggregateId).startsWith(expectedPrefix)) throw new Error('Snapshot rejeitado: identificador fora da instância oficial.');
+      if(ids.has(stableId)) throw new Error('Snapshot rejeitado: identificador de registro duplicado.');
+      ids.add(stableId);
       if(!['income','expense'].includes(record.direction)) throw new Error('Direção financeira inválida.');
-      if(!Number.isFinite(Number(record.amount)) || Number(record.amount) < 0) throw new Error('Valor financeiro inválido.');
+      if(!Number.isFinite(Number(record.amount)) || Number(record.amount)<0) throw new Error('Valor financeiro inválido.');
     });
-    (snapshot.tombstones || []).forEach(item => {
-      if(!item.aggregateId || !String(item.aggregateId).startsWith(expectedPrefix)) throw new Error('Snapshot rejeitado: exclusão fora da instância de origem.');
-    });
-    const calculatedHash = hash({records:snapshot.records, tombstones:snapshot.tombstones});
-    if(snapshot.contentHash && snapshot.contentHash !== calculatedHash) throw new Error('Snapshot rejeitado: conteúdo alterado ou incompleto.');
+    (snapshot.tombstones||[]).forEach(item=>{if(!sourceRecordKey(item))throw new Error('Snapshot rejeitado: exclusão sem identificador permanente.');});
+    const calculatedHash=snapshotContentHash(snapshot);
+    if(snapshot.contentHash && snapshot.contentHash!==calculatedHash) throw new Error('Snapshot rejeitado: conteúdo alterado ou incompleto.');
+    if(protocol>=2&&snapshot.checksum){
+      const expected=hash({companyInstanceId:company,revision:Number(snapshot.revision)||0,contentHash:calculatedHash,records:snapshot.records,tombstones:snapshot.tombstones});
+      if(snapshot.checksum!==expected) throw new Error('Snapshot rejeitado: checksum divergente.');
+    }
     return true;
   }
 
@@ -733,7 +750,7 @@
     const delta = txDelta(tx);
     return delta ? adjust(data, tx.accountId, delta) : true;
   }
-  /* V6.44.6 — Equivalente a payFixaOcorrencia, mas só toca no parâmetro `data`.
+  /* V6.45.0 — Equivalente a payFixaOcorrencia, mas só toca no parâmetro `data`.
      payFixaOcorrencia (07-budget.js) lê e grava em S.data/S.reservas — funciona no
      modal de revisão manual porque ali data===S.data sempre (perfil aberto é travado
      antes de abrir o modal). Mas a sincronização automática roda sobre um clone
@@ -891,11 +908,39 @@
   }
 
   function importedState(data, sourceAppId){
-    const interop = ensureInterop(data);
-    return interop.imported[sourceAppId] ||= {
-      instanceId:'', lastRevision:0, lastContentHash:'', records:{}, lastSyncAt:'', lastError:''
-    };
+    const interop=ensureInterop(data);
+    const state=interop.imported[sourceAppId] ||= {companyInstanceId:'',instanceId:'',lastRevision:0,lastContentHash:'',records:{},lastSyncAt:'',lastError:''};
+    state.companyInstanceId=String(state.companyInstanceId||state.instanceId||'');
+    state.instanceId=state.companyInstanceId;
+    state.records ||= {};
+    return state;
   }
+  function bindOrAssertCompanyInstance(data,config,snapshot,{allowBind=false}={}){
+    const state=importedState(data,config.sourceAppId),incoming=snapshotCompanyInstance(snapshot);
+    const bound=String(config.companyInstanceId||state.companyInstanceId||state.instanceId||'').trim();
+    if(bound&&incoming!==bound){
+      const error=new Error('A origem da integração mudou. Os dados não foram processados. Confirme a reconexão desta instalação do Marco Iris Tecnologia.');
+      error.code='INSTANCE_CONFLICT';error.expectedCompanyInstanceId=bound;error.receivedCompanyInstanceId=incoming;throw error;
+    }
+    if(!bound){
+      if(!allowBind){const error=new Error('A instalação oficial ainda não foi vinculada. Reconfigure a conexão antes de sincronizar.');error.code='INSTANCE_NOT_BOUND';throw error;}
+      config.companyInstanceId=incoming;config.boundAt=nowIso();
+    }
+    state.companyInstanceId=incoming;state.instanceId=incoming;config.companyInstanceId=incoming;config.lastDeviceId=String(snapshot.deviceId||'');
+    return incoming;
+  }
+  function existingAckResults(data,state,snapshot){
+    const pending=(ensureInterop(data).pending||[]).filter(x=>x.sourceAppId===snapshot.sourceAppId);
+    const pendingKeys=new Set(pending.flatMap(x=>[String(x.aggregateId||''),String(x.sourceRecordId||''),String(x.entityId||'')]).filter(Boolean));
+    return (snapshot.records||[]).map(record=>{
+      const marker=state.records?.[record.aggregateId],key=sourceRecordKey(record);let result='already_processed',borionId=marker?.txId||'';
+      if(marker?.status==='ignored')result='ignored_by_cutoff';
+      else if(marker?.status==='waiting'||pendingKeys.has(key)||pendingKeys.has(String(record.aggregateId))||pendingKeys.has(String(record.entityId)))result=record.direction==='expense'?'pending_review':'already_processed';
+      else if(record.active===false||normalize(record.status).includes('cancel'))result='cancelled';
+      return {sourceRecordId:key,aggregateId:record.aggregateId,entityId:record.entityId,result,status:result,processedRevision:Number(snapshot.revision)||0,borionId,borionTransactionId:borionId,processedAt:nowIso(),message:result==='pending_review'?'Registro continua aguardando revisão.':'Registro já processado; nenhuma duplicidade criada.'};
+    });
+  }
+
   function ignoredState(data, sourceAppId){
     const interop = ensureInterop(data);
     return interop.ignored[sourceAppId] ||= {};
@@ -952,7 +997,7 @@
       integrationOriginalSourceValues:clone(sourceBag(record)),integrationMappingVersion:SPEC.mappingVersion
     };
   }
-  /* V6.44.6 — Cria a despesa sozinha, sem passar pela revisão manual. Só cobre
+  /* V6.45.0 — Cria a despesa sozinha, sem passar pela revisão manual. Só cobre
      Carteira/Pix/Débito/Reserva: Crédito sempre lança um erro aqui de propósito
      (ver comentário de MIT_EXPENSE_METHODS) e cai na fila "Aguardando Revisão". */
   function commitMitExpenseAuto(data,config,record){
@@ -1007,116 +1052,115 @@
     if(!config.mappingReady) throw new Error('Configure as receitas do Marco Iris antes de sincronizar esta integração.');
     config.mitRevenueRules=validateMitRevenueRules(data,config,config.mitRevenueRules);
     const interop=ensureInterop(data),state=importedState(data,config.sourceAppId),mitState=ensureMitState(data);
+    bindOrAssertCompanyInstance(data,config,snapshot,{allowBind:true});
+    const incomingRevision=Number(snapshot.revision)||0,incomingHash=snapshot.contentHash||snapshotContentHash(snapshot);
+    if(incomingRevision<Number(state.lastRevision||0)){const error=new Error('Snapshot antigo rejeitado: a revisão recebida é inferior à última já processada.');error.code='STALE_REVISION';throw error;}
+    if(incomingRevision===Number(state.lastRevision||0)&&incomingHash===state.lastContentHash){
+      const results=existingAckResults(data,state,snapshot),pending=(interop.pending||[]).filter(x=>x.sourceAppId==='marco-iris');
+      return {results,pending,summary:Object.assign({},config.lastResult||{},{processed:results.length,created:0,createdReceipts:0,createdExpenses:0,deleted:0,unchanged:results.length,pendingExpenses:pending.length,errors:0}),changed:false};
+    }
     state.records ||= {};
-    const results=[],pendingById=new Map((interop.pending||[]).filter(item=>item.sourceAppId==='marco-iris').map(item=>[String(item.entityId),item]));
-    const incomingExpenseIds=new Set();
+    const results=[];
+    const pendingEntries=(interop.pending||[]).filter(item=>item.sourceAppId==='marco-iris');
+    const pendingById=new Map(pendingEntries.map(item=>[String(item.sourceRecordId||item.entityId||item.aggregateId),item]));
+    function deletePending(record){const keys=[sourceRecordKey(record),String(record.entityId||''),String(record.receiptId||''),String(record.aggregateId||'')];for(const key of keys){if(!key)continue;pendingById.delete(key);for(const [stored,item] of pendingById){if([item.sourceRecordId,item.entityId,item.aggregateId].map(String).includes(key))pendingById.delete(stored);}}}
     (snapshot.records||[]).forEach(record=>{
       const entityId=String(record.receiptId||record.entityId||'').trim();
       if(!entityId) throw new Error('O Marco Iris enviou um registro sem identificador permanente. A sincronização foi cancelada sem alterar os dados.');
-      const aggregateId=String(record.aggregateId||'').trim();
+      const aggregateId=String(record.aggregateId||'').trim(),recordKey=sourceRecordKey(record);
       if(!aggregateId) throw new Error(`O registro ${entityId} não possui identificador agregado da integração.`);
       if(record.direction==='expense'){
-        incomingExpenseIds.add(entityId);
         const importedExpense=mitState.expenses[entityId];
         if(record.active===false||['cancelled','canceled','cancelado'].includes(normalize(record.status))){
-          pendingById.delete(entityId);
+          deletePending(record);
           if(importedExpense){
             state.records[aggregateId]=Object.assign({},state.records[aggregateId]||{},{status:'imported',entityId,sourceCancelledAt:record.sourceUpdatedAt||snapshot.generatedAt||nowIso()});
-            results.push({aggregateId,entityId,status:'source_cancelled_preserved',borionTransactionId:importedExpense.borionId||'',message:'Despesa cancelada na origem; lançamento já importado foi preservado no Borion.'});
+            results.push({sourceRecordId:recordKey,aggregateId,entityId,status:'source_cancelled_preserved',result:'cancelled',borionTransactionId:importedExpense.borionId||'',message:'Despesa cancelada na origem; lançamento já importado foi preservado no Borion.'});
           }else{
-            delete state.records[aggregateId];
-            results.push({aggregateId,entityId,status:'cancelled',borionTransactionId:'',message:'Despesa cancelada na origem; retirada da revisão.'});
+            state.records[aggregateId]={status:'cancelled',entityId,cancelledAt:record.sourceUpdatedAt||nowIso()};
+            results.push({sourceRecordId:recordKey,aggregateId,entityId,status:'cancelled',result:'cancelled',borionTransactionId:'',message:'Despesa cancelada na origem; retirada da revisão.'});
           }
           return;
         }
         if(importedExpense){
-          pendingById.delete(entityId);
+          deletePending(record);
           state.records[aggregateId]=Object.assign({},state.records[aggregateId]||{},{status:'imported',entityId,importedAt:importedExpense.importedAt||''});
-          results.push({aggregateId,entityId,status:'unchanged',borionTransactionId:importedExpense.borionId||'',message:'Despesa já importada manualmente.'});
+          results.push({sourceRecordId:recordKey,aggregateId,entityId,status:'unchanged',result:'already_processed',borionTransactionId:importedExpense.borionId||'',message:'Despesa já importada; duplicidade bloqueada.'});
           return;
         }
         if(beforeImportCutoff(config,record.date||record.dueDate)){
-          pendingById.delete(entityId);
+          deletePending(record);
           state.records[aggregateId]={status:'ignored',entityId,reason:'before_cutoff',updatedAt:record.sourceUpdatedAt||''};
-          results.push({aggregateId,entityId,status:'ignored_before_cutoff',borionTransactionId:'',message:'Fora do período configurado para importação.'});
+          results.push({sourceRecordId:recordKey,aggregateId,entityId,status:'ignored_before_cutoff',result:'ignored_by_cutoff',borionTransactionId:'',message:'Fora do período configurado para importação.'});
           return;
         }
         if(config.mitExpenseMappingReady){
           try{
-            const borionId=commitMitExpenseAuto(data,config,record);
-            pendingById.delete(entityId);
-            const importedAt=nowIso();
-            mitState.expenses[entityId]={borionId,aggregateId,importedAt};
-            state.records[aggregateId]={status:'imported',txId:borionId,entityId,importedAt};
-            results.push({aggregateId,entityId,status:'expense_created',borionTransactionId:borionId,message:'Despesa recebida e importada automaticamente.'});
-            return;
-          }catch(autoError){
-            // Não coube na automação (Crédito, destino removido, saldo insuficiente etc.)
-            // — cai na fila de revisão manual abaixo em vez de perder o registro.
-          }
+            const borionId=commitMitExpenseAuto(data,config,record);deletePending(record);const importedAt=nowIso();
+            mitState.expenses[entityId]={borionId,aggregateId,importedAt};state.records[aggregateId]={status:'imported',txId:borionId,entityId,importedAt,fingerprint:record.fingerprint||hash(record)};
+            results.push({sourceRecordId:recordKey,aggregateId,entityId,status:'expense_created',result:'imported',borionTransactionId:borionId,message:'Despesa recebida e importada automaticamente.'});return;
+          }catch(_autoError){/* Crédito, destino removido ou regra incompleta: mantém revisão. */}
         }
-        const pending={
-          sourceAppId:'marco-iris',aggregateId,entityId,
-          name:record.name||record.description||'Despesa do Marco Iris',description:record.description||record.name||'Despesa do Marco Iris',
-          localPurchase:record.localPurchase||'',category:record.category||'',amount:Number(record.amount)||0,
-          date:record.date||record.dueDate||todayISO(),origin:'Marco Iris',status:(record.settled===true||mitRecordPaid(record))?'Pago':'Em aberto',
-          paymentMethod:record.paymentMethod||'',externalReference:record.externalReference||'',record:clone(record),
-          updatedAt:record.sourceUpdatedAt||snapshot.generatedAt||nowIso()
-        };
-        pendingById.set(entityId,pending);
-        state.records[aggregateId]={status:'waiting',entityId,fingerprint:record.fingerprint||hash(record),updatedAt:pending.updatedAt};
-        results.push({aggregateId,entityId,status:'waiting_expense',borionTransactionId:'',message:'Aguardando revisão manual no Borion.'});
+        const previous=[...pendingById.values()].find(item=>[item.sourceRecordId,item.entityId,item.aggregateId].map(String).includes(recordKey)||String(item.entityId)===entityId);
+        const pending={sourceAppId:'marco-iris',companyInstanceId:snapshotCompanyInstance(snapshot),sourceRecordId:recordKey,aggregateId,entityId,
+          enteredAt:previous?.enteredAt||nowIso(),sourceRevision:incomingRevision,reason:'manual_review',decisionHistory:Array.isArray(previous?.decisionHistory)?previous.decisionHistory:[],
+          name:record.name||record.description||'Despesa do Marco Iris',description:record.description||record.name||'Despesa do Marco Iris',localPurchase:record.localPurchase||'',category:record.category||'',amount:Number(record.amount)||0,
+          date:record.date||record.dueDate||todayISO(),origin:'Marco Iris',status:(record.settled===true||mitRecordPaid(record))?'Pago':'Em aberto',paymentMethod:record.paymentMethod||'',externalReference:record.externalReference||'',mapping:clone(config.mitExpenseRules||{}),record:clone(record),updatedAt:record.sourceUpdatedAt||snapshot.generatedAt||nowIso()};
+        deletePending(record);pendingById.set(recordKey,pending);state.records[aggregateId]={status:'waiting',entityId,sourceRecordId:recordKey,fingerprint:record.fingerprint||hash(record),updatedAt:pending.updatedAt};
+        results.push({sourceRecordId:recordKey,aggregateId,entityId,status:'waiting_expense',result:'pending_review',borionTransactionId:'',message:'Aguardando revisão manual no Borion.'});
         return;
       }
-
-      const receiptId=entityId;
-      const nativeTx=findMitImportedIncome(data,receiptId),receiptMarker=findMitImportedMarker(state,receiptId),receiptState=mitState.receipts[receiptId];
+      const receiptId=entityId,nativeTx=findMitImportedIncome(data,receiptId),receiptMarker=findMitImportedMarker(state,receiptId),receiptState=mitState.receipts[receiptId];
+      const receiptCancelled=record.active===false||normalize(record.status).includes('cancel')||record.operationType==='cancel';
+      if(receiptCancelled){
+        const txId=nativeTx?.id||receiptState?.borionId||receiptMarker?.txId||'';
+        if(txId){
+          mitState.receipts[receiptId] ||= {borionId:txId,aggregateId:nativeTx?.integrationAggregateId||aggregateId,importedAt:nativeTx?.integrationImportedAt||receiptMarker?.importedAt||nowIso()};
+          state.records[aggregateId]={status:'source_cancelled_preserved',txId,entityId:receiptId,sourceRecordId:recordKey,cancelledAt:record.sourceUpdatedAt||nowIso(),reason:'source_cancelled'};
+          results.push({sourceRecordId:recordKey,aggregateId,entityId:receiptId,status:'source_cancelled_preserved',result:'cancelled',borionTransactionId:txId,message:'Recebimento cancelado na origem; lançamento já importado foi preservado para revisão, sem exclusão silenciosa.'});
+        }else{
+          state.records[aggregateId]={status:'cancelled',entityId:receiptId,sourceRecordId:recordKey,cancelledAt:record.sourceUpdatedAt||nowIso(),reason:'source_cancelled'};
+          results.push({sourceRecordId:recordKey,aggregateId,entityId:receiptId,status:'cancelled',result:'cancelled',borionTransactionId:'',message:'Recebimento cancelado na origem; nenhum lançamento foi criado.'});
+        }
+        return;
+      }
       if(nativeTx||receiptState||receiptMarker){
         const txId=nativeTx?.id||receiptState?.borionId||receiptMarker?.txId||'';
         mitState.receipts[receiptId] ||= {borionId:txId,aggregateId:nativeTx?.integrationAggregateId||aggregateId,importedAt:nativeTx?.integrationImportedAt||receiptMarker?.importedAt||nowIso()};
-        state.records[aggregateId]={status:'imported',txId,entityId:receiptId,importedAt:mitState.receipts[receiptId].importedAt};
-        results.push({aggregateId,entityId:receiptId,status:'unchanged',borionTransactionId:txId,message:'Recebimento já importado; duplicidade bloqueada.'});
-        return;
+        state.records[aggregateId]={status:'imported',txId,entityId:receiptId,sourceRecordId:recordKey,importedAt:mitState.receipts[receiptId].importedAt};
+        results.push({sourceRecordId:recordKey,aggregateId,entityId:receiptId,status:'unchanged',result:'already_processed',borionTransactionId:txId,message:'Recebimento já importado; duplicidade bloqueada.'});return;
       }
       if(beforeImportCutoff(config,record.paymentDate||record.date)){
-        state.records[aggregateId]={status:'ignored',entityId:receiptId,reason:'before_cutoff',updatedAt:record.sourceUpdatedAt||''};
-        results.push({aggregateId,entityId:receiptId,status:'ignored_before_cutoff',borionTransactionId:'',message:'Fora do período configurado para importação.'});
-        return;
+        state.records[aggregateId]={status:'ignored',entityId:receiptId,sourceRecordId:recordKey,reason:'before_cutoff',updatedAt:record.sourceUpdatedAt||''};
+        results.push({sourceRecordId:recordKey,aggregateId,entityId:receiptId,status:'ignored_before_cutoff',result:'ignored_by_cutoff',borionTransactionId:'',message:'Fora do período configurado para importação.'});return;
       }
       if(record.active===false||!mitRecordPaid(record)||!record.paymentDate){
-        state.records[aggregateId]={status:'waiting',entityId:receiptId,reason:'not-paid',updatedAt:record.sourceUpdatedAt||''};
-        results.push({aggregateId,entityId:receiptId,status:'waiting_receipt',borionTransactionId:'',message:'Recebimento ainda não está Pago com Data de Pagamento.'});
-        return;
+        state.records[aggregateId]={status:'waiting',entityId:receiptId,sourceRecordId:recordKey,reason:'not-paid',updatedAt:record.sourceUpdatedAt||''};
+        results.push({sourceRecordId:recordKey,aggregateId,entityId:receiptId,status:'waiting_receipt',result:'pending_review',borionTransactionId:'',message:'Recebimento ainda não está Pago com Data de Pagamento.'});return;
       }
-      const tx=makeMitIncomeTransaction(data,config,record);
-      data.transacoes=Array.isArray(data.transacoes)?data.transacoes:[];
-      if(data.transacoes.some(item=>item.id===tx.id)) tx.id += '-' + hash(receiptId+nowIso());
-      data.transacoes.push(tx);
-      if(!applyNew(data,tx)){
-        data.transacoes=data.transacoes.filter(item=>item.id!==tx.id);
-        throw new Error('Não foi possível aplicar o destino financeiro da receita '+receiptId+'.');
-      }
+      const tx=makeMitIncomeTransaction(data,config,record);data.transacoes=Array.isArray(data.transacoes)?data.transacoes:[];
+      if(data.transacoes.some(item=>item.id===tx.id))tx.id+='-'+hash(receiptId+nowIso());data.transacoes.push(tx);
+      if(!applyNew(data,tx)){data.transacoes=data.transacoes.filter(item=>item.id!==tx.id);throw new Error('Não foi possível aplicar o destino financeiro da receita '+receiptId+'.');}
       mitState.receipts[receiptId]={borionId:tx.id,aggregateId,importedAt:tx.integrationImportedAt,externalReference:record.externalReference||''};
-      state.records[aggregateId]={status:'imported',txId:tx.id,entityId:receiptId,importedAt:tx.integrationImportedAt,fingerprint:tx.integrationOriginalFingerprint};
-      results.push({aggregateId,entityId:receiptId,status:'created',borionTransactionId:tx.id,message:'Receita recebida e importada automaticamente.'});
+      state.records[aggregateId]={status:'imported',txId:tx.id,entityId:receiptId,sourceRecordId:recordKey,importedAt:tx.integrationImportedAt,fingerprint:tx.integrationOriginalFingerprint};
+      results.push({sourceRecordId:recordKey,aggregateId,entityId:receiptId,status:'created',result:'imported',borionTransactionId:tx.id,message:'Receita recebida e importada automaticamente.'});
     });
-    [...pendingById.keys()].forEach(entityId=>{ if(!incomingExpenseIds.has(entityId)) pendingById.delete(entityId); });
+    /* Ausência em snapshot nunca apaga pendência. Somente tombstone/cancelamento explícito resolve a fila. */
+    (snapshot.tombstones||[]).forEach(tomb=>{
+      const key=sourceRecordKey(tomb),candidate=[...pendingById.entries()].find(([,item])=>[item.sourceRecordId,item.aggregateId,item.entityId].map(String).includes(key));
+      if(!candidate)return;const [pendingKey,item]=candidate;pendingById.delete(pendingKey);
+      state.records[item.aggregateId]=Object.assign({},state.records[item.aggregateId]||{},{status:'cancelled',entityId:item.entityId,cancelledAt:tomb.deletedAt||nowIso(),reason:tomb.reason||'source_tombstone'});
+      results.push({sourceRecordId:key,aggregateId:item.aggregateId,entityId:item.entityId,status:'cancelled',result:'cancelled',borionTransactionId:'',message:'Exclusão explícita recebida da origem; pendência encerrada.'});
+    });
     interop.pending=(interop.pending||[]).filter(item=>item.sourceAppId!=='marco-iris').concat([...pendingById.values()]);
-    state.instanceId=snapshot.instanceId;state.lastRevision=Number(snapshot.revision)||0;
-    state.lastContentHash=snapshot.contentHash||hash({records:snapshot.records,tombstones:snapshot.tombstones});
-    state.lastSyncAt=nowIso();state.lastError='';
-    config.lastSyncAt=state.lastSyncAt;config.lastRevision=state.lastRevision;config.lastContentHash=state.lastContentHash;config.lastError='';
-    config.lastResult={
-      processed:results.length,created:results.filter(x=>x.status==='created').length,createdReceipts:results.filter(x=>x.status==='created').length,
-      createdExpenses:results.filter(x=>x.status==='expense_created').length,deleted:0,
-      waiting:results.filter(x=>x.status==='waiting_receipt').length,waitingReceipts:results.filter(x=>x.status==='waiting_receipt').length,
-      pendingExpenses:pendingById.size,unchanged:results.filter(x=>x.status==='unchanged').length,
-      ignored:results.filter(x=>x.status==='ignored_before_cutoff').length,ignoredBeforeCutoff:results.filter(x=>x.status==='ignored_before_cutoff').length,
-      sourceDeleted:results.filter(x=>x.status==='cancelled'||x.status==='source_cancelled_preserved').length,errors:0
-    };
-    interop.audit.unshift({id:'interop-mit-'+Date.now(),at:state.lastSyncAt,sourceAppId:'marco-iris',revision:state.lastRevision,mode:mode==='automatic'?'automatic':'manual',result:clone(config.lastResult)});
-    interop.audit=interop.audit.slice(0,300);
-    return {results,pending:[...pendingById.values()],summary:config.lastResult};
+    state.companyInstanceId=snapshotCompanyInstance(snapshot);state.instanceId=state.companyInstanceId;state.lastRevision=incomingRevision;state.lastContentHash=incomingHash;state.lastSyncAt=nowIso();state.lastError='';
+    config.companyInstanceId=state.companyInstanceId;config.lastDeviceId=String(snapshot.deviceId||'');config.lastSyncAt=state.lastSyncAt;config.lastRevision=state.lastRevision;config.lastContentHash=state.lastContentHash;config.lastError='';
+    config.lastResult={processed:results.length,created:results.filter(x=>x.status==='created').length,createdReceipts:results.filter(x=>x.status==='created').length,createdExpenses:results.filter(x=>x.status==='expense_created').length,deleted:results.filter(x=>x.status==='cancelled').length,
+      waiting:results.filter(x=>x.status==='waiting_receipt').length,waitingReceipts:results.filter(x=>x.status==='waiting_receipt').length,pendingExpenses:pendingById.size,unchanged:results.filter(x=>x.status==='unchanged').length,
+      ignored:results.filter(x=>x.status==='ignored_before_cutoff').length,ignoredBeforeCutoff:results.filter(x=>x.status==='ignored_before_cutoff').length,sourceDeleted:results.filter(x=>x.status==='cancelled'||x.status==='source_cancelled_preserved').length,errors:0};
+    interop.audit.unshift({id:'interop-mit-'+Date.now(),at:state.lastSyncAt,sourceAppId:'marco-iris',companyInstanceId:state.companyInstanceId,deviceId:config.lastDeviceId,revision:state.lastRevision,mode:mode==='automatic'?'automatic':'manual',result:clone(config.lastResult)});interop.audit=interop.audit.slice(0,300);
+    results.forEach(item=>{item.processedRevision=incomingRevision;item.processedAt=state.lastSyncAt;item.borionId=item.borionTransactionId||'';});
+    return {results,pending:[...pendingById.values()],summary:config.lastResult,changed:true};
   }
 
   function replaceObjectContents(target,source){
@@ -1355,18 +1399,21 @@
       draftConfig.discovered=discoverSnapshot(snapshot,draftConfig.discovered);
       draftInterop.sources[sourceAppId]=draftConfig;
       const result=reconcileSnapshot(draftData,draftConfig,snapshot,{mode:silent?'automatic':'manual'});
+      const companyInstanceId=snapshotCompanyInstance(snapshot);
       const ack={
-        schema:'borion.interop.ack',schemaVersion:1,bridgeVersion:SPEC.bridgeVersion,
-        importMode:'smart-native',sourceAppId,instanceId:snapshot.instanceId,
+        schema:'borion.interop.ack',schemaVersion:2,bridgeVersion:SPEC.bridgeVersion,
+        importMode:'smart-native',sourceAppId,companyInstanceId,instanceId:companyInstanceId,deviceId:snapshot.deviceId||'',
         sourceRevision:Number(snapshot.revision)||0,targetProfileId:row.profile.id,targetProfileName:row.profile.name,
-        processedAt:nowIso(),summary:result.summary,records:result.results
+        processedAt:nowIso(),summary:result.summary,records:result.results.map(item=>Object.assign({},item,{result:item.result||item.status,processedRevision:Number(snapshot.revision)||0,processedAt:item.processedAt||nowIso(),borionId:item.borionId||item.borionTransactionId||''}))
       };
       if(row.config.transport==='drive') await writeDriveAck(row,ack);
       else await writeLocalAck(row,ack);
-      Object.keys(row.data).forEach(key=>delete row.data[key]);
-      Object.assign(row.data,draftData);
-      saveProfileData(row.profile.id,row.data);
-      if(S.currentProfile&&String(S.currentProfile.id)===String(row.profile.id)){
+      if(result.changed!==false){
+        Object.keys(row.data).forEach(key=>delete row.data[key]);
+        Object.assign(row.data,draftData);
+        saveProfileData(row.profile.id,row.data);
+      }
+      if(result.changed!==false&&S.currentProfile&&String(S.currentProfile.id)===String(row.profile.id)){
         saveCurrentData();
         const editingIntegrationSettings=silent&&S.view==='settings'&&S.settingsTab==='integrations';
         if(typeof renderView==='function'&&!editingIntegrationSettings) renderView();
@@ -1378,6 +1425,13 @@
       }
       return result;
     }catch(error){
+      if(error?.code==='INSTANCE_CONFLICT'){
+        try{
+          const rejectedSnapshot=await readSnapshot(row),companyInstanceId=snapshotCompanyInstance(rejectedSnapshot);
+          const rejected={schema:'borion.interop.ack',schemaVersion:2,bridgeVersion:SPEC.bridgeVersion,sourceAppId,companyInstanceId,instanceId:companyInstanceId,sourceRevision:Number(rejectedSnapshot.revision)||0,targetProfileId:row.profile.id,processedAt:nowIso(),summary:{errors:(rejectedSnapshot.records||[]).length},records:(rejectedSnapshot.records||[]).map(record=>({sourceRecordId:sourceRecordKey(record),aggregateId:record.aggregateId,entityId:record.entityId,result:'rejected_instance',status:'rejected_instance',processedRevision:Number(rejectedSnapshot.revision)||0,processedAt:nowIso(),borionId:'',message:error.message}))};
+          if(row.config.transport==='drive')await writeDriveAck(row,rejected);else await writeLocalAck(row,rejected);
+        }catch(_ackError){}
+      }
       const current=findSourceConfig(sourceAppId)||row;
       current.config.lastError=error.message||String(error);
       current.config.lastAttemptAt=nowIso();
@@ -1528,6 +1582,9 @@
   // a partir de tal data/agora", pra testes e histórico antigo do aplicativo de
   // origem não virarem lançamento no Borion sozinhos. Nada do que já foi
   // importado antes é afetado — só passa a valer para os próximos lançamentos.
+  function confirmCutoffChange(message){
+    return typeof confirm!=='function' || confirm(message);
+  }
   function setImportCutoff(sourceAppId, dateValue){
     const row = findSourceConfig(sourceAppId);
     if(!row) return false;
@@ -1535,6 +1592,8 @@
     if(!trimmed){ return clearImportCutoff(sourceAppId); }
     const parsed = new Date(trimmed.length <= 10 ? trimmed + 'T00:00:00' : trimmed);
     if(isNaN(parsed.getTime())){ if(typeof alert === 'function') alert('Data inválida.'); return false; }
+    const displayDate=parsed.toLocaleDateString('pt-BR');
+    if(!confirmCutoffChange('Confirmar o corte de importação? Somente registros a partir de '+displayDate+' serão considerados.')) return false;
     row.config.importCutoffAt = parsed.toISOString();
     saveProfileData(row.profile.id, row.data);
     if(typeof toast === 'function') toast('A partir de agora, só entram sozinhos lançamentos de ' + sourceName(sourceAppId) + ' a partir de ' + dateText(row.config.importCutoffAt) + '. O que já foi importado antes continua como está.');
@@ -1544,6 +1603,7 @@
   function setImportCutoffNow(sourceAppId){
     const row = findSourceConfig(sourceAppId);
     if(!row) return false;
+    if(!confirmCutoffChange('Confirmar o corte a partir de agora? Registros anteriores não serão importados automaticamente.')) return false;
     row.config.importCutoffAt = nowIso();
     saveProfileData(row.profile.id, row.data);
     if(typeof toast === 'function') toast('Definido: a partir de agora, só entram sozinhos lançamentos novos de ' + sourceName(sourceAppId) + '. Testes e histórico anteriores a agora não serão importados automaticamente.');
@@ -1553,6 +1613,7 @@
   function clearImportCutoff(sourceAppId){
     const row = findSourceConfig(sourceAppId);
     if(!row) return false;
+    if(!confirmCutoffChange('Remover o corte e permitir que todo o histórico volte a ser considerado?')) return false;
     row.config.importCutoffAt = '';
     saveProfileData(row.profile.id, row.data);
     if(typeof toast === 'function') toast('Corte removido: todo o histórico de ' + sourceName(sourceAppId) + ' volta a valer para importação automática.');

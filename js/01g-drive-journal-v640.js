@@ -114,7 +114,7 @@ const BorionDriveJournal640={
     const stored=await GoogleDriveFS.readFile(file.id);await this._validateOperation(stored,file);
     const expectedNameId=this.operationIdFromFileName(file.name);
     if(!expectedNameId||String(stored.operationId)!==String(expectedNameId))throw Object.assign(new Error('O operationId interno não corresponde ao nome do arquivo '+file.name+'.'),{code:'JOURNAL_OPERATION_NAME_MISMATCH',fileId:file.id});
-    if(operation){const expectedChecksum=operation.checksum||await BorionSyncCore.checksumOf(operation.payload);const storedChecksum=stored.checksum||await BorionSyncCore.checksumOf(stored.payload);if(String(stored.operationId)!==String(operation.operationId)||storedChecksum!==expectedChecksum)throw Object.assign(new Error('Colisão/adulteração no operationId '+operation.operationId+'.'),{code:'OPERATION_ID_COLLISION',operationId:operation.operationId,fileId:file.id});}
+    if(operation){const expectedBody=operation.format==='account-delta-v2'?operation.delta:operation.payload,storedBody=stored.format==='account-delta-v2'?stored.delta:stored.payload;const expectedChecksum=operation.checksum||await BorionSyncCore.checksumOf(expectedBody);const storedChecksum=stored.checksum||await BorionSyncCore.checksumOf(storedBody);if(String(stored.operationId)!==String(operation.operationId)||storedChecksum!==expectedChecksum)throw Object.assign(new Error('Colisão/adulteração no operationId '+operation.operationId+'.'),{code:'OPERATION_ID_COLLISION',operationId:operation.operationId,fileId:file.id});}
     return stored;
   },
 
@@ -161,9 +161,19 @@ const BorionDriveJournal640={
     return all.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''))||String(a.id).localeCompare(String(b.id)));
   },
 
+  async listAppliedOperationFiles(mainFolderId,options={}){
+    const topology=options.topology||await this.discoverTopology(mainFolderId),folders=topology.appliedFolders||[];
+    const all=[],seen=new Set();
+    for(const folder of folders){
+      const files=await GoogleDriveFS.listChildren(folder.id,{maxItems:250000,maxPages:1000});
+      for(const f of files){if(!f||!f.id||seen.has(f.id))continue;const operationId=this.operationIdFromFileName(f.name);if(!operationId)continue;seen.add(f.id);all.push(Object.assign({},f,{operationIdFromName:operationId,appliedFolderId:folder.id}));}
+    }
+    return all.sort((a,b)=>String(b.createdTime||b.modifiedTime||'').localeCompare(String(a.createdTime||a.modifiedTime||''))||String(b.name||'').localeCompare(String(a.name||'')));
+  },
+
   async _validateOperation(op,file){
-    if(!op||typeof op!=='object'||!op.operationId||!op.payload)throw Object.assign(new Error('Operação inválida em '+(file&&file.name||'arquivo desconhecido')+'.'),{code:'JOURNAL_OPERATION_INVALID'});
-    if(op.checksum){const started=Date.now();const actual=await BorionSyncCore.checksumOf(op.payload);if(window.BorionPerf)BorionPerf.count('checksumMs',Date.now()-started);if(actual!==op.checksum)throw Object.assign(new Error('Checksum inválido na operação '+op.operationId+'.'),{code:'JOURNAL_OPERATION_TAMPERED',operationId:op.operationId});}
+    if(!op||typeof op!=='object'||!op.operationId||!(op.payload||op.delta))throw Object.assign(new Error('Operação inválida em '+(file&&file.name||'arquivo desconhecido')+'.'),{code:'JOURNAL_OPERATION_INVALID'});
+    if(op.checksum){const started=Date.now();const body=op.format==='account-delta-v2'?op.delta:op.payload;const actual=await BorionSyncCore.checksumOf(body);if(window.BorionPerf)BorionPerf.count('checksumMs',Date.now()-started);if(actual!==op.checksum)throw Object.assign(new Error('Checksum inválido na operação '+op.operationId+'.'),{code:'JOURNAL_OPERATION_TAMPERED',operationId:op.operationId});}
     return true;
   },
 
@@ -190,7 +200,7 @@ const BorionDriveJournal640={
     operations.sort((a,b)=>String(a.op.createdAt||'').localeCompare(String(b.op.createdAt||''))||String(a.op.operationId).localeCompare(String(b.op.operationId))||String(a.file.id).localeCompare(String(b.file.id)));
     let acc=remoteCurrentPayload||{profiles:[],dataByProfile:{},config:{}};const newlyApplied=[];
     const mergeStarted=Date.now();
-    for(const item of operations){const op=item.op,id=String(op.operationId);if(applied.has(id))continue;acc=BorionSyncCore.mergeAccountPayload(op.basePayload||null,op.payload,acc);applied.add(id);newlyApplied.push({fileId:item.file.id,name:item.file.name,operationId:id,createdAt:op.createdAt||null,journalFolderId:item.file.journalFolderId});}
+    for(const item of operations){const op=item.op,id=String(op.operationId);if(applied.has(id))continue;acc=op.format==='account-delta-v2'?BorionSyncCore.mergeAccountDelta(op.delta,acc):BorionSyncCore.mergeAccountPayload(op.basePayload||null,op.payload,acc);applied.add(id);newlyApplied.push({fileId:item.file.id,name:item.file.name,operationId:id,createdAt:op.createdAt||null,journalFolderId:item.file.journalFolderId});}
     if(window.BorionPerf)BorionPerf.count('mergeMs',Date.now()-mergeStarted);
     const previousMeta=acc.__syncMeta640&&typeof acc.__syncMeta640==='object'?acc.__syncMeta640:{};
     acc.__syncMeta640=Object.assign({},previousMeta,{schemaVersion:BorionSyncCore.BORION_DATA_SCHEMA_VERSION,appliedOperationIds:Array.from(applied).sort(),consolidatedThrough:operations.reduce((m,x)=>String(x.op.createdAt||'')>m?String(x.op.createdAt||''):m,String(previousMeta.consolidatedThrough||'')),lastConsolidatedAt:new Date().toISOString(),journalFolderDuplicates:Object.fromEntries(Object.entries(topology.duplicates||{}).map(([kind,items])=>[kind,(items||[]).map(x=>x&&x.id).filter(Boolean).sort()]))});
@@ -222,10 +232,16 @@ const BorionDriveJournal640={
     const valid=await this.validateSnapshot(snapshot);if(!valid.valid)return {trashed:0,blocked:'snapshot_invalid'};
     if(!options.backupValidated)return {trashed:0,blocked:'backup_not_validated'};
     if(!options.deviceGraceSatisfied)return {trashed:0,blocked:'device_grace_not_satisfied'};
-    const applied=new Set((snapshot.__syncMeta640&&snapshot.__syncMeta640.appliedOperationIds||[]).map(String));
-    const files=await this.listPendingOperationFiles(mainFolderId),cutoff=Date.now()-(Number(options.retentionMs)||BORION_OPERATION_RETENTION_MS);let trashed=0;const errors=[];
-    for(const f of files){try{const opId=String(f.operationIdFromName||'');if(!applied.has(opId))continue;const t=Date.parse(f.createdTime||f.modifiedTime||'');if(!Number.isFinite(t)||t>cutoff)continue;await GoogleDriveFS.trashFile(f.id);trashed++;}catch(e){errors.push({fileId:f.id,error:String(e&&e.message||e)});break;}}
-    return {trashed,errors,interrupted:errors.length>0};
+    const appliedIds=new Set((snapshot.__syncMeta640&&snapshot.__syncMeta640.appliedOperationIds||[]).map(String));
+    const maxKeep=Math.max(20,Number(options.maxKeep)||200),retentionMs=Number(options.retentionMs)||7*24*60*60*1000,cutoff=Date.now()-retentionMs;
+    let files=await this.listAppliedOperationFiles(mainFolderId);if(!files.length)files=await this.listPendingOperationFiles(mainFolderId);const errors=[];let trashed=0;
+    for(let index=0;index<files.length;index++){
+      const f=files[index],opId=String(f.operationIdFromName||'');if(!appliedIds.has(opId))continue;
+      const t=Date.parse(f.createdTime||f.modifiedTime||'');const beyondCount=index>=maxKeep,older=Number.isFinite(t)&&t<cutoff;
+      if(!beyondCount&&!older)continue;
+      try{await GoogleDriveFS.trashFile(f.id);trashed++;}catch(e){errors.push({fileId:f.id,operationId:opId,error:String(e&&e.message||e)});break;}
+    }
+    return {trashed,kept:files.length-trashed,retentionDays:Math.round(retentionMs/86400000),maxKeep,errors,interrupted:errors.length>0};
   },
 
   async compactAppliedOperationIds(snapshot,options={}){

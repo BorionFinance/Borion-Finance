@@ -1328,9 +1328,17 @@ function openTransactionModal({type, existing}){
       const snapshot=JSON.parse(JSON.stringify(S.data));
       if(integrationMode&&window.BorionInterop)BorionInterop.markImportedDeletion(existing,integrationMode,S.data);
       reverseTxSaldoEffect(existing);removeLinkedReservaMoveFromTransaction(existing);removeLinkedReservaWithdrawalFromDespesa(existing);
-      S.data.transacoes.splice(idx,1);saveCurrentData();closeModal();renderView();
-      const message=integrationMode==='permanent'?'Lançamento excluído e ignorado permanentemente.':(integrationMode==='reimport'?'Lançamento excluído e liberado para nova importação.':'Lançamento excluído.');
-      showUndoToast(message,()=>{S.data=snapshot;saveCurrentData();renderView();});
+      S.data.transacoes.splice(idx,1);saveCurrentData();
+      const criticalSync=integrationMode&&window.BorionInterop?BorionInterop.persistCriticalChange?.('interop_imported_delete'):null;
+      closeModal();renderView();
+      const message=integrationMode?'Lançamento excluído definitivamente e bloqueado contra retorno.':'Lançamento excluído.';
+      if(integrationMode){
+        toast(message);
+        Promise.resolve(criticalSync).then(result=>{
+          if(result?.synced)toast('Exclusão confirmada no Google Drive.');
+          else if(result?.pending)setTimeout(()=>toast('Exclusão salva neste dispositivo e pendente de confirmação no Drive.'),150);
+        }).catch(error=>console.warn('[BORION][IMPORTED_DELETE_SYNC]',error));
+      }else showUndoToast(message,()=>{S.data=snapshot;saveCurrentData();renderView();});
     };
     if(existing.integrationAggregateId&&window.BorionInterop){BorionInterop.openImportedDeleteDialog(existing,performDelete);return;}
     performDelete();

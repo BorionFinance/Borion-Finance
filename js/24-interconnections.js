@@ -445,7 +445,7 @@
     root.ignored ||= {};
     root.pending ||= [];
     root.audit ||= [];
-    // V6.45.3 — modo de aprovação de importação: '' (ainda não decidido pelo usuário),
+    // V6.45.4 — modo de aprovação de importação: '' (ainda não decidido pelo usuário),
     // 'auto' (sincronização silenciosa importa sozinha, como sempre foi) ou 'ask'
     // (a sincronização automática nunca importa sozinha; ela só avisa que há
     // lançamentos novos disponíveis e espera confirmação explícita). Existe para
@@ -947,7 +947,7 @@
     return incoming;
   }
 
-  // V6.45.3 — troca de instalação somente com confirmação explícita. A base financeira
+  // V6.45.4 — troca de instalação somente com confirmação explícita. A base financeira
   // já importada permanece no Borion como lançamento nativo; apenas os vínculos técnicos
   // e filas da instalação antiga são encerrados para que IDs antigos não contaminem a
   // nova origem. Nenhum lançamento do snapshot novo é importado nesta etapa.
@@ -993,7 +993,7 @@
     const pendingKeys=new Set(pending.flatMap(x=>[String(x.aggregateId||''),String(x.sourceRecordId||''),String(x.entityId||'')]).filter(Boolean));
     return (snapshot.records||[]).map(record=>{
       const marker=state.records?.[record.aggregateId],key=sourceRecordKey(record);let result='already_processed',borionId=marker?.txId||'';
-      if(marker?.status==='ignored')result='ignored_by_cutoff';
+      if(marker?.status==='ignored')result=marker?.reason==='user_deleted_in_borion'||marker?.reason==='user_permanent_ignore'?'ignored_permanently':'ignored_by_cutoff';
       else if(marker?.status==='waiting'||pendingKeys.has(key)||pendingKeys.has(String(record.aggregateId))||pendingKeys.has(String(record.entityId)))result=record.direction==='expense'?'pending_review':'already_processed';
       else if(record.active===false||normalize(record.status).includes('cancel'))result='cancelled';
       return {sourceRecordId:key,aggregateId:record.aggregateId,entityId:record.entityId,result,status:result,processedRevision:Number(snapshot.revision)||0,borionId,borionTransactionId:borionId,processedAt:nowIso(),message:result==='pending_review'?'Registro continua aguardando revisão.':'Registro já processado; nenhuma duplicidade criada.'};
@@ -1003,6 +1003,18 @@
   function ignoredState(data, sourceAppId){
     const interop = ensureInterop(data);
     return interop.ignored[sourceAppId] ||= {};
+  }
+  function ignoredKeysForMit(recordOrTx){
+    const entityId=String(recordOrTx?.receiptId||recordOrTx?.integrationReceiptId||recordOrTx?.integrationExpenseId||recordOrTx?.entityId||recordOrTx?.integrationEntityId||'').trim();
+    const aggregateId=String(recordOrTx?.aggregateId||recordOrTx?.integrationAggregateId||'').trim();
+    const sourceRecordId=String(recordOrTx?.sourceRecordId||recordOrTx?.integrationSourceRecordId||'').trim()||
+      (entityId?`marco:${recordOrTx?.direction==='expense'||recordOrTx?.integrationExpenseId?'expense':'receipt'}:${entityId}`:'');
+    return [...new Set([aggregateId,sourceRecordId,entityId].filter(Boolean))];
+  }
+  function findIgnoredMitRecord(data,record){
+    const ignored=ignoredState(data,'marco-iris');
+    for(const key of ignoredKeysForMit(record)){if(ignored[key])return ignored[key];}
+    return null;
   }
   function findImportedTransaction(data, sourceAppId, aggregateId){
     return (data.transacoes || []).find(tx =>
@@ -1170,6 +1182,16 @@
       if(!entityId) throw new Error('O Marco Iris enviou um registro sem identificador permanente. A sincronização foi cancelada sem alterar os dados.');
       const aggregateId=String(record.aggregateId||'').trim(),recordKey=sourceRecordKey(record);
       if(!aggregateId) throw new Error(`O registro ${entityId} não possui identificador agregado da integração.`);
+      const ignoredEntry=findIgnoredMitRecord(data,record);
+      if(ignoredEntry){
+        deletePending(record);
+        const removed=record.direction==='expense'
+          ?removeMitExpenseFromBorion(data,state,mitState,entityId,aggregateId,ignoredEntry.ignoredAt||nowIso(),'ignored_permanently_in_borion')
+          :removeMitIncomeFromBorion(data,state,mitState,entityId,aggregateId,ignoredEntry.ignoredAt||nowIso(),'ignored_permanently_in_borion');
+        state.records[aggregateId]={status:'ignored',txId:'',entityId,sourceRecordId:recordKey,ignoredAt:ignoredEntry.ignoredAt||nowIso(),reason:'user_permanent_ignore'};
+        results.push({sourceRecordId:recordKey,aggregateId,entityId,status:'ignored',result:'ignored_permanently',borionTransactionId:'',message:removed.removed?'Lançamento removido e mantido na lista de ignorados permanentes.':'Ignorado permanentemente no Borion; não será importado novamente.'});
+        return;
+      }
       if(record.direction==='expense'){
         const importedExpense=mitState.expenses[entityId];
         if(record.active===false||['cancelled','canceled','cancelado'].includes(normalize(record.status))){
@@ -1762,13 +1784,28 @@
   function confirmCutoffChange(message){
     return typeof confirm!=='function' || confirm(message);
   }
-  // V6.45.3 — além do saveProfileData (grava local na hora), força uma sincronização
+  // V6.45.4 — além do saveProfileData (grava local na hora), força uma sincronização
   // imediata com o Drive em vez de esperar o debounce normal de fila (1.2s). Um
   // ajuste crítico como a data de corte não deve ficar nem um instante exposto a uma
   // atualização remota concorrente sobrescrever o que acabou de ser salvo.
-  function forceImmediateSync(){
-    try{ if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.syncNow({source:'interop_critical_setting'}); }catch(_){ }
+  function forceImmediateSync(reason='interop_critical_setting'){
+    return Promise.resolve().then(async()=>{
+      try{
+        if(!(window.GoogleDriveProvider&&GoogleDriveProvider.isConnected()))return {localOnly:true};
+        GoogleDriveProvider.queueSave();
+        const result=typeof GoogleDriveProvider.forceSyncNow==='function'
+          ?await GoogleDriveProvider.forceSyncNow({reason})
+          :await GoogleDriveProvider.syncNow({source:reason});
+        return {synced:true,result};
+      }catch(error){
+        console.warn('[BORION_INTEROP][IMMEDIATE_SYNC_PENDING]',error);
+        /* A pendência já ficou gravada localmente pela queueSave. Não rejeitar aqui
+           evita tratar uma falha temporária de rede como perda da exclusão. */
+        return {synced:false,pending:true,error:String(error?.message||error)};
+      }
+    });
   }
+  function persistCriticalChange(reason='interop_critical_change'){return forceImmediateSync(reason);}
   function setImportCutoff(sourceAppId, dateValue){
     const row = findSourceConfig(sourceAppId);
     if(!row) return false;
@@ -1808,7 +1845,7 @@
     return true;
   }
 
-  // V6.45.3 — modo de aprovação de importação (item pedido junto com a data de
+  // V6.45.4 — modo de aprovação de importação (item pedido junto com a data de
   // corte): 'auto' mantém o comportamento de sempre (sincronização silenciosa
   // importa sozinha o que passar no corte); 'ask' faz a sincronização automática
   // nunca importar sozinha — ela só avisa que há lançamentos novos disponíveis e
@@ -1829,7 +1866,7 @@
     if(typeof renderView === 'function') renderView();
     return true;
   }
-  // V6.45.3 — na primeira vez que o perfil tem alguma integração configurada e
+  // V6.45.4 — na primeira vez que o perfil tem alguma integração configurada e
   // ainda não decidiu entre "automático" e "perguntar sempre", pergunta uma única
   // vez ao abrir o app (ver postLoginSequence). Depois disso, a escolha fica salva
   // e só muda se a pessoa mudar explicitamente na tela de Integrações.
@@ -2317,31 +2354,35 @@
     return true;
   }
 
-  function markImportedDeletion(tx, mode, data=S.data){
+  function markImportedDeletion(tx, mode='permanent', data=S.data){
     if(!tx?.integrationAggregateId || !tx?.integrationSourceAppId) return false;
-    const sourceAppId = tx.integrationSourceAppId;
-    const aggregateId = tx.integrationAggregateId;
-    const state = importedState(data, sourceAppId);
-    const ignored = ignoredState(data, sourceAppId);
-    if(mode === 'permanent'){
-      ignored[aggregateId] = {
-        ignoredAt:nowIso(), sourceAppId, aggregateId,
-        entityId:tx.integrationEntityId || '', txId:tx.id || ''
-      };
-      state.records[aggregateId] = {
-        status:'ignored', txId:'', entityId:tx.integrationEntityId || '', ignoredAt:ignored[aggregateId].ignoredAt
-      };
+    const sourceAppId=tx.integrationSourceAppId;
+    const aggregateId=String(tx.integrationAggregateId);
+    const entityId=String(tx.integrationReceiptId||tx.integrationExpenseId||tx.integrationEntityId||'');
+    const state=importedState(data,sourceAppId);
+    const ignored=ignoredState(data,sourceAppId);
+    const permanent=mode!=='reimport';
+    const ignoredAt=nowIso();
+    const sourceRecordId=String(tx.integrationSourceRecordId||'')||
+      (sourceAppId==='marco-iris'&&entityId?`marco:${tx.integrationExpenseId?'expense':'receipt'}:${entityId}`:'');
+    if(permanent){
+      const marker={ignoredAt,sourceAppId,aggregateId,sourceRecordId,entityId,txId:tx.id||'',reason:'user_deleted_in_borion'};
+      [aggregateId,sourceRecordId,entityId].filter(Boolean).forEach(key=>{ignored[key]=clone(marker);});
+      state.records[aggregateId]={status:'ignored',txId:'',entityId,sourceRecordId,ignoredAt,reason:'user_deleted_in_borion'};
+      if(sourceAppId==='marco-iris'&&entityId){
+        const mitState=ensureMitState(data),bucket=tx.integrationExpenseId?'expenses':'receipts';
+        mitState[bucket][entityId]=Object.assign({},mitState[bucket][entityId]||{},{borionId:'',previousBorionId:tx.id||'',aggregateId,status:'ignored',ignoredAt});
+      }
     }else{
-      delete ignored[aggregateId];
+      [aggregateId,sourceRecordId,entityId].filter(Boolean).forEach(key=>delete ignored[key]);
       delete state.records[aggregateId];
+      if(sourceAppId==='marco-iris'&&entityId){const mitState=ensureMitState(data),bucket=tx.integrationExpenseId?'expenses':'receipts';delete mitState[bucket][entityId];}
     }
-    const interop = ensureInterop(data);
-    interop.pending = (interop.pending || []).filter(item => !(item.sourceAppId === sourceAppId && item.aggregateId === aggregateId));
-    interop.audit.unshift({
-      id:'interop-delete-' + Date.now(), at:nowIso(), sourceAppId, aggregateId,
-      action:mode === 'permanent' ? 'delete-and-ignore' : 'delete-and-reimport'
-    });
-    interop.audit = interop.audit.slice(0, 300);
+    const interop=ensureInterop(data);
+    const keySet=new Set([aggregateId,sourceRecordId,entityId].filter(Boolean));
+    interop.pending=(interop.pending||[]).filter(item=>!(item.sourceAppId===sourceAppId&&[item.aggregateId,item.sourceRecordId,item.entityId].map(String).some(key=>keySet.has(key))));
+    interop.audit.unshift({id:'interop-delete-'+Date.now(),at:ignoredAt,sourceAppId,aggregateId,sourceRecordId,entityId,action:permanent?'delete-and-ignore':'delete-and-reimport'});
+    interop.audit=interop.audit.slice(0,300);
     return true;
   }
 
@@ -2349,7 +2390,7 @@
     const root = document.getElementById('modal-root');
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
-    overlay.innerHTML = `<div class="modal-box interop-delete-modal"><div class="modal-head"><h2>Excluir lançamento importado</h2><button data-close>&times;</button></div><p class="modal-sub">Este lançamento veio de <b>${escHtml(sourceName(tx.integrationSourceAppId))}</b>. Escolha o que deve acontecer na próxima sincronização.</p><button class="interop-delete-choice" data-choice="reimport"><strong>Excluir e permitir importar novamente</strong><span>Remove o lançamento e libera o ID. Se ele ainda existir na origem, voltará na próxima sincronização.</span></button><button class="interop-delete-choice danger" data-choice="permanent"><strong>Excluir e ignorar permanentemente</strong><span>Remove o lançamento e grava o ID na lista de ignorados. Ele não voltará.</span></button><button class="btn-outline btn-block" data-close>Cancelar</button></div>`;
+    overlay.innerHTML = `<div class="modal-box interop-delete-modal"><div class="modal-head"><h2>Excluir lançamento importado</h2><button data-close>&times;</button></div><p class="modal-sub">Este lançamento veio de <b>${escHtml(sourceName(tx.integrationSourceAppId))}</b>. Ao excluir, o Borion gravará uma marca permanente para impedir que o mesmo lançamento volte na próxima sincronização.</p><button class="interop-delete-choice danger" data-choice="permanent"><strong>Excluir definitivamente</strong><span>Remove o lançamento, estorna o efeito financeiro e impede a reimportação deste mesmo ID.</span></button><button class="btn-outline btn-block" data-close>Cancelar</button></div>`;
     root.replaceChildren(overlay);
     if(typeof attachModalGuard==='function') attachModalGuard(overlay);
     overlay.querySelectorAll('[data-close]').forEach(btn => btn.onclick = () => { closeModal(); });
@@ -2384,7 +2425,7 @@
     return targets.length > 0;
   }
 
-  // V6.45.3 — quando o perfil está em modo "perguntar sempre", a sincronização
+  // V6.45.4 — quando o perfil está em modo "perguntar sempre", a sincronização
   // automática nunca aplica os lançamentos: faz um cálculo "a seco" (clonando os
   // dados, sem gravar nada) usando a MESMA reconciliação de uma sincronização
   // real, só para descobrir quantos lançamentos novos existem dentro do corte.
@@ -2441,7 +2482,7 @@
     spec:SPEC, sources:SOURCES, sourceName,
     renderSettings, setSettingsSource, setSettingsTab, setDeletionPolicy, openMappingHelp,
     setupDialog, configure, inspectSource, saveMappings, saveMitSettings, saveMitExpenseSettings, setMitDestination, markMitFormDirty, openMitExpenseImport,
-    syncSource, syncAll, disconnect, confirmInstanceReconnect,
+    syncSource, syncAll, disconnect, confirmInstanceReconnect,persistCriticalChange,
     setImportCutoff, setImportCutoffNow, clearImportCutoff,
     setImportApprovalMode, maybePromptImportMode,
     markImportedDeletion, openImportedDeleteDialog,
@@ -2449,7 +2490,7 @@
     start,
     __test:{
       hash, stableStringify, ensureInterop, validateSnapshot,
-      discoverSnapshot, mappedRecord, reconcileSnapshot, reconcileMitSnapshot, makeMitIncomeTransaction, mitMethodKey, normalizeMitRevenueRules, validateMitRevenueRules, resolveMitEntryMethod, mitOriginalInstallments, mitRuleTarget, sourceLabel, friendlyFieldName, friendlySourceValue, normalizeTarget, resolveFinancialTarget,
+      discoverSnapshot, mappedRecord, reconcileSnapshot, reconcileMitSnapshot,markImportedDeletion,findIgnoredMitRecord,ignoredKeysForMit, makeMitIncomeTransaction, mitMethodKey, normalizeMitRevenueRules, validateMitRevenueRules, resolveMitEntryMethod, mitOriginalInstallments, mitRuleTarget, sourceLabel, friendlyFieldName, friendlySourceValue, normalizeTarget, resolveFinancialTarget,
       txDelta, adjust, applyReserveLink, paymentForm, targetAccountId, makeTransaction,
       markImportedDeletion, editableSnapshotHash, reverseImportedTransaction,
       beforeImportCutoff, checkAskModeSource, applyConfirmedInstanceRebind,

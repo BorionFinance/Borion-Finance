@@ -7,8 +7,8 @@ const root=path.resolve(__dirname,'..');
 function read(p){ return fs.readFileSync(path.join(root,p),'utf8'); }
 function assert(cond,msg){ if(!cond) throw new Error('FALHOU: '+msg); }
 
-const NEW_VERSION='6.44.5';
-const OLD_VERSION='6.38.4';
+const NEW_VERSION='6.44.6';
+const OLD_VERSION='6.44.5';
 
 (function noStaleVersionReferences(){
   const filesToCheck=['index.html','sw.js','manifest.json','js/02-backup-local.js','js/13-settings.js','js/14-events-boot-pwa.js'];
@@ -28,11 +28,11 @@ const OLD_VERSION='6.38.4';
 
   assert(indexHtml.includes('?v='+NEW_VERSION), 'index.html deve referenciar a nova versão nos scripts/estilos');
   assert(swJs.includes('?v='+NEW_VERSION), 'sw.js deve referenciar a nova versão nos assets');
-  assert(swJs.includes('6-44-5'), 'sw.js deve ter um CACHE_NAME novo (nome de cache muda a cada versão — item 26)');
+  assert(swJs.includes('6-44-6'), 'sw.js deve ter um CACHE_NAME novo (nome de cache muda a cada versão — item 26)');
   assert(manifestJson.version===NEW_VERSION, 'manifest.json "version" deve ser '+NEW_VERSION);
   assert(backupLocal.includes("BORION_APP_VERSION = '"+NEW_VERSION+"'"), 'BORION_APP_VERSION deve ser '+NEW_VERSION);
   assert(settings.includes('6.44'), 'tela de Configurações deve exibir a versão 6.44 visível ao usuário');
-  console.log('OK: versão '+NEW_VERSION+' ("6.44.5 — Integração Marco Iris Simplificada") está presente em todos os locais esperados.');
+  console.log('OK: versão '+NEW_VERSION+' ("6.44.6 — Despesas Automáticas do Marco Iris") está presente em todos os locais esperados.');
 })();
 
 (function newModulesAreRegisteredEverywhere(){

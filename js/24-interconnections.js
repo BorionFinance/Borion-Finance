@@ -9,7 +9,7 @@
      ======================================================================== */
   const SPEC = Object.freeze({
     schemaVersion: 1,
-    bridgeVersion: '2.2.0',
+    bridgeVersion: '2.3.0',
     mappingVersion: 3,
     folderName: 'Borion_Integracoes'
   });
@@ -226,6 +226,88 @@
     });
     return base;
   }
+  /* V6.44.6 — DESPESAS AUTOMÁTICAS DO MARCO IRIS
+     Mesmo espírito das receitas: a pessoa escolhe uma vez para onde cada origem de
+     pagamento vai (Carteira/Pix/Débito/Reserva) e, depois de salvo, a despesa entra
+     sozinha no ciclo de sincronização — sem abrir um formulário por lançamento.
+     Crédito continua pedindo revisão manual porque a fatura do cartão depende de
+     dados carregados apenas quando aquele perfil está aberto na tela; aplicar isso
+     em segundo plano arriscaria mexer no cartão errado enquanto outro perfil está
+     aberto no momento da sincronização automática. */
+  const MIT_EXPENSE_METHODS = Object.freeze([
+    {key:'carteira', label:'Carteira', fixedDestination:'wallet'},
+    {key:'pix', label:'Pix'},
+    {key:'debito', label:'Débito'},
+    {key:'credito', label:'Crédito', fixedDestination:'card'},
+    {key:'reserva', label:'Reserva', fixedDestination:'reserve'}
+  ]);
+  function mitExpenseMethodDefinition(key){ return MIT_EXPENSE_METHODS.find(method=>method.key===key)||MIT_EXPENSE_METHODS[0]; }
+  function mitExpenseMethodKey(record){
+    const origin=normalize(record?.paymentOrigin);
+    if(origin.includes('carteira')) return 'carteira';
+    if(origin.includes('pix')) return 'pix';
+    if(origin.includes('debit')) return 'debito';
+    if(origin.includes('credit')) return 'credito';
+    if(origin.includes('reserv')) return 'reserva';
+    // Compatibilidade com registros antigos que ainda não enviavam paymentOrigin:
+    // tenta inferir a partir da forma de pagamento recebida.
+    const method=normalize(record?.paymentMethod);
+    if(method.includes('dinheiro')) return 'carteira';
+    if(method.includes('debit')) return 'debito';
+    if(method.includes('credit')) return 'credito';
+    if(method.includes('reserv')) return 'reserva';
+    return 'pix';
+  }
+  function defaultMitExpenseRules(config={}){
+    return Object.fromEntries(MIT_EXPENSE_METHODS.map(method=>{
+      const wallet=method.fixedDestination==='wallet',card=method.fixedDestination==='card',reserve=method.fixedDestination==='reserve';
+      const accountId=wallet?CARTEIRA_CONTA_ID:(card||reserve?null:(String(config.accountId||'')||null));
+      return [method.key,{
+        key:method.key,label:method.label,category:'Compras Marco Iris',
+        destinationKind:wallet?'wallet':(card?'card':(reserve?'reserve':'account')),
+        accountId,cardId:null,reserveId:null
+      }];
+    }));
+  }
+  function normalizeMitExpenseRules(input,config={}){
+    const base=defaultMitExpenseRules(config),value=input&&typeof input==='object'?input:{};
+    Object.keys(base).forEach(key=>{
+      const method=mitExpenseMethodDefinition(key),current=value[key]&&typeof value[key]==='object'?value[key]:{};
+      base[key]={
+        key,label:method.label,category:String(current.category||base[key].category||'').trim()||'Compras Marco Iris',
+        destinationKind:base[key].destinationKind,
+        accountId:method.fixedDestination==='wallet'?CARTEIRA_CONTA_ID:(current.accountId!=null?(String(current.accountId)||null):base[key].accountId),
+        cardId:current.cardId!=null?(String(current.cardId)||null):base[key].cardId,
+        reserveId:current.reserveId!=null?(String(current.reserveId)||null):base[key].reserveId
+      };
+    });
+    return base;
+  }
+  function validateMitExpenseRules(data,config,rulesInput=config?.mitExpenseRules){
+    const rules=normalizeMitExpenseRules(rulesInput,config||{});
+    for(const method of MIT_EXPENSE_METHODS){
+      if(method.fixedDestination==='card') continue; // Crédito nunca é aplicado sozinho — ver commitMitExpenseAuto.
+      const rule=rules[method.key],label=method.label;
+      if(!String(rule.category||'').trim()) throw new Error(`Escolha uma categoria para despesas via ${label}.`);
+      if(method.fixedDestination==='wallet'){
+        const wallet=accountByIdIn(data,CARTEIRA_CONTA_ID);
+        if(!mitAccountActive(wallet)) throw new Error('A Carteira não está disponível no perfil de destino.');
+        rule.accountId=CARTEIRA_CONTA_ID;rule.cardId=null;rule.reserveId=null;
+      }else if(method.fixedDestination==='reserve'){
+        if(!mitReservesEnabled(data)) throw new Error(`Ative o módulo de Reservas antes de usar despesas via ${label}.`);
+        const reserve=reserveByIdIn(data,rule.reserveId);
+        if(!mitReserveActive(reserve)) throw new Error(`Escolha a reserva usada para despesas via ${label}.`);
+        const account=mitReserveLinkedAccount(data,reserve);
+        if(!account) throw new Error(`A reserva escolhida para despesas via ${label} não possui uma conta vinculada válida.`);
+        rule.reserveId=String(reserve.id);rule.accountId=null;rule.cardId=null;
+      }else{
+        const account=accountByIdIn(data,rule.accountId);
+        if(!mitAccountActive(account)||mitWalletAccount(account)) throw new Error(`Escolha a conta usada para despesas via ${label}.`);
+        rule.accountId=String(account.id);rule.cardId=null;rule.reserveId=null;
+      }
+    }
+    return rules;
+  }
   function mitOriginalInstallments(record,key=mitMethodKey(record)){
     const direct=Number(record?.installments);
     if(Number.isFinite(direct)&&direct>0) return Math.max(1,Math.min(12,Math.trunc(direct)));
@@ -375,7 +457,11 @@
     config.discovered = normalizeDiscovered(config.discovered);
     config.mappingReady = config.mappingReady === true;
     config.importMode = 'smart-native';
-    if(config.sourceAppId === 'marco-iris') config.mitRevenueRules = normalizeMitRevenueRules(config.mitRevenueRules,config);
+    if(config.sourceAppId === 'marco-iris'){
+      config.mitRevenueRules = normalizeMitRevenueRules(config.mitRevenueRules,config);
+      config.mitExpenseRules = normalizeMitExpenseRules(config.mitExpenseRules,config);
+      config.mitExpenseMappingReady = config.mitExpenseMappingReady === true;
+    }
     // V6.34 — padrão é excluir automaticamente aqui quando o registro some na
     // origem; só fica "preserve" se o usuário desligar explicitamente no toggle.
     config.deletionPolicy = config.deletionPolicy === 'preserve' ? 'preserve' : 'delete';
@@ -647,6 +733,37 @@
     const delta = txDelta(tx);
     return delta ? adjust(data, tx.accountId, delta) : true;
   }
+  /* V6.44.6 — Equivalente a payFixaOcorrencia, mas só toca no parâmetro `data`.
+     payFixaOcorrencia (07-budget.js) lê e grava em S.data/S.reservas — funciona no
+     modal de revisão manual porque ali data===S.data sempre (perfil aberto é travado
+     antes de abrir o modal). Mas a sincronização automática roda sobre um clone
+     (draftData) que pode nem ser o perfil aberto no momento; usar payFixaOcorrencia
+     ali aplicaria o pagamento no perfil errado. Esta versão nunca lê/grava S.*. */
+  function applyMitFixedExpensePayment(data, fixed, mesKey){
+    data.fixaPagamentos = Array.isArray(data.fixaPagamentos) ? data.fixaPagamentos : [];
+    const existing = data.fixaPagamentos.find(rec => rec && rec.fixaId === fixed.id && rec.mesKey === mesKey);
+    if(existing && existing.pago) return true;
+    const valor = Number(fixed.valor) || 0;
+    if((fixed.origemPagamento||'conta') === 'reserva'){
+      const box = reserveByIdIn(data, fixed.reservaOrigemId);
+      if(!box || (Number(box.valorAtual)||0) < valor - 1e-9) return false;
+      data.reservas ||= {boxes:[],moves:[]};
+      data.reservas.moves = Array.isArray(data.reservas.moves) ? data.reservas.moves : [];
+      const move = {id:'bridge-fixa-'+hash(fixed.id+mesKey),boxId:box.id,tipo:'Pagamento de despesa fixa',data:todayISO(),valor,banco:box.banco||'',descricao:'Pagamento de despesa fixa integrada: '+(fixed.nome||'Sem nome'),despesaFixaId:fixed.id,fixaOcorrenciaId:null,createdAt:Date.now()};
+      data.reservas.moves.push(move);
+      box.valorAtual = Math.round(((Number(box.valorAtual)||0) - valor) * 100) / 100;
+      const rec = existing || {id:uid(), fixaId:fixed.id, mesKey};
+      Object.assign(rec, {pago:true, origemPagamento:'reserva', reservaId:box.id, reservaMoveId:move.id, valorPago:valor, banco:box.banco||'', pagoEm:Date.now()});
+      move.fixaOcorrenciaId = rec.id;
+      if(!existing) data.fixaPagamentos.push(rec);
+      return true;
+    }
+    if(!adjust(data, fixed.accountId, -valor)) return false;
+    const rec = existing || {id:uid(), fixaId:fixed.id, mesKey};
+    Object.assign(rec, {pago:true, origemPagamento:'conta', reservaId:null, reservaMoveId:null, valorPago:valor, accountId:fixed.accountId||null, banco:accountName(data,fixed.accountId), pagoEm:Date.now()});
+    if(!existing) data.fixaPagamentos.push(rec);
+    return true;
+  }
   /* V6.34 — EXCLUSÃO SINCRONIZADA COM TRAVA DE SEGURANÇA
      Assinatura dos campos que o usuário pode editar livremente no Borion depois
      que o lançamento vira nativo. Guardada no momento da criação e recalculada
@@ -826,6 +943,64 @@
     tx.integrationDestinationKind=rule.destinationKind;
     return tx;
   }
+  function mitExpenseAutoMeta(record){
+    return {
+      integrationImported:true,integrationManaged:false,integrationImportMode:'native-automatic',
+      integrationAggregateId:record.aggregateId,integrationSourceAppId:'marco-iris',integrationEntityId:record.entityId,
+      integrationExpenseId:record.entityId,integrationImportedAt:nowIso(),integrationExternalReference:record.externalReference||'',
+      integrationOriginalStatus:record.status||'',integrationOriginalPaymentMethod:record.paymentMethod||'',
+      integrationOriginalSourceValues:clone(sourceBag(record)),integrationMappingVersion:SPEC.mappingVersion
+    };
+  }
+  /* V6.44.6 — Cria a despesa sozinha, sem passar pela revisão manual. Só cobre
+     Carteira/Pix/Débito/Reserva: Crédito sempre lança um erro aqui de propósito
+     (ver comentário de MIT_EXPENSE_METHODS) e cai na fila "Aguardando Revisão". */
+  function commitMitExpenseAuto(data,config,record){
+    const key=mitExpenseMethodKey(record),rules=validateMitExpenseRules(data,config,config.mitExpenseRules),rule=rules[key];
+    if(!rule) throw new Error('A origem de pagamento da despesa do Marco Iris não é suportada.');
+    if(rule.destinationKind==='card') throw new Error('Despesas no Crédito pedem revisão manual no Borion (fatura do cartão).');
+    const type=normalize(record.expenseType)==='fixa'?'fixa':'variavel';
+    const name=String(record.name||record.description||'Despesa do Marco Iris').trim();
+    const localPurchase=String(record.localPurchase||'').trim();
+    const category=ensureMitExpenseCategory(data,type,String(record.category||rule.category||'Outro').trim()||rule.category);
+    const value=Math.round((Number(record.amount)||0)*100)/100;
+    if(value<=0) throw new Error('Valor inválido para importar automaticamente.');
+    const date=record.date||record.dueDate||todayISO();
+    const status=mitRecordPaid(record)?'Pago':'Em aberto';
+    const meta=mitExpenseAutoMeta(record);
+    let accountId=null,banco='',origemPagamento='conta',formaPagamento=null,reserve=null;
+    if(rule.destinationKind==='wallet'){
+      accountId=CARTEIRA_CONTA_ID;
+      if(!accountByIdIn(data,accountId)) throw new Error('A Carteira não está disponível.');
+      banco=accountName(data,accountId);formaPagamento='Dinheiro';
+    }else if(rule.destinationKind==='reserve'){
+      reserve=reserveByIdIn(data,rule.reserveId);
+      if(!reserve) throw new Error('A reserva configurada não está mais disponível.');
+      origemPagamento='reserva';banco=reserve.banco||'';
+    }else{
+      accountId=rule.accountId;
+      if(!accountByIdIn(data,accountId)) throw new Error('A conta configurada não está mais disponível.');
+      banco=accountName(data,accountId);formaPagamento=key==='debito'?'Débito':'Pix';
+    }
+    let borionId='';
+    if(type==='fixa'){
+      const fixed=Object.assign({id:uid(),nome:name,localCompra:localPurchase,category,categoria:category,valor:value,dia:Math.max(1,Number(String(date).slice(8,10))||1),dataCadastro:date,startMonth:String(date).slice(0,7),endMonth:null,accountId:origemPagamento==='conta'?accountId:null,banco,formaPagamento:origemPagamento==='conta'?formaPagamento:null,origemPagamento,reservaOrigemId:reserve?.id||null},meta);
+      data.fixas=Array.isArray(data.fixas)?data.fixas:[];data.fixaPagamentos=Array.isArray(data.fixaPagamentos)?data.fixaPagamentos:[];
+      data.fixas.push(fixed);borionId=fixed.id;
+      if(status==='Pago'&&!applyMitFixedExpensePayment(data,fixed,fixed.startMonth)){
+        data.fixas=data.fixas.filter(f=>f.id!==fixed.id);
+        throw new Error('Não foi possível aplicar o pagamento da despesa fixa (saldo insuficiente ou destino inválido).');
+      }
+    }else{
+      const tx=Object.assign({id:uid(),tipo:'variavel',nome:name,localCompra:localPurchase,categoria:category,valor:value,data:date,statusPagamento:status,accountId:origemPagamento==='conta'?accountId:null,banco,origemPagamento,formaPagamento:origemPagamento==='conta'?formaPagamento:null,reservaOrigemId:reserve?.id||null,reservaOrigemMoveId:null},meta);
+      data.transacoes=Array.isArray(data.transacoes)?data.transacoes:[];data.transacoes.push(tx);borionId=tx.id;
+      if(status==='Pago'&&!applyNew(data,tx)){
+        data.transacoes=data.transacoes.filter(item=>item.id!==tx.id);
+        throw new Error('Não foi possível aplicar o saldo da despesa (saldo de reserva insuficiente ou destino inválido).');
+      }
+    }
+    return borionId;
+  }
   function reconcileMitSnapshotMutable(data,config,snapshot,{mode='manual'}={}){
     validateSnapshot(snapshot,config.sourceAppId);
     ensureSourceConfig(config);
@@ -865,6 +1040,20 @@
           state.records[aggregateId]={status:'ignored',entityId,reason:'before_cutoff',updatedAt:record.sourceUpdatedAt||''};
           results.push({aggregateId,entityId,status:'ignored_before_cutoff',borionTransactionId:'',message:'Fora do período configurado para importação.'});
           return;
+        }
+        if(config.mitExpenseMappingReady){
+          try{
+            const borionId=commitMitExpenseAuto(data,config,record);
+            pendingById.delete(entityId);
+            const importedAt=nowIso();
+            mitState.expenses[entityId]={borionId,aggregateId,importedAt};
+            state.records[aggregateId]={status:'imported',txId:borionId,entityId,importedAt};
+            results.push({aggregateId,entityId,status:'expense_created',borionTransactionId:borionId,message:'Despesa recebida e importada automaticamente.'});
+            return;
+          }catch(autoError){
+            // Não coube na automação (Crédito, destino removido, saldo insuficiente etc.)
+            // — cai na fila de revisão manual abaixo em vez de perder o registro.
+          }
         }
         const pending={
           sourceAppId:'marco-iris',aggregateId,entityId,
@@ -918,7 +1107,8 @@
     state.lastSyncAt=nowIso();state.lastError='';
     config.lastSyncAt=state.lastSyncAt;config.lastRevision=state.lastRevision;config.lastContentHash=state.lastContentHash;config.lastError='';
     config.lastResult={
-      processed:results.length,created:results.filter(x=>x.status==='created').length,createdReceipts:results.filter(x=>x.status==='created').length,deleted:0,
+      processed:results.length,created:results.filter(x=>x.status==='created').length,createdReceipts:results.filter(x=>x.status==='created').length,
+      createdExpenses:results.filter(x=>x.status==='expense_created').length,deleted:0,
       waiting:results.filter(x=>x.status==='waiting_receipt').length,waitingReceipts:results.filter(x=>x.status==='waiting_receipt').length,
       pendingExpenses:pendingById.size,unchanged:results.filter(x=>x.status==='unchanged').length,
       ignored:results.filter(x=>x.status==='ignored_before_cutoff').length,ignoredBeforeCutoff:results.filter(x=>x.status==='ignored_before_cutoff').length,
@@ -1183,7 +1373,8 @@
       }
       if(!silent&&typeof toast==='function'){
         const summary=result.summary||{};
-        toast(`${sourceName(sourceAppId)}: ${Number(summary.created||0)} receita(s) nova(s), ${Number(summary.unchanged||0)} já processada(s), ${Number((summary.pendingExpenses??summary.waiting)||0)} despesa(s) em revisão.`);
+        const expenseCreatedText=summary.createdExpenses?`, ${Number(summary.createdExpenses)} despesa(s) nova(s)`:'';
+        toast(`${sourceName(sourceAppId)}: ${Number(summary.created||0)} receita(s) nova(s)${expenseCreatedText}, ${Number(summary.unchanged||0)} já processada(s), ${Number((summary.pendingExpenses??summary.waiting)||0)} despesa(s) em revisão.`);
       }
       return result;
     }catch(error){
@@ -1220,8 +1411,18 @@
       await GoogleDriveAuth.ensureFreshToken();
       const selected = await openDriveFolderPicker();
       folderId = selected.id;
-      const file = await GoogleDriveFS.findChild(folderId, SOURCES[sourceAppId].snapshotFile, 'application/json');
-      if(!file) throw new Error(`A pasta escolhida não contém ${SOURCES[sourceAppId].snapshotFile}.`);
+      let file = await GoogleDriveFS.findChild(folderId, SOURCES[sourceAppId].snapshotFile, 'application/json');
+      if(!file){
+        // A pessoa pode ter escolhido a pasta principal do aplicativo de origem em vez
+        // da subpasta Borion_Integracoes que fica dentro dela — desce um nível antes de
+        // desistir, igual já acontecia na conexão por pasta local (V6.44.5).
+        const subfolder = await GoogleDriveFS.findChild(folderId, SPEC.folderName, 'application/vnd.google-apps.folder');
+        if(subfolder){
+          const nestedFile = await GoogleDriveFS.findChild(subfolder.id, SOURCES[sourceAppId].snapshotFile, 'application/json');
+          if(nestedFile){ folderId = subfolder.id; file = nestedFile; }
+        }
+      }
+      if(!file) throw new Error(`A pasta escolhida não contém ${SOURCES[sourceAppId].snapshotFile}. Selecione a pasta “${SPEC.folderName}” criada pelo ${sourceName(sourceAppId)} (ou a pasta que contém essa subpasta).`);
     }else throw new Error('Meio de sincronização inválido.');
 
     // Uma origem só pode apontar para um perfil por vez. Ao trocar o destino,
@@ -1446,11 +1647,17 @@
       steps:['Escolha a categoria do Borion para cada forma recebida.','Dinheiro entra obrigatoriamente na Carteira.','Para Pix, Débito e Crédito, escolha a conta ou reserva de destino.','Salve a configuração. Os próximos recebimentos serão importados automaticamente e sem duplicidade.'],
       example:['Pix → Serviços Marco Iris → Conta · Nubank','Dinheiro → Serviços Marco Iris → Carteira']
     },
+    mitExpenseRules:{
+      title:'Despesas automáticas do Marco Iris',
+      summary:'Escolha, uma única vez, para onde vai cada origem de pagamento das despesas. Depois de salvar, despesas via Carteira, Pix, Débito e Reserva entram sozinhas no Borion Finance a cada sincronização.',
+      steps:['No Marco Iris, ao lançar uma despesa, escolha de onde o dinheiro saiu: Carteira, Pix, Débito, Crédito ou Reserva.','Aqui no Borion, escolha a categoria e o destino (conta ou reserva) de cada uma dessas origens.','Crédito não tem configuração aqui — despesas nesse meio sempre aparecem em “Aguardando Revisão”, porque a fatura do cartão depende do perfil estar aberto na tela.','Salve a configuração. As próximas despesas com essas origens são importadas automaticamente e sem duplicidade.'],
+      example:['Pix → Compras Marco Iris → Conta · Nubank','Carteira → Compras Marco Iris → Carteira (Dinheiro)']
+    },
     mitExpenses:{
       title:'Despesas aguardando revisão',
-      summary:'Despesas do Marco Iris nunca entram automaticamente. Elas ficam nesta lista até você revisar e confirmar.',
+      summary:'Despesas no Crédito, e despesas de origens ainda não configuradas em “Como as despesas serão registradas”, ficam nesta lista até você revisar e confirmar.',
       steps:['Clique em Revisar na despesa desejada.','Confira nome, local da compra, categoria, valor e data.','Escolha se é despesa variável ou fixa, de onde será paga e o status.','Clique em Importar. Somente então a despesa será criada no Borion Finance.'],
-      example:['Peça comprada → Despesa variável → Categoria “Manutenção” → Conta · Nubank']
+      example:['Peça comprada no Crédito → Despesa variável → Categoria “Manutenção” → Cartão · Nubank']
     }
   });
   function interopSectionHeading(title, helpTopic, helpLabel=title){
@@ -1486,7 +1693,7 @@
       else if(c.lastError){statusLabel='Erro na última sincronização';statusClass='danger';}
       else if(!c.mappingReady||!mitAccountActive(defaultAccount)){statusLabel='Configuração pendente';statusClass='warn';}
       const processed=Number(r.processed??(Number(r.created||0)+Number(r.unchanged||0)+Number(r.waiting||0)+Number(r.ignored||0)));
-      return `<div class="interop-pane"><div class="interop-status-grid mit-connection-status"><div><span>Perfil de destino</span><strong>${escHtml(row.profile.name)}</strong></div><div><span>Conta padrão</span><strong>${escHtml(accountName(row.data,c.accountId)||'Não definida')}</strong></div><div><span>Meio</span><strong>${c.transport==='drive'?'Google Drive':'Pasta local'}</strong></div><div><span>Última sincronização</span><strong>${escHtml(dateText(c.lastSyncAt))}</strong></div><div><span>Quantidade de registros processados</span><strong>${processed}</strong></div><div><span>Status da automação</span><strong><span class="pill ${statusClass}">${statusLabel}</span></strong></div></div><div class="gold-box interop-sync-box"><b>Resumo da última sincronização</b><br><span>${Number(r.created||0)} receita(s) nova(s) · ${Number(r.unchanged||0)} já processado(s) · ${Number(r.pendingExpenses??pending)} despesa(s) aguardando revisão · ${Number((r.ignoredBeforeCutoff??r.ignored)||0)} ignorado(s) pelo corte · ${Number(r.errors||0)} erro(s)</span>${c.lastError?`<br><b>Erro:</b> ${escHtml(c.lastError)}`:''}</div><div class="info-box"><b>Regra ativa:</b> cada pagamento Pago com Data de Pagamento entra individualmente; a OSV não precisa estar totalmente quitada. Despesas nunca entram sem revisão.</div><div class="interop-actions"><button class="btn btn-primary btn-sm" onclick="BorionInterop.syncSource('marco-iris',{button:this})" ${c.mappingReady?'':'disabled title="Configure as receitas primeiro"'}>Sincronizar agora</button><button class="btn-outline btn-sm" onclick="BorionInterop.setupDialog('marco-iris','${c.transport}')">Reconfigurar conexão</button><button class="btn-outline btn-sm" onclick="BorionInterop.disconnect('marco-iris')">Desconectar</button></div>${!c.mappingReady?'<div class="interop-next-step"><b>Próximo passo:</b> abra a aba <b>Configurar receitas e revisar despesas</b>, escolha as categorias e os destinos financeiros e clique em <b>Salvar opções</b>.</div>':''}</div>`;
+      return `<div class="interop-pane"><div class="interop-status-grid mit-connection-status"><div><span>Perfil de destino</span><strong>${escHtml(row.profile.name)}</strong></div><div><span>Conta padrão</span><strong>${escHtml(accountName(row.data,c.accountId)||'Não definida')}</strong></div><div><span>Meio</span><strong>${c.transport==='drive'?'Google Drive':'Pasta local'}</strong></div><div><span>Última sincronização</span><strong>${escHtml(dateText(c.lastSyncAt))}</strong></div><div><span>Quantidade de registros processados</span><strong>${processed}</strong></div><div><span>Status da automação</span><strong><span class="pill ${statusClass}">${statusLabel}</span></strong></div></div><div class="gold-box interop-sync-box"><b>Resumo da última sincronização</b><br><span>${Number(r.created||0)} receita(s) nova(s) · ${Number(r.createdExpenses||0)} despesa(s) nova(s) · ${Number(r.unchanged||0)} já processado(s) · ${Number(r.pendingExpenses??pending)} despesa(s) aguardando revisão · ${Number((r.ignoredBeforeCutoff??r.ignored)||0)} ignorado(s) pelo corte · ${Number(r.errors||0)} erro(s)</span>${c.lastError?`<br><b>Erro:</b> ${escHtml(c.lastError)}`:''}</div><div class="info-box"><b>Regra ativa:</b> cada pagamento Pago com Data de Pagamento entra individualmente; a OSV não precisa estar totalmente quitada. Despesas via Carteira, Pix, Débito e Reserva entram sozinhas quando configuradas em "Como as despesas serão registradas"; despesas no Crédito sempre pedem revisão rápida.</div><div class="interop-actions"><button class="btn btn-primary btn-sm" onclick="BorionInterop.syncSource('marco-iris',{button:this})" ${c.mappingReady?'':'disabled title="Configure as receitas primeiro"'}>Sincronizar agora</button><button class="btn-outline btn-sm" onclick="BorionInterop.setupDialog('marco-iris','${c.transport}')">Reconfigurar conexão</button><button class="btn-outline btn-sm" onclick="BorionInterop.disconnect('marco-iris')">Desconectar</button></div>${!c.mappingReady?'<div class="interop-next-step"><b>Próximo passo:</b> abra a aba <b>Configurar receitas e revisar despesas</b>, escolha as categorias e os destinos financeiros e clique em <b>Salvar opções</b>.</div>':''}</div>`;
     }
     const r = c.lastResult || {};
     const mappingLabel = c.mappingReady ? '<span class="pill ok">Vínculos configurados</span>' : '<span class="pill warn">Vínculos pendentes</span>';
@@ -1555,9 +1762,14 @@
     markMitFormDirty();
     return true;
   }
+  function mitExpenseCategoryOptions(data){
+    const categories=[...(data.categorias?.variavel||[]),...(data.categorias?.fixa||[])].filter((value,index,list)=>list.indexOf(value)===index);
+    return categories.map(category=>`<option value="${escHtml(category)}"></option>`).join('');
+  }
   function renderMitLinksTab(row){
     if(!row) return `<div class="interop-pane"><div class="interop-empty"><h4>Conecte o Marco Iris Tecnologia primeiro</h4><button class="btn btn-primary btn-sm" onclick="BorionInterop.setSettingsTab('connection')">Ir para Conexão</button></div></div>`;
     const rules=normalizeMitRevenueRules(row.config.mitRevenueRules,row.config);
+    const expenseRules=normalizeMitExpenseRules(row.config.mitExpenseRules,row.config);
     const pending=(ensureInterop(row.data).pending||[]).filter(item=>item.sourceAppId==='marco-iris');
     const reservesEnabled=mitReservesEnabled(row.data);
     const validReserves=(row.data.reservas?.boxes||[]).filter(reserve=>mitReserveActive(reserve)&&mitReserveLinkedAccount(row.data,reserve));
@@ -1571,8 +1783,27 @@
         <td class="mit-destination-cell"><div class="segmented-toggle revenue-destination-toggle mit-destination-toggle" role="group" aria-label="Destino do valor de ${escHtml(method.label)}"><button type="button" class="seg-btn ${kind==='wallet'?'active':''}" data-mit-destination-button data-value="wallet" aria-pressed="${kind==='wallet'}" ${fixedWallet?'disabled aria-disabled="true"':''} onclick="BorionInterop.setMitDestination(this,'${escHtml(method.key)}')">Carteira</button><button type="button" class="seg-btn ${kind==='account'?'active':''}" data-mit-destination-button data-value="account" aria-pressed="${kind==='account'}" ${fixedWallet?'disabled aria-disabled="true"':''} onclick="BorionInterop.setMitDestination(this,'${escHtml(method.key)}')">Conta</button><button type="button" class="seg-btn ${kind==='reserve'?'active':''}" data-mit-destination-button data-value="reserve" aria-pressed="${kind==='reserve'}" aria-disabled="${fixedWallet||reserveDisabled}" ${(fixedWallet||reserveDisabled)?'disabled':''} title="${fixedWallet?'Dinheiro entra obrigatoriamente na Carteira':(!reservesEnabled?'Ative o módulo de Reservas':(!validReserves.length?'Crie uma reserva primeiro':''))}" onclick="BorionInterop.setMitDestination(this,'${escHtml(method.key)}')">Reserva</button></div><input type="hidden" data-mit-destination-kind="${escHtml(method.key)}" value="${escHtml(kind)}"><div class="mit-specific-destination"><div class="payment-source-panel ${kind==='account'?'':'hidden'}" data-mit-destination-panel="account"><label for="${accountId}"><small>Conta que receberá</small></label><select id="${accountId}" data-mit-account="${escHtml(method.key)}" aria-label="Conta que receberá ${escHtml(method.label)}" onchange="BorionInterop.markMitFormDirty()">${mitAccountOptions(row.data,rule.accountId)}</select></div><div class="payment-source-panel ${kind==='reserve'?'':'hidden'}" data-mit-destination-panel="reserve"><label for="${reserveId}"><small>Reserva que receberá</small></label><select id="${reserveId}" data-mit-reserve="${escHtml(method.key)}" aria-label="Reserva que receberá ${escHtml(method.label)}" onchange="BorionInterop.markMitFormDirty()">${mitReserveOptions(row.data,rule.reserveId)}</select></div><div class="payment-source-panel mit-wallet-panel ${kind==='wallet'?'':'hidden'}" data-mit-destination-panel="wallet"><strong>Carteira</strong><span>O valor será registrado automaticamente como Dinheiro.</span></div></div>${!fixedWallet&&!reservesEnabled&&kind==='reserve'?'<span class="mit-destination-warning">Reservas estão desativadas. A configuração antiga foi preservada, mas precisa ser corrigida antes de salvar.</span>':''}</td>
       </tr>`;
     }).join('');
+    const expenseRows=MIT_EXPENSE_METHODS.filter(method=>method.fixedDestination!=='card').map(method=>{
+      const rule=expenseRules[method.key],catId=`mit-expcategory-${method.key}`;
+      let destinationCell;
+      if(method.fixedDestination==='wallet'){
+        destinationCell=`<strong>Carteira</strong><small>Sai sempre da Carteira (Dinheiro)</small>`;
+      }else if(method.fixedDestination==='reserve'){
+        const reserveDisabled=!reservesEnabled||!validReserves.length;
+        destinationCell=reserveDisabled
+          ? `<span class="mit-destination-warning">${!reservesEnabled?'Ative o módulo de Reservas primeiro.':'Crie uma reserva primeiro.'}</span>`
+          : `<label class="sr-only" for="mit-expreserve-${method.key}">Reserva usada para despesas via ${escHtml(method.label)}</label><select id="mit-expreserve-${method.key}" data-mit-expense-reserve="${escHtml(method.key)}" onchange="BorionInterop.markMitFormDirty()">${mitReserveOptions(row.data,rule.reserveId)}</select>`;
+      }else{
+        destinationCell=`<label class="sr-only" for="mit-expaccount-${method.key}">Conta usada para despesas via ${escHtml(method.label)}</label><select id="mit-expaccount-${method.key}" data-mit-expense-account="${escHtml(method.key)}" onchange="BorionInterop.markMitFormDirty()">${mitAccountOptions(row.data,rule.accountId)}</select>`;
+      }
+      return `<tr class="mit-rule-table-row mit-expense-rule-row" data-mit-expense-rule="${escHtml(method.key)}">
+        <td class="mit-origin-cell"><strong>${escHtml(method.label)}</strong></td>
+        <td class="mit-category-cell"><label class="sr-only" for="${catId}">Categoria de despesa para ${escHtml(method.label)}</label><input id="${catId}" type="text" list="mit-exp-rule-categories" data-mit-expense-category="${escHtml(method.key)}" value="${escHtml(rule.category)}" oninput="BorionInterop.markMitFormDirty()"></td>
+        <td class="mit-destination-cell">${destinationCell}</td>
+      </tr>`;
+    }).join('');
     const pendingRows=pending.length?pending.map(item=>`<div class="mit-pending-row"><div><strong>${escHtml(item.name||item.description)}</strong><small>${escHtml(item.localPurchase||'Sem local informado')}</small></div><span>${typeof brl==='function'?brl(Number(item.amount)||0):('R$ '+(Number(item.amount)||0).toFixed(2).replace('.',','))}</span><span>${escHtml(item.date||'')}</span><span>Marco Iris</span><span class="pill ${item.status==='Pago'?'ok':'warn'}">${escHtml(item.status||'Em aberto')}</span><button class="btn btn-primary btn-sm" onclick="BorionInterop.openMitExpenseImport('${escHtml(item.aggregateId)}')">Revisar</button></div>`).join(''):'<div class="interop-map-empty">Nenhuma despesa aguardando revisão.</div>';
-    return `<div class="interop-pane mit-integration-pane"><div class="interop-links-intro"><div><h4>Receitas automáticas e despesas revisadas</h4><p>Cada pagamento Pago com Data de Pagamento é importado individualmente. A OSV não precisa estar totalmente quitada. Despesas nunca são importadas sem revisão.</p></div><span class="pill ${row.config.mappingReady?'ok':'warn'}">${row.config.mappingReady?'Configurado':'Configuração necessária'}</span></div><div class="interop-map-legend"><div class="origin"><small>ORIGEM</small><b>Marco Iris Tecnologia</b><span>Forma recebida, parcelas, OSV, cliente e referência original.</span></div><div class="destination"><small>DESTINO</small><b>Borion Finance</b><span>Categoria e destino financeiro. A forma efetiva é calculada automaticamente.</span></div></div>${importCutoffControlHTML('marco-iris',row.config)}<section class="interop-map-section">${interopSectionHeading('Como as receitas serão registradas no Borion','mitReceipts','receitas automáticas do Marco Iris')}<p>Escolha a categoria e o destino financeiro de cada forma recebida. Pix, Débito e Crédito preservam sua natureza; Carteira é sempre registrada como Dinheiro.</p><div class="mit-rules-table-wrap"><table class="mit-rules-table"><thead><tr><th scope="col">Forma recebida do Marco Iris Tec</th><th scope="col">Categoria de receita no Borion</th><th scope="col">Destino do valor</th></tr></thead><tbody>${revenueRows}</tbody></table></div><div class="interop-save-bar"><button class="btn-outline btn-sm" onclick="BorionInterop.inspectSource('marco-iris',{button:this})">Atualizar dados da origem</button><button class="btn btn-primary" onclick="BorionInterop.saveMitSettings({button:this})">Salvar opções</button><button class="btn-outline" onclick="BorionInterop.syncSource('marco-iris',{button:this})" ${row.config.mappingReady?'':'disabled title="Salve as opções antes de sincronizar"'}>Sincronizar agora</button></div></section><section class="interop-map-section"><div class="mit-pending-head"><div>${interopSectionHeading('Aguardando Revisão','mitExpenses','despesas aguardando revisão')}<p>Despesas nunca entram automaticamente. Revise categoria, origem financeira, tipo e status.</p></div><span class="pill ${pending.length?'warn':'ok'}">${pending.length} pendente(s)</span></div><div class="mit-pending-labels"><span>Nome</span><span>Valor</span><span>Data</span><span>Origem</span><span>Status</span><span></span></div><div class="mit-pending-list">${pendingRows}</div></section></div>`;
+    return `<div class="interop-pane mit-integration-pane"><div class="interop-links-intro"><div><h4>Receitas e despesas automáticas</h4><p>Cada pagamento Pago com Data de Pagamento é importado individualmente. A OSV não precisa estar totalmente quitada.</p></div><span class="pill ${row.config.mappingReady?'ok':'warn'}">${row.config.mappingReady?'Receitas configuradas':'Configuração necessária'}</span></div><div class="interop-map-legend"><div class="origin"><small>ORIGEM</small><b>Marco Iris Tecnologia</b><span>Forma recebida, parcelas, OSV, cliente e referência original.</span></div><div class="destination"><small>DESTINO</small><b>Borion Finance</b><span>Categoria e destino financeiro. A forma efetiva é calculada automaticamente.</span></div></div>${importCutoffControlHTML('marco-iris',row.config)}<section class="interop-map-section">${interopSectionHeading('Como as receitas serão registradas no Borion','mitReceipts','receitas automáticas do Marco Iris')}<p>Escolha a categoria e o destino financeiro de cada forma recebida. Pix, Débito e Crédito preservam sua natureza; Carteira é sempre registrada como Dinheiro.</p><div class="mit-rules-table-wrap"><table class="mit-rules-table"><thead><tr><th scope="col">Forma recebida do Marco Iris Tec</th><th scope="col">Categoria de receita no Borion</th><th scope="col">Destino do valor</th></tr></thead><tbody>${revenueRows}</tbody></table></div><div class="interop-save-bar"><button class="btn-outline btn-sm" onclick="BorionInterop.inspectSource('marco-iris',{button:this})">Atualizar dados da origem</button><button class="btn btn-primary" onclick="BorionInterop.saveMitSettings({button:this})">Salvar opções</button><button class="btn-outline" onclick="BorionInterop.syncSource('marco-iris',{button:this})" ${row.config.mappingReady?'':'disabled title="Salve as opções antes de sincronizar"'}>Sincronizar agora</button></div></section><section class="interop-map-section"><div class="mit-pending-head"><div>${interopSectionHeading('Como as despesas serão registradas no Borion','mitExpenseRules','despesas automáticas do Marco Iris')}<p>Escolha, na hora de lançar a despesa no Marco Iris, de onde o dinheiro saiu — Carteira, Pix, Débito ou Reserva entram sozinhas aqui em segundos, na categoria e destino abaixo. Despesas no <b>Crédito</b> sempre aparecem em "Aguardando Revisão", porque a fatura do cartão só pode ser calculada com o perfil aberto na tela.</p></div><span class="pill ${row.config.mitExpenseMappingReady?'ok':'warn'}">${row.config.mitExpenseMappingReady?'Configurado':'Ainda não configurado'}</span></div><datalist id="mit-exp-rule-categories">${mitExpenseCategoryOptions(row.data)}</datalist><div class="mit-rules-table-wrap"><table class="mit-rules-table"><thead><tr><th scope="col">De onde saiu no Marco Iris</th><th scope="col">Categoria de despesa no Borion</th><th scope="col">Destino</th></tr></thead><tbody>${expenseRows}</tbody></table></div><div class="interop-save-bar"><button class="btn btn-primary" onclick="BorionInterop.saveMitExpenseSettings({button:this})">Salvar opções de despesa</button></div></section><section class="interop-map-section"><div class="mit-pending-head"><div>${interopSectionHeading('Aguardando Revisão','mitExpenses','despesas aguardando revisão')}<p>Despesas no Crédito, ou despesas sem a configuração acima ainda salva, ficam aqui até você revisar.</p></div><span class="pill ${pending.length?'warn':'ok'}">${pending.length} pendente(s)</span></div><div class="mit-pending-labels"><span>Nome</span><span>Valor</span><span>Data</span><span>Origem</span><span>Status</span><span></span></div><div class="mit-pending-list">${pendingRows}</div></section></div>`;
   }
   async function saveMitSettings({button=null}={}){
     const row=findSourceConfig('marco-iris');
@@ -1606,6 +1837,39 @@
       row.config.mitRevenueRules=validated;row.config.mappingReady=true;row.config.mappingVersion=SPEC.mappingVersion;row.config.mappingSavedAt=nowIso();
       saveProfileData(row.profile.id,row.data);mitFormDirty=false;
       if(typeof toast==='function') toast('Opções salvas. A configuração permanece no perfil e será sincronizada pelo Google Drive. Nenhuma importação foi executada.');
+      if(typeof renderView==='function') renderView();
+      return true;
+    }finally{setAsyncButtonState(button,false);}
+  }
+  async function saveMitExpenseSettings({button=null}={}){
+    const row=findSourceConfig('marco-iris');
+    if(!row) throw new Error('Integração com o Marco Iris não configurada.');
+    setAsyncButtonState(button,true,'Salvando…');
+    try{
+      const draft=normalizeMitExpenseRules(row.config.mitExpenseRules,row.config);
+      document.querySelectorAll('[data-mit-expense-rule]').forEach(ruleRow=>{
+        const key=ruleRow.dataset.mitExpenseRule,rule=draft[key];if(!rule)return;
+        const categoryInput=ruleRow.querySelector('[data-mit-expense-category]');
+        if(categoryInput) rule.category=String(categoryInput.value||'').trim();
+        const accountInput=ruleRow.querySelector('[data-mit-expense-account]');
+        if(accountInput) rule.accountId=String(accountInput.value||'')||null;
+        const reserveInput=ruleRow.querySelector('[data-mit-expense-reserve]');
+        if(reserveInput) rule.reserveId=String(reserveInput.value||'')||null;
+      });
+      const candidate=Object.assign({},row.config,{mitExpenseRules:draft});
+      let validated;
+      try{validated=validateMitExpenseRules(row.data,candidate,draft);}
+      catch(error){
+        const method=MIT_EXPENSE_METHODS.find(item=>String(error.message||'').includes(item.label));
+        const ruleRow=method?document.querySelector(`[data-mit-expense-rule="${method.key}"]`):null;
+        const selector=String(error.message||'').includes('categoria')?'[data-mit-expense-category]':(String(error.message||'').includes('reserva')?'[data-mit-expense-reserve]':'[data-mit-expense-account]');
+        ruleRow?.querySelector(selector)?.focus?.();
+        if(typeof alert==='function') alert(error.message||String(error));
+        return false;
+      }
+      row.config.mitExpenseRules=validated;row.config.mitExpenseMappingReady=true;
+      saveProfileData(row.profile.id,row.data);mitFormDirty=false;
+      if(typeof toast==='function') toast('Opções de despesa salvas. A partir de agora, despesas via Carteira, Pix, Débito e Reserva entram sozinhas na próxima sincronização.');
       if(typeof renderView==='function') renderView();
       return true;
     }finally{setAsyncButtonState(button,false);}
@@ -1674,7 +1938,7 @@
           if(source==='carteira'){ accountId=CARTEIRA_CONTA_ID; if(!accountByIdIn(data,accountId))throw new Error('A Carteira não está disponível.'); banco=accountName(data,accountId); formaPagamento='Dinheiro'; }
           else if(source==='conta'){ accountId=q('#mit_exp_account').value; if(!accountByIdIn(data,accountId))throw new Error('Escolha uma conta válida.'); banco=accountName(data,accountId); formaPagamento=q('#mit_exp_account_form').value; }
           else { reserve=reserves.find(r=>String(r.id)===String(q('#mit_exp_reserve').value)); if(!reserve) throw new Error('Escolha uma reserva válida.'); origemPagamento='reserva'; banco=reserve.banco||''; }
-          const fixed=Object.assign({id:uid(),nome:name,localCompra,category,categoria:category,valor:value,dia:Math.max(1,Number(date.slice(8,10))||1),dataCadastro:date,startMonth:date.slice(0,7),endMonth:null,accountId:origemPagamento==='conta'?accountId:null,banco,formaPagamento:origemPagamento==='conta'?formaPagamento:null,origemPagamento,reservaOrigemId:reserve?.id||null},meta);
+          const fixed=Object.assign({id:uid(),nome:name,localCompra:localPurchase,category,categoria:category,valor:value,dia:Math.max(1,Number(date.slice(8,10))||1),dataCadastro:date,startMonth:date.slice(0,7),endMonth:null,accountId:origemPagamento==='conta'?accountId:null,banco,formaPagamento:origemPagamento==='conta'?formaPagamento:null,origemPagamento,reservaOrigemId:reserve?.id||null},meta);
           data.fixas=Array.isArray(data.fixas)?data.fixas:[]; data.fixaPagamentos=Array.isArray(data.fixaPagamentos)?data.fixaPagamentos:[]; data.fixas.push(fixed); borionId=fixed.id;
           if(status==='Pago'&&!payFixaOcorrencia(fixed,fixed.startMonth,{persist:false,notify:false})){data.fixas=data.fixas.filter(f=>f.id!==fixed.id);throw new Error('Não foi possível aplicar o pagamento da despesa fixa.');}
         }else{
@@ -1682,7 +1946,7 @@
           if(source==='carteira'){accountId=CARTEIRA_CONTA_ID;if(!accountByIdIn(data,accountId))throw new Error('A Carteira não está disponível.');banco=accountName(data,accountId);formaPagamento='Dinheiro';}
           else if(source==='conta'){accountId=q('#mit_exp_account').value;if(!accountByIdIn(data,accountId))throw new Error('Escolha uma conta válida.');banco=accountName(data,accountId);formaPagamento=q('#mit_exp_account_form').value;}
           else {reserve=reserves.find(r=>String(r.id)===String(q('#mit_exp_reserve').value));if(!reserve)throw new Error('Escolha uma reserva válida.');origemPagamento='reserva';banco=reserve.banco||'';}
-          const tx=Object.assign({id:uid(),tipo:'variavel',nome:name,localCompra,categoria:category,valor:value,data,statusPagamento:status,accountId:origemPagamento==='conta'?accountId:null,banco,origemPagamento,formaPagamento:origemPagamento==='conta'?formaPagamento:null,reservaOrigemId:reserve?.id||null,reservaOrigemMoveId:null},meta);
+          const tx=Object.assign({id:uid(),tipo:'variavel',nome:name,localCompra:localPurchase,categoria:category,valor:value,data,statusPagamento:status,accountId:origemPagamento==='conta'?accountId:null,banco,origemPagamento,formaPagamento:origemPagamento==='conta'?formaPagamento:null,reservaOrigemId:reserve?.id||null,reservaOrigemMoveId:null},meta);
           data.transacoes=Array.isArray(data.transacoes)?data.transacoes:[];data.transacoes.push(tx);borionId=tx.id;
           if(status==='Pago'&&!applyNew(data,tx)){data.transacoes=data.transacoes.filter(t=>t.id!==tx.id);throw new Error('Não foi possível aplicar o saldo da despesa.');}
         }
@@ -1846,7 +2110,7 @@
   window.BorionInterop = Object.freeze({
     spec:SPEC, sources:SOURCES, sourceName,
     renderSettings, setSettingsSource, setSettingsTab, setDeletionPolicy, openMappingHelp,
-    setupDialog, configure, inspectSource, saveMappings, saveMitSettings, setMitDestination, markMitFormDirty, openMitExpenseImport,
+    setupDialog, configure, inspectSource, saveMappings, saveMitSettings, saveMitExpenseSettings, setMitDestination, markMitFormDirty, openMitExpenseImport,
     syncSource, syncAll, disconnect,
     setImportCutoff, setImportCutoffNow, clearImportCutoff,
     markImportedDeletion, openImportedDeleteDialog,
@@ -1857,7 +2121,8 @@
       discoverSnapshot, mappedRecord, reconcileSnapshot, reconcileMitSnapshot, makeMitIncomeTransaction, mitMethodKey, normalizeMitRevenueRules, validateMitRevenueRules, resolveMitEntryMethod, mitOriginalInstallments, mitRuleTarget, sourceLabel, friendlyFieldName, friendlySourceValue, normalizeTarget, resolveFinancialTarget,
       txDelta, adjust, applyReserveLink, paymentForm, targetAccountId, makeTransaction,
       markImportedDeletion, editableSnapshotHash, reverseImportedTransaction,
-      beforeImportCutoff
+      beforeImportCutoff,
+      mitExpenseMethodKey, normalizeMitExpenseRules, validateMitExpenseRules, commitMitExpenseAuto, applyMitFixedExpensePayment
     }
   });
 })();

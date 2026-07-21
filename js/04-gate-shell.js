@@ -250,6 +250,7 @@ function postLoginSequence(){
   const popupList = Notifs.unreadForPopup ? Notifs.unreadForPopup() : [];
   setTimeout(()=>{ Notifs.showFloating(popupList); }, 500);
   setTimeout(()=>{ checkOverdueModal(); }, popupList.length? 1400 : 650);
+  setTimeout(()=>{ if(window.BorionInterop && typeof BorionInterop.maybePromptImportMode==='function') BorionInterop.maybePromptImportMode(); }, popupList.length? 2200 : 1200);
 }
 
 function resetImportTransientState(){

@@ -88,9 +88,11 @@
     if(!recordTime) return false;
     return recordTime<cutoff;
   }
-  function importCutoffControlHTML(sourceAppId, config){
+  function importCutoffControlHTML(sourceAppId, config, data){
     const cutoffAt = config && config.importCutoffAt ? String(config.importCutoffAt) : '';
     const inputValue = cutoffAt ? cutoffAt.slice(0,10) : '';
+    const approvalMode = data ? ensureInterop(data).importApprovalMode : '';
+    const isAsk = approvalMode === 'ask';
     return `<div class="gold-box interop-cutoff-box">
       <b>A partir de quando importar sozinho</b>
       <p>Lançamentos de ${escHtml(sourceName(sourceAppId))} com data anterior a este ponto nunca entram automaticamente no Borion — útil para testes e histórico antigo não baterem aqui. Nada do que já foi importado antes é afetado.</p>
@@ -101,6 +103,14 @@
         ${cutoffAt ? `<button type="button" class="btn-outline btn-sm" onclick="BorionInterop.clearImportCutoff('${escHtml(sourceAppId)}')">Importar todo o histórico</button>` : ''}
       </div>
       <small>${cutoffAt ? ('Somente registros a partir de ' + escHtml(new Date(cutoffAt).toLocaleDateString('pt-BR')) + ' serão considerados.') : 'Sem corte definido: todo o histórico pode ser importado automaticamente.'}</small>
+      ${data ? `<div class="interop-approval-mode">
+        <b>Como importar os lançamentos que passarem no corte</b>
+        <p>${isAsk ? 'Perguntar sempre: nada é importado sozinho — o Borion avisa quando houver lançamentos novos disponíveis e só importa se você confirmar.' : 'Importar automaticamente: assim que um lançamento passa no corte acima, ele entra sozinho no Borion (comportamento de sempre).'}</p>
+        <div class="interop-cutoff-controls">
+          <button type="button" class="btn ${isAsk?'btn-outline':'btn-primary'} btn-sm" onclick="BorionInterop.setImportApprovalMode('auto')">Importar automaticamente</button>
+          <button type="button" class="btn ${isAsk?'btn-primary':'btn-outline'} btn-sm" onclick="BorionInterop.setImportApprovalMode('ask')">Perguntar sempre antes de importar</button>
+        </div>
+      </div>` : ''}
     </div>`;
   }
   function sourceName(sourceAppId){ return SOURCES[sourceAppId]?.name || sourceAppId || 'aplicativo externo'; }
@@ -435,6 +445,13 @@
     root.ignored ||= {};
     root.pending ||= [];
     root.audit ||= [];
+    // V6.45.2 — modo de aprovação de importação: '' (ainda não decidido pelo usuário),
+    // 'auto' (sincronização silenciosa importa sozinha, como sempre foi) ou 'ask'
+    // (a sincronização automática nunca importa sozinha; ela só avisa que há
+    // lançamentos novos disponíveis e espera confirmação explícita). Existe para
+    // proteger uma importação em massa (ex.: centenas de lançamentos antigos do
+    // Marco Iris) sem depender só da data de corte.
+    root.importApprovalMode = root.importApprovalMode === 'ask' ? 'ask' : (root.importApprovalMode === 'auto' ? 'auto' : '');
     (data.transacoes || []).forEach(tx => {
       if(!tx || !tx.integrationAggregateId || !tx.integrationSourceAppId) return;
       tx.integrationImported = true;
@@ -1636,6 +1653,13 @@
   function confirmCutoffChange(message){
     return typeof confirm!=='function' || confirm(message);
   }
+  // V6.45.2 — além do saveProfileData (grava local na hora), força uma sincronização
+  // imediata com o Drive em vez de esperar o debounce normal de fila (1.2s). Um
+  // ajuste crítico como a data de corte não deve ficar nem um instante exposto a uma
+  // atualização remota concorrente sobrescrever o que acabou de ser salvo.
+  function forceImmediateSync(){
+    try{ if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.syncNow({source:'interop_critical_setting'}); }catch(_){ }
+  }
   function setImportCutoff(sourceAppId, dateValue){
     const row = findSourceConfig(sourceAppId);
     if(!row) return false;
@@ -1647,6 +1671,7 @@
     if(!confirmCutoffChange('Confirmar o corte de importação? Somente registros a partir de '+displayDate+' serão considerados.')) return false;
     row.config.importCutoffAt = parsed.toISOString();
     saveProfileData(row.profile.id, row.data);
+    forceImmediateSync();
     if(typeof toast === 'function') toast('A partir de agora, só entram sozinhos lançamentos de ' + sourceName(sourceAppId) + ' a partir de ' + dateText(row.config.importCutoffAt) + '. O que já foi importado antes continua como está.');
     if(typeof renderView === 'function') renderView();
     return true;
@@ -1657,6 +1682,7 @@
     if(!confirmCutoffChange('Confirmar o corte a partir de agora? Registros anteriores não serão importados automaticamente.')) return false;
     row.config.importCutoffAt = nowIso();
     saveProfileData(row.profile.id, row.data);
+    forceImmediateSync();
     if(typeof toast === 'function') toast('Definido: a partir de agora, só entram sozinhos lançamentos novos de ' + sourceName(sourceAppId) + '. Testes e histórico anteriores a agora não serão importados automaticamente.');
     if(typeof renderView === 'function') renderView();
     return true;
@@ -1667,9 +1693,52 @@
     if(!confirmCutoffChange('Remover o corte e permitir que todo o histórico volte a ser considerado?')) return false;
     row.config.importCutoffAt = '';
     saveProfileData(row.profile.id, row.data);
+    forceImmediateSync();
     if(typeof toast === 'function') toast('Corte removido: todo o histórico de ' + sourceName(sourceAppId) + ' volta a valer para importação automática.');
     if(typeof renderView === 'function') renderView();
     return true;
+  }
+
+  // V6.45.2 — modo de aprovação de importação (item pedido junto com a data de
+  // corte): 'auto' mantém o comportamento de sempre (sincronização silenciosa
+  // importa sozinha o que passar no corte); 'ask' faz a sincronização automática
+  // nunca importar sozinha — ela só avisa que há lançamentos novos disponíveis e
+  // aguarda confirmação explícita (ver checkAskModeSource/syncAll). É por perfil,
+  // não por integração: vale para todas as origens conectadas àquele perfil.
+  function setImportApprovalMode(mode, {silent=false}={}){
+    const normalized = mode === 'ask' ? 'ask' : 'auto';
+    if(!S.currentProfile || !S.data) return false;
+    const interop = ensureInterop(S.data);
+    interop.importApprovalMode = normalized;
+    saveProfileData(S.currentProfile.id, S.data);
+    forceImmediateSync();
+    if(!silent && typeof toast === 'function'){
+      toast(normalized==='ask'
+        ? 'A partir de agora, o Borion sempre pergunta antes de importar novos lançamentos automaticamente.'
+        : 'A partir de agora, novos lançamentos que passarem no corte são importados automaticamente.');
+    }
+    if(typeof renderView === 'function') renderView();
+    return true;
+  }
+  // V6.45.2 — na primeira vez que o perfil tem alguma integração configurada e
+  // ainda não decidiu entre "automático" e "perguntar sempre", pergunta uma única
+  // vez ao abrir o app (ver postLoginSequence). Depois disso, a escolha fica salva
+  // e só muda se a pessoa mudar explicitamente na tela de Integrações.
+  function maybePromptImportMode(){
+    if(!S.currentProfile || !S.data) return;
+    const interop = ensureInterop(S.data);
+    if(interop.importApprovalMode) return;
+    const hasConfiguredSource = Object.values(interop.sources||{}).some(cfg => cfg && cfg.mappingReady);
+    if(!hasConfiguredSource) return;
+    if(typeof openChoiceModal !== 'function') return;
+    openChoiceModal({
+      title:'Importação automática de lançamentos',
+      sub:'Este perfil tem uma integração conectada. Quando um lançamento novo estiver pronto para entrar no Borion, o que você prefere?',
+      choices:[
+        {label:'Importar automaticamente', desc:'Mantém o comportamento de sempre: assim que um lançamento passa no corte configurado, ele entra sozinho.', onClick:()=>setImportApprovalMode('auto')},
+        {label:'Perguntar sempre antes de importar', desc:'Nada entra sozinho — o Borion avisa que há lançamentos novos e só importa se você confirmar. Você pode mudar isso depois em Integrações.', onClick:()=>setImportApprovalMode('ask')}
+      ]
+    });
   }
 
   function transactionTypeOptions(selected){
@@ -1842,7 +1911,7 @@
       return `<div class="interop-map-row"><div class="interop-source-value"><small>${escHtml(sourceContextLabel(item.field||'status',item.direction))}</small>${sourceDisplay(item)}</div><div class="interop-arrow" aria-hidden="true">→</div><label><small>Regra de status no Borion</small><select data-interop-status data-key="${escHtml(mapId)}">${statusOptions(target)}</select></label></div>`;
     }).join('');
     const fieldRows=d.fields.map(item=>`<div class="interop-field-preview"><div><small>Informação</small><strong>${escHtml(friendlyFieldName(item.sourceName))}</strong></div><div><small>Exemplo recebido</small><span>${escHtml(friendlySourceValue(item.sample,item.sourceName))}</span></div></div>`).join('');
-    return `<div class="interop-pane interop-links-pane"><div class="interop-links-intro"><div><h4>Configuração da integração com ${escHtml(sourceName(sourceAppId))}</h4><p>Confira o que chega do aplicativo e escolha, à direita, como cada informação será registrada no Borion Finance. As regras são usadas na primeira importação de cada lançamento.</p></div><span class="pill ${c.mappingReady?'ok':'warn'}">${c.mappingReady?'Configurado':'Revisão necessária'}</span></div><div class="interop-map-legend"><div class="origin"><small>ORIGEM</small><b>${escHtml(sourceName(sourceAppId))}</b><span>Dados enviados pelo aplicativo, exibidos em linguagem simples.</span></div><div class="destination"><small>DESTINO</small><b>Borion Finance</b><span>Como o lançamento será salvo: tipo, categoria, status, forma e destino financeiro.</span></div></div>${importCutoffControlHTML(sourceAppId,c)}<datalist id="interop-cat-income">${categoryDatalist(row.data,'income')}</datalist><datalist id="interop-cat-expense">${categoryDatalist(row.data,'expense')}</datalist><section class="interop-map-section">${interopSectionHeading('Dados recebidos do aplicativo','fields')}<p>Somente leitura. Use esta amostra para confirmar que a conexão está trazendo as informações corretas.</p><div class="interop-field-grid">${fieldRows||'<div class="interop-map-empty">Nenhuma informação adicional identificada.</div>'}</div></section><section class="interop-map-section">${interopSectionHeading('Tipos de lançamento','types')}<p>Escolha se cada entrada ou saída será uma receita, uma despesa variável ou não será importada.</p>${directionRows}${kindRows}</section><section class="interop-map-section">${interopSectionHeading('Categorias e origem da receita','categories')}<p>Associe cada categoria recebida à categoria correspondente do Borion e defina a origem das receitas.</p>${categoryRows||'<div class="interop-map-empty">Nenhuma categoria encontrada.</div>'}</section><section class="interop-map-section">${interopSectionHeading('Formas de pagamento e destino financeiro','payments')}<p>Defina a forma usada no Borion e em qual conta, carteira ou reserva o valor será registrado.</p>${paymentRows||'<div class="interop-map-empty">Nenhuma forma de pagamento encontrada.</div>'}</section><section class="interop-map-section">${interopSectionHeading('Status','status')}<p>Escolha se o Borion deve manter o status recebido, forçar um status ou ignorar o lançamento.</p>${statusRows||'<div class="interop-map-empty">Nenhum status encontrado.</div>'}</section><div class="interop-save-bar"><button class="btn-outline btn-sm" onclick="BorionInterop.inspectSource('${sourceAppId}')">Atualizar dados da origem</button><button class="btn btn-primary" onclick="BorionInterop.saveMappings('${sourceAppId}')">Salvar opções</button><button class="btn-outline" onclick="BorionInterop.syncSource('${sourceAppId}')" ${c.mappingReady?'':'disabled title="Salve as opções antes de sincronizar"'}>Sincronizar agora</button></div></div>`;
+    return `<div class="interop-pane interop-links-pane"><div class="interop-links-intro"><div><h4>Configuração da integração com ${escHtml(sourceName(sourceAppId))}</h4><p>Confira o que chega do aplicativo e escolha, à direita, como cada informação será registrada no Borion Finance. As regras são usadas na primeira importação de cada lançamento.</p></div><span class="pill ${c.mappingReady?'ok':'warn'}">${c.mappingReady?'Configurado':'Revisão necessária'}</span></div><div class="interop-map-legend"><div class="origin"><small>ORIGEM</small><b>${escHtml(sourceName(sourceAppId))}</b><span>Dados enviados pelo aplicativo, exibidos em linguagem simples.</span></div><div class="destination"><small>DESTINO</small><b>Borion Finance</b><span>Como o lançamento será salvo: tipo, categoria, status, forma e destino financeiro.</span></div></div>${importCutoffControlHTML(sourceAppId,c,row.data)}<datalist id="interop-cat-income">${categoryDatalist(row.data,'income')}</datalist><datalist id="interop-cat-expense">${categoryDatalist(row.data,'expense')}</datalist><section class="interop-map-section">${interopSectionHeading('Dados recebidos do aplicativo','fields')}<p>Somente leitura. Use esta amostra para confirmar que a conexão está trazendo as informações corretas.</p><div class="interop-field-grid">${fieldRows||'<div class="interop-map-empty">Nenhuma informação adicional identificada.</div>'}</div></section><section class="interop-map-section">${interopSectionHeading('Tipos de lançamento','types')}<p>Escolha se cada entrada ou saída será uma receita, uma despesa variável ou não será importada.</p>${directionRows}${kindRows}</section><section class="interop-map-section">${interopSectionHeading('Categorias e origem da receita','categories')}<p>Associe cada categoria recebida à categoria correspondente do Borion e defina a origem das receitas.</p>${categoryRows||'<div class="interop-map-empty">Nenhuma categoria encontrada.</div>'}</section><section class="interop-map-section">${interopSectionHeading('Formas de pagamento e destino financeiro','payments')}<p>Defina a forma usada no Borion e em qual conta, carteira ou reserva o valor será registrado.</p>${paymentRows||'<div class="interop-map-empty">Nenhuma forma de pagamento encontrada.</div>'}</section><section class="interop-map-section">${interopSectionHeading('Status','status')}<p>Escolha se o Borion deve manter o status recebido, forçar um status ou ignorar o lançamento.</p>${statusRows||'<div class="interop-map-empty">Nenhum status encontrado.</div>'}</section><div class="interop-save-bar"><button class="btn-outline btn-sm" onclick="BorionInterop.inspectSource('${sourceAppId}')">Atualizar dados da origem</button><button class="btn btn-primary" onclick="BorionInterop.saveMappings('${sourceAppId}')">Salvar opções</button><button class="btn-outline" onclick="BorionInterop.syncSource('${sourceAppId}')" ${c.mappingReady?'':'disabled title="Salve as opções antes de sincronizar"'}>Sincronizar agora</button></div></div>`;
   }
 
   function mitCategoryOptions(data,selected){
@@ -1915,7 +1984,7 @@
       </tr>`;
     }).join('');
     const pendingRows=pending.length?pending.map(item=>`<div class="mit-pending-row"><div><strong>${escHtml(item.name||item.description)}</strong><small>${escHtml(item.localPurchase||'Sem local informado')}</small></div><span>${typeof brl==='function'?brl(Number(item.amount)||0):('R$ '+(Number(item.amount)||0).toFixed(2).replace('.',','))}</span><span>${escHtml(item.date||'')}</span><span>Marco Iris</span><span class="pill ${item.status==='Pago'?'ok':'warn'}">${escHtml(item.status||'Em aberto')}</span><button class="btn btn-primary btn-sm" onclick="BorionInterop.openMitExpenseImport('${escHtml(item.aggregateId)}')">Revisar</button></div>`).join(''):'<div class="interop-map-empty">Nenhuma despesa aguardando revisão.</div>';
-    return `<div class="interop-pane mit-integration-pane"><div class="interop-links-intro"><div><h4>Receitas e despesas automáticas</h4><p>Cada pagamento Pago com Data de Pagamento é importado individualmente. A OSV não precisa estar totalmente quitada.</p></div><span class="pill ${row.config.mappingReady?'ok':'warn'}">${row.config.mappingReady?'Receitas configuradas':'Configuração necessária'}</span></div><div class="interop-map-legend"><div class="origin"><small>ORIGEM</small><b>Marco Iris Tecnologia</b><span>Forma recebida, parcelas, OSV, cliente e referência original.</span></div><div class="destination"><small>DESTINO</small><b>Borion Finance</b><span>Categoria e destino financeiro. A forma efetiva é calculada automaticamente.</span></div></div>${importCutoffControlHTML('marco-iris',row.config)}<section class="interop-map-section">${interopSectionHeading('Como as receitas serão registradas no Borion','mitReceipts','receitas automáticas do Marco Iris')}<p>Escolha a categoria e o destino financeiro de cada forma recebida. Pix, Débito e Crédito preservam sua natureza; Carteira é sempre registrada como Dinheiro.</p><div class="mit-rules-table-wrap"><table class="mit-rules-table"><thead><tr><th scope="col">Forma recebida do Marco Iris Tec</th><th scope="col">Categoria de receita no Borion</th><th scope="col">Destino do valor</th></tr></thead><tbody>${revenueRows}</tbody></table></div><div class="interop-save-bar"><button class="btn-outline btn-sm" onclick="BorionInterop.inspectSource('marco-iris',{button:this})">Atualizar dados da origem</button><button class="btn btn-primary" onclick="BorionInterop.saveMitSettings({button:this})">Salvar opções</button><button class="btn-outline" onclick="BorionInterop.syncSource('marco-iris',{button:this})" ${row.config.mappingReady?'':'disabled title="Salve as opções antes de sincronizar"'}>Sincronizar agora</button></div></section><section class="interop-map-section"><div class="mit-pending-head"><div>${interopSectionHeading('Como as despesas serão registradas no Borion','mitExpenseRules','despesas automáticas do Marco Iris')}<p>Escolha, na hora de lançar a despesa no Marco Iris, de onde o dinheiro saiu — Carteira, Pix, Débito ou Reserva entram sozinhas aqui em segundos, na categoria e destino abaixo. Despesas no <b>Crédito</b> sempre aparecem em "Aguardando Revisão", porque a fatura do cartão só pode ser calculada com o perfil aberto na tela.</p></div><span class="pill ${row.config.mitExpenseMappingReady?'ok':'warn'}">${row.config.mitExpenseMappingReady?'Configurado':'Ainda não configurado'}</span></div><datalist id="mit-exp-rule-categories">${mitExpenseCategoryOptions(row.data)}</datalist><div class="mit-rules-table-wrap"><table class="mit-rules-table"><thead><tr><th scope="col">De onde saiu no Marco Iris</th><th scope="col">Categoria de despesa no Borion</th><th scope="col">Destino</th></tr></thead><tbody>${expenseRows}</tbody></table></div><div class="interop-save-bar"><button class="btn btn-primary" onclick="BorionInterop.saveMitExpenseSettings({button:this})">Salvar opções de despesa</button></div></section><section class="interop-map-section"><div class="mit-pending-head"><div>${interopSectionHeading('Aguardando Revisão','mitExpenses','despesas aguardando revisão')}<p>Despesas no Crédito, ou despesas sem a configuração acima ainda salva, ficam aqui até você revisar.</p></div><span class="pill ${pending.length?'warn':'ok'}">${pending.length} pendente(s)</span></div><div class="mit-pending-labels"><span>Nome</span><span>Valor</span><span>Data</span><span>Origem</span><span>Status</span><span></span></div><div class="mit-pending-list">${pendingRows}</div></section></div>`;
+    return `<div class="interop-pane mit-integration-pane"><div class="interop-links-intro"><div><h4>Receitas e despesas automáticas</h4><p>Cada pagamento Pago com Data de Pagamento é importado individualmente. A OSV não precisa estar totalmente quitada.</p></div><span class="pill ${row.config.mappingReady?'ok':'warn'}">${row.config.mappingReady?'Receitas configuradas':'Configuração necessária'}</span></div><div class="interop-map-legend"><div class="origin"><small>ORIGEM</small><b>Marco Iris Tecnologia</b><span>Forma recebida, parcelas, OSV, cliente e referência original.</span></div><div class="destination"><small>DESTINO</small><b>Borion Finance</b><span>Categoria e destino financeiro. A forma efetiva é calculada automaticamente.</span></div></div>${importCutoffControlHTML('marco-iris',row.config,row.data)}<section class="interop-map-section">${interopSectionHeading('Como as receitas serão registradas no Borion','mitReceipts','receitas automáticas do Marco Iris')}<p>Escolha a categoria e o destino financeiro de cada forma recebida. Pix, Débito e Crédito preservam sua natureza; Carteira é sempre registrada como Dinheiro.</p><div class="mit-rules-table-wrap"><table class="mit-rules-table"><thead><tr><th scope="col">Forma recebida do Marco Iris Tec</th><th scope="col">Categoria de receita no Borion</th><th scope="col">Destino do valor</th></tr></thead><tbody>${revenueRows}</tbody></table></div><div class="interop-save-bar"><button class="btn-outline btn-sm" onclick="BorionInterop.inspectSource('marco-iris',{button:this})">Atualizar dados da origem</button><button class="btn btn-primary" onclick="BorionInterop.saveMitSettings({button:this})">Salvar opções</button><button class="btn-outline" onclick="BorionInterop.syncSource('marco-iris',{button:this})" ${row.config.mappingReady?'':'disabled title="Salve as opções antes de sincronizar"'}>Sincronizar agora</button></div></section><section class="interop-map-section"><div class="mit-pending-head"><div>${interopSectionHeading('Como as despesas serão registradas no Borion','mitExpenseRules','despesas automáticas do Marco Iris')}<p>Escolha, na hora de lançar a despesa no Marco Iris, de onde o dinheiro saiu — Carteira, Pix, Débito ou Reserva entram sozinhas aqui em segundos, na categoria e destino abaixo. Despesas no <b>Crédito</b> sempre aparecem em "Aguardando Revisão", porque a fatura do cartão só pode ser calculada com o perfil aberto na tela.</p></div><span class="pill ${row.config.mitExpenseMappingReady?'ok':'warn'}">${row.config.mitExpenseMappingReady?'Configurado':'Ainda não configurado'}</span></div><datalist id="mit-exp-rule-categories">${mitExpenseCategoryOptions(row.data)}</datalist><div class="mit-rules-table-wrap"><table class="mit-rules-table"><thead><tr><th scope="col">De onde saiu no Marco Iris</th><th scope="col">Categoria de despesa no Borion</th><th scope="col">Destino</th></tr></thead><tbody>${expenseRows}</tbody></table></div><div class="interop-save-bar"><button class="btn btn-primary" onclick="BorionInterop.saveMitExpenseSettings({button:this})">Salvar opções de despesa</button></div></section><section class="interop-map-section"><div class="mit-pending-head"><div>${interopSectionHeading('Aguardando Revisão','mitExpenses','despesas aguardando revisão')}<p>Despesas no Crédito, ou despesas sem a configuração acima ainda salva, ficam aqui até você revisar.</p></div><span class="pill ${pending.length?'warn':'ok'}">${pending.length} pendente(s)</span></div><div class="mit-pending-labels"><span>Nome</span><span>Valor</span><span>Data</span><span>Origem</span><span>Status</span><span></span></div><div class="mit-pending-list">${pendingRows}</div></section></div>`;
   }
   async function saveMitSettings({button=null}={}){
     const row=findSourceConfig('marco-iris');
@@ -2202,11 +2271,46 @@
     return targets.length > 0;
   }
 
+  // V6.45.2 — quando o perfil está em modo "perguntar sempre", a sincronização
+  // automática nunca aplica os lançamentos: faz um cálculo "a seco" (clonando os
+  // dados, sem gravar nada) usando a MESMA reconciliação de uma sincronização
+  // real, só para descobrir quantos lançamentos novos existem dentro do corte.
+  // Se houver algum, avisa (só quando a pessoa está de fato olhando aquele perfil
+  // agora) e só importa de verdade se ela confirmar — "recusar" simplesmente não
+  // faz nada, sem sujar o Borion.
+  async function checkAskModeSource(row){
+    try{
+      const snapshot = await readSnapshot(row);
+      validateSnapshot(snapshot, row.sourceAppId);
+      const draftData = clone(row.data), draftConfig = ensureSourceConfig(clone(row.config));
+      draftData.interconnections ||= {}; draftData.interconnections.sources ||= {};
+      draftData.interconnections.sources[row.sourceAppId] = draftConfig;
+      const dry = reconcileSnapshot(draftData, draftConfig, snapshot, {mode:'automatic'});
+      const newCount = (dry.results||[]).filter(x => x.status==='created' || x.status==='expense_created').length;
+      if(newCount<=0) return;
+      const isCurrentProfile = S.currentProfile && String(S.currentProfile.id)===String(row.profile.id);
+      if(!isCurrentProfile || typeof openConfirmModal!=='function') return;
+      const revisionKey = String(snapshot.revision||'');
+      if(String(row.config.lastAskPromptRevision||'')===revisionKey) return;
+      const liveRow = findSourceConfig(row.sourceAppId) || row;
+      liveRow.config.lastAskPromptRevision = revisionKey;
+      saveProfileData(liveRow.profile.id, liveRow.data);
+      openConfirmModal({
+        title:'Novos lançamentos disponíveis',
+        text: sourceName(row.sourceAppId)+' tem '+newCount+' lançamento(s) novo(s), dentro do período configurado, prontos para importar. Deseja importar agora?',
+        confirmLabel:'Importar agora', cancelLabel:'Agora não', variant:'gold',
+        onConfirm: () => { syncSource(row.sourceAppId, {silent:false}).catch(error => { if(typeof alert==='function') alert(error.message||String(error)); }); }
+      });
+    }catch(error){
+      console.warn('[BORION_INTEROP] Verificação em modo "perguntar sempre":', error);
+    }
+  }
   async function syncAll({silent=true}={}){
     const rows = allSourceConfigs();
     const out = [];
     for(const row of rows){
       if(!row.config.mappingReady) continue;
+      if(silent && ensureInterop(row.data).importApprovalMode==='ask'){ await checkAskModeSource(row); continue; }
       try{ out.push(await syncSource(row.sourceAppId, {silent})); }
       catch(error){ console.warn('[BORION_INTEROP] Auto sync:', error); }
     }
@@ -2225,6 +2329,7 @@
     setupDialog, configure, inspectSource, saveMappings, saveMitSettings, saveMitExpenseSettings, setMitDestination, markMitFormDirty, openMitExpenseImport,
     syncSource, syncAll, disconnect,
     setImportCutoff, setImportCutoffNow, clearImportCutoff,
+    setImportApprovalMode, maybePromptImportMode,
     markImportedDeletion, openImportedDeleteDialog,
     captureImportReference, transferImportReference,
     start,
@@ -2233,7 +2338,7 @@
       discoverSnapshot, mappedRecord, reconcileSnapshot, reconcileMitSnapshot, makeMitIncomeTransaction, mitMethodKey, normalizeMitRevenueRules, validateMitRevenueRules, resolveMitEntryMethod, mitOriginalInstallments, mitRuleTarget, sourceLabel, friendlyFieldName, friendlySourceValue, normalizeTarget, resolveFinancialTarget,
       txDelta, adjust, applyReserveLink, paymentForm, targetAccountId, makeTransaction,
       markImportedDeletion, editableSnapshotHash, reverseImportedTransaction,
-      beforeImportCutoff,
+      beforeImportCutoff, checkAskModeSource,
       mitExpenseMethodKey, normalizeMitExpenseRules, validateMitExpenseRules, commitMitExpenseAuto, applyMitFixedExpensePayment
     }
   });

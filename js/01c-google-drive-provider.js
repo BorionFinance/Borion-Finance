@@ -732,15 +732,12 @@ const GoogleDriveProvider = {
   _strictStatusElement(){return typeof document!=='undefined'?document.getElementById('gdrive_strict_status'):null;},
 
   _showStrictSaving(){
+    // Salvamento estrito continua ativo, mas nunca bloqueia a interface.
+    // Remove inclusive uma sobreposição antiga que ainda possa estar no DOM.
     if(typeof document==='undefined')return;
-    let overlay=document.getElementById('borion_strict_saving_overlay');
-    if(!overlay){
-      overlay=document.createElement('div');overlay.id='borion_strict_saving_overlay';
-      overlay.style.cssText='position:fixed;inset:0;z-index:999999;background:rgba(3,8,14,.78);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:24px;';
-      overlay.innerHTML='<div style="max-width:420px;width:100%;padding:24px;border-radius:18px;background:#0c1520;border:1px solid rgba(255,255,255,.14);box-shadow:0 24px 80px rgba(0,0,0,.45);text-align:center;color:#fff"><div style="font-size:18px;font-weight:800;margin-bottom:8px">Salvando no Google Drive</div><div style="opacity:.78;line-height:1.45">A alteração só será concluída depois da confirmação da nuvem.</div></div>';
-      document.body.appendChild(overlay);
-    }
-    overlay.style.display='flex';this._strictOverlay=overlay;
+    const overlay=document.getElementById('borion_strict_saving_overlay');
+    if(overlay)overlay.remove();
+    this._strictOverlay=null;
   },
 
   _hideStrictSaving(){
@@ -821,6 +818,12 @@ const GoogleDriveProvider = {
           this._showStrictSaving();
           const ok=await this.forceSyncNow({payload,reason:'strict_'+source});
           if(ok!==true){
+            // Uma nova alteração durante a gravação faz syncNow() devolver false mesmo
+            // quando o snapshot anterior foi confirmado corretamente. Nesse caso não
+            // bloqueia o app: o laço abaixo prepara e confirma imediatamente o estado
+            // mais recente. Falhas reais de rede/autenticação continuam bloqueando.
+            const newerChangeWaiting=!!this._strictCommitAgain&&this.isStrictCloudReady()&&!this.authRequired&&!this.lastSyncError;
+            if(newerChangeWaiting){lastResult=true;continue;}
             this.lockStrictCloud(this.authRequired?'A sessão do Google expirou durante o salvamento. Entre novamente para concluir.':'O Google Drive não confirmou o salvamento. O app foi bloqueado para impedir novos lançamentos.',payload);
             return false;
           }

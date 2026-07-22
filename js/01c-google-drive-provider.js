@@ -679,6 +679,7 @@ const GoogleDriveProvider = {
   lastSyncError: '',
   authRequired: false,
   _lastFailureToastAt: 0,
+  _strictCommitPromise:null,_strictCommitAgain:false,_strictPendingPayload:null,_strictOverlay:null,_strictAuthTimer:null,
   // V6.40 — journal de operações imutáveis + merge de três vias.
   _deviceId: null,
   _lastConsolidatedPayload: null,
@@ -721,6 +722,119 @@ const GoogleDriveProvider = {
     return /status\s*401|oauth|token|google recusou|login com google|renova|popup|access[_ -]?denied|interaction[_ -]?required/i.test(msg);
   },
 
+
+  _isStrictMode(){return !!(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory());},
+
+  hasUsableToken(){return !!(GoogleDriveAuth.accessToken&&Date.now()<GoogleDriveAuth.tokenExpiresAt-60000);},
+
+  isStrictCloudReady(){return !!(this._isStrictMode()&&this.isConnected()&&this.currentFileId&&navigator.onLine&&!this.authRequired&&this.hasUsableToken());},
+
+  _strictStatusElement(){return typeof document!=='undefined'?document.getElementById('gdrive_strict_status'):null;},
+
+  _showStrictSaving(){
+    if(typeof document==='undefined')return;
+    let overlay=document.getElementById('borion_strict_saving_overlay');
+    if(!overlay){
+      overlay=document.createElement('div');overlay.id='borion_strict_saving_overlay';
+      overlay.style.cssText='position:fixed;inset:0;z-index:999999;background:rgba(3,8,14,.78);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:24px;';
+      overlay.innerHTML='<div style="max-width:420px;width:100%;padding:24px;border-radius:18px;background:#0c1520;border:1px solid rgba(255,255,255,.14);box-shadow:0 24px 80px rgba(0,0,0,.45);text-align:center;color:#fff"><div style="font-size:18px;font-weight:800;margin-bottom:8px">Salvando no Google Drive</div><div style="opacity:.78;line-height:1.45">A alteração só será concluída depois da confirmação da nuvem.</div></div>';
+      document.body.appendChild(overlay);
+    }
+    overlay.style.display='flex';this._strictOverlay=overlay;
+  },
+
+  _hideStrictSaving(){
+    const overlay=typeof document!=='undefined'?document.getElementById('borion_strict_saving_overlay'):null;
+    if(overlay)overlay.remove();this._strictOverlay=null;
+  },
+
+  lockStrictCloud(message,payload=null){
+    if(!this._isStrictMode())return false;
+    if(payload)this._strictPendingPayload=payload;
+    this.authRequired=!navigator.onLine?false:true;
+    this.lastSyncError=String(message||(!navigator.onLine?'Sem internet. O Borion foi bloqueado porque este modo usa somente o Google Drive.':'A sessão do Google precisa ser confirmada novamente.'));
+    this._hideStrictSaving();
+    if(typeof document==='undefined')return false;
+    const root=document.getElementById('root');if(!root)return false;
+    const online=!!navigator.onLine;
+    root.innerHTML=`<div class="gate-wrap"><div class="gate-box"><div class="gate-logo"><img src="borion-emblem.png" alt="Borion Finance"/><div class="appname">Borion Finance</div></div><div class="gate-card"><h2>${online?'Confirme o login do Google':'Internet necessária'}</h2><p class="gate-sub" id="gdrive_strict_status">${esc(this.lastSyncError)}</p><button class="btn btn-primary btn-block" id="gdrive_strict_reconnect">${online?'Entrar novamente com o Google':'Tentar novamente'}</button><p class="gate-sub" style="margin-top:14px">Nenhum lançamento novo será aceito sem confirmação real do Google Drive. O Borion não usa dados financeiros locais neste modo.</p></div></div></div>`;
+    const button=document.getElementById('gdrive_strict_reconnect');if(button)button.onclick=()=>this.reconnectStrictCloud();
+    return false;
+  },
+
+  async reconnectStrictCloud(){
+    const button=typeof document!=='undefined'?document.getElementById('gdrive_strict_reconnect'):null;
+    const status=this._strictStatusElement();
+    if(!navigator.onLine){if(status)status.textContent='Ainda sem internet. Conecte o dispositivo e tente novamente.';return false;}
+    if(button){button.disabled=true;button.textContent='Confirmando conta...';}
+    const previousSub=GoogleDriveAuth.user&&GoogleDriveAuth.user.sub;
+    try{
+      await GoogleDriveAuth.login(true);
+      if(previousSub&&GoogleDriveAuth.user&&GoogleDriveAuth.user.sub!==previousSub)throw new Error('Use a mesma conta Google que já está vinculada a esta pasta.');
+      this.authRequired=false;this.lastSyncError='';
+      if(this._strictPendingPayload){
+        if(status)status.textContent='Login confirmado. Salvando a alteração pendente no Drive...';
+        const payload=this._strictPendingPayload;
+        const ok=await this.forceSyncNow({payload,reason:'strict_reconnect'});
+        if(ok!==true)throw new Error('O Google Drive não confirmou a alteração pendente.');
+        this._strictPendingPayload=null;
+      }
+      this.startStrictAuthWatchdog();
+      if(S&&S.currentProfile&&S.data)renderApp();else{S.gate={mode:'list',error:''};renderGate();}
+      this._refreshStatusUI();
+      return true;
+    }catch(e){
+      this.authRequired=true;this.lastSyncError=String(e&&e.message||e);
+      if(status)status.textContent=this.lastSyncError;
+      if(button){button.disabled=false;button.textContent='Entrar novamente com o Google';}
+      return false;
+    }
+  },
+
+  startStrictAuthWatchdog(){
+    if(!this._isStrictMode())return;
+    if(this._strictAuthTimer)clearInterval(this._strictAuthTimer);
+    this._strictAuthTimer=setInterval(()=>{
+      if(!this._isStrictMode()||document.visibilityState==='hidden')return;
+      if(!this.isStrictCloudReady()&&!this._syncInFlight&&!this._strictCommitPromise){
+        this.lockStrictCloud(!navigator.onLine?'Sem internet. O Borion foi bloqueado porque este modo depende 100% do Google Drive.':'A sessão do Google expirou. Confirme o login para continuar.');
+      }
+    },10000);
+  },
+
+  requestStrictCommit(source='change'){
+    if(!this._isStrictMode())return null;
+    this._strictCommitAgain=true;
+    if(this._strictCommitPromise)return this._strictCommitPromise;
+    this._strictCommitPromise=(async()=>{
+      let lastResult=false;
+      try{
+        do{
+          this._strictCommitAgain=false;
+          let payload=null;
+          try{payload=await buildFullBackupPayload();}catch(e){this.lockStrictCloud('Não foi possível preparar os dados para o Google Drive: '+String(e&&e.message||e));return false;}
+          this._strictPendingPayload=payload;
+          if(!this.isStrictCloudReady()){
+            this.lockStrictCloud(!navigator.onLine?'Sem internet. A alteração não foi aceita e o app foi bloqueado.': 'A sessão do Google expirou antes do salvamento. Entre novamente para confirmar a alteração.',payload);
+            return false;
+          }
+          this._showStrictSaving();
+          const ok=await this.forceSyncNow({payload,reason:'strict_'+source});
+          if(ok!==true){
+            this.lockStrictCloud(this.authRequired?'A sessão do Google expirou durante o salvamento. Entre novamente para concluir.':'O Google Drive não confirmou o salvamento. O app foi bloqueado para impedir novos lançamentos.',payload);
+            return false;
+          }
+          this._strictPendingPayload=null;this._hideStrictSaving();lastResult=true;
+        }while(this._strictCommitAgain);
+        return lastResult;
+      }catch(e){
+        this.lockStrictCloud('Falha ao confirmar o salvamento no Google Drive: '+String(e&&e.message||e),this._strictPendingPayload);
+        return false;
+      }finally{this._strictCommitPromise=null;}
+    })();
+    return this._strictCommitPromise;
+  },
+
   async _refreshPendingQueueCount(){
     if(!window.BorionDurableQueue||typeof BorionDurableQueue.pendingOnly!=='function')return this._pendingQueueCount||0;
     try{this._pendingQueueCount=(await BorionDurableQueue.pendingOnly()).length;}catch(e){}
@@ -737,7 +851,7 @@ const GoogleDriveProvider = {
     if(this.pendingMergeConflicts&&this.pendingMergeConflicts.length&&!this.dirty&&!this._syncInFlight){el.className='cloud-status offline';el.textContent='Conflito precisa de revisão';el.title=this.pendingMergeConflicts.length+' conflito(s) preservado(s) para revisão.';return;}
     if(state==='RECOVERY'||state==='JOURNAL_ERROR'){el.className='cloud-status offline';el.textContent=state==='RECOVERY'?'Modo de recuperação':'Erro no journal';el.title=this.lastSyncError||'O último snapshot válido foi preservado.';return;}
     if(this.authRequired||state==='AUTH_REQUIRED'){el.className='cloud-status offline';el.textContent='Google Drive — reconectar';el.title=this.lastSyncError||'Autenticação necessária.';return;}
-    if(!navigator.onLine||state==='OFFLINE_PENDING'){el.className='cloud-status offline';el.textContent='Salvo neste dispositivo';el.title='Offline. A alteração está preservada localmente e será enviada quando a internet voltar.';return;}
+    if(!navigator.onLine||state==='OFFLINE_PENDING'){el.className='cloud-status offline';el.textContent=this._isStrictMode()?'Internet necessária':'Salvo neste dispositivo';el.title=this._isStrictMode()?'O Borion está bloqueado: este modo depende 100% do Google Drive.':'Offline. A alteração está preservada localmente e será enviada quando a internet voltar.';return;}
     if((window.RemoteUpdateQueue&&RemoteUpdateQueue.hasPending())||state==='REMOTE_CHANGED'){el.className='cloud-status syncing';el.textContent='Aguardando finalizar edição';el.title='Atualização recebida e validada; será aplicada assim que o formulário em edição for finalizado.';return;}
     if(state==='PROTECTING_DRIVE'){el.className='cloud-status syncing';el.textContent='Protegendo alteração no Drive';el.title='Criando a operação imutável no Google Drive.';return;}
     if(state==='DRIVE_PROTECTED'||this.hasPersistedConsolidation()){el.className='cloud-status syncing';el.textContent='Alteração protegida no Drive';el.title='A operação existe no Drive, mas o snapshot ainda precisa ser consolidado.';return;}
@@ -775,7 +889,8 @@ const GoogleDriveProvider = {
     const now=Date.now();
     if(!options.silent && now-this._lastFailureToastAt>12000){
       this._lastFailureToastAt=now;
-      toast((this.authRequired?'A conexão com o Google expirou. Toque no selo para reconectar. ':'Não foi possível confirmar no Google Drive. ')+'Os dados continuam salvos neste dispositivo.');
+      if(this._isStrictMode())this.lockStrictCloud((this.authRequired?'A conexão com o Google expirou. ':'Não foi possível confirmar no Google Drive. ')+'O app foi bloqueado para impedir novos lançamentos.');
+      else toast((this.authRequired?'A conexão com o Google expirou. Toque no selo para reconectar. ':'Não foi possível confirmar no Google Drive. ')+'Os dados continuam salvos neste dispositivo.');
     }
   },
 
@@ -800,7 +915,7 @@ const GoogleDriveProvider = {
       return await this.checkForRemoteUpdate();
     }
     if(!navigator.onLine){
-      this.lastSyncError='Sem internet. A alteração está salva somente neste dispositivo por enquanto.';
+      this.lastSyncError=this._isStrictMode()?'Sem internet. O Borion está bloqueado até o Google Drive voltar.':'Sem internet. A alteração está salva somente neste dispositivo por enquanto.';
       this.authRequired=false;
       this._refreshStatusUI();
       this._scheduleRetry(5000);
@@ -921,7 +1036,16 @@ const GoogleDriveProvider = {
     setStorageMode('google_drive');
     this.autosaveSlotIndex=gdriveReadSlotIndex(this.folderId,'autosave');this.forcesaveSlotIndex=gdriveReadSlotIndex(this.folderId,'forcesave');
     const result=await this.loadFromDrive();
-    this.startAutosaveLoop();this.startLivePollLoop();this._refreshPendingQueueCount().catch(()=>{});
+    if(window.BorionStrictDrive&&!BorionStrictDrive.shouldUseMemory()&&result&&result.pending){
+      const recovered=await this.resumePendingSync('strict_migration_recovery');
+      if(recovered!==true&&(this.dirty||this.hasPersistedConsolidation()))throw new Error('Existe uma alteração antiga pendente e o Google Drive ainda não confirmou a recuperação. O app permanecerá bloqueado.');
+    }
+    if(window.BorionStrictDrive)await BorionStrictDrive.activate();
+    if(this._isStrictMode()&&(this.dirty||this.hasPersistedConsolidation())){
+      const confirmed=await this.resumePendingSync('strict_boot_confirmation');
+      if(confirmed!==true&&(this.dirty||this.hasPersistedConsolidation()))throw new Error('O Google Drive não confirmou todas as alterações antes da abertura. O app permanecerá bloqueado.');
+    }
+    this.startAutosaveLoop();this.startLivePollLoop();this.startStrictAuthWatchdog();this._refreshPendingQueueCount().catch(()=>{});
     if(window.BorionDriveJournal640&&BorionDriveJournal640.ensureAppliedFolder)setTimeout(()=>BorionDriveJournal640.ensureAppliedFolder(this.folderId).catch(e=>console.warn('[GoogleDriveProvider] organização gradual do journal foi adiada:',e)),0);
     if(window.BackupFS)BackupFS.maybeDailyDriveSnapshot().catch(e=>console.warn('[GoogleDriveProvider] ponto diário imutável falhou (não crítico):',e));
     if(!options.suppressRender){
@@ -1080,8 +1204,16 @@ const GoogleDriveProvider = {
      V6.40 não muda esse tempo, só o que acontece quando o timer dispara (ver
      syncNow abaixo): em vez de "ler modifiedTime e sobrescrever", agora grava
      uma operação imutável e consolida com merge de três vias. */
-  queueSave(){
-    if(!this.isConnected()) return;
+  queueSave(options={}){
+    if(!this.isConnected()){
+      if(this._isStrictMode())this.lockStrictCloud('O Google Drive não está conectado. Entre novamente antes de continuar.');
+      return;
+    }
+    if(this._isStrictMode()){
+      this.dirty=true;this._syncRevision++;this.lastSyncError='';this._refreshStatusUI();
+      this.requestStrictCommit(options.source||'queue');
+      return;
+    }
     // V6.40 — captura a "base" desta leva de alterações (o último snapshot
     // consolidado conhecido) na TRANSIÇÃO de limpo->sujo, não a cada tecla —
     // é o que permite ao merge de três vias (01e) saber o que realmente mudou
@@ -1368,7 +1500,7 @@ const GoogleDriveProvider = {
     if(!this.isConnected()||!this.currentFileId)return false;
     this._lastSyncStartedAt=Date.now();
     if(window.BorionPerf)BorionPerf.startStage('sync_total',{source:options.source||'unknown'});
-    if(window.BorionMultiTab640&&!BorionMultiTab640.isLeader()){
+    if(!this._isStrictMode()&&window.BorionMultiTab640&&!BorionMultiTab640.isLeader()){
       BorionMultiTab640.requestSync({folderId:this.folderId,source:options.source||'syncNow'});
       return {delegated:true,synced:false};
     }
@@ -1376,7 +1508,7 @@ const GoogleDriveProvider = {
     if(!this.dirty&&this.hasPersistedConsolidation()) options.consolidationOnly=true;
     if(!this.dirty&&!options.payloadOverride&&!options.consolidationOnly){this._recordSyncSuccess();if(window.BorionSyncState)BorionSyncState.set('SNAPSHOT_CONFIRMED');return true;}
     if(this._syncInFlight){this._syncAgain=true;return false;}
-    if(!navigator.onLine){this._recordSyncFailure(new Error('Sem internet. Alteração salva somente neste dispositivo.'),{silent:true});if(window.BorionSyncState)BorionSyncState.set('OFFLINE_PENDING');return false;}
+    if(!navigator.onLine){this._recordSyncFailure(new Error(this._isStrictMode()?'Sem internet. O Google Drive não confirmou a alteração.':'Sem internet. Alteração salva somente neste dispositivo.'),{silent:true});if(window.BorionSyncState)BorionSyncState.set('OFFLINE_PENDING');return false;}
     this._syncInFlight=true;
     if(options.consolidationOnly){
       const requiredOperationId=this._readPersistedConsolidationOperationId();
@@ -1559,7 +1691,7 @@ const GoogleDriveProvider = {
      quem decide é o merge, como em qualquer outra sincronização. */
   async forceSyncNow(options={}){
     if(!this.isConnected()||!this.currentFileId)return false;
-    if(window.BorionMultiTab640&&!BorionMultiTab640.isLeader()){
+    if(!this._isStrictMode()&&window.BorionMultiTab640&&!BorionMultiTab640.isLeader()){
       BorionMultiTab640.requestSync({folderId:this.folderId,source:'force'});
       return {delegated:true,synced:false};
     }
@@ -1751,14 +1883,36 @@ window.GoogleDriveProvider = GoogleDriveProvider;
 if(typeof document!=='undefined'){
   document.addEventListener('visibilitychange', ()=>{
     if(document.visibilityState==='visible' && window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){
+      if(GoogleDriveProvider._isStrictMode()&&!GoogleDriveProvider.isStrictCloudReady()){GoogleDriveProvider.lockStrictCloud(!navigator.onLine?'Sem internet. O Borion foi bloqueado porque este modo depende 100% do Google Drive.':'A sessão do Google expirou. Confirme o login para continuar.');return;}
       if(GoogleDriveProvider.dirty || GoogleDriveProvider.hasPersistedPending() || GoogleDriveProvider.hasPersistedConsolidation()) GoogleDriveProvider.resumePendingSync('visibility');
       else GoogleDriveProvider.checkForRemoteUpdate();
     }
   });
+  document.addEventListener('pointerdown',event=>{
+    if(!window.GoogleDriveProvider||!GoogleDriveProvider._isStrictMode())return;
+    const target=event.target&&event.target.closest?event.target.closest('#gdrive_strict_reconnect'):null;
+    if(target)return;
+    if(!GoogleDriveProvider.isStrictCloudReady()){
+      event.preventDefault();event.stopImmediatePropagation();
+      GoogleDriveProvider.lockStrictCloud(!navigator.onLine?'Sem internet. O Borion não abre nem aceita lançamentos neste modo.':'A sessão do Google precisa ser confirmada antes de usar o app.');
+    }
+  },true);
+  const strictGuardEvent=event=>{
+    if(!window.GoogleDriveProvider||!GoogleDriveProvider._isStrictMode())return;
+    const target=event.target&&event.target.closest?event.target.closest('#gdrive_strict_reconnect'):null;
+    if(target)return;
+    if(!GoogleDriveProvider.isStrictCloudReady()){
+      event.preventDefault();event.stopImmediatePropagation();
+      GoogleDriveProvider.lockStrictCloud(!navigator.onLine?'Sem internet. O Borion não abre nem aceita lançamentos neste modo.':'A sessão do Google precisa ser confirmada antes de usar o app.');
+    }
+  };
+  document.addEventListener('submit',strictGuardEvent,true);
+  document.addEventListener('keydown',event=>{if(event.key==='Tab')return;strictGuardEvent(event);},true);
 }
 if(typeof window!=='undefined'){
   window.addEventListener('focus', ()=>{
     if(!window.GoogleDriveProvider || !GoogleDriveProvider.isConnected()) return;
+    if(GoogleDriveProvider._isStrictMode()&&!GoogleDriveProvider.isStrictCloudReady()){GoogleDriveProvider.lockStrictCloud(!navigator.onLine?'Sem internet. O Borion foi bloqueado porque este modo depende 100% do Google Drive.':'A sessão do Google expirou. Confirme o login para continuar.');return;}
     if(GoogleDriveProvider.dirty || GoogleDriveProvider.hasPersistedPending() || GoogleDriveProvider.hasPersistedConsolidation()) GoogleDriveProvider.resumePendingSync('focus');
     else GoogleDriveProvider.checkForRemoteUpdate();
   });
@@ -1766,6 +1920,9 @@ if(typeof window!=='undefined'){
     if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.resumePendingSync('online');
   });
   window.addEventListener('offline', ()=>{
+    if(window.GoogleDriveProvider&&GoogleDriveProvider.isConnected()&&GoogleDriveProvider._isStrictMode()){
+      GoogleDriveProvider.lockStrictCloud('Sem internet. O Borion foi bloqueado porque este modo depende 100% do Google Drive.');return;
+    }
     if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected() && (GoogleDriveProvider.dirty || GoogleDriveProvider.hasPersistedPending() || GoogleDriveProvider.hasPersistedConsolidation())){
       GoogleDriveProvider.lastSyncError='Sem internet. A alteração está salva somente neste dispositivo por enquanto.';
       GoogleDriveProvider.authRequired=false;

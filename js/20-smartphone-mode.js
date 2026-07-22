@@ -130,7 +130,7 @@ const SmartphoneMode={
     try{
       if(btn){ btn.disabled=true; btn.classList.add('is-saving'); }
       if(strong) strong.textContent='Salvando...';
-      if(small) small.textContent='Drive + dispositivo';
+      if(small) small.textContent='Somente Google Drive';
       if(typeof forceManualSave!=='function'){
         throw new Error('A rotina de force save não foi carregada.');
       }
@@ -140,12 +140,12 @@ const SmartphoneMode={
       if(!result || (!result.driveOk && !result.localOk)){
         throw new Error('Não foi possível confirmar o force save.');
       }
-      if(result.driveOk && result.localOk){
+      if(result.driveOk){
         if(strong) strong.textContent='Force save concluído';
-        if(small) small.textContent='Drive + local atualizados';
+        if(small) small.textContent='Google Drive confirmado';
       }else{
         if(strong) strong.textContent='Salvo parcialmente';
-        if(small) small.textContent=result.driveOk?'Drive salvo · local falhou':'Local salvo · Drive falhou';
+        if(small) small.textContent='Google Drive não confirmou';
       }
       setTimeout(()=>{
         const b=document.getElementById('pro_sidebar_quick_save');

@@ -14,7 +14,7 @@ const HelpCenterLoader = {
     this.promise = new Promise((resolve,reject)=>{
       if(!document.querySelector('link[data-borion-help-css]')){
         const link=document.createElement('link');
-        link.rel='stylesheet'; link.href='css/help-center.css?v=6.45.5'; link.dataset.borionHelpCss='1';
+        link.rel='stylesheet'; link.href='css/help-center.css?v=6.46.0'; link.dataset.borionHelpCss='1';
         document.head.appendChild(link);
       }
       const existing=document.querySelector('script[data-borion-help-script]');
@@ -24,7 +24,7 @@ const HelpCenterLoader = {
         return;
       }
       const script=document.createElement('script');
-      script.src='js/26-help-center.js?v=6.45.5'; script.async=true; script.dataset.borionHelpScript='1';
+      script.src='js/26-help-center.js?v=6.46.0'; script.async=true; script.dataset.borionHelpScript='1';
       script.onload=()=>window.BorionHelp?resolve(window.BorionHelp):reject(new Error('A Central do Borion não iniciou.'));
       script.onerror=()=>{ script.remove(); reject(new Error('Falha ao carregar a Central do Borion.')); };
       document.head.appendChild(script);
@@ -67,7 +67,7 @@ function renderSettings(){
       ${settingsTabButton('backup','Backups')}
       ${settingsTabButton('integrations','Integrações')}
       <button class="settings-tab settings-help-tab ${S.settingsTab==='help'?'active':''}" onclick="HelpCenterLoader.open()" title="Abrir a Central do Borion"><span class="settings-help-icon">?</span><span>Central do Borion</span></button>
-      <button id="qb_both" class="btn btn-primary btn-sm settings-quick-backup-btn" onclick="Settings.quickBackupBoth()" title="Cria um backup agora e salva ao mesmo tempo no Google Drive e neste dispositivo">SALVAR DRIVE&amp;LOCAL</button>
+      <button id="qb_both" class="btn btn-primary btn-sm settings-quick-backup-btn" onclick="Settings.quickBackupBoth()" title="Confirma o salvamento diretamente no Google Drive">SALVAR NO DRIVE</button>
     </div>`;
   let content='';
   if(S.settingsTab==='modules') content = renderSettingsModules();
@@ -78,8 +78,8 @@ function renderSettings(){
   else if(S.settingsTab==='backup') content = renderSettingsBackup();
   else if(S.settingsTab==='integrations') content = window.BorionInterop ? BorionInterop.renderSettings() : '<div class="settings-section">Integração indisponível.</div>'; // protected interop seam
   else if(S.settingsTab==='help') content = window.BorionHelp ? BorionHelp.render() : HelpCenterLoader.placeholder();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.45.5 — Revisão de Despesas MIT Corrigida</div><footer class="app-release-footer" aria-label="Informações do Borion">
-<div><strong>Versão:</strong> 6.45.5</div>
+  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.46.0 — Modo Google Drive Estrito</div><footer class="app-release-footer" aria-label="Informações do Borion">
+<div><strong>Versão:</strong> 6.46.0</div>
 <div><strong>Lançamento:</strong> 20/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
@@ -243,8 +243,9 @@ const Settings = {
   async manualBackup(options={}){
     if(!(S&&S.currentProfile&&S.data)) throw new Error('Abra um perfil financeiro antes de salvar.');
     const targets=options.targets||'both';
-    const wantDrive=targets==='both'||targets==='drive';
-    const wantLocal=targets==='both'||targets==='local';
+    const strictDrive=!!(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory());
+    const wantDrive=strictDrive?true:(targets==='both'||targets==='drive');
+    const wantLocal=strictDrive?false:(targets==='both'||targets==='local');
     const reason=options.reason||'manual_drive_local';
     saveCurrentData({finalConfirmation:true});
     if(typeof clearExitSavePending==='function') clearExitSavePending(S.currentProfile.id);
@@ -292,7 +293,7 @@ const Settings = {
     return Settings._runQuickBackup('qb_local','Criar backup agora','Criando...',()=>Settings.manualBackup({targets:'local',reason:'manual'}));
   },
   quickBackupBoth(){
-    return Settings._runQuickBackup('qb_both','SALVAR DRIVE&LOCAL','Salvando...',()=>Settings.manualBackup({targets:'both',reason:'manual_drive_local'}));
+    return Settings._runQuickBackup('qb_both','SALVAR NO DRIVE','Salvando...',()=>Settings.manualBackup({targets:'drive',reason:'manual_drive'}));
   },
   toggleCheques(){ if(!S.data.cheques) S.data.cheques={enabled:false,items:[]}; S.data.cheques.enabled=!S.data.cheques.enabled; if(!Array.isArray(S.data.cheques.items)) S.data.cheques.items=[]; saveCurrentData(); if(!S.data.cheques.enabled && S.view==='cheques') S.view='settings'; renderApp(); toast(S.data.cheques.enabled?'Módulo de cheques ativado.':'Módulo de cheques desativado.'); },
   toggleReservas(){
@@ -384,7 +385,7 @@ function renderSettingsBackup(){
     <div class="settings-section"><h3>Backups no Google Drive</h3><p class="desc">Histórico guardado na pasta <b>backups</b>, dentro da pasta acima. Limpeza automática mantém no máximo ~10GB (mais antigos são apagados — o histórico completo continua no disco local).</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewDriveBackups()">Ver backups no Drive</button><button id="qb_drive" class="btn btn-primary btn-sm" onclick="Settings.quickBackupDrive()">Criar backup agora</button></div></div>
     ${localBackupsBlock}
     ${folderSection}
-    <div class="info-box">Se a internet cair, o Borion continua salvando neste dispositivo e envia pro Drive automaticamente quando a conexão voltar.</div>`;
+    <div class="info-box">Neste modo, o Borion depende 100% do Google Drive. Sem internet ou sem login confirmado, o aplicativo é bloqueado e não aceita lançamentos.</div>`;
   }
 
   if(isLocal){
@@ -1056,7 +1057,7 @@ window.Settings = Settings;
 /* ================= V6.33.1 — refinamento extra de Configurações, padronização de ordenação
    e bloco flutuante de Anotações persistente entre abas ================= */
 (function(){
-  const SETTINGS_VERSION = '6.45.5';
+  const SETTINGS_VERSION = '6.46.0';
 
   function floatingNotesPrefs(create=false){
     const fallback={enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};
@@ -1117,7 +1118,7 @@ window.Settings = Settings;
         ${originalSettingsTabButton('backup','Backups')}
         ${originalSettingsTabButton('integrations','Integrações')}
         <button class="settings-tab settings-help-tab ${S.settingsTab==='help'?'active':''}" onclick="HelpCenterLoader.open()" title="Abrir a Central do Borion"><span class="settings-help-icon">?</span><span>Central do Borion</span></button>
-        <button id="qb_both" class="btn btn-primary btn-sm settings-quick-backup-btn" onclick="Settings.quickBackupBoth()" title="Cria um backup agora e salva ao mesmo tempo no Google Drive e neste dispositivo">SALVAR DRIVE&amp;LOCAL</button>
+        <button id="qb_both" class="btn btn-primary btn-sm settings-quick-backup-btn" onclick="Settings.quickBackupBoth()" title="Confirma o salvamento diretamente no Google Drive">SALVAR NO DRIVE</button>
       </div>`;
     let content='';
     if(S.settingsTab==='modules') content = renderSettingsModules();
@@ -1349,7 +1350,7 @@ window.Settings = Settings;
       </div>
       ${localBackupsBlock}
       ${folderSection}
-      <div class="info-box">Se a internet cair, o Borion continua salvando neste dispositivo e envia pro Drive quando a conexão voltar.</div>`;
+      <div class="info-box">Neste modo, o Borion depende 100% do Google Drive. Sem internet ou login confirmado, o aplicativo é bloqueado e não aceita lançamentos.</div>`;
     }
 
     if(isLocal){

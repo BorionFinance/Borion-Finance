@@ -459,10 +459,10 @@ function renderView(){
           : (window.GoogleDriveProvider && GoogleDriveProvider.isConnected() && GoogleDriveProvider.conflict)
           ? `<button id="cloud_status_badge" class="cloud-status offline" onclick="GoogleDriveProvider.handleStatusClick()" title="Existe uma versão mais recente no Drive — clique pra recarregar, ou Ctrl+S pra salvar sua versão">Conflito — recarregar</button>`
           : (window.GoogleDriveProvider && GoogleDriveProvider.isConnected() && (GoogleDriveProvider.lastSyncError || !navigator.onLine))
-          ? `<button id="cloud_status_badge" class="cloud-status offline" onclick="GoogleDriveProvider.handleStatusClick()" title="${esc(GoogleDriveProvider.lastSyncError||'Sem internet. Os dados continuam neste dispositivo.')}">${GoogleDriveProvider.authRequired?'Google Drive — reconectar':'Google Drive — não salvo'}</button>`
+          ? `<button id="cloud_status_badge" class="cloud-status offline" onclick="GoogleDriveProvider.handleStatusClick()" title="${esc(GoogleDriveProvider.lastSyncError||'Sem internet. O Borion está bloqueado até o Google Drive voltar.')}">${GoogleDriveProvider.authRequired?'Google Drive — reconectar':'Google Drive — não salvo'}</button>`
           : (window.GoogleDriveProvider && GoogleDriveProvider.isConnected())
           ? `<button id="cloud_status_badge" class="cloud-status ${GoogleDriveProvider.dirty?'syncing':'local'}" onclick="GoogleDriveProvider.handleStatusClick()" title="Conectado ao Google Drive — ${esc(GoogleDriveAuth.user?GoogleDriveAuth.user.email:'')} — pasta: ${esc(GoogleDriveProvider.folderName||'?')}">Google Drive${GoogleDriveProvider.dirty?' — salvando...':' — salvo'}</button>`
-          : `<button id="cloud_status_badge" class="cloud-status local" onclick="Nav.go('settings')" title="Sem conta na nuvem — dados salvos só neste dispositivo">Modo local</button>`}
+          : `<button id="cloud_status_badge" class="cloud-status local" onclick="Nav.go('settings')" title="Sem conexão confirmada com o Google Drive">Sem conexão</button>`}
         ${bankBtn}
         ${monthNav}
         <button class="bell-btn" onclick="Notifs.togglePanel(event)">${bellIconSVG()}${unread?`<span class="bell-badge">${unread>9?'9+':unread}</span>`:''}</button>

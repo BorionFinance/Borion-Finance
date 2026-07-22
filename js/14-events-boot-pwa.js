@@ -156,10 +156,13 @@ window.addEventListener('pageshow', (e)=>{
 let borionServiceWorkerPromise=null;
 function registerBorionServiceWorker642(){
   if(borionServiceWorkerPromise)return borionServiceWorkerPromise;
-  if(!('serviceWorker' in navigator))return Promise.resolve(null);
-  borionServiceWorkerPromise=navigator.serviceWorker.register('sw.js?v=6.45.5',{updateViaCache:'none'})
-    .then(registration=>{registration.update().catch(()=>{});let lastCheck=Date.now();document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&Date.now()-lastCheck>30*60*1000){lastCheck=Date.now();registration.update().catch(()=>{});}});return registration;})
-    .catch(err=>{console.warn('SW falhou:',err);return null;});
+  borionServiceWorkerPromise=(async()=>{
+    try{
+      if('serviceWorker' in navigator){const regs=await navigator.serviceWorker.getRegistrations();for(const reg of regs)await reg.unregister();}
+      if(window.caches){const keys=await caches.keys();for(const key of keys)await caches.delete(key);}
+    }catch(e){console.warn('[BORION][STRICT_DRIVE] não foi possível limpar todo o cache antigo do PWA:',e);}
+    return null;
+  })();
   return borionServiceWorkerPromise;
 }
 
@@ -189,7 +192,7 @@ async function runBorionBoot642(){
     if(window.BootProgress)BootProgress.setStage('device');
     // Backup local e atualização do service worker são importantes, porém não
     // bloqueiam login nem seletor. As falhas ficam registradas e são retomadas depois.
-    const backupFolderInit=Promise.resolve().then(()=>window.BackupFS&&BackupFS.init?BackupFS.init():null).catch(e=>{if(window.BorionPerf)BorionPerf.event('backup_init_deferred',{error:String(e&&e.message||e)});return null;});
+    const backupFolderInit=storageMode==='google_drive'?Promise.resolve(null):Promise.resolve().then(()=>window.BackupFS&&BackupFS.init?BackupFS.init():null).catch(e=>{if(window.BorionPerf)BorionPerf.event('backup_init_deferred',{error:String(e&&e.message||e)});return null;});
     const swInit=registerBorionServiceWorker642();
     const deviceInit=borionBootTaskTimeout((async()=>{if(window.BorionDevice640){await BorionDevice640.getOrCreateDeviceId();BorionDevice640.newSessionId();}return true;})(),10000,'DEVICE_STORAGE_TIMEOUT','O identificador seguro deste dispositivo demorou além do limite.');
     const queueInit=borionBootTaskTimeout((async()=>{if(window.BorionDurableQueue){const stuck=await BorionDurableQueue.pendingOnly();if(stuck.length&&window.BorionPerf)BorionPerf.event('durable_queue_recovery',{count:stuck.length});}return true;})(),10000,'DURABLE_QUEUE_TIMEOUT','A fila segura de alterações demorou além do limite.');
@@ -199,6 +202,7 @@ async function runBorionBoot642(){
     if(window.BootProgress)BootProgress.setStage('storage',{detail:'Preparando armazenamento local e verificando pendências'});
 
     if(storageMode==='google_drive'){
+      if(!navigator.onLine)throw Object.assign(new Error('Sem internet. O Borion usa somente o Google Drive e não abre offline.'),{code:'STRICT_DRIVE_OFFLINE'});
       // Identity, deviceId e IndexedDB são preparados em paralelo. BackupFS e SW
       // continuam em segundo plano e não seguram a conexão com o Google.
       const identity=GoogleDriveAuth.ensureIdentityLoaded();

@@ -14,6 +14,70 @@ const LS_STORAGE_MODE = 'borion_storage_mode';
 function getStorageMode(){ return readJSON(LS_STORAGE_MODE, null); }
 function setStorageMode(mode){ writeJSON(LS_STORAGE_MODE, mode); }
 
+
+/* V6.46.0 — Modo Google Drive estrito (fail-closed).
+   - Dados financeiros e perfis ficam apenas em memória durante a sessão.
+   - localStorage/IndexedDB deixam de ser fonte, cache ou fila de recuperação de dados.
+   - Na primeira abertura desta versão existe uma migração única: qualquer pendência
+     local legítima da versão anterior é enviada ao Drive; depois os caches financeiros
+     locais são apagados e nunca mais voltam a ser usados. */
+const BORION_STRICT_DRIVE_MIGRATION_KEY='borion_strict_drive_migrated_v6460';
+const BorionStrictDrive={
+  enabled:true,
+  active:false,
+  profiles:[],
+  dataByProfile:new Map(),
+  profileTombstones:{},
+  _clone(value){
+    if(value==null)return value;
+    try{return JSON.parse(JSON.stringify(value));}catch(e){return value;}
+  },
+  isGoogleMode(){return getStorageMode()==='google_drive';},
+  shouldUseMemory(){return !!(this.enabled&&this.isGoogleMode()&&this.active);},
+  init(){
+    try{this.active=this.enabled&&this.isGoogleMode()&&localStorage.getItem(BORION_STRICT_DRIVE_MIGRATION_KEY)==='1';}
+    catch(e){this.active=false;}
+    return this.active;
+  },
+  seedFromLegacyState(){
+    const sourceProfiles=(typeof S!=='undefined'&&Array.isArray(S.profiles))?S.profiles:readJSON(LS_PROFILES,[]);
+    this.profiles=this._clone(sourceProfiles||[]);
+    this.dataByProfile.clear();
+    for(const profile of this.profiles){
+      if(!profile||profile.id==null)continue;
+      const id=String(profile.id);
+      const data=(typeof S!=='undefined'&&S.currentProfile&&String(S.currentProfile.id)===id&&S.data)
+        ?S.data:readJSON(LS_DATA_PREFIX+id,null);
+      if(data!=null)this.dataByProfile.set(id,this._clone(data));
+    }
+    this.profileTombstones=this._clone(readJSON(LS_PROFILE_TOMBSTONES_6401,{}))||{};
+  },
+  async purgeFinancialCaches(){
+    try{
+      Object.keys(localStorage).forEach(key=>{
+        if(key===LS_PROFILES||key===LS_SESSION||key===LS_PROFILE_TOMBSTONES_6401||key.startsWith(LS_DATA_PREFIX)||key.startsWith(LS_EXIT_SAVE_PREFIX))localStorage.removeItem(key);
+      });
+    }catch(e){console.warn('[BORION][STRICT_DRIVE] falha ao limpar localStorage financeiro:',e);}
+    try{
+      if(window.indexedDB){
+        for(const name of ['borion_findata_v1','borion_local_backups_v1']){
+          await new Promise(resolve=>{try{const req=indexedDB.deleteDatabase(name);req.onsuccess=resolve;req.onerror=resolve;req.onblocked=resolve;}catch(e){resolve();}});
+        }
+      }
+    }catch(e){console.warn('[BORION][STRICT_DRIVE] falha ao limpar IndexedDB financeiro:',e);}
+  },
+  async activate(){
+    if(!this.enabled||!this.isGoogleMode())return false;
+    if(!this.active)this.seedFromLegacyState();
+    this.active=true;
+    try{localStorage.setItem(BORION_STRICT_DRIVE_MIGRATION_KEY,'1');}catch(e){}
+    await this.purgeFinancialCaches();
+    return true;
+  }
+};
+BorionStrictDrive.init();
+window.BorionStrictDrive=BorionStrictDrive;
+
 const APP_NAME = 'Borion Finance';
 /* V5.36.0 — id fixo da conta "Carteira" (dinheiro físico). Nunca muda entre migrações,
    nunca é excluída pelo usuário e serve para diferenciar dinheiro físico de banco/cartão. */
@@ -140,10 +204,22 @@ function profileAvatarHTML(profile, extraClass=''){
 }
 
 const LS_PROFILE_TOMBSTONES_6401='borion_profile_tombstones_v6401';
-function getProfiles(){ return readJSON(LS_PROFILES, []); }
-function setProfiles(list){ writeJSON(LS_PROFILES, list); }
-function getProfileTombstones6401(){ const v=readJSON(LS_PROFILE_TOMBSTONES_6401,{}); return v&&typeof v==='object'&&!Array.isArray(v)?v:{}; }
-function setProfileTombstones6401(v){ writeJSON(LS_PROFILE_TOMBSTONES_6401,v||{}); }
+function getProfiles(){
+  if(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory())return BorionStrictDrive._clone(BorionStrictDrive.profiles||[]);
+  return readJSON(LS_PROFILES, []);
+}
+function setProfiles(list){
+  if(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory()){BorionStrictDrive.profiles=BorionStrictDrive._clone(list||[]);return true;}
+  return writeJSON(LS_PROFILES, list);
+}
+function getProfileTombstones6401(){
+  if(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory())return BorionStrictDrive._clone(BorionStrictDrive.profileTombstones||{});
+  const v=readJSON(LS_PROFILE_TOMBSTONES_6401,{}); return v&&typeof v==='object'&&!Array.isArray(v)?v:{};
+}
+function setProfileTombstones6401(v){
+  if(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory()){BorionStrictDrive.profileTombstones=BorionStrictDrive._clone(v||{});return true;}
+  return writeJSON(LS_PROFILE_TOMBSTONES_6401,v||{});
+}
 function recordProfileDeletion6401(profileId,reason='user_delete'){
   if(!profileId) return null;
   const all=getProfileTombstones6401();
@@ -161,32 +237,39 @@ function recordProfileDeletion6401(profileId,reason='user_delete'){
 function applyProfileTombstones6401(v){ if(v&&typeof v==='object'&&!Array.isArray(v)) setProfileTombstones6401(v); }
 function clearProfileDeletion6401(profileId){ const all=getProfileTombstones6401(); delete all[String(profileId)]; setProfileTombstones6401(all); }
 
-function getSession(){ return readJSON(LS_SESSION, null); }
-function setSession(s){ if(s) writeJSON(LS_SESSION, s); else localStorage.removeItem(LS_SESSION); }
+function getSession(){ if(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory())return null; return readJSON(LS_SESSION, null); }
+function setSession(s){ if(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory())return; if(s) writeJSON(LS_SESSION, s); else localStorage.removeItem(LS_SESSION); }
 
 function exitSaveProfileId(){ return (S && S.currentProfile && S.currentProfile.id) ? S.currentProfile.id : 'sem_perfil'; }
 function exitSaveKey(profileId){ return LS_EXIT_SAVE_PREFIX + (profileId || exitSaveProfileId()); }
 function markExitSavePending(profileId){
+  if(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory())return;
   try{ writeJSON(exitSaveKey(profileId), {pending:true, updatedAt:Date.now()}); }catch(e){}
   if(window.ExitSaveGuard && typeof ExitSaveGuard.refresh==='function'){ ExitSaveGuard.dismissed=false; ExitSaveGuard.refresh(); }
 }
 function clearExitSavePending(profileId){
+  if(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory())return;
   try{ localStorage.removeItem(exitSaveKey(profileId)); }catch(e){}
   if(window.ExitSaveGuard && typeof ExitSaveGuard.refresh==='function') ExitSaveGuard.refresh();
 }
 function hasExitSavePending(profileId){
+  if(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory())return false;
   const info = readJSON(exitSaveKey(profileId), null);
   return !!(info && info.pending);
 }
 
-function getProfileData(id){ return readJSON(LS_DATA_PREFIX+id, null); }
+function getProfileData(id){
+  if(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory())return BorionStrictDrive._clone(BorionStrictDrive.dataByProfile.get(String(id))||null);
+  return readJSON(LS_DATA_PREFIX+id, null);
+}
 function setProfileData(id, data){
+  if(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory()){
+    BorionStrictDrive.dataByProfile.set(String(id),BorionStrictDrive._clone(data));
+    return true;
+  }
   writeJSON(LS_DATA_PREFIX+id, data);
-  // V5.34.1 — os dados financeiros do perfil agora também são gravados "de
-  // verdade" no IndexedDB (armazenamento durável e com mais espaço). O
-  // localStorage continua recebendo a mesma escrita para servir de cache
-  // rápido/síncrono para a UI, mas deixa de ser o único lugar onde os dados existem.
   idbSetProfileData(id, data);
+  return true;
 }
 
 /* ---------------- IndexedDB: armazenamento principal dos dados financeiros por perfil ----------------
@@ -209,18 +292,20 @@ function borionDataIdbOpen(){
   });
 }
 async function idbGetProfileData(id){
+  if(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory())return getProfileData(id);
   if(!id) return null;
   try{
     const db = await borionDataIdbOpen();
     return await new Promise((resolve, reject)=>{
       const tx = db.transaction(BORION_IDB_DATA_STORE, 'readonly');
       const rq = tx.objectStore(BORION_IDB_DATA_STORE).get(id);
-      rq.onsuccess = ()=> resolve(rq.result!=null ? rq.result : null);
-      rq.onerror = ()=> reject(rq.error);
+      rq.onsuccess = ()=>{const value=rq.result!=null?rq.result:null;try{db.close();}catch(e){}resolve(value);};
+      rq.onerror = ()=>{try{db.close();}catch(e){}reject(rq.error);};
     });
   }catch(e){ console.warn('IndexedDB (leitura) indisponível, usando localStorage:', e); return null; }
 }
 async function idbSetProfileData(id, data){
+  if(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory())return true;
   if(!id) return false;
   try{
     const db = await borionDataIdbOpen();
@@ -228,20 +313,21 @@ async function idbSetProfileData(id, data){
     return await new Promise((resolve, reject)=>{
       const tx = db.transaction(BORION_IDB_DATA_STORE, 'readwrite');
       tx.objectStore(BORION_IDB_DATA_STORE).put(safe, id);
-      tx.oncomplete = ()=> resolve(true);
-      tx.onerror = ()=> reject(tx.error);
+      tx.oncomplete = ()=>{try{db.close();}catch(e){}resolve(true);};
+      tx.onerror = ()=>{try{db.close();}catch(e){}reject(tx.error);};
     });
   }catch(e){ console.warn('IndexedDB (escrita) indisponível — os dados continuam salvos no localStorage:', e); return false; }
 }
 async function idbDeleteProfileData(id){
+  if(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory()){BorionStrictDrive.dataByProfile.delete(String(id));return true;}
   if(!id) return false;
   try{
     const db = await borionDataIdbOpen();
     return await new Promise((resolve, reject)=>{
       const tx = db.transaction(BORION_IDB_DATA_STORE, 'readwrite');
       tx.objectStore(BORION_IDB_DATA_STORE).delete(id);
-      tx.oncomplete = ()=> resolve(true);
-      tx.onerror = ()=> reject(tx.error);
+      tx.oncomplete = ()=>{try{db.close();}catch(e){}resolve(true);};
+      tx.onerror = ()=>{try{db.close();}catch(e){}reject(tx.error);};
     });
   }catch(e){ return false; }
 }
@@ -249,6 +335,7 @@ async function idbDeleteProfileData(id){
    também atualiza o cache síncrono do localStorage. Retorna os dados já
    migrados (migrateData) ou null se não houver nada gravado ainda no IndexedDB. */
 async function hydrateProfileDataFromIDB(id){
+  if(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory())return getProfileData(id);
   const idbData = await idbGetProfileData(id);
   if(idbData){
     writeJSON(LS_DATA_PREFIX+id, idbData);
@@ -1168,16 +1255,17 @@ function saveCurrentData(options={}){
     try{ BorionDataActions6401.captureImplicitDeletions(_previousProfileData,S.data,S.currentProfile.id); }
     catch(e){ console.warn('[BORION][DELETE_CAPTURE_WARN]',e); }
     setProfileData(S.currentProfile.id, S.data);
-    // V5.34.3 — isolamento entre perfis: o profileId é passado explicitamente
-    // (o mesmo que acabou de receber os dados em setProfileData acima), em vez
-    // de depender só da variável interna CloudStorage.activeProfileId. Isso
-    // fecha qualquer janela em que os dois pudessem divergir e um perfil
-    // acabasse sobrescrevendo a linha de outro no Supabase.
     if(window.CloudStorage && CloudStorage.user){ CloudStorage.queueSave(S.currentProfile.id, S.data); }
-    if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){ GoogleDriveProvider.queueSave(); }
-    if(!options.finalConfirmation) markExitSavePending(S.currentProfile.id);
+    if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){
+      GoogleDriveProvider.queueSave({source:options.finalConfirmation?'final_confirmation':'data_change'});
+    }else if(window.BorionStrictDrive&&BorionStrictDrive.isGoogleMode()&&window.GoogleDriveProvider){
+      GoogleDriveProvider.lockStrictCloud('O Google Drive não está conectado. Entre novamente antes de continuar.');
+      return false;
+    }
+    if(!(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory())&&!options.finalConfirmation) markExitSavePending(S.currentProfile.id);
   }
-  BackupFS.markDirty();
+  if(!(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory())&&window.BackupFS)BackupFS.markDirty();
+  return true;
 }
 
 function confirmFinalSave(reason='manual'){

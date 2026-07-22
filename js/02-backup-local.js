@@ -9,7 +9,7 @@
 /* ---------------- Backup em pasta local (File System Access API — Chrome/Edge) ---------------- */
 const FS_ACCESS_SUPPORTED = typeof window!=='undefined' && 'showDirectoryPicker' in window;
 const IDB_NAME = 'borion_handles', IDB_STORE = 'handles';
-const BORION_APP_VERSION = '6.45.4';
+const BORION_APP_VERSION = '6.45.5';
 const BORION_BACKUP_CONSENT_PREFIX = 'borion_backup_consent_v2_';
 const BORION_BACKUP_LAST_CLOUD_PREFIX = 'borion_backup_last_cloud_v1_';
 const BORION_BACKUP_SNOOZE_PREFIX = 'borion_backup_consent_snooze_v1_';

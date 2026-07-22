@@ -157,7 +157,7 @@ let borionServiceWorkerPromise=null;
 function registerBorionServiceWorker642(){
   if(borionServiceWorkerPromise)return borionServiceWorkerPromise;
   if(!('serviceWorker' in navigator))return Promise.resolve(null);
-  borionServiceWorkerPromise=navigator.serviceWorker.register('sw.js?v=6.45.4',{updateViaCache:'none'})
+  borionServiceWorkerPromise=navigator.serviceWorker.register('sw.js?v=6.45.5',{updateViaCache:'none'})
     .then(registration=>{registration.update().catch(()=>{});let lastCheck=Date.now();document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&Date.now()-lastCheck>30*60*1000){lastCheck=Date.now();registration.update().catch(()=>{});}});return registration;})
     .catch(err=>{console.warn('SW falhou:',err);return null;});
   return borionServiceWorkerPromise;

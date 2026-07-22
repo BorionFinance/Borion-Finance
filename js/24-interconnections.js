@@ -2225,13 +2225,54 @@
     if(!data.categoryColors[bucket][value]) data.categoryColors[bucket][value]=baseCatColor(value);
     return value;
   }
-  function completeMitExpenseImport(row,item,borionId){
+  function completeMitExpenseImport(row,item,borionId,options={}){
+    const persist=options.persist!==false;
     const interop=ensureInterop(row.data),mitState=ensureMitState(row.data),state=importedState(row.data,'marco-iris');
-    mitState.expenses[String(item.entityId)]={borionId:borionId||'',aggregateId:item.aggregateId,importedAt:nowIso()};
-    state.records[item.aggregateId]=Object.assign({},state.records[item.aggregateId]||{},{status:'imported',entityId:item.entityId,txId:borionId||'',importedAt:mitState.expenses[String(item.entityId)].importedAt});
+    const importedAt=nowIso();
+    mitState.expenses[String(item.entityId)]={borionId:borionId||'',aggregateId:item.aggregateId,importedAt};
+    state.records[item.aggregateId]=Object.assign({},state.records[item.aggregateId]||{},{status:'imported',entityId:item.entityId,txId:borionId||'',importedAt});
     interop.pending=(interop.pending||[]).filter(pending=>!(pending.sourceAppId==='marco-iris'&&pending.aggregateId===item.aggregateId));
-    saveProfileData(row.profile.id,row.data);
-    if(S.currentProfile&&String(S.currentProfile.id)===String(row.profile.id)) saveCurrentData();
+    if(!persist) return;
+    if(S.currentProfile&&String(S.currentProfile.id)===String(row.profile.id)){
+      S.data=row.data;
+      saveCurrentData();
+    }else{
+      saveProfileData(row.profile.id,row.data);
+    }
+  }
+  function mitReviewedExpenseCategories(data,type){
+    data.categorias ||= defaultCategories();
+    const bucket=type==='fixa'?'fixa':'variavel';
+    const defaults=defaultCategories()[bucket]||['Outro'];
+    const current=Array.isArray(data.categorias[bucket])?data.categorias[bucket]:[];
+    data.categorias[bucket]=current.length?current:defaults.slice();
+    if(!data.categorias[bucket].includes('Outro')) data.categorias[bucket].push('Outro');
+    return data.categorias[bucket];
+  }
+  function validateMitReviewedExpenseViews(type){
+    const previousTab=S.budgetTab;
+    try{
+      if(typeof renderBudget==='function'){
+        S.budgetTab=type==='fixa'?'fixa':'variavel';
+        const budgetHTML=renderBudget();
+        if(typeof budgetHTML!=='string') throw new Error('A tela de Lançamentos não pôde ser validada.');
+      }
+      if(typeof renderOverview==='function'){
+        const overviewHTML=renderOverview();
+        if(typeof overviewHTML!=='string') throw new Error('A Visão geral não pôde ser validada.');
+      }
+      if(typeof renderInvestments==='function'&&investmentsEnabled?.()){
+        const investmentsHTML=renderInvestments();
+        if(typeof investmentsHTML!=='string') throw new Error('A tela de Investimentos não pôde ser validada.');
+      }
+    }finally{
+      S.budgetTab=previousTab;
+    }
+  }
+  function restoreMitExpenseSnapshot(target,snapshot){
+    Object.keys(target).forEach(key=>delete target[key]);
+    Object.assign(target,snapshot);
+    S.data=target;
   }
   function openMitExpenseImport(aggregateId){
     const row=findSourceConfig('marco-iris');
@@ -2239,52 +2280,148 @@
     if(!S.currentProfile||String(S.currentProfile.id)!==String(row.profile.id)){ if(typeof toast==='function')toast('Abra o perfil '+row.profile.name+' para revisar esta despesa.'); return; }
     const item=(ensureInterop(row.data).pending||[]).find(pending=>pending.sourceAppId==='marco-iris'&&pending.aggregateId===aggregateId);
     if(!item){ if(typeof toast==='function') toast('Esta despesa não está mais aguardando revisão.'); return; }
-    const data=row.data,accounts=(data.contas||[]).filter(a=>a&&!a.archivedAt&&a.active!==false),reserves=(data.reservas?.boxes||[]).filter(r=>r&&!r.archivedAt&&r.active!==false),cards=(data.cartoes||[]).filter(c=>c&&!c.archivedAt&&c.active!==false);
+
+    const data=row.data;
+    const accounts=(data.contas||[]).filter(a=>a&&!a.archivedAt&&a.active!==false);
+    const reserves=(data.reservas?.boxes||[]).filter(r=>r&&!r.archivedAt&&r.active!==false);
+    const cards=(data.cartoes||[]).filter(c=>c&&!c.archivedAt&&c.active!==false);
     const initialStatus=item.status==='Pago'?'Pago':'Em aberto';
-    const root=document.getElementById('modal-root'),overlay=document.createElement('div'); overlay.className='modal-overlay transaction-modal-overlay';
-    overlay.innerHTML=`<div class="modal-box transaction-modal mit-expense-modal"><div class="modal-head"><h2>Importar Despesa</h2><button data-close>&times;</button></div><p class="modal-sub">Revise os dados recebidos do Marco Iris. A despesa só será criada após clicar em Importar.</p><div class="field"><label>Tipo</label><div class="segmented-toggle" id="mit_exp_type_group"><button type="button" class="seg-btn active" data-value="variavel">Despesa Variável</button><button type="button" class="seg-btn" data-value="fixa">Despesa Fixa</button></div><input type="hidden" id="mit_exp_type" value="variavel"></div><div class="field"><label>Nome</label><input id="mit_exp_name" value="${escHtml(item.name||item.description||'Despesa do Marco Iris')}"></div><div class="field"><label>Local da Compra</label><input id="mit_exp_local" value="${escHtml(item.localPurchase||'')}"></div><div class="field"><label>Categoria</label><input id="mit_exp_category" list="mit-exp-categories" value=""><datalist id="mit-exp-categories">${[...(data.categorias?.variavel||[]),...(data.categorias?.fixa||[])].filter((v,i,a)=>a.indexOf(v)===i).map(v=>`<option value="${escHtml(v)}"></option>`).join('')}</datalist></div><div class="field"><label>Valor</label><input id="mit_exp_value" type="number" min="0.01" step="0.01" value="${Number(item.amount)||0}"></div><div class="field"><label>Data</label><input id="mit_exp_date" type="date" value="${escHtml(item.date||todayISO())}"></div><div class="field"><label>De onde será pago</label><div class="segmented-toggle payment-source-toggle" id="mit_exp_source_group"><button type="button" class="seg-btn active" data-value="carteira">Carteira</button><button type="button" class="seg-btn" data-value="conta">Conta</button><button type="button" class="seg-btn" data-value="reserva" ${reserves.length?'':'disabled'}>Reserva</button><button type="button" class="seg-btn" data-value="credito" ${cards.length?'':'disabled'}>Crédito</button></div><input type="hidden" id="mit_exp_source" value="carteira"></div><div id="mit_exp_account_panel" class="payment-source-panel hidden"><div class="field"><label>Conta</label><select id="mit_exp_account">${accounts.filter(a=>!a.isCarteira).map(a=>`<option value="${escHtml(a.id)}">${escHtml(a.nome||'Conta')}</option>`).join('')}</select></div><div class="field"><label>Forma</label><select id="mit_exp_account_form"><option>Pix</option><option>Débito</option></select></div></div><div id="mit_exp_reserve_panel" class="payment-source-panel hidden"><div class="field"><label>Reserva</label><select id="mit_exp_reserve">${reserves.map(r=>`<option value="${escHtml(r.id)}">${escHtml(r.nome||'Reserva')}</option>`).join('')}</select></div></div><div id="mit_exp_credit_panel" class="payment-source-panel hidden"><div class="field"><label>Cartão de crédito</label><select id="mit_exp_card">${cards.map(c=>`<option value="${escHtml(c.id)}">${escHtml(c.banco||c.nome||'Cartão')}</option>`).join('')}</select></div></div><div class="field"><label>Status deste mês</label><div class="segmented-toggle" id="mit_exp_status_group"><button type="button" class="seg-btn ${initialStatus==='Pago'?'active':''}" data-value="Pago">Pago</button><button type="button" class="seg-btn ${initialStatus==='Em aberto'?'active':''}" data-value="Em aberto">Em Aberto</button></div><input type="hidden" id="mit_exp_status" value="${initialStatus}"></div><div class="row-btns"><button class="btn btn-primary btn-block" id="mit_exp_import">Importar</button></div></div>`;
-    root.replaceChildren(overlay); if(typeof attachModalGuard==='function') attachModalGuard(overlay);
-    const q=id=>overlay.querySelector(id),wire=(group,hidden,change)=>q(group)?.querySelectorAll('.seg-btn:not([disabled])').forEach(btn=>btn.onclick=()=>{q(group).querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');q(hidden).value=btn.dataset.value;change?.(btn.dataset.value);});
+    const initialCategory=String(item.category||item.record?.category||item.record?.categoria||'').trim();
+    const returnScroll=window.scrollY||document.documentElement?.scrollTop||0;
+    const root=document.getElementById('modal-root'),overlay=document.createElement('div');
+    overlay.className='modal-overlay transaction-modal-overlay';
+    overlay.innerHTML=`<div class="modal-box transaction-modal mit-expense-modal">
+      <div class="modal-head"><h2>Importar Despesa</h2><button type="button" data-close>&times;</button></div>
+      <p class="modal-sub">Revise os dados recebidos do Marco Iris. A despesa só será criada após clicar em Importar.</p>
+      <div class="field"><label>Tipo</label><div class="segmented-toggle" id="mit_exp_type_group"><button type="button" class="seg-btn active" data-value="variavel">Despesa Variável</button><button type="button" class="seg-btn" data-value="fixa">Despesa Fixa</button></div><input type="hidden" id="mit_exp_type" value="variavel"></div>
+      <div class="field"><label>Nome</label><input type="text" id="mit_exp_name" value="${escHtml(item.name||item.description||'Despesa do Marco Iris')}" placeholder="Nome da despesa"></div>
+      <div class="field"><label>Local da compra</label><input type="text" id="mit_exp_local" value="${escHtml(item.localPurchase||'')}" placeholder="Ex: Mercado, fornecedor, loja..."></div>
+      <div class="field"><label>Categoria</label><select id="mit_exp_category"></select><div id="mit_exp_newcat_box" class="quickcat-box hidden"><input type="text" id="mit_exp_newcat_input" placeholder="Nome da nova categoria"><button class="btn btn-primary btn-sm" id="mit_exp_newcat_add" type="button">Adicionar</button></div></div>
+      <div class="field"><label>Valor (R$)</label><input type="text" inputmode="numeric" id="mit_exp_value" class="money-input" placeholder="0,00" autocomplete="off"></div>
+      <div class="field"><label>Data</label><input type="date" id="mit_exp_date" value="${escHtml(item.date||todayISO())}"></div>
+      <div class="field"><label>De onde será pago</label><div class="segmented-toggle payment-source-toggle" id="mit_exp_source_group"><button type="button" class="seg-btn active" data-value="carteira">Carteira</button><button type="button" class="seg-btn" data-value="conta">Conta</button><button type="button" class="seg-btn" data-value="reserva" ${reserves.length?'':'disabled'}>Reserva</button><button type="button" class="seg-btn" data-value="credito" ${cards.length?'':'disabled'}>Crédito</button></div><input type="hidden" id="mit_exp_source" value="carteira"></div>
+      <div id="mit_exp_account_panel" class="payment-source-panel hidden"><div class="field"><label>Conta</label><select id="mit_exp_account">${accounts.filter(a=>!a.isCarteira&&String(a.id)!==String(CARTEIRA_CONTA_ID)).map(a=>`<option value="${escHtml(a.id)}">${escHtml(a.nome||'Conta')}</option>`).join('')}</select></div><div class="field"><label>Forma</label><select id="mit_exp_account_form"><option value="Pix">Pix</option><option value="Débito">Débito</option></select></div></div>
+      <div id="mit_exp_reserve_panel" class="payment-source-panel hidden"><div class="field"><label>Reserva</label><select id="mit_exp_reserve">${reserves.map(r=>`<option value="${escHtml(r.id)}">${escHtml(r.nome||'Reserva')}</option>`).join('')}</select></div></div>
+      <div id="mit_exp_credit_panel" class="payment-source-panel hidden"><div class="field"><label>Cartão de crédito</label><select id="mit_exp_card">${cards.map(c=>`<option value="${escHtml(c.id)}">${escHtml(c.banco||c.nome||'Cartão')}</option>`).join('')}</select></div></div>
+      <div class="field"><label>Status deste mês</label><div class="segmented-toggle" id="mit_exp_status_group"><button type="button" class="seg-btn ${initialStatus==='Pago'?'active':''}" data-value="Pago">Pago</button><button type="button" class="seg-btn ${initialStatus==='Em aberto'?'active':''}" data-value="Em aberto">Em aberto</button></div><input type="hidden" id="mit_exp_status" value="${initialStatus}"></div>
+      <div class="row-btns"><button type="button" class="btn btn-primary btn-block" id="mit_exp_import">Importar</button></div>
+    </div>`;
+    root.replaceChildren(overlay);
+    if(typeof attachModalGuard==='function') attachModalGuard(overlay);
+
+    const q=selector=>overlay.querySelector(selector);
+    const wire=(group,hidden,change)=>q(group)?.querySelectorAll('.seg-btn:not([disabled])').forEach(btn=>btn.onclick=()=>{
+      q(group).querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');q(hidden).value=btn.dataset.value;change?.(btn.dataset.value);
+    });
+    const categorySelect=q('#mit_exp_category'),newCategoryBox=q('#mit_exp_newcat_box'),newCategoryInput=q('#mit_exp_newcat_input');
+    function fillCategorySelect(type,preferred=''){
+      const categories=mitReviewedExpenseCategories(data,type);
+      const selected=categories.includes(preferred)?preferred:(categories.includes('Outro')?'Outro':categories[0]);
+      categorySelect.innerHTML=categories.map(category=>`<option value="${escHtml(category)}">${escHtml(category)}</option>`).join('')+'<option value="__new__">➕ Criar nova categoria...</option>';
+      categorySelect.value=selected||'Outro';
+      newCategoryBox.classList.add('hidden');newCategoryInput.value='';
+    }
+    categorySelect.onchange=()=>newCategoryBox.classList.toggle('hidden',categorySelect.value!=='__new__');
+    q('#mit_exp_newcat_add').onclick=()=>{
+      const type=q('#mit_exp_type').value;
+      const category=String(newCategoryInput.value||'').trim();
+      if(!category){newCategoryInput.focus();return;}
+      ensureMitExpenseCategory(data,type,category);
+      fillCategorySelect(type,category);
+      if(typeof toast==='function')toast('Categoria criada.');
+    };
+    fillCategorySelect('variavel',initialCategory);
+    attachMoneyMask(q('#mit_exp_value'),Number(item.amount)||0);
+
     overlay.querySelectorAll('[data-close]').forEach(btn=>btn.onclick=()=>closeModal());
-    wire('#mit_exp_type_group','#mit_exp_type'); wire('#mit_exp_status_group','#mit_exp_status');
-    wire('#mit_exp_source_group','#mit_exp_source',source=>{q('#mit_exp_account_panel').classList.toggle('hidden',source!=='conta');q('#mit_exp_reserve_panel').classList.toggle('hidden',source!=='reserva');q('#mit_exp_credit_panel').classList.toggle('hidden',source!=='credito');});
+    wire('#mit_exp_type_group','#mit_exp_type',type=>fillCategorySelect(type,''));
+    wire('#mit_exp_status_group','#mit_exp_status');
+    wire('#mit_exp_source_group','#mit_exp_source',source=>{
+      q('#mit_exp_account_panel').classList.toggle('hidden',source!=='conta');
+      q('#mit_exp_reserve_panel').classList.toggle('hidden',source!=='reserva');
+      q('#mit_exp_credit_panel').classList.toggle('hidden',source!=='credito');
+    });
+
     q('#mit_exp_import').onclick=()=>{
-      const type=q('#mit_exp_type').value,name=String(q('#mit_exp_name').value||'Despesa do Marco Iris').trim(),localPurchase=String(q('#mit_exp_local').value||'').trim(),category=ensureMitExpenseCategory(data,type,q('#mit_exp_category').value),value=Math.round((Number(q('#mit_exp_value').value)||0)*100)/100,date=q('#mit_exp_date').value||todayISO(),source=q('#mit_exp_source').value,status=q('#mit_exp_status').value==='Pago'?'Pago':'Em aberto',meta=mitExpenseIntegrationMeta(item);
-      if(value<=0){ alert('Digite um valor maior que zero.'); return; }
-      let borionId='';
+      const button=q('#mit_exp_import');
+      if(button.disabled)return;
+      const type=q('#mit_exp_type').value;
+      const name=String(q('#mit_exp_name').value||'').trim();
+      const localPurchase=String(q('#mit_exp_local').value||'').trim();
+      const selectedCategory=q('#mit_exp_category').value;
+      const value=Math.round((parseInt(q('#mit_exp_value').dataset.cents||'0',10)/100)*100)/100;
+      const date=q('#mit_exp_date').value||todayISO();
+      const source=q('#mit_exp_source').value;
+      const status=q('#mit_exp_status').value==='Pago'?'Pago':'Em aberto';
+      if(!name){alert('Informe o nome da despesa.');q('#mit_exp_name').focus();return;}
+      if(selectedCategory==='__new__'){alert('Confirme o nome da nova categoria antes de importar.');newCategoryInput.focus();return;}
+      if(value<=0){alert('Digite um valor maior que zero.');q('#mit_exp_value').focus();return;}
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){alert('Informe uma data válida.');q('#mit_exp_date').focus();return;}
+
+      button.disabled=true;button.textContent='Importando...';
       const beforeImport=clone(data);
+      const category=ensureMitExpenseCategory(data,type,selectedCategory);
+      const meta=mitExpenseIntegrationMeta(item);
+      let borionId='';
       try{
         if(source==='credito'){
-          const card=cards.find(c=>String(c.id)===String(q('#mit_exp_card').value)); if(!card) throw new Error('Escolha um cartão válido.');
+          const card=cards.find(c=>String(c.id)===String(q('#mit_exp_card').value));
+          if(!card) throw new Error('Escolha um cartão válido.');
           card.parcelas=Array.isArray(card.parcelas)?card.parcelas:[];
-          const parcel={id:uid(),descricao:name,local:localPurchase,categoria:category,valorParcela:value,parcelaTotal:1,dataCompra:date.slice(0,7),dataCompraCompleta:date,diaEntrada:Math.max(1,Number(date.slice(8,10))||1),apareceDespesas:true,despesaTipo:type,statusPagamento:status,statusFaturaPorCompetencia:{},despesaTransacaoId:null,despesaTransacaoIds:[],despesaFixaId:null};
-          card.parcelas.push(parcel); linkParcelaToDespesa(card,parcel);
+          const parcel={id:uid(),descricao:name,local:localPurchase,categoria:category,valorParcela:value,parcelaTotal:1,dataCompra:date.slice(0,7),dataCompraCompleta:date,diaEntrada:Math.max(1,Number(date.slice(8,10))||1),apareceDespesas:true,despesaTipo:type,statusPagamento:status,statusFaturaPorCompetencia:{},despesaTransacaoId:null,despesaTransacaoIds:[],despesaFixaId:null,createdAt:Date.now()};
+          card.parcelas.push(parcel);
+          linkParcelaToDespesa(card,parcel);
           if(type==='fixa'){
-            const fixed=(data.fixas||[]).find(f=>f.id===parcel.despesaFixaId); if(!fixed) throw new Error('Falha ao criar a despesa fixa no cartão.'); Object.assign(fixed,meta); borionId=fixed.id;
+            const fixed=(data.fixas||[]).find(f=>f.id===parcel.despesaFixaId);
+            if(!fixed) throw new Error('Falha ao criar a despesa fixa no cartão.');
+            Object.assign(fixed,meta,{localCompra:localPurchase,createdAt:fixed.createdAt||Date.now()});borionId=fixed.id;
           }else{
-            (parcel.despesaTransacaoIds||[]).forEach(id=>{const tx=(data.transacoes||[]).find(t=>t.id===id);if(tx)Object.assign(tx,meta);}); borionId=parcel.despesaTransacaoId||'';
+            const ids=Array.isArray(parcel.despesaTransacaoIds)&&parcel.despesaTransacaoIds.length?parcel.despesaTransacaoIds:[parcel.despesaTransacaoId].filter(Boolean);
+            ids.forEach(id=>{const tx=(data.transacoes||[]).find(t=>t.id===id);if(tx)Object.assign(tx,meta,{localCompra:localPurchase,createdAt:tx.createdAt||Date.now()});});
+            borionId=ids[0]||'';
+            if(!borionId) throw new Error('Falha ao criar a despesa variável no cartão.');
           }
         }else if(type==='fixa'){
           let accountId=null,banco='',origemPagamento='conta',formaPagamento=null,reserve=null;
-          if(source==='carteira'){ accountId=CARTEIRA_CONTA_ID; if(!accountByIdIn(data,accountId))throw new Error('A Carteira não está disponível.'); banco=accountName(data,accountId); formaPagamento='Dinheiro'; }
-          else if(source==='conta'){ accountId=q('#mit_exp_account').value; if(!accountByIdIn(data,accountId))throw new Error('Escolha uma conta válida.'); banco=accountName(data,accountId); formaPagamento=q('#mit_exp_account_form').value; }
-          else { reserve=reserves.find(r=>String(r.id)===String(q('#mit_exp_reserve').value)); if(!reserve) throw new Error('Escolha uma reserva válida.'); origemPagamento='reserva'; banco=reserve.banco||''; }
-          const fixed=Object.assign({id:uid(),nome:name,localCompra:localPurchase,category,categoria:category,valor:value,dia:Math.max(1,Number(date.slice(8,10))||1),dataCadastro:date,startMonth:date.slice(0,7),endMonth:null,accountId:origemPagamento==='conta'?accountId:null,banco,formaPagamento:origemPagamento==='conta'?formaPagamento:null,origemPagamento,reservaOrigemId:reserve?.id||null},meta);
-          data.fixas=Array.isArray(data.fixas)?data.fixas:[]; data.fixaPagamentos=Array.isArray(data.fixaPagamentos)?data.fixaPagamentos:[]; data.fixas.push(fixed); borionId=fixed.id;
-          if(status==='Pago'&&!payFixaOcorrencia(fixed,fixed.startMonth,{persist:false,notify:false})){data.fixas=data.fixas.filter(f=>f.id!==fixed.id);throw new Error('Não foi possível aplicar o pagamento da despesa fixa.');}
+          if(source==='carteira'){
+            accountId=CARTEIRA_CONTA_ID;if(!accountByIdIn(data,accountId))throw new Error('A Carteira não está disponível.');banco=accountName(data,accountId);formaPagamento='Dinheiro';
+          }else if(source==='conta'){
+            accountId=q('#mit_exp_account').value;if(!accountByIdIn(data,accountId))throw new Error('Escolha uma conta válida.');banco=accountName(data,accountId);formaPagamento=q('#mit_exp_account_form').value==='Débito'?'Débito':'Pix';
+          }else{
+            reserve=reserves.find(r=>String(r.id)===String(q('#mit_exp_reserve').value));if(!reserve)throw new Error('Escolha uma reserva válida.');origemPagamento='reserva';banco=reserve.banco||'';
+          }
+          const fixed=Object.assign({id:uid(),nome:name,localCompra:localPurchase,categoria:category,valor:value,dia:Math.max(1,Number(date.slice(8,10))||1),dataCadastro:date,startMonth:date.slice(0,7),endMonth:null,accountId:origemPagamento==='conta'?accountId:null,banco,formaPagamento:origemPagamento==='conta'?formaPagamento:null,origemPagamento,reservaOrigemId:reserve?.id||null,createdAt:Date.now()},meta);
+          data.fixas=Array.isArray(data.fixas)?data.fixas:[];data.fixaPagamentos=Array.isArray(data.fixaPagamentos)?data.fixaPagamentos:[];data.fixas.push(fixed);borionId=fixed.id;
+          if(status==='Pago'&&!applyMitFixedExpensePayment(data,fixed,fixed.startMonth)) throw new Error('Não foi possível aplicar o pagamento da despesa fixa. Confira o saldo e o destino selecionado.');
         }else{
           let accountId=null,banco='',origemPagamento='conta',formaPagamento=null,reserve=null;
-          if(source==='carteira'){accountId=CARTEIRA_CONTA_ID;if(!accountByIdIn(data,accountId))throw new Error('A Carteira não está disponível.');banco=accountName(data,accountId);formaPagamento='Dinheiro';}
-          else if(source==='conta'){accountId=q('#mit_exp_account').value;if(!accountByIdIn(data,accountId))throw new Error('Escolha uma conta válida.');banco=accountName(data,accountId);formaPagamento=q('#mit_exp_account_form').value;}
-          else {reserve=reserves.find(r=>String(r.id)===String(q('#mit_exp_reserve').value));if(!reserve)throw new Error('Escolha uma reserva válida.');origemPagamento='reserva';banco=reserve.banco||'';}
-          const tx=Object.assign({id:uid(),tipo:'variavel',nome:name,localCompra:localPurchase,categoria:category,valor:value,data,statusPagamento:status,accountId:origemPagamento==='conta'?accountId:null,banco,origemPagamento,formaPagamento:origemPagamento==='conta'?formaPagamento:null,reservaOrigemId:reserve?.id||null,reservaOrigemMoveId:null},meta);
+          if(source==='carteira'){
+            accountId=CARTEIRA_CONTA_ID;if(!accountByIdIn(data,accountId))throw new Error('A Carteira não está disponível.');banco=accountName(data,accountId);formaPagamento='Dinheiro';
+          }else if(source==='conta'){
+            accountId=q('#mit_exp_account').value;if(!accountByIdIn(data,accountId))throw new Error('Escolha uma conta válida.');banco=accountName(data,accountId);formaPagamento=q('#mit_exp_account_form').value==='Débito'?'Débito':'Pix';
+          }else{
+            reserve=reserves.find(r=>String(r.id)===String(q('#mit_exp_reserve').value));if(!reserve)throw new Error('Escolha uma reserva válida.');origemPagamento='reserva';banco=reserve.banco||'';
+          }
+          const tx=Object.assign({id:uid(),tipo:'variavel',nome:name,localCompra:localPurchase,categoria:category,valor:value,data:date,statusPagamento:status,accountId:origemPagamento==='conta'?accountId:null,banco,origemPagamento,formaPagamento:origemPagamento==='conta'?formaPagamento:null,reservaOrigemId:reserve?.id||null,reservaOrigemMoveId:null,createdAt:Date.now()},meta);
           data.transacoes=Array.isArray(data.transacoes)?data.transacoes:[];data.transacoes.push(tx);borionId=tx.id;
-          if(status==='Pago'&&!applyNew(data,tx)){data.transacoes=data.transacoes.filter(t=>t.id!==tx.id);throw new Error('Não foi possível aplicar o saldo da despesa.');}
+          if(status==='Pago'&&!applyNew(data,tx)) throw new Error('Não foi possível aplicar o saldo da despesa. Confira o saldo e o destino selecionado.');
         }
-        completeMitExpenseImport(row,item,borionId); closeModal(); if(typeof renderView==='function')renderView(); if(typeof toast==='function')toast('Despesa do Marco Iris importada com sucesso.');
-      }catch(error){
-        Object.keys(data).forEach(key=>delete data[key]); Object.assign(data,beforeImport); S.data=data;
+
+        completeMitExpenseImport(row,item,borionId,{persist:false});
+        validateMitReviewedExpenseViews(type);
+        S.data=data;
+        saveCurrentData();
+
+        closeModal();
+        S.view='settings';uiSourceAppId='marco-iris';uiTab='links';
         if(typeof renderView==='function')renderView();
+        requestAnimationFrame(()=>window.scrollTo({top:returnScroll,behavior:'auto'}));
+        if(typeof toast==='function')toast('Despesa do Marco Iris importada com sucesso. Continue revisando as pendentes.');
+      }catch(error){
+        restoreMitExpenseSnapshot(data,beforeImport);
+        button.disabled=false;button.textContent='Importar';
+        console.error('[BORION][MIT_EXPENSE_REVIEW_IMPORT_ROLLBACK]',error);
         alert(error.message||String(error));
       }
     };

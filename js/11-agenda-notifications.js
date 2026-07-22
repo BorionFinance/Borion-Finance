@@ -31,7 +31,7 @@ function agendaApplyReplication(item, novoQtd){
   }
 }
 function agendaDeleteItems(mode, item){
-  const snapshot = JSON.parse(JSON.stringify(S.data));
+  const snapshot = borionCloneForUndo(S.data);
   if(mode==='future' && item.serieId){
     S.data.agenda = S.data.agenda.filter(x=> !(x.serieId===item.serieId && String(x.data||'')>=String(item.data||'')) );
     S.data.notificacoes = (S.data.notificacoes||[]).filter(n=>S.data.agenda.some(a=>a.id===n.lembreteId));

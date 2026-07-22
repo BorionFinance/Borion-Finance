@@ -755,7 +755,7 @@ const Reservas = {
     openConfirmModal({title:'Excluir transferência entre reservas',text:'A saída e a entrada serão removidas juntas, devolvendo os dois saldos ao estado anterior.',confirmLabel:'Excluir transferência',cancelLabel:'Cancelar',variant:'danger',onConfirm(){
       const entrada=pair.find(m=>m.tipo==='Recebimento de outra reserva'),destino=entrada&&(S.data.reservas.boxes||[]).find(r=>r.id===entrada.boxId);
       if(destino&&!reservaTemSaldo(destino,Number(entrada.valor)||0)){showReservaInsuficienteModal(destino,Number(entrada.valor)||0);toast('Não é possível excluir: parte do valor transferido já foi utilizada na reserva de destino.');return;}
-      const snapshot=JSON.parse(JSON.stringify(S.data));pair.forEach(m=>Reservas.reverseMoveEffect(m));S.data.reservas.moves=(S.data.reservas.moves||[]).filter(m=>m.reservaTransferId!==transferId);saveCurrentData();renderView();showUndoToast('Transferência excluída.',()=>{S.data=snapshot;saveCurrentData();renderView();});
+      const snapshot=borionCloneForUndo(S.data);pair.forEach(m=>Reservas.reverseMoveEffect(m));S.data.reservas.moves=(S.data.reservas.moves||[]).filter(m=>m.reservaTransferId!==transferId);saveCurrentData();renderView();showUndoToast('Transferência excluída.',()=>{S.data=snapshot;saveCurrentData();renderView();});
     }});
   },
   editMove(id){
@@ -819,7 +819,7 @@ const Reservas = {
       cancelLabel:'Cancelar',
       variant:'danger',
       onConfirm(){
-        const snapshot = JSON.parse(JSON.stringify(S.data));
+        const snapshot = borionCloneForUndo(S.data);
         Reservas.reverseMoveEffect(mv);
         S.data.reservas.moves = (S.data.reservas.moves||[]).filter(x=>x.id!==id);
         saveCurrentData(); renderView();

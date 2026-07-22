@@ -1325,7 +1325,7 @@ function openTransactionModal({type, existing}){
   if(isEdit)$('#tm_delete').onclick=()=>{
     const performDelete=(integrationMode=null)=>{
       const idx=S.data.transacoes.findIndex(x=>x.id===existing.id);if(idx<0)return;
-      const snapshot=JSON.parse(JSON.stringify(S.data));
+      const snapshot=borionCloneForUndo(S.data);
       if(integrationMode&&window.BorionInterop)BorionInterop.markImportedDeletion(existing,integrationMode,S.data);
       reverseTxSaldoEffect(existing);removeLinkedReservaMoveFromTransaction(existing);removeLinkedReservaWithdrawalFromDespesa(existing);
       S.data.transacoes.splice(idx,1);saveCurrentData();
@@ -1520,7 +1520,7 @@ function openFixaModal(existing){
 
   if(isEdit){
     $('#fm_delete').onclick=()=>{
-      const snapshot=JSON.parse(JSON.stringify(S.data));
+      const snapshot=borionCloneForUndo(S.data);
       const deletingEntirely=existing.startMonth===monthKeyNow;
       refundAndCleanFixaOcorrencias(existing.id,deletingEntirely?null:monthKeyNow);
       if(deletingEntirely)S.data.fixas=S.data.fixas.filter(x=>x.id!==existing.id);else existing.endMonth=monthBeforeKey(monthKeyNow);

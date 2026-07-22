@@ -1114,7 +1114,7 @@ function txContaDelta(tx){
 function applyTxSaldoEffect(tx){const d=txContaDelta(tx);if(d)return adjustLiquidez(tx.accountId,d);return true;}
 function reverseTxSaldoEffect(tx){const d=txContaDelta(tx);if(d)return adjustLiquidez(tx.accountId,-d);return true;}
 function runAtomicFinancialMutation(mutator,onError){
-  const before=JSON.parse(JSON.stringify(S.data));
+  const before=borionCloneForUndo(S.data);
   try{ mutator(); return true; }
   catch(err){
     S.data=before;

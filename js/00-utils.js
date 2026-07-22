@@ -8,6 +8,20 @@
 /* ---------------- Utilities ---------------- */
 function $(sel,root){return (root||document).querySelector(sel);}
 function el(html){const t=document.createElement('template');t.innerHTML=html.trim();return t.content.firstElementChild;}
+/* V6.46.2 — clone rápido pra snapshots de "desfazer"/rollback (excluir lançamento,
+   excluir categoria, excluir despesa fixa etc.). Antes cada um desses pontos fazia
+   JSON.parse(JSON.stringify(S.data)) na hora do clique — uma volta completa de
+   serializar E reanalisar TODO o perfil (todas as transações, contas, cartões,
+   reservas...) só pra guardar uma cópia de segurança. structuredClone() faz a
+   mesma cópia profunda de forma nativa, sem passar por texto — bem mais rápido
+   pra perfis com muito histórico. Mantém o fallback antigo pra qualquer navegador
+   sem suporte, ou se o dado tiver algo não clonável por algum motivo. */
+function borionCloneForUndo(data){
+  if(typeof structuredClone==='function'){
+    try{ return structuredClone(data); }catch(e){ /* cai no fallback abaixo */ }
+  }
+  return JSON.parse(JSON.stringify(data));
+}
 /* V5.34.2 — uid() agora gera um UUID v4 de verdade. Isso é obrigatório porque
    este id pode virar profile_id (coluna uuid) no Supabase; o formato antigo
    ('id_'+timestamp+random) não é um UUID válido e o Postgres rejeitava com

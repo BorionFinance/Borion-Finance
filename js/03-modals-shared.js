@@ -310,7 +310,7 @@ function openModal({title, sub, fields, values={}, saveLabel, onSave, onDelete, 
   };
   if(onDelete){
     $('#mf_delete').onclick = ()=>{
-      const snapshot = JSON.parse(JSON.stringify(S.data));
+      const snapshot = borionCloneForUndo(S.data);
       const result=onDelete();
       if(result===false) return;
       showUndoToast('Item excluído.', ()=>{ S.data = snapshot; saveCurrentData(); renderView(); });

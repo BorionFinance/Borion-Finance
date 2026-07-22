@@ -79,8 +79,8 @@ function renderSettings(){
   else if(S.settingsTab==='integrations') content = window.BorionInterop ? BorionInterop.renderSettings() : '<div class="settings-section">Integração indisponível.</div>'; // protected interop seam
   else if(S.settingsTab==='help') content = window.BorionHelp ? BorionHelp.render() : HelpCenterLoader.placeholder();
   return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.46.0 — Modo Google Drive Estrito</div><footer class="app-release-footer" aria-label="Informações do Borion">
-<div><strong>Versão:</strong> 6.46.1</div>
-<div><strong>Lançamento:</strong> 15/07/2026</div>
+<div><strong>Versão:</strong> 6.46.0</div>
+<div><strong>Lançamento:</strong> 20/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
 </footer></div>`;
@@ -178,7 +178,7 @@ const Settings = {
     openModal({title:'Renomear categoria', fields:[{key:'nome',label:'Novo nome',type:'text',default:oldName}], onSave(v){ const list=S.data.categorias[typeKey]; const idx=list.indexOf(oldName); if(idx>-1 && v.nome){ list[idx]=v.nome; S.data.transacoes.forEach(t=>{ if(t.categoria===oldName) t.categoria=v.nome; }); S.data.fixas.forEach(f=>{ if(f.categoria===oldName) f.categoria=v.nome; }); saveCurrentData(); } closeModal(); renderView(); }});
   },
   deleteCategory(typeKey, name){
-    const snapshot=JSON.parse(JSON.stringify(S.data)); S.data.categorias[typeKey]=S.data.categorias[typeKey].filter(c=>c!==name); if(!S.data.categorias[typeKey].includes('Outro')) S.data.categorias[typeKey].push('Outro'); S.data.transacoes.forEach(t=>{ if(t.categoria===name) t.categoria='Outro'; }); S.data.fixas.forEach(f=>{ if(f.categoria===name) f.categoria='Outro'; }); if(typeKey==='variavel') (S.data.assinaturas||[]).forEach(a=>{ if(a.categoria===name) a.categoria='Outro'; }); saveCurrentData(); renderView(); showUndoToast('Categoria "'+name+'" excluída.', ()=>{ S.data=snapshot; saveCurrentData(); renderView(); });
+    const snapshot=borionCloneForUndo(S.data); S.data.categorias[typeKey]=S.data.categorias[typeKey].filter(c=>c!==name); if(!S.data.categorias[typeKey].includes('Outro')) S.data.categorias[typeKey].push('Outro'); S.data.transacoes.forEach(t=>{ if(t.categoria===name) t.categoria='Outro'; }); S.data.fixas.forEach(f=>{ if(f.categoria===name) f.categoria='Outro'; }); if(typeKey==='variavel') (S.data.assinaturas||[]).forEach(a=>{ if(a.categoria===name) a.categoria='Outro'; }); saveCurrentData(); renderView(); showUndoToast('Categoria "'+name+'" excluída.', ()=>{ S.data=snapshot; saveCurrentData(); renderView(); });
   },
   savePersonal(){
     const p=S.currentProfile; p.name=$('#pf_name').value.trim()||p.name; p.email=$('#pf_email').value.trim(); const color=$('#pf_avatar_color'); if(color) p.avatarColor=color.value; setProfiles(S.profiles); renderApp(); toast('Perfil atualizado.');
@@ -1057,7 +1057,7 @@ window.Settings = Settings;
 /* ================= V6.33.1 — refinamento extra de Configurações, padronização de ordenação
    e bloco flutuante de Anotações persistente entre abas ================= */
 (function(){
-  const SETTINGS_VERSION = '6.46.1';
+  const SETTINGS_VERSION = '6.46.0';
 
   function floatingNotesPrefs(create=false){
     const fallback={enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};
@@ -1129,7 +1129,7 @@ window.Settings = Settings;
     else if(S.settingsTab==='backup') content = renderSettingsBackup();
     else if(S.settingsTab==='integrations') content = window.BorionInterop ? BorionInterop.renderSettings() : '<div class="settings-section">Integração indisponível.</div>';
     else if(S.settingsTab==='help') content = window.BorionHelp ? BorionHelp.render() : HelpCenterLoader.placeholder();
-    return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. ${SETTINGS_VERSION} • Sync</div><footer class="app-release-footer" aria-label="Informações do Borion">
+    return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. ${SETTINGS_VERSION} • Importação JSON Suprema</div><footer class="app-release-footer" aria-label="Informações do Borion">
 <div><strong>Versão:</strong> ${SETTINGS_VERSION}</div>
 <div><strong>Lançamento:</strong> 20/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>

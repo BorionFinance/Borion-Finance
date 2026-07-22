@@ -432,7 +432,7 @@ const ImportStatement = {
       prepared.push({r,accountId,banco:accountNameSnapshot(accountId)});
     }
 
-    const before=JSON.parse(JSON.stringify(S.data));
+    const before=borionCloneForUndo(S.data);
     let trans=0, fixas=0;
     try{
       prepared.forEach(({r,accountId,banco})=>{

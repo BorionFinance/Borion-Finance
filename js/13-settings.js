@@ -79,8 +79,8 @@ function renderSettings(){
   else if(S.settingsTab==='integrations') content = window.BorionInterop ? BorionInterop.renderSettings() : '<div class="settings-section">Integração indisponível.</div>'; // protected interop seam
   else if(S.settingsTab==='help') content = window.BorionHelp ? BorionHelp.render() : HelpCenterLoader.placeholder();
   return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.46.0 — Modo Google Drive Estrito</div><footer class="app-release-footer" aria-label="Informações do Borion">
-<div><strong>Versão:</strong> 6.46.0</div>
-<div><strong>Lançamento:</strong> 20/07/2026</div>
+<div><strong>Versão:</strong> 6.46.1</div>
+<div><strong>Lançamento:</strong> 15/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
 </footer></div>`;
@@ -1057,7 +1057,7 @@ window.Settings = Settings;
 /* ================= V6.33.1 — refinamento extra de Configurações, padronização de ordenação
    e bloco flutuante de Anotações persistente entre abas ================= */
 (function(){
-  const SETTINGS_VERSION = '6.46.0';
+  const SETTINGS_VERSION = '6.46.1';
 
   function floatingNotesPrefs(create=false){
     const fallback={enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};
@@ -1129,7 +1129,7 @@ window.Settings = Settings;
     else if(S.settingsTab==='backup') content = renderSettingsBackup();
     else if(S.settingsTab==='integrations') content = window.BorionInterop ? BorionInterop.renderSettings() : '<div class="settings-section">Integração indisponível.</div>';
     else if(S.settingsTab==='help') content = window.BorionHelp ? BorionHelp.render() : HelpCenterLoader.placeholder();
-    return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. ${SETTINGS_VERSION} • Importação JSON Suprema</div><footer class="app-release-footer" aria-label="Informações do Borion">
+    return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. ${SETTINGS_VERSION} • Sync</div><footer class="app-release-footer" aria-label="Informações do Borion">
 <div><strong>Versão:</strong> ${SETTINGS_VERSION}</div>
 <div><strong>Lançamento:</strong> 20/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>

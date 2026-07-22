@@ -48,10 +48,19 @@ const GOOGLE_DRIVE_AUTOSAVE_SLOTS = 20;
    nenhum conteúdo é baixado à toa). Se o `modifiedTime` mudou, é porque outro
    dispositivo salvou — aí sim busca o conteúdo novo e atualiza a tela sozinho. Ver
    checkForRemoteUpdate() mais abaixo. */
-const GOOGLE_DRIVE_LIVE_POLL_ACTIVE_MS = 2 * 1000;
+const GOOGLE_DRIVE_LIVE_POLL_ACTIVE_MS = 1.2 * 1000;
 const GOOGLE_DRIVE_LIVE_POLL_NORMAL_MS = 4500;
 const GOOGLE_DRIVE_LIVE_POLL_IDLE_MS = 12000;
 const GOOGLE_DRIVE_LIVE_ACTIVE_WINDOW_MS = 30 * 1000;
+/* V6.46.1 — debounce adaptativo do envio (queueSave). Uma alteração ISOLADA
+   (abriu o app, editou 1 lançamento, parou) não deveria pagar o mesmo preço de
+   espera que uma rajada de várias alterações seguidas. Por padrão usa uma
+   janela curta; só volta pra janela longa (a que agrupa rajadas em poucas
+   gravações) quando detecta que a alteração atual chegou pouco tempo depois
+   da anterior — sinal de que a pessoa está numa sequência rápida de edições. */
+const GOOGLE_DRIVE_QUEUE_DEBOUNCE_SOLO_MS = 500;
+const GOOGLE_DRIVE_QUEUE_DEBOUNCE_BURST_MS = 1200;
+const GOOGLE_DRIVE_QUEUE_BURST_GAP_MS = 900;
 /* V6.20.0 — novo: além do autosave automático acima, cada Ctrl+S (forceSyncNow)
    agora também grava num rodízio PRÓPRIO de até 40 slots (forcesave-1.json ...
    forcesave-40.json), separado do autosave normal — histórico só dos momentos em que
@@ -1254,7 +1263,20 @@ const GoogleDriveProvider = {
     }
     const _leader=!window.BorionMultiTab640||BorionMultiTab640.isLeader();
     if(!_leader){ BorionMultiTab640.requestSync({folderId:this.folderId,operationId:this._queueOperationId}); clearTimeout(this.syncTimer); }
-    else { clearTimeout(this.syncTimer); this.syncTimer=setTimeout(()=>this.syncNow({source:'queue'}),1200); }
+    else {
+      // V6.46.1 — janela de espera adaptativa: se esta chamada chegou pouco
+      // tempo depois da anterior, é sinal de rajada (ex.: vários lançamentos
+      // seguidos) e mantemos a janela longa, que agrupa tudo numa gravação só
+      // quando a rajada terminar. Se chegou isolada, usa a janela curta — a
+      // pessoa não deveria esperar o tempo pensado pra rajada por causa de
+      // uma única alteração.
+      const _now=Date.now();
+      const _gap=this._lastQueueSaveAt?(_now-this._lastQueueSaveAt):Infinity;
+      this._lastQueueSaveAt=_now;
+      this._queueBurstStreak=(_gap<GOOGLE_DRIVE_QUEUE_BURST_GAP_MS)?((this._queueBurstStreak||0)+1):1;
+      const _delay=this._queueBurstStreak>=2?GOOGLE_DRIVE_QUEUE_DEBOUNCE_BURST_MS:GOOGLE_DRIVE_QUEUE_DEBOUNCE_SOLO_MS;
+      clearTimeout(this.syncTimer); this.syncTimer=setTimeout(()=>this.syncNow({source:'queue'}),_delay);
+    }
     this.scheduleAutosaveSoon();
   },
 

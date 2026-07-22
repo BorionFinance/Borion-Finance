@@ -584,10 +584,24 @@ function commitPreparedAccountPayload6401(prepared,options={}){
   };
   for(const p of previous.profiles||[]) if(p&&p.id!=null){const id=String(p.id);const stored=typeof getProfileData==='function'?getProfileData(id):((S.currentProfile&&String(S.currentProfile.id)===id)?S.data:null);previous.dataByProfile[id]=cloneAccountValue6401(stored);}
   const nextIds=new Set((prepared.profiles||[]).map(p=>String(p.id)));
+  // V6.46.3 — se o perfil ATIVO tiver uma edição local mais nova do que este
+  // snapshot confirmado (ex.: a pessoa excluiu outra coisa enquanto este envio
+  // ainda estava em trânsito pro Drive), NÃO sobrescreve S.data com o resultado
+  // confirmado — isso apagaria silenciosamente a edição em andamento e faria o
+  // item recém-excluído "voltar" na tela. O snapshot confirmado continua sendo
+  // gravado normalmente pra todos os OUTROS perfis; só o perfil ativo com
+  // edição pendente é poupado, e a sincronização seguinte (já agendada por
+  // conta dessa mesma edição) reconcilia tudo com o Drive normalmente.
+  const activeId=previous.currentProfile&&previous.currentProfile.id!=null?String(previous.currentProfile.id):null;
+  const keepLocalActiveData=!!(options.preserveNewerLocalEdit&&activeId);
   try{
     // Persistência só começa depois que todos os perfis terminaram a migração em memória.
     setConfig(prepared.config);setProfiles(prepared.profiles);
-    for(const p of prepared.profiles) setProfileData(String(p.id),prepared.dataByProfile[String(p.id)]);
+    for(const p of prepared.profiles){
+      const id=String(p.id);
+      if(keepLocalActiveData&&id===activeId) continue; // não grava o snapshot velho por cima da edição em andamento
+      setProfileData(id,prepared.dataByProfile[id]);
+    }
     if(prepared.profileTombstones&&typeof applyProfileTombstones6401==='function') applyProfileTombstones6401(prepared.profileTombstones);
     // Só apaga o cache de um perfil ausente quando existe tombstone explícito.
     // Assim uma listagem incompleta nunca elimina dados locais, mas uma exclusão
@@ -602,7 +616,12 @@ function commitPreparedAccountPayload6401(prepared,options={}){
     S.config=prepared.config;S.profiles=prepared.profiles;
     if(options.preserveCurrentProfile&&previous.currentProfile){
       const active=prepared.profiles.find(p=>String(p.id)===String(previous.currentProfile.id));
-      if(active){S.currentProfile=active;S.data=prepared.dataByProfile[String(active.id)];return {profileRemoved:false};}
+      if(active){
+        S.currentProfile=active;
+        if(!keepLocalActiveData) S.data=prepared.dataByProfile[String(active.id)];
+        // keepLocalActiveData: S.data permanece o que já estava em memória (mais novo que este snapshot)
+        return {profileRemoved:false};
+      }
       S.currentProfile=null;S.data=null;return {profileRemoved:true};
     }
     S.currentProfile=null;S.data=null;return {profileRemoved:false};
@@ -634,9 +653,9 @@ function applyAccountPayloadSilently(obj){
    seletor de perfil — se ela já estava dentro de um perfil, continua nele, só com os
    números atualizados. Só sai do perfil atual no caso raro de ele ter sido apagado
    em outro dispositivo enquanto esta aba estava aberta. */
-function applyAccountPayloadForLiveUpdate(obj){
+function applyAccountPayloadForLiveUpdate(obj, options={}){
   const prepared=prepareAccountPayload6401(obj);
-  return commitPreparedAccountPayload6401(prepared,{preserveCurrentProfile:true});
+  return commitPreparedAccountPayload6401(prepared,Object.assign({preserveCurrentProfile:true},options));
 }
 function handleRemovedActiveProfile6402(result,source='remote_update'){
   if(!result||!result.profileRemoved) return false;
@@ -1414,7 +1433,13 @@ const GoogleDriveProvider = {
       const data=await GoogleDriveFS.readFile(this.currentFileId);
       const check=validateBorionJson(data);if(!check.valid){console.warn('[GoogleDriveProvider] atualização remota rejeitada pela validação.');return false;}
       if(window.BorionDriveJournal640){const integrity=await BorionDriveJournal640.validateSnapshot(data);if(!integrity.valid){console.warn('[GoogleDriveProvider] atualização remota rejeitada pelo checksum:',integrity.reason);return false;}}
-      if(!borionLiveUpdateSafeToApplyNow()){
+      // V6.46.3 — entre o início desta checagem e aqui, passaram duas idas e
+      // vindas de rede (getFileMeta + readFile). Se a pessoa fez uma edição
+      // local nesse meio-tempo (this.dirty virou true), aplicar esta atualização
+      // remota agora sobrescreveria S.data e apagaria essa edição em andamento —
+      // mesma causa da "exclusão que volta". Confere de novo, na hora, e adia
+      // pra fila (igual já fazíamos para modal aberto) em vez de aplicar por cima.
+      if(!borionLiveUpdateSafeToApplyNow()||this.dirty){
         if(window.RemoteUpdateQueue)RemoteUpdateQueue.enqueue(data,freshMeta);
         this._refreshStatusUI();return false;
       }
@@ -1535,6 +1560,13 @@ const GoogleDriveProvider = {
     if(this._syncInFlight){this._syncAgain=true;return false;}
     if(!navigator.onLine){this._recordSyncFailure(new Error(this._isStrictMode()?'Sem internet. O Google Drive não confirmou a alteração.':'Sem internet. Alteração salva somente neste dispositivo.'),{silent:true});if(window.BorionSyncState)BorionSyncState.set('OFFLINE_PENDING');return false;}
     this._syncInFlight=true;
+    // V6.46.3 — capturado aqui (antes de qualquer ramo) pra também proteger o
+    // caminho de consolidationOnly: se uma edição nova chegar enquanto ESTE
+    // syncNow ainda está em trânsito (rede lenta, duas exclusões seguidas...),
+    // this._syncRevision muda e os dois caminhos abaixo sabem que não podem
+    // sobrescrever S.data do perfil ativo com o resultado que acabaram de
+    // confirmar — ver commitPreparedAccountPayload6401.
+    const revision=this._syncRevision;
     if(options.consolidationOnly){
       const requiredOperationId=this._readPersistedConsolidationOperationId();
       try{
@@ -1555,7 +1587,7 @@ const GoogleDriveProvider = {
         this.currentFileMeta=updated||this.currentFileMeta;gdriveWriteCurrentFileCache(this.folderId,this.currentFileMeta);this._lastConsolidatedPayload=confirmed;this._operationBasePayload=JSON.parse(JSON.stringify(confirmed));
         if(window.BorionDurableQueue&&requiredOperationId)await BorionDurableQueue.markSnapshotConfirmed(requiredOperationId).catch(()=>{});
         BorionDriveJournal640.archiveConfirmedOperations(this.folderId,confirmed,result.newlyApplied||[]).then(()=>this._scheduleAppliedMaintenance(confirmed)).catch(e=>console.warn('[GoogleDriveProvider] arquivamento de operação será retomado:',e));
-        this._surfaceMergeConflicts(confirmed);try{const applied=applyAccountPayloadForLiveUpdate(confirmed);this._notifyAccountSnapshotApplied6402(applied,'consolidation_retry');handleRemovedActiveProfile6402(applied,'consolidation_retry');}catch(e){console.warn('[GoogleDriveProvider] consolidação confirmada; atualização visual adiada:',e);}
+        this._surfaceMergeConflicts(confirmed);try{const staleLocalEdit=revision!==this._syncRevision;const applied=applyAccountPayloadForLiveUpdate(confirmed,{preserveNewerLocalEdit:staleLocalEdit});this._notifyAccountSnapshotApplied6402(applied,'consolidation_retry');handleRemovedActiveProfile6402(applied,'consolidation_retry');}catch(e){console.warn('[GoogleDriveProvider] consolidação confirmada; atualização visual adiada:',e);}
         this._clearConsolidationPending();this.lastSyncError='';this._recordSyncSuccess();
         if(window.BorionSyncState)BorionSyncState.set('SNAPSHOT_CONFIRMED',{operationId:requiredOperationId,checksum:confirmedCheck.checksum});
         return true;
@@ -1570,7 +1602,6 @@ const GoogleDriveProvider = {
     }
     if(window.BorionSyncState)BorionSyncState.set('PROTECTING_DRIVE');
     this._refreshStatusUI();
-    const revision=this._syncRevision;
     let operationProtected=false,operationId=null;
     try{
       const payload=options.payloadOverride||await buildFullBackupPayload();
@@ -1623,10 +1654,11 @@ const GoogleDriveProvider = {
       BorionDriveJournal640.archiveConfirmedOperations(this.folderId,confirmed,result.newlyApplied||[]).then(()=>this._scheduleAppliedMaintenance(confirmed)).catch(e=>console.warn('[GoogleDriveProvider] operação confirmada; arquivamento será retomado:',e));
       this._clearConsolidationPending();
       this._surfaceMergeConflicts(confirmed);
-      try{const applied=applyAccountPayloadForLiveUpdate(confirmed);this._notifyAccountSnapshotApplied6402(applied,'sync_confirmed');handleRemovedActiveProfile6402(applied,'sync_confirmed');}catch(e){console.warn('[GoogleDriveProvider] snapshot confirmado, mas atualização local da UI foi adiada:',e);}
+      const staleLocalEdit=revision!==this._syncRevision;
+      try{const applied=applyAccountPayloadForLiveUpdate(confirmed,{preserveNewerLocalEdit:staleLocalEdit});this._notifyAccountSnapshotApplied6402(applied,'sync_confirmed');handleRemovedActiveProfile6402(applied,'sync_confirmed');}catch(e){console.warn('[GoogleDriveProvider] snapshot confirmado, mas atualização local da UI foi adiada:',e);}
       this.conflict=false;this.lastKnownProfileCount=(confirmed.profiles||[]).length;
       if(window.BorionDataGuard){const counts=BorionDataGuard.countAccountRecords(confirmed);this._lastGoodCounts=counts;BorionDataGuard.writeLastGoodCounts(this.folderId,counts);}
-      this.dirty=revision!==this._syncRevision;this._syncAgain=this.dirty;this._queueOperationId=null;
+      this.dirty=staleLocalEdit;this._syncAgain=this.dirty;this._queueOperationId=null;
       if(!this.dirty)try{localStorage.removeItem(gdrivePendingKey(this.folderId));}catch(e){}
       this.lastSyncError='';this._recordSyncSuccess();
       if(window.RemoteUpdateQueue&&RemoteUpdateQueue.hasPending())setTimeout(()=>RemoteUpdateQueue.applyIfSafe(),0);

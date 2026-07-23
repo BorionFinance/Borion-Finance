@@ -14,7 +14,7 @@ const HelpCenterLoader = {
     this.promise = new Promise((resolve,reject)=>{
       if(!document.querySelector('link[data-borion-help-css]')){
         const link=document.createElement('link');
-        link.rel='stylesheet'; link.href='css/help-center.css?v=6.46.0'; link.dataset.borionHelpCss='1';
+        link.rel='stylesheet'; link.href='css/help-center.css?v=6.46.8'; link.dataset.borionHelpCss='1';
         document.head.appendChild(link);
       }
       const existing=document.querySelector('script[data-borion-help-script]');
@@ -24,7 +24,7 @@ const HelpCenterLoader = {
         return;
       }
       const script=document.createElement('script');
-      script.src='js/26-help-center.js?v=6.46.0'; script.async=true; script.dataset.borionHelpScript='1';
+      script.src='js/26-help-center.js?v=6.46.8'; script.async=true; script.dataset.borionHelpScript='1';
       script.onload=()=>window.BorionHelp?resolve(window.BorionHelp):reject(new Error('A Central do Borion não iniciou.'));
       script.onerror=()=>{ script.remove(); reject(new Error('Falha ao carregar a Central do Borion.')); };
       document.head.appendChild(script);
@@ -54,37 +54,11 @@ function moduleToggleHTML({key,title,desc,enabled,onClick}){
   </div>`;
 }
 function dashboardEnabled(key){ return !!(S.data.dashboard && Array.isArray(S.data.dashboard.widgets) && S.data.dashboard.widgets.includes(key)); }
-function renderSettings(){
-  if(!S.settingsTab) S.settingsTab='modules';
-  if(S.settingsTab==='cloud') S.settingsTab='backup'; // V6.14.0 — aba "Nuvem" foi unificada em "Backups"
-  const tabs = `
-    <div class="settings-tabs">
-      ${settingsTabButton('modules','Módulos')}
-      ${settingsTabButton('dashboard','Dashboard')}
-      ${settingsTabButton('profiles','Perfis')}
-      ${settingsTabButton('categories','Categorias')}
-      ${settingsTabButton('personalization','Personalização')}
-      ${settingsTabButton('backup','Backups')}
-      ${settingsTabButton('integrations','Integrações')}
-      <button class="settings-tab settings-help-tab ${S.settingsTab==='help'?'active':''}" onclick="HelpCenterLoader.open()" title="Abrir a Central do Borion"><span class="settings-help-icon">?</span><span>Central do Borion</span></button>
-      <button id="qb_both" class="btn btn-primary btn-sm settings-quick-backup-btn" onclick="Settings.quickBackupBoth()" title="Confirma o salvamento diretamente no Google Drive">SALVAR NO DRIVE</button>
-    </div>`;
-  let content='';
-  if(S.settingsTab==='modules') content = renderSettingsModules();
-  else if(S.settingsTab==='dashboard') content = renderSettingsDashboard();
-  else if(S.settingsTab==='profiles') content = renderSettingsProfiles();
-  else if(S.settingsTab==='categories') content = renderSettingsCategories();
-  else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
-  else if(S.settingsTab==='backup') content = renderSettingsBackup();
-  else if(S.settingsTab==='integrations') content = window.BorionInterop ? BorionInterop.renderSettings() : '<div class="settings-section">Integração indisponível.</div>'; // protected interop seam
-  else if(S.settingsTab==='help') content = window.BorionHelp ? BorionHelp.render() : HelpCenterLoader.placeholder();
-  return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. 6.46.0 — Modo Google Drive Estrito</div><footer class="app-release-footer" aria-label="Informações do Borion">
-<div><strong>Versão:</strong> 6.46.0</div>
-<div><strong>Lançamento:</strong> 20/07/2026</div>
-<div>Desenvolvido por <strong>Pedro Bardella</strong></div>
-<div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
-</footer></div>`;
-}
+// V6.46.8 — a função renderSettings() completa (abas, conteúdo, versão e rodapé)
+// é definida logo abaixo, dentro da IIFE V6.33.1. A versão antiga que existia aqui
+// era descartada em tempo de execução (a IIFE sempre reatribuía renderSettings antes
+// de qualquer tela chamá-la) e ainda mostrava um número de versão desatualizado no
+// rodapé — por isso foi removida, evitando o risco de alguém editar a função errada.
 function renderSettingsModules(){
   const chequesEnabled = !!(S.data.cheques && S.data.cheques.enabled);
   const reservasEnabledNow = !!(S.data.modules && S.data.modules.reserves !== false && S.data.reservas && S.data.reservas.enabled !== false);
@@ -1057,7 +1031,7 @@ window.Settings = Settings;
 /* ================= V6.33.1 — refinamento extra de Configurações, padronização de ordenação
    e bloco flutuante de Anotações persistente entre abas ================= */
 (function(){
-  const SETTINGS_VERSION = '6.42.2';
+  const SETTINGS_VERSION = '6.46.8';
 
   function floatingNotesPrefs(create=false){
     const fallback={enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};
@@ -1131,7 +1105,7 @@ window.Settings = Settings;
     else if(S.settingsTab==='help') content = window.BorionHelp ? BorionHelp.render() : HelpCenterLoader.placeholder();
     return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. ${SETTINGS_VERSION} • Importação JSON Suprema</div><footer class="app-release-footer" aria-label="Informações do Borion">
 <div><strong>Versão:</strong> ${SETTINGS_VERSION}</div>
-<div><strong>Lançamento:</strong> 20/07/2026</div>
+<div><strong>Lançamento:</strong> 23/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>
 <div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
 </footer></div>`;

@@ -214,73 +214,118 @@ function dashboardWidgetHTML(key, ctx){
         </table>` : '<div class="empty-note">Cadastre bancos/contas em "Cartões e Contas" e vincule seus lançamentos a eles para ver o resumo por banco.</div>'}</div>`;
   return '';
 }
-function renderOverview(){
-  const pt = patrimonioTotal();
-  const inv = investAtualTotal();
-  const desp = despesasMes();
-  const rec = receitaMes();
-  const saldo = saldoMes();
-  const resultado = resultadoPeriodo();
-  const disponivel = disponivelEmConta();
-  const dividasDebt = computeCardsDebt();
-  const divCartao = dividasDebt.cartoesTotal;
-  const divBoletos = dividasDebt.boletosTotal;
-  const patLiq = patrimonioLiquido();
-  const caixa = caixaDisponivel();
-  const reservas = reservasTotal();
-  const entradasExtra = receitaExtraMes();
-
-  const ctx = {
-    fluxo: fluxoMensalData(),
-    evolPat: evolucaoPatrimonioData(),
-    evolDiv: evolucaoDividasData(),
-    composicaoSegs: patrimonioComposicaoSegments(),
-    gastosCat: gastosPorCategoriaSegments(),
-    gastosCartao: gastosPorCartaoSegments(),
-    bankSegs: bankDistribuicaoSegments(),
-    bankSummary: bankSummaryList()
+function overviewDashboardCatalog(){
+  const fixed=[
+    {id:'metric_patrimonio',label:'Patrimônio total',defaultW:1,group:'Indicadores'},
+    {id:'metric_disponivel',label:'Disponível em conta',defaultW:1,group:'Indicadores'},
+    {id:'metric_receitas',label:'Receitas do período',defaultW:1,group:'Indicadores'},
+    {id:'metric_despesas',label:'Despesas do período',defaultW:1,group:'Indicadores'},
+    {id:'metric_resultado',label:'Resultado do período',defaultW:1,group:'Indicadores'},
+    {id:'metric_investido',label:'Total investido',defaultW:1,group:'Indicadores'},
+    {id:'metric_reserva',label:'Total em reserva',defaultW:1,group:'Indicadores'},
+    {id:'metric_liquido',label:'Patrimônio líquido',defaultW:1,group:'Indicadores'},
+    {id:'resumo_rapido',label:'Resumo rápido',defaultW:2,group:'Análises'},
+    {id:'saude_financeira',label:'Saúde financeira',defaultW:2,group:'Análises'}
+  ];
+  const labels={
+    fluxoMensal:'Fluxo mensal',
+    evolucaoPatrimonio:'Evolução do patrimônio',
+    evolucaoDividasCartao:'Evolução das dívidas',
+    distribuicaoPatrimonio:'Distribuição do patrimônio',
+    gastosCategoria:'Gastos por categoria',
+    gastosCartao:'Gastos por cartão',
+    distribuicaoBanco:'Distribuição por banco',
+    resumoBanco:'Resumo por banco'
   };
-  const saudeMensal = healthAnalysis('monthly');
-  const saudeAnual = healthAnalysis('annual');
-  const widgets = dashboardWidgetKeys();
-  const wideWidgets=new Set(['fluxoMensal','gastosCartao','resumoBanco']);
-  const widgetsHTML = widgets.map(k=>{const defaultW=wideWidgets.has(k)?4:2;return `<div class="module-layout-slot ${window.ModuleLayout&&ModuleLayout.isActive('overview_modules')?'organizing':''}" data-module-id="${esc(k)}" style="${window.ModuleLayout?ModuleLayout.slotStyle('overview_modules',k,defaultW):'--module-span:'+defaultW+';'}">${window.ModuleLayout?ModuleLayout.slotControlsHTML('overview_modules',k,k,defaultW):''}<div class="module-layout-content">${dashboardWidgetHTML(k, ctx)}</div></div>`;}).join('');
-  if(window.ModuleLayout) ModuleLayout.schedule('overview_modules');
-
-  return `
-    <div class="indicators-grid">
-      <div class="card card-sm hero-gold"><div class="clabel">Patrimônio Total</div><div class="cval">${brl(pt)}</div></div>
-      <div class="card card-sm hero-green"><div class="clabel">Disponível em Conta</div><div class="cval">${brl(disponivel)}</div></div>
-      <div class="card card-sm"><div class="clabel">Receitas do período</div><div class="cval" style="color:${iconColor('receita')}">${brl(rec)}</div></div>
-      <div class="card card-sm"><div class="clabel">Despesas do período</div><div class="cval" style="color:${iconColor('despesas')}">${brl(desp)}</div></div>
-    </div>
-    <div class="indicators-grid">
-      <div class="card card-sm hero-blue"><div class="clabel">Resultado do período</div><div class="cval" style="color:${resultado>=0?iconColor('receita'):iconColor('despesas')}">${brl(resultado)}</div></div>
-      <div class="card card-sm"><div class="clabel">Total investido</div><div class="cval">${brl(inv)}</div></div>
-      <div class="card card-sm"><div class="clabel">Total em reserva</div><div class="cval" style="color:var(--gold-bright)">${brl(reservas)}</div></div>
-      <div class="card card-sm"><div class="clabel">Patrimônio líquido</div><div class="cval">${brl(patLiq)}</div></div>
-    </div>
-
-    <div class="overview-top-grid">
-      <div class="panel-box">
-        <div class="panel-title">Resumo rápido de ${monthLabel(S.month.y,S.month.m)}</div>
-        <div class="list-row"><span class="lname">Receitas do período</span><span class="lval val-pos">${brl(rec)}</span></div>
-        <div class="list-row"><span class="lname">Despesas do período</span><span class="lval" style="color:${iconColor('despesas')}">- ${brl(desp)}</span></div>
-        <div class="list-row"><span class="lname">Resultado do período</span><span class="lval ${resultado>=0?'val-pos':''}" style="${resultado<0?'color:'+iconColor('despesas'):''}">${brl(resultado)}</span></div>
-        <div class="list-row"><span class="lname">Crédito usado em cartões</span><span class="lval" style="color:${iconColor('dividas')}">- ${brl(divCartao)}</span></div>
-        <div class="list-row"><span class="lname">Boletos a pagar</span><span class="lval" style="color:${iconColor('dividas')}">- ${brl(divBoletos)}</span></div>
-        <div class="list-row"><span class="lname">Reserva (patrimônio guardado)</span><span class="lval" style="color:var(--gold-bright)">${brl(reservas)}</span></div>
-        <div class="list-row"><span class="lname">Disponível em conta (fora das reservas)</span><span class="lval">${brl(disponivel)}</span></div>
-        ${entradasExtra>0?`<div class="list-row"><span class="lname">Reembolsos/repasses recebidos (não é renda)</span><span class="lval" style="color:var(--gold-bright)">${brl(entradasExtra)}</span></div>`:''}
-      </div>
-
-      <div class="panel-box financial-health-panel">
-        <div class="panel-title">◆ Saúde financeira</div>
-        <p class="financial-health-copy">Duas leituras independentes, calculadas com renda, despesas, patrimônio, liquidez, reservas, rendimentos, dívidas, economia e tendência patrimonial.</p>
-        <div class="financial-health-grid">${financialHealthCardHTML(saudeMensal)}${financialHealthCardHTML(saudeAnual)}</div>
-      </div>
-    </div>
-
-    ${widgets.length ? `${window.ModuleLayout?ModuleLayout.toolbarHTML('overview_modules','Organização da Visão Geral'):''}<div class="module-layout-grid dashboard-module-grid ${window.ModuleLayout&&ModuleLayout.isActive('overview_modules')?'module-grid-organizer':''}" data-module-layout="overview_modules" style="--module-columns:${window.ModuleLayout?ModuleLayout.get('overview_modules').columns:4};">${widgetsHTML}</div>` : `<div class="panel-box"><div class="empty-note">Todos os blocos da visão geral estão desativados. Ative os gráficos em Configurações → Dashboard.</div></div>`}
-  `;
+  const wide=new Set(['fluxoMensal','gastosCartao','resumoBanco']);
+  const enabled=((S.data.dashboard&&Array.isArray(S.data.dashboard.widgets))?S.data.dashboard.widgets:DEFAULT_DASHBOARD_WIDGETS.slice())
+    .filter(key=>DEFAULT_DASHBOARD_WIDGETS.includes(key));
+  return fixed.concat(enabled.map(id=>({id,label:labels[id]||id,defaultW:wide.has(id)?4:2,group:'Gráficos'})));
+}
+function overviewMetricHTML(id,ctx){
+  if(id==='metric_patrimonio') return `<div class="card card-sm hero-gold overview-metric-card"><div class="clabel">Patrimônio Total</div><div class="cval">${brl(ctx.pt)}</div></div>`;
+  if(id==='metric_disponivel') return `<div class="card card-sm hero-green overview-metric-card"><div class="clabel">Disponível em Conta</div><div class="cval">${brl(ctx.disponivel)}</div></div>`;
+  if(id==='metric_receitas') return `<div class="card card-sm overview-metric-card"><div class="clabel">Receitas do período</div><div class="cval" style="color:${iconColor('receita')}">${brl(ctx.rec)}</div></div>`;
+  if(id==='metric_despesas') return `<div class="card card-sm overview-metric-card"><div class="clabel">Despesas do período</div><div class="cval" style="color:${iconColor('despesas')}">${brl(ctx.desp)}</div></div>`;
+  if(id==='metric_resultado') return `<div class="card card-sm hero-blue overview-metric-card"><div class="clabel">Resultado do período</div><div class="cval" style="color:${ctx.resultado>=0?iconColor('receita'):iconColor('despesas')}">${brl(ctx.resultado)}</div></div>`;
+  if(id==='metric_investido') return `<div class="card card-sm overview-metric-card"><div class="clabel">Total investido</div><div class="cval">${brl(ctx.inv)}</div></div>`;
+  if(id==='metric_reserva') return `<div class="card card-sm overview-metric-card"><div class="clabel">Total em reserva</div><div class="cval" style="color:var(--gold-bright)">${brl(ctx.reservas)}</div></div>`;
+  if(id==='metric_liquido') return `<div class="card card-sm overview-metric-card"><div class="clabel">Patrimônio líquido</div><div class="cval">${brl(ctx.patLiq)}</div></div>`;
+  return '';
+}
+function overviewSummaryHTML(ctx){
+  return `<div class="panel-box overview-summary-panel">
+    <div class="panel-title">Resumo rápido de ${monthLabel(S.month.y,S.month.m)}</div>
+    <div class="list-row"><span class="lname">Receitas do período</span><span class="lval val-pos">${brl(ctx.rec)}</span></div>
+    <div class="list-row"><span class="lname">Despesas do período</span><span class="lval" style="color:${iconColor('despesas')}">- ${brl(ctx.desp)}</span></div>
+    <div class="list-row"><span class="lname">Resultado do período</span><span class="lval ${ctx.resultado>=0?'val-pos':''}" style="${ctx.resultado<0?'color:'+iconColor('despesas'):''}">${brl(ctx.resultado)}</span></div>
+    <div class="list-row"><span class="lname">Crédito usado em cartões</span><span class="lval" style="color:${iconColor('dividas')}">- ${brl(ctx.divCartao)}</span></div>
+    <div class="list-row"><span class="lname">Boletos a pagar</span><span class="lval" style="color:${iconColor('dividas')}">- ${brl(ctx.divBoletos)}</span></div>
+    <div class="list-row"><span class="lname">Reserva (patrimônio guardado)</span><span class="lval" style="color:var(--gold-bright)">${brl(ctx.reservas)}</span></div>
+    <div class="list-row"><span class="lname">Disponível em conta (fora das reservas)</span><span class="lval">${brl(ctx.disponivel)}</span></div>
+    ${ctx.entradasExtra>0?`<div class="list-row"><span class="lname">Reembolsos/repasses recebidos (não é renda)</span><span class="lval" style="color:var(--gold-bright)">${brl(ctx.entradasExtra)}</span></div>`:''}
+  </div>`;
+}
+function overviewHealthHTML(ctx){
+  return `<div class="panel-box financial-health-panel">
+    <div class="panel-title">◆ Saúde financeira</div>
+    <p class="financial-health-copy">Duas leituras independentes, calculadas com renda, despesas, patrimônio, liquidez, reservas, rendimentos, dívidas, economia e tendência patrimonial.</p>
+    <div class="financial-health-grid">${financialHealthCardHTML(ctx.saudeMensal)}${financialHealthCardHTML(ctx.saudeAnual)}</div>
+  </div>`;
+}
+function overviewDashboardWidgetHTML(id,ctx){
+  if(id.startsWith('metric_')) return overviewMetricHTML(id,ctx);
+  if(id==='resumo_rapido') return overviewSummaryHTML(ctx);
+  if(id==='saude_financeira') return overviewHealthHTML(ctx);
+  return dashboardWidgetHTML(id,ctx.chartCtx);
+}
+function renderOverview(){
+  const dividasDebt=computeCardsDebt();
+  const ctx={
+    pt:patrimonioTotal(),
+    inv:investAtualTotal(),
+    desp:despesasMes(),
+    rec:receitaMes(),
+    resultado:resultadoPeriodo(),
+    disponivel:disponivelEmConta(),
+    divCartao:dividasDebt.cartoesTotal,
+    divBoletos:dividasDebt.boletosTotal,
+    patLiq:patrimonioLiquido(),
+    reservas:reservasTotal(),
+    entradasExtra:receitaExtraMes(),
+    saudeMensal:healthAnalysis('monthly'),
+    saudeAnual:healthAnalysis('annual'),
+    chartCtx:{
+      fluxo:fluxoMensalData(),
+      evolPat:evolucaoPatrimonioData(),
+      evolDiv:evolucaoDividasData(),
+      composicaoSegs:patrimonioComposicaoSegments(),
+      gastosCat:gastosPorCategoriaSegments(),
+      gastosCartao:gastosPorCartaoSegments(),
+      bankSegs:bankDistribuicaoSegments(),
+      bankSummary:bankSummaryList()
+    }
+  };
+  const scope='overview_dashboard';
+  const catalog=overviewDashboardCatalog();
+  let visible=catalog;
+  let columns=4;
+  let editing=false;
+  if(window.ModuleLayout){
+    ModuleLayout.register(scope,catalog);
+    visible=ModuleLayout.visibleItems(scope,catalog);
+    columns=ModuleLayout.get(scope).columns;
+    editing=ModuleLayout.isActive(scope);
+  }
+  const slots=visible.map(item=>{
+    const style=window.ModuleLayout?ModuleLayout.slotStyle(scope,item.id,item.defaultW):`--module-span:${item.defaultW};`;
+    const controls=window.ModuleLayout?ModuleLayout.slotControlsHTML(scope,item.id,item.label,item.defaultW):'';
+    const resize=window.ModuleLayout?ModuleLayout.resizeHandleHTML(scope,item.id,item.label):'';
+    const metric=item.id.startsWith('metric_')?' overview-metric-slot':'';
+    return `<section class="module-layout-slot overview-dashboard-slot${metric} ${editing?'organizing':''}" data-module-id="${esc(item.id)}" style="${style}">${controls}<div class="module-layout-content">${overviewDashboardWidgetHTML(item.id,ctx)}</div>${resize}</section>`;
+  }).join('');
+  if(window.ModuleLayout) ModuleLayout.schedule(scope);
+  const toolbar=window.ModuleLayout?ModuleLayout.toolbarHTML(scope,'Personalização da Visão Geral'):'';
+  const empty=`<div class="panel-box overview-layout-empty"><div class="empty-note">Nenhum widget está visível neste layout. Use “Widgets” para reativar os blocos.</div></div>`;
+  return `${toolbar}<div class="module-layout-grid overview-dashboard-grid ${editing?'module-grid-organizer':''}" data-module-layout="${scope}" style="--module-columns:${columns};">${slots||empty}</div>`;
 }

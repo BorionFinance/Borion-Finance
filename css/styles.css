@@ -3161,5 +3161,5 @@ html[data-theme="light"] .interop-source-value{background:rgba(122,85,29,.025)}
 .mit-expense-modal .quickcat-box{margin-top:8px;}
 html[data-theme="light"] .mit-expense-modal .field input[type="text"],html[data-theme="light"] .mit-expense-modal .field input[type="date"],html[data-theme="light"] .mit-expense-modal .field select{background:rgba(255,255,255,.92);border-color:rgba(122,85,29,.18);color:var(--text);}
 
-/* V6.46.5 — fluxo de pasta compatível com Firefox, Opera e Brave */
+/* V6.46.6 — fluxo de pasta compatível com Firefox, Opera e Brave */
 .drive-folder-fallback{margin-top:16px;padding-top:2px}.drive-folder-fallback input{width:100%;box-sizing:border-box;min-height:46px}.drive-folder-fallback .btn{min-height:44px}

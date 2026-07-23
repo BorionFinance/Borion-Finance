@@ -1,4 +1,4 @@
-/* Borion Finance — Google Drive Provider (V6.46.5 — Compatibilidade Multinavegador)
+/* Borion Finance — Google Drive Provider (V6.46.6 — Autenticação Firefox corrigida)
 
    Arquitetura 6.40.2: current.json é apenas o snapshot consolidado. Toda alteração
    é protegida primeiro como operação imutável, identificada por operationId, e só
@@ -198,6 +198,10 @@ const GoogleDriveAuth = {
 
   async ensureLoaded(){return this.ensureIdentityLoaded();},
 
+  isInteractiveReady(){
+    return !!(this._gisReady&&window.google&&google.accounts&&google.accounts.oauth2);
+  },
+
   requestToken(interactive){
     if(this._tokenPromise)return this._tokenPromise;
     this._tokenPromise=new Promise((resolve,reject)=>{
@@ -205,8 +209,14 @@ const GoogleDriveAuth = {
       const finish=(err,token)=>{if(settled)return;settled=true;clearTimeout(timeoutId);this._tokenPromise=null;if(err)reject(err);else resolve(token);};
       const timeoutId=setTimeout(()=>finish(Object.assign(new Error('O Google não respondeu à renovação do acesso. Reconecte sua conta.'),{code:'AUTH_TIMEOUT'})),20000);
       try{
+        if(!this.isInteractiveReady()){
+          finish(Object.assign(new Error('O login do Google ainda não terminou de carregar. Clique novamente em Continuar com Google.'),{code:'AUTH_NOT_READY'}));
+          return;
+        }
         this.tokenClient=google.accounts.oauth2.initTokenClient({
-          client_id:GOOGLE_CLIENT_ID,scope:GOOGLE_DRIVE_SCOPES,
+          client_id:GOOGLE_CLIENT_ID,
+          scope:GOOGLE_DRIVE_SCOPES,
+          include_granted_scopes:true,
           callback:(resp)=>{
             if(resp&&resp.error){finish(Object.assign(new Error('Google recusou o acesso: '+resp.error),{code:'AUTH_REJECTED'}));return;}
             if(!resp||!resp.access_token){finish(Object.assign(new Error('O Google não devolveu um token de acesso válido.'),{code:'AUTH_TOKEN_INVALID'}));return;}
@@ -240,31 +250,35 @@ const GoogleDriveAuth = {
       }
       throw Object.assign(new Error('A sessão do Google precisa ser confirmada por um clique.'),{code:'AUTH_REQUIRED'});
     }
-    let tokenPromise;
-    // No clique do usuário, abre o popup antes do primeiro await. Isso preserva a
-    // ativação do clique e evita "Failed to open popup window" em navegadores mais rígidos.
-    if(this._gisReady&&window.google&&google.accounts&&google.accounts.oauth2){
-      tokenPromise=this.requestToken(true);
-    }else{
-      await this.ensureIdentityLoaded();
-      tokenPromise=this.requestToken(true);
+    /* V6.46.6 — regra obrigatória para Firefox/Brave/Opera: quando este método
+       recebe interactive=true, ele NÃO carrega script e NÃO executa nenhum await
+       antes de requestAccessToken(). O popup nasce dentro da pilha do clique real.
+       Se o Google ainda não estiver pronto, a tela prepara primeiro e exige um
+       segundo clique, em vez de perder a ativação do usuário silenciosamente. */
+    if(!this.isInteractiveReady()){
+      if(window.BorionPerf)BorionPerf.endStage('google_token',{ready:false});
+      throw Object.assign(new Error('O login do Google ainda está sendo preparado. Clique novamente em Continuar com Google.'),{code:'AUTH_NOT_READY'});
     }
+    const tokenPromise=this.requestToken(true);
     await tokenPromise;
     if(window.BorionPerf)BorionPerf.endStage('google_token');
     return await this.fetchUserInfo();
   },
 
   prepareInteractiveLogin(){
-    return this.ensureIdentityLoaded();
+    return this.ensureIdentityLoaded().then(()=>{
+      if(!this.isInteractiveReady())throw Object.assign(new Error('Google Identity Services não ficou pronto para autenticação.'),{code:'AUTH_SCRIPT_INVALID'});
+      return true;
+    });
   },
 
   async ensureFreshToken(interactive=false){
     if(this.accessToken&&Date.now()<this.tokenExpiresAt-60000)return this.accessToken;
-    // V6.46.5 — nunca tenta abrir/renovar a janela Google sem um clique real.
+    // V6.46.6 — nunca tenta abrir/renovar a janela Google sem um clique real.
     // Firefox, Brave e Opera bloqueiam popups automáticos; o modo estrito então
     // apresenta o botão de reconexão e preserva qualquer alteração pendente.
     if(!interactive)throw Object.assign(new Error('A sessão do Google expirou. Confirme o login para continuar.'),{code:'AUTH_REQUIRED'});
-    await this.ensureIdentityLoaded();
+    if(!this.isInteractiveReady())throw Object.assign(new Error('O login do Google ainda precisa ser preparado antes da confirmação.'),{code:'AUTH_NOT_READY'});
     return await this.requestToken(true);
   },
 
@@ -280,15 +294,39 @@ const GoogleDriveAuth = {
 
   async fetchUserInfo(){
     if(window.BorionPerf)BorionPerf.startStage('google_userinfo');
-    const controller=typeof AbortController!=='undefined'?new AbortController():null;
-    const timer=controller?setTimeout(()=>controller.abort(),10000):null;
-    let res;
-    try{res=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+this.accessToken},signal:controller?controller.signal:undefined});}
-    catch(e){if(e&&e.name==='AbortError')throw Object.assign(new Error('O Google demorou para confirmar sua conta.'),{code:'AUTH_TIMEOUT'});throw e;}
-    finally{if(timer)clearTimeout(timer);}
-    if(!res.ok)throw Object.assign(new Error('Não foi possível confirmar a conta Google (status '+res.status+').'),{status:res.status,code:res.status===401?'AUTH_REQUIRED':'AUTH_USERINFO_FAILED'});
-    const info=await res.json();
-    this.user={sub:info.sub,email:info.email,name:info.name||info.email,picture:info.picture||''};
+    const authHeader={Authorization:'Bearer '+this.accessToken};
+    const fetchWithTimeout=async(url,timeoutMs=10000)=>{
+      const controller=typeof AbortController!=='undefined'?new AbortController():null;
+      const timer=controller?setTimeout(()=>controller.abort(),timeoutMs):null;
+      try{return await fetch(url,{headers:authHeader,signal:controller?controller.signal:undefined});}
+      finally{if(timer)clearTimeout(timer);}
+    };
+    let info=null,firstError=null;
+    try{
+      const res=await fetchWithTimeout('https://www.googleapis.com/oauth2/v3/userinfo');
+      if(res.ok)info=await res.json();
+      else firstError=Object.assign(new Error('userinfo status '+res.status),{status:res.status});
+    }catch(e){firstError=e;}
+    /* Firefox com proteção reforçada pode concluir o OAuth e ainda bloquear a
+       consulta de userinfo. Nesse caso o token continua válido; confirmamos a
+       conta pela própria Drive API em vez de devolver o usuário ao login. */
+    if(!info){
+      if(firstError&&firstError.status===401)throw Object.assign(new Error('A sessão Google não é mais válida.'),{status:401,code:'AUTH_REQUIRED'});
+      try{
+        const driveRes=await fetchWithTimeout('https://www.googleapis.com/drive/v3/about?fields=user(displayName,emailAddress,photoLink,permissionId)');
+        if(!driveRes.ok)throw Object.assign(new Error('Drive about status '+driveRes.status),{status:driveRes.status});
+        const about=await driveRes.json();
+        const u=about&&about.user||{};
+        if(!u.emailAddress)throw new Error('A Drive API não devolveu o e-mail da conta.');
+        info={sub:u.permissionId||('email:'+u.emailAddress),email:u.emailAddress,name:u.displayName||u.emailAddress,picture:u.photoLink||''};
+      }catch(fallbackError){
+        const timedOut=(firstError&&firstError.name==='AbortError')||(fallbackError&&fallbackError.name==='AbortError');
+        throw Object.assign(new Error(timedOut?'O Google demorou para confirmar sua conta.':'O Google autenticou, mas não foi possível identificar a conta.'),{code:timedOut?'AUTH_TIMEOUT':'AUTH_USERINFO_FAILED',cause:fallbackError||firstError});
+      }
+    }
+    const email=String(info.email||'').trim();
+    if(!email)throw Object.assign(new Error('O Google não devolveu o e-mail da conta.'),{code:'AUTH_USERINFO_FAILED'});
+    this.user={sub:String(info.sub||('email:'+email)),email,name:info.name||email,picture:info.picture||''};
     writeJSON(LS_GDRIVE_USER,this.user);
     if(window.BorionPerf)BorionPerf.endStage('google_userinfo');
     return this.user;
@@ -501,7 +539,7 @@ const GoogleDriveFS = {
   }
 };
 
-/* V6.46.5 — compatibilidade entre navegadores.
+/* V6.46.6 — compatibilidade entre navegadores.
    Firefox, Brave e Opera são mais rígidos com janelas abertas depois de awaits.
    O Picker agora é preparado antes e exibido diretamente por um segundo clique
    explícito. Também existe fallback por link/ID da pasta, sem depender do Picker. */
@@ -818,8 +856,12 @@ const GoogleDriveProvider = {
     if(typeof document==='undefined')return false;
     const root=document.getElementById('root');if(!root)return false;
     const online=!!navigator.onLine;
-    root.innerHTML=`<div class="gate-wrap"><div class="gate-box"><div class="gate-logo"><img src="borion-emblem.png" alt="Borion Finance"/><div class="appname">Borion Finance</div></div><div class="gate-card"><h2>${online?'Confirme o login do Google':'Internet necessária'}</h2><p class="gate-sub" id="gdrive_strict_status">${esc(this.lastSyncError)}</p><button class="btn btn-primary btn-block" id="gdrive_strict_reconnect">${online?'Entrar novamente com o Google':'Tentar novamente'}</button><p class="gate-sub" style="margin-top:14px">Nenhum lançamento novo será aceito sem confirmação real do Google Drive. O Borion não usa dados financeiros locais neste modo.</p></div></div></div>`;
-    const button=document.getElementById('gdrive_strict_reconnect');if(button)button.onclick=()=>this.reconnectStrictCloud();
+    root.innerHTML=`<div class="gate-wrap"><div class="gate-box"><div class="gate-logo"><img src="borion-emblem.png" alt="Borion Finance"/><div class="appname">Borion Finance</div></div><div class="gate-card"><h2>${online?'Confirme o login do Google':'Internet necessária'}</h2><p class="gate-sub" id="gdrive_strict_status">${esc(this.lastSyncError)}</p><button class="btn btn-primary btn-block" id="gdrive_strict_reconnect" ${online?'disabled':''}>${online?'Preparando Google...':'Tentar novamente'}</button><p class="gate-sub" style="margin-top:14px">Nenhum lançamento novo será aceito sem confirmação real do Google Drive. O Borion não usa dados financeiros locais neste modo.</p></div></div></div>`;
+    const button=document.getElementById('gdrive_strict_reconnect');
+    if(button){
+      button.onclick=()=>this.reconnectStrictCloud();
+      if(online)GoogleDriveAuth.prepareInteractiveLogin().then(()=>{button.disabled=false;button.textContent='Entrar novamente com o Google';}).catch(error=>{button.disabled=false;button.textContent='Preparar login do Google';const status=this._strictStatusElement();if(status)status.textContent=String(error&&error.message||error);});
+    }
     return false;
   },
 
@@ -827,6 +869,18 @@ const GoogleDriveProvider = {
     const button=typeof document!=='undefined'?document.getElementById('gdrive_strict_reconnect'):null;
     const status=this._strictStatusElement();
     if(!navigator.onLine){if(status)status.textContent='Ainda sem internet. Conecte o dispositivo e tente novamente.';return false;}
+    if(!GoogleDriveAuth.isInteractiveReady()){
+      if(button){button.disabled=true;button.textContent='Preparando Google...';}
+      try{
+        await GoogleDriveAuth.prepareInteractiveLogin();
+        if(status)status.textContent='Google preparado. Clique novamente para confirmar a conta.';
+        if(button){button.disabled=false;button.textContent='Entrar novamente com o Google';}
+      }catch(e){
+        if(status)status.textContent=String(e&&e.message||e);
+        if(button){button.disabled=false;button.textContent='Preparar login do Google';}
+      }
+      return false;
+    }
     if(button){button.disabled=true;button.textContent='Confirmando conta...';}
     const previousSub=GoogleDriveAuth.user&&GoogleDriveAuth.user.sub;
     try{
@@ -1070,7 +1124,7 @@ const GoogleDriveProvider = {
     return canonical;
   },
 
-  /* V6.46.5 — login e seleção de pasta em etapas explícitas.
+  /* V6.46.6 — login e seleção de pasta em etapas explícitas.
      Em navegadores rígidos, o popup do Google consome a ativação do primeiro clique.
      Por isso, quando a pasta ainda não está vinculada neste navegador, connect()
      autentica e devolve needsFolderSelection; a tela pede um segundo clique. */

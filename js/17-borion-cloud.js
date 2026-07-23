@@ -1056,15 +1056,24 @@ const CloudAuth={
     </div></div>`;
     const gd=document.getElementById('cloud_gdrive');
     const inlineError=document.getElementById('cloud_google_inline_error');
-    const markReady=()=>{if(!gd)return;gd.disabled=false;gd.dataset.googleReady='1';gd.textContent='Continuar com Google';if(inlineError){inlineError.hidden=true;inlineError.textContent='';}};
-    const markLoadFailure=(error)=>{if(!gd)return;gd.disabled=false;gd.dataset.googleReady='0';gd.textContent='Tentar preparar Google';this.error=this.googleLoginError(error);if(inlineError){inlineError.hidden=false;inlineError.textContent=this.error;}};
+    const isActuallyReady=()=>!!(window.GoogleDriveAuth&&typeof GoogleDriveAuth.isInteractiveReady==='function'&&GoogleDriveAuth.isInteractiveReady());
+    const markReady=()=>{if(!gd)return;if(!isActuallyReady()){markLoadFailure(Object.assign(new Error('O Google ainda não ficou pronto.'),{code:'AUTH_NOT_READY'}));return;}gd.disabled=false;gd.dataset.googleReady='1';gd.textContent='Continuar com Google';if(inlineError){inlineError.hidden=true;inlineError.textContent='';}};
+    const markLoadFailure=(error)=>{if(!gd)return;gd.disabled=false;gd.dataset.googleReady='0';gd.textContent='Preparar login do Google';this.error=this.googleLoginError(error);if(inlineError){inlineError.hidden=false;inlineError.textContent=this.error;}};
     if(window.GoogleDriveAuth&&typeof GoogleDriveAuth.prepareInteractiveLogin==='function'){
       GoogleDriveAuth.prepareInteractiveLogin().then(markReady).catch(markLoadFailure);
-    }else markReady();
+    }else markLoadFailure(Object.assign(new Error('Módulo Google indisponível.'),{code:'AUTH_SCRIPT_INVALID'}));
     if(gd) gd.onclick=async()=>{
-      if(gd.dataset.googleReady!=='1'){
+      /* V6.46.6 — nunca prossegue só porque um dataset antigo diz que está pronto.
+         O Firefox precisa que requestAccessToken aconteça no mesmo clique real. */
+      if(gd.dataset.googleReady!=='1'||!isActuallyReady()){
         gd.disabled=true;gd.textContent='Preparando Google...';this.error='';
-        try{await GoogleDriveAuth.prepareInteractiveLogin();markReady();this.info='Conexão preparada. Clique em “Continuar com Google” para entrar.';this.render();}
+        try{
+          await GoogleDriveAuth.prepareInteractiveLogin();
+          markReady();
+          this.info='Google preparado. Agora clique novamente em “Continuar com Google”.';
+          const infoNode=root.querySelector('.gate-info');
+          if(!infoNode){const p=document.createElement('p');p.className='gate-info';p.textContent=this.info;gd.parentNode.insertBefore(p,gd);}else infoNode.textContent=this.info;
+        }
         catch(error){markLoadFailure(error);}
         return;
       }
@@ -1136,9 +1145,11 @@ const CloudAuth={
   googleLoginError(error){
     const code=String(error&&error.code||'');
     const message=String(error&&error.message||error||'');
-    if(/AUTH_POPUP_BLOCKED|popup.*failed|failed.*popup/i.test(code+' '+message)) return 'O navegador bloqueou a janela do Google. Permita pop-ups para este site e tente novamente.';
+    if(/AUTH_NOT_READY/i.test(code+' '+message)) return 'O login do Google ainda está sendo preparado. Clique em “Preparar login do Google” e, quando liberar, clique novamente em “Continuar com Google”.';
+    if(/AUTH_POPUP_BLOCKED|popup.*failed|failed.*popup/i.test(code+' '+message)) return 'O Firefox bloqueou a janela do Google. Permita pop-ups para este site e clique novamente.';
     if(/AUTH_POPUP_CLOSED|popup.*closed|closed.*popup/i.test(code+' '+message)) return 'A janela do Google foi fechada antes de concluir o login. Tente novamente.';
-    if(/Falha ao carregar script|AUTH_SCRIPT_INVALID/i.test(code+' '+message)) return 'O navegador bloqueou o serviço de login do Google. Permita accounts.google.com para este site e tente novamente.';
+    if(/Falha ao carregar script|AUTH_SCRIPT_INVALID/i.test(code+' '+message)) return 'O Firefox bloqueou accounts.google.com. Clique no escudo ao lado do endereço, desative a proteção apenas para este site e tente novamente.';
+    if(/AUTH_USERINFO_FAILED/i.test(code+' '+message)) return 'O Google abriu, mas o Firefox bloqueou a confirmação final da conta. Libere accounts.google.com e googleapis.com para este site e tente novamente.';
     if(/AUTH_TIMEOUT|demorou|timeout/i.test(code+' '+message)) return 'O Google demorou para responder. Tente entrar novamente.';
     if(/access_denied|recusou|cancel/i.test(code+' '+message)) return 'O acesso do Google não foi concluído. Tente novamente.';
     return 'Não foi possível conectar sua conta Google. Tente novamente.';

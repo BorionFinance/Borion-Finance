@@ -14,7 +14,7 @@ const HelpCenterLoader = {
     this.promise = new Promise((resolve,reject)=>{
       if(!document.querySelector('link[data-borion-help-css]')){
         const link=document.createElement('link');
-        link.rel='stylesheet'; link.href='css/help-center.css?v=6.46.9'; link.dataset.borionHelpCss='1';
+        link.rel='stylesheet'; link.href='css/help-center.css?v=6.46.10'; link.dataset.borionHelpCss='1';
         document.head.appendChild(link);
       }
       const existing=document.querySelector('script[data-borion-help-script]');
@@ -24,7 +24,7 @@ const HelpCenterLoader = {
         return;
       }
       const script=document.createElement('script');
-      script.src='js/26-help-center.js?v=6.46.9'; script.async=true; script.dataset.borionHelpScript='1';
+      script.src='js/26-help-center.js?v=6.46.10'; script.async=true; script.dataset.borionHelpScript='1';
       script.onload=()=>window.BorionHelp?resolve(window.BorionHelp):reject(new Error('A Central do Borion não iniciou.'));
       script.onerror=()=>{ script.remove(); reject(new Error('Falha ao carregar a Central do Borion.')); };
       document.head.appendChild(script);
@@ -431,6 +431,68 @@ Settings.switchFinancialProfile = async function(id){
   if(window.CloudStorage && CloudStorage.user) await CloudStorage.guardExit(doSwitch);
   else await doSwitch();
 };
+/* V6.46.10 — recorte de foto de perfil. Sem dependências externas, só canvas puro.
+   Usa Pointer Events (unifica mouse no computador e toque no celular no mesmo
+   código): arrastar para posicionar, controle deslizante (ou roda do mouse) para
+   zoom. O quadro de recorte é sempre um círculo, igual ao avatar exibido no app. */
+function openAvatarCropper(srcDataUrl, onConfirm){
+  const img = new Image();
+  img.onload = ()=>{
+    const frameSize = Math.min(300, (window.innerWidth||360) - 80);
+    const minScale = frameSize / Math.min(img.naturalWidth, img.naturalHeight);
+    let zoom = 1, tx = 0, ty = 0, dragging = false, startX = 0, startY = 0, startTx = 0, startTy = 0;
+
+    const box = el(`
+    <div class="modal-overlay">
+      <div class="modal-box" style="max-width:360px;text-align:center;">
+        <div class="modal-head"><h2>Ajustar foto</h2><button id="crop_close">&times;</button></div>
+        <p class="modal-sub">Arraste para posicionar e use o controle abaixo para o zoom.</p>
+        <div id="crop_frame" style="width:${frameSize}px;height:${frameSize}px;margin:12px auto;border-radius:50%;overflow:hidden;position:relative;background:#111;touch-action:none;cursor:grab;">
+          <img id="crop_img" src="${srcDataUrl}" draggable="false" style="position:absolute;left:0;top:0;transform-origin:0 0;user-select:none;-webkit-user-drag:none;pointer-events:none;"/>
+        </div>
+        <input id="crop_zoom" type="range" min="1" max="3" step="0.01" value="1" style="width:100%;margin:8px 0 14px;"/>
+        <div class="row-btns">
+          <button class="btn btn-secondary btn-block" id="crop_cancel">Cancelar</button>
+          <button class="btn btn-primary btn-block" id="crop_confirm">Usar foto</button>
+        </div>
+      </div>
+    </div>`);
+    $('#modal-root').innerHTML=''; $('#modal-root').appendChild(box); attachModalGuard(box);
+
+    const frameEl = box.querySelector('#crop_frame'), imgEl = box.querySelector('#crop_img'), zoomEl = box.querySelector('#crop_zoom');
+    const clamp=(v,mn,mx)=>Math.max(mn,Math.min(mx,v));
+    function layout(){
+      const scale = minScale*zoom, dw = img.naturalWidth*scale, dh = img.naturalHeight*scale;
+      const maxTx = Math.max(0,(dw-frameSize)/2), maxTy = Math.max(0,(dh-frameSize)/2);
+      tx = clamp(tx,-maxTx,maxTx); ty = clamp(ty,-maxTy,maxTy);
+      imgEl.style.width = dw+'px'; imgEl.style.height = dh+'px';
+      imgEl.style.transform = `translate(${(frameSize-dw)/2+tx}px, ${(frameSize-dh)/2+ty}px)`;
+    }
+    layout();
+    zoomEl.oninput = ()=>{ zoom = parseFloat(zoomEl.value)||1; layout(); };
+    frameEl.addEventListener('pointerdown',e=>{ dragging=true; startX=e.clientX; startY=e.clientY; startTx=tx; startTy=ty; frameEl.style.cursor='grabbing'; try{frameEl.setPointerCapture(e.pointerId);}catch(_e){} });
+    frameEl.addEventListener('pointermove',e=>{ if(!dragging) return; tx=startTx+(e.clientX-startX); ty=startTy+(e.clientY-startY); layout(); });
+    const endDrag=e=>{ dragging=false; frameEl.style.cursor='grab'; try{frameEl.releasePointerCapture(e.pointerId);}catch(_e){} };
+    frameEl.addEventListener('pointerup',endDrag); frameEl.addEventListener('pointercancel',endDrag);
+    frameEl.addEventListener('wheel',e=>{ e.preventDefault(); zoom=clamp(zoom+(e.deltaY<0?0.08:-0.08),1,3); zoomEl.value=zoom; layout(); },{passive:false});
+
+    const finish=dataUrl=>{ closeModal(); if(dataUrl) onConfirm(dataUrl); };
+    box.querySelector('#crop_close').onclick = ()=>finish(null);
+    box.querySelector('#crop_cancel').onclick = ()=>finish(null);
+    box.querySelector('#crop_confirm').onclick = ()=>{
+      const scale = minScale*zoom, dw = img.naturalWidth*scale, dh = img.naturalHeight*scale;
+      const left = (frameSize-dw)/2+tx, top = (frameSize-dh)/2+ty;
+      const srcX = -left/scale, srcY = -top/scale, srcSize = frameSize/scale, OUT=512;
+      const canvas = document.createElement('canvas'); canvas.width=OUT; canvas.height=OUT;
+      canvas.getContext('2d').drawImage(img, srcX, srcY, srcSize, srcSize, 0, 0, OUT, OUT);
+      finish(canvas.toDataURL('image/jpeg',0.88));
+    };
+  };
+  img.onerror = ()=>alert('Não foi possível abrir essa imagem para recorte.');
+  img.src = srcDataUrl;
+}
+const BORION_AVATAR_MAX_BYTES = 3*1024*1024; // V6.46.10 — antes 900 KB; a foto final sai redimensionada (512×512) pelo recorte, então não pesa o backup
+
 Settings.savePersonal = async function(){
   const p=S.currentProfile; if(!p) return;
   const name=$('#pf_name').value.trim()||p.name; const color=$('#pf_avatar_color'); const c=color?color.value:profileAvatarBg(p);
@@ -443,26 +505,32 @@ Settings.savePersonal = async function(){
       toast('Perfil financeiro atualizado e confirmado no Supabase.');
     } else {
       p.name=name; p.avatarColor=c;
-      setProfiles(S.profiles); renderApp(); toast('Perfil financeiro atualizado.');
+      setProfiles(S.profiles);
+      if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.queueSave({source:'profile_change'});
+      renderApp(); toast('Perfil financeiro atualizado.');
     }
   }
   catch(e){ alert(e.message||String(e)); }
 };
 Settings.readAvatarFile = function(input){
   const file=input.files&&input.files[0]; if(!file) return;
-  if(file.size>900000){ alert('Escolha uma imagem menor que 900 KB para não pesar o backup.'); input.value=''; return; }
-  const reader=new FileReader(); reader.onload=async ()=>{
-    const img=reader.result;
-    try{
-      if(window.CloudStorage&&CloudStorage.user){
-        await CloudStorage.renameProfile(S.currentProfile.id,S.currentProfile.name,profileAvatarBg(S.currentProfile),img);
-        const fresh = S.profiles.find(x=>x.id===S.currentProfile.id); if(fresh) S.currentProfile=fresh;
-      } else {
-        S.currentProfile.avatarImage=img; setProfiles(S.profiles);
-      }
-      renderApp(); toast('Foto do perfil atualizada e confirmada.');
-    }catch(e){ alert(e.message||String(e)); }
-  }; reader.readAsDataURL(file); input.value='';
+  if(file.size>BORION_AVATAR_MAX_BYTES){ alert('Escolha uma imagem menor que 3 MB.'); input.value=''; return; }
+  const reader=new FileReader();
+  reader.onload=()=>{
+    openAvatarCropper(reader.result, async (croppedDataUrl)=>{
+      try{
+        if(window.CloudStorage&&CloudStorage.user){
+          await CloudStorage.renameProfile(S.currentProfile.id,S.currentProfile.name,profileAvatarBg(S.currentProfile),croppedDataUrl);
+          const fresh = S.profiles.find(x=>x.id===S.currentProfile.id); if(fresh) S.currentProfile=fresh;
+        } else {
+          S.currentProfile.avatarImage=croppedDataUrl; setProfiles(S.profiles);
+          if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.queueSave({source:'profile_change'});
+        }
+        renderApp(); toast('Foto do perfil atualizada e confirmada.');
+      }catch(e){ alert(e.message||String(e)); }
+    });
+  };
+  reader.readAsDataURL(file); input.value='';
 };
 Settings.removeAvatarImage = async function(){
   try{
@@ -471,6 +539,7 @@ Settings.removeAvatarImage = async function(){
       const fresh = S.profiles.find(x=>x.id===S.currentProfile.id); if(fresh) S.currentProfile=fresh;
     } else {
       delete S.currentProfile.avatarImage; setProfiles(S.profiles);
+      if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.queueSave({source:'profile_change'});
     }
     renderApp(); toast('Foto removida e confirmada.');
   }catch(e){ alert(e.message||String(e)); }
@@ -485,6 +554,7 @@ Settings.setPasswordFlow = function(){
         await CloudStorage.updateProfilePassword(p.id,'',v.pw,'set');
       } else {
         p.salt=randomSalt(); p.passwordHash=await hashPassword(v.pw,p.salt); setProfiles(S.profiles);
+        if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.queueSave({source:'profile_change'});
       }
       closeModal(); renderApp(); toast('Senha do perfil definida.');
     }catch(e){ alert(e.message||String(e)); }
@@ -502,6 +572,7 @@ Settings.changePassword = function(){
       } else {
         if(hasCurrent){ const oldHash=await hashPassword(v.atual||'',p.salt||''); if(oldHash!==p.passwordHash) throw new Error('Senha atual do perfil incorreta.'); }
         p.salt=randomSalt(); p.passwordHash=await hashPassword(v.pw,p.salt); setProfiles(S.profiles);
+        if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.queueSave({source:'profile_change'});
       }
       closeModal(); renderApp(); toast('Senha do perfil alterada.');
     }catch(e){ alert(e.message||String(e)); }
@@ -516,6 +587,7 @@ Settings.removePassword = function(){
       } else {
         if(p.passwordHash){ const oldHash=await hashPassword(v.atual||'',p.salt||''); if(oldHash!==p.passwordHash) throw new Error('Senha atual do perfil incorreta.'); }
         p.passwordHash=null; p.salt=null; setProfiles(S.profiles);
+        if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.queueSave({source:'profile_change'});
       }
       closeModal(); renderApp(); toast('Senha do perfil removida.');
     }catch(e){ alert(e.message||String(e)); }
@@ -1031,7 +1103,7 @@ window.Settings = Settings;
 /* ================= V6.33.1 — refinamento extra de Configurações, padronização de ordenação
    e bloco flutuante de Anotações persistente entre abas ================= */
 (function(){
-  const SETTINGS_VERSION = '6.46.9';
+  const SETTINGS_VERSION = '6.46.10';
 
   function floatingNotesPrefs(create=false){
     const fallback={enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};

@@ -1129,8 +1129,23 @@ const GoogleDriveProvider = {
     const pendingSince=localStorage.getItem(gdrivePendingKey(this.folderId));
     let localPendingPayload=null;
     if(pendingSince){
-      try{localPendingPayload=await buildFullBackupPayload();}
-      catch(e){console.warn('[GoogleDriveProvider] não foi possível montar a pendência local no boot:',e);}
+      // V6.46.9 — bug real corrigido: em boot frio (S.profiles ainda vazio nesta sessão —
+      // por exemplo depois de um login que demorou e a sessão expirou, voltando pra tela de
+      // login e reiniciando o boot do zero), buildFullBackupPayload() gerava um payload local
+      // com profiles:[] (nada carregado ainda), e esse payload vazio era tratado como "a
+      // edição pendente mais recente" e mesclado por cima do snapshot remoto. Como o caso mais
+      // comum é remote===base (nada novo no Drive desde o último sync), o merge de três vias
+      // tomava o lado local vazio por inteiro — apagando nome e foto do perfil. Um boot
+      // verdadeiramente frio nunca tem uma edição local real pra proteger por este caminho
+      // legado (V6.16.0): qualquer operação genuinamente pendente já é recuperada de forma
+      // segura mais abaixo pela fila durável do IndexedDB / journal (V6.40), que guarda a
+      // operação em si — não um retrato reconstruído do estado em memória.
+      if(Array.isArray(S.profiles)&&S.profiles.length){
+        try{localPendingPayload=await buildFullBackupPayload();}
+        catch(e){console.warn('[GoogleDriveProvider] não foi possível montar a pendência local no boot:',e);}
+      }else{
+        console.warn('[GoogleDriveProvider] marcador de pendência encontrado em boot frio (sem perfis carregados ainda nesta sessão) — ignorando payload local reconstruído para não sobrescrever o perfil com um retrato vazio; a fila durável/journal cuidam da recuperação real.');
+      }
     }
 
     let visibleSnapshot=remoteSnapshot,journalPending=false,journalError=null;

@@ -522,6 +522,28 @@ function cloneAccountValue6401(value){
   return value==null ? value : JSON.parse(JSON.stringify(value));
 }
 
+/* V6.46.11 — comparação restrita aos campos que formam a identidade do perfil.
+   Dados financeiros ficam em dataByProfile e continuam usando o merge normal. */
+function profileMetadataComparable64611(profile){
+  const p=profile||{};
+  return {
+    id:p.id==null?'':String(p.id),
+    name:p.name||'Perfil',
+    email:p.email||'',
+    avatarColor:p.avatarColor||p.avatar_color||'',
+    avatarImage:p.avatarImage||p.avatar_image||'',
+    passwordHash:p.passwordHash||p.password_hash||null,
+    salt:p.salt||p.password_salt||null,
+    createdAt:p.createdAt||p.created_at||null,
+    updatedAt:p.updatedAt||p.updated_at||null,
+    cloud:!!p.cloud
+  };
+}
+function sameProfileMetadata64611(a,b){
+  try{return JSON.stringify(profileMetadataComparable64611(a))===JSON.stringify(profileMetadataComparable64611(b));}
+  catch(_e){return false;}
+}
+
 /* Prepara TODA a conta em memória antes de tocar no estado persistido. Assim, uma
    exceção no segundo/terceiro perfil não deixa configurações novas combinadas com
    somente parte dos perfis migrados. Dados órfãos e IDs de perfil duplicados entram
@@ -584,6 +606,20 @@ function commitPreparedAccountPayload6401(prepared,options={}){
   };
   for(const p of previous.profiles||[]) if(p&&p.id!=null){const id=String(p.id);const stored=typeof getProfileData==='function'?getProfileData(id):((S.currentProfile&&String(S.currentProfile.id)===id)?S.data:null);previous.dataByProfile[id]=cloneAccountValue6401(stored);}
   const nextIds=new Set((prepared.profiles||[]).map(p=>String(p.id)));
+  const metadataProvider=window.GoogleDriveProvider||null;
+  const committedProfiles=(prepared.profiles||[]).map(remoteProfile=>{
+    const id=String(remoteProfile.id);
+    const pending=metadataProvider&&typeof metadataProvider.pendingProfileMetadata==='function'
+      ?metadataProvider.pendingProfileMetadata(id):null;
+    if(!pending)return remoteProfile;
+    if(sameProfileMetadata64611(remoteProfile,pending)){
+      metadataProvider.clearPendingProfileMetadata(id);
+      return remoteProfile;
+    }
+    // O Drive ainda confirmou uma fotografia anterior. Mantém localmente nome/foto
+    // mais novos; a fila já pendente enviará esta sobreposição na próxima operação.
+    return Object.assign({},remoteProfile,pending,{id:remoteProfile.id});
+  });
   // V6.46.3 — se o perfil ATIVO tiver uma edição local mais nova do que este
   // snapshot confirmado (ex.: a pessoa excluiu outra coisa enquanto este envio
   // ainda estava em trânsito pro Drive), NÃO sobrescreve S.data com o resultado
@@ -596,7 +632,7 @@ function commitPreparedAccountPayload6401(prepared,options={}){
   const keepLocalActiveData=!!(options.preserveNewerLocalEdit&&activeId);
   try{
     // Persistência só começa depois que todos os perfis terminaram a migração em memória.
-    setConfig(prepared.config);setProfiles(prepared.profiles);
+    setConfig(prepared.config);setProfiles(committedProfiles);
     for(const p of prepared.profiles){
       const id=String(p.id);
       if(keepLocalActiveData&&id===activeId) continue; // não grava o snapshot velho por cima da edição em andamento
@@ -613,9 +649,9 @@ function commitPreparedAccountPayload6401(prepared,options={}){
       try{if(typeof idbDeleteProfileData==='function')idbDeleteProfileData(oldId);}catch(e){}
       try{if(typeof clearExitSavePending==='function')clearExitSavePending(oldId);}catch(e){}
     }
-    S.config=prepared.config;S.profiles=prepared.profiles;
+    S.config=prepared.config;S.profiles=committedProfiles;
     if(options.preserveCurrentProfile&&previous.currentProfile){
-      const active=prepared.profiles.find(p=>String(p.id)===String(previous.currentProfile.id));
+      const active=committedProfiles.find(p=>String(p.id)===String(previous.currentProfile.id));
       if(active){
         S.currentProfile=active;
         if(!keepLocalActiveData) S.data=prepared.dataByProfile[String(active.id)];
@@ -708,6 +744,22 @@ const GoogleDriveProvider = {
   authRequired: false,
   _lastFailureToastAt: 0,
   _strictCommitPromise:null,_strictCommitAgain:false,_strictPendingPayload:null,_strictOverlay:null,_strictAuthTimer:null,
+  _pendingProfileMetadata:new Map(),
+
+  markProfileMetadataChanged(profile){
+    if(!profile||profile.id==null)return;
+    this._pendingProfileMetadata.set(String(profile.id),cloneAccountValue6401(profile));
+  },
+
+  pendingProfileMetadata(profileId){
+    const value=this._pendingProfileMetadata.get(String(profileId));
+    return value?cloneAccountValue6401(value):null;
+  },
+
+  clearPendingProfileMetadata(profileId){
+    this._pendingProfileMetadata.delete(String(profileId));
+  },
+
   // V6.40 — journal de operações imutáveis + merge de três vias.
   _deviceId: null,
   _lastConsolidatedPayload: null,
@@ -1257,8 +1309,7 @@ const GoogleDriveProvider = {
     }
     if(this._isStrictMode()){
       this.dirty=true;this._syncRevision++;this.lastSyncError='';this._refreshStatusUI();
-      this.requestStrictCommit(options.source||'queue');
-      return;
+      return this.requestStrictCommit(options.source||'queue');
     }
     // V6.40 — captura a "base" desta leva de alterações (o último snapshot
     // consolidado conhecido) na TRANSIÇÃO de limpo->sujo, não a cada tecla —

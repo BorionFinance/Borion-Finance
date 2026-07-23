@@ -14,7 +14,7 @@ const HelpCenterLoader = {
     this.promise = new Promise((resolve,reject)=>{
       if(!document.querySelector('link[data-borion-help-css]')){
         const link=document.createElement('link');
-        link.rel='stylesheet'; link.href='css/help-center.css?v=6.46.10'; link.dataset.borionHelpCss='1';
+        link.rel='stylesheet'; link.href='css/help-center.css?v=6.46.11'; link.dataset.borionHelpCss='1';
         document.head.appendChild(link);
       }
       const existing=document.querySelector('script[data-borion-help-script]');
@@ -24,7 +24,7 @@ const HelpCenterLoader = {
         return;
       }
       const script=document.createElement('script');
-      script.src='js/26-help-center.js?v=6.46.10'; script.async=true; script.dataset.borionHelpScript='1';
+      script.src='js/26-help-center.js?v=6.46.11'; script.async=true; script.dataset.borionHelpScript='1';
       script.onload=()=>window.BorionHelp?resolve(window.BorionHelp):reject(new Error('A Central do Borion não iniciou.'));
       script.onerror=()=>{ script.remove(); reject(new Error('Falha ao carregar a Central do Borion.')); };
       document.head.appendChild(script);
@@ -164,10 +164,10 @@ const Settings = {
   },
   removeAvatarImage(){ delete S.currentProfile.avatarImage; setProfiles(S.profiles); renderApp(); toast('Foto removida.'); },
   setPasswordFlow(){
-    openModal({title:'Definir senha', fields:[{key:'pw',label:'Nova senha',type:'password'},{key:'pw2',label:'Confirmar senha',type:'password'}], onSave: async (v)=>{ if(!v.pw || v.pw.length<4){ alert('A senha deve ter ao menos 4 caracteres.'); return; } if(v.pw!==v.pw2){ alert('As senhas não coincidem.'); return; } const p=S.currentProfile; p.salt=randomSalt(); p.passwordHash=await hashPassword(v.pw,p.salt); setProfiles(S.profiles); closeModal(); renderView(); toast('Senha definida.'); }});
+    openModal({title:'Definir senha', fields:[{key:'pw',label:'Nova senha',type:'password'},{key:'pw2',label:'Confirmar senha',type:'password'}], onSave: async (v)=>{ if(!v.pw || v.pw.length<4){ alert('A senha deve ter ao menos 4 caracteres.'); return; } if(v.pw!==v.pw2){ alert('As senhas não coincidem.'); return; } const p=S.currentProfile; p.salt=randomSalt(); p.passwordHash=await hashPassword(v.pw,p.salt); markProfileMetadataPending64611(p); setProfiles(S.profiles); closeModal(); renderView(); toast('Senha definida.'); }});
   },
   changePassword(){ Settings.setPasswordFlow(); },
-  removePassword(){ const p=S.currentProfile; p.passwordHash=null; p.salt=null; setProfiles(S.profiles); renderView(); toast('Senha removida.'); },
+  removePassword(){ const p=S.currentProfile; p.passwordHash=null; p.salt=null; markProfileMetadataPending64611(p); setProfiles(S.profiles); renderView(); toast('Senha removida.'); },
   deleteProfile(id){
     const pr=S.profiles.find(x=>x.id===id); if(!pr) return; const prSnapshot=JSON.parse(JSON.stringify(pr)); const dataSnapshot=getProfileData(id); const wasCurrent=id===S.currentProfile.id; if(window.BorionDataActions6401) BorionDataActions6401.deleteProfile(id,'settings_delete'); S.profiles=S.profiles.filter(x=>x.id!==id); setProfiles(S.profiles); localStorage.removeItem(LS_DATA_PREFIX+id); if(wasCurrent){ logout(); } else { renderView(); } showUndoToast('Perfil "'+pr.name+'" excluído.', ()=>{ if(typeof clearProfileDeletion6401==='function') clearProfileDeletion6401(id); S.profiles.push(prSnapshot); setProfiles(S.profiles); if(dataSnapshot!=null) setProfileData(id,dataSnapshot); if(S.currentProfile) renderView(); else renderGate(); });
   },
@@ -431,7 +431,7 @@ Settings.switchFinancialProfile = async function(id){
   if(window.CloudStorage && CloudStorage.user) await CloudStorage.guardExit(doSwitch);
   else await doSwitch();
 };
-/* V6.46.10 — recorte de foto de perfil. Sem dependências externas, só canvas puro.
+/* V6.46.11 — recorte de foto de perfil. Sem dependências externas, só canvas puro.
    Usa Pointer Events (unifica mouse no computador e toque no celular no mesmo
    código): arrastar para posicionar, controle deslizante (ou roda do mouse) para
    zoom. O quadro de recorte é sempre um círculo, igual ao avatar exibido no app. */
@@ -491,7 +491,38 @@ function openAvatarCropper(srcDataUrl, onConfirm){
   img.onerror = ()=>alert('Não foi possível abrir essa imagem para recorte.');
   img.src = srcDataUrl;
 }
-const BORION_AVATAR_MAX_BYTES = 3*1024*1024; // V6.46.10 — antes 900 KB; a foto final sai redimensionada (512×512) pelo recorte, então não pesa o backup
+const BORION_AVATAR_MAX_BYTES = 3*1024*1024; // V6.46.11 — antes 900 KB; a foto final sai redimensionada (512×512) pelo recorte, então não pesa o backup
+
+/* V6.46.11 — nome, foto, cor e senha pertencem ao metadado do perfil, não aos
+   lançamentos. Durante uma gravação no Drive, um snapshot confirmado mais antigo
+   podia voltar para a tela e apagar uma segunda alteração feita enquanto a primeira
+   ainda estava em trânsito. Este marcador mantém a identidade mais nova do perfil
+   sobreposta em memória até o próprio Drive devolver exatamente essa versão. */
+function markProfileMetadataPending64611(profile){
+  if(!profile) return;
+  profile.updatedAt = new Date().toISOString();
+  if(window.GoogleDriveProvider && typeof GoogleDriveProvider.markProfileMetadataChanged==='function')
+    GoogleDriveProvider.markProfileMetadataChanged(profile);
+}
+
+async function confirmProfileMetadataSave64611(){
+  if(!(window.GoogleDriveProvider&&GoogleDriveProvider.isConnected())) return true;
+  const result=GoogleDriveProvider.queueSave({source:'profile_change'});
+  if(result&&typeof result.then==='function'){
+    const confirmed=await result;
+    if(confirmed!==true) throw new Error('O Google Drive não confirmou a alteração do perfil.');
+  }
+  return true;
+}
+
+function currentProfileFormIdentity64611(profile){
+  const p=profile||{};
+  const nameEl=$('#pf_name'),colorEl=$('#pf_avatar_color');
+  return {
+    name:(nameEl&&nameEl.value.trim())||p.name||'Perfil',
+    avatarColor:(colorEl&&colorEl.value)||profileAvatarBg(p)
+  };
+}
 
 Settings.savePersonal = async function(){
   const p=S.currentProfile; if(!p) return;
@@ -505,9 +536,10 @@ Settings.savePersonal = async function(){
       toast('Perfil financeiro atualizado e confirmado no Supabase.');
     } else {
       p.name=name; p.avatarColor=c;
+      markProfileMetadataPending64611(p);
       setProfiles(S.profiles);
-      if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.queueSave({source:'profile_change'});
-      renderApp(); toast('Perfil financeiro atualizado.');
+      await confirmProfileMetadataSave64611();
+      renderApp(); toast('Nome e foto do perfil confirmados no Google Drive.');
     }
   }
   catch(e){ alert(e.message||String(e)); }
@@ -515,18 +547,31 @@ Settings.savePersonal = async function(){
 Settings.readAvatarFile = function(input){
   const file=input.files&&input.files[0]; if(!file) return;
   if(file.size>BORION_AVATAR_MAX_BYTES){ alert('Escolha uma imagem menor que 3 MB.'); input.value=''; return; }
+  const profileAtSelection=S.currentProfile;
+  if(!profileAtSelection){ input.value=''; return; }
+  const profileId=String(profileAtSelection.id);
+  // Captura o nome/cor que estão digitados ANTES de abrir o recorte. Assim escolher
+  // uma foto nunca reconstrói a tela e apaga um nome ainda não confirmado.
+  const typedIdentity=currentProfileFormIdentity64611(profileAtSelection);
   const reader=new FileReader();
   reader.onload=()=>{
     openAvatarCropper(reader.result, async (croppedDataUrl)=>{
       try{
+        const target=(S.profiles||[]).find(x=>String(x.id)===profileId);
+        if(!target) throw new Error('O perfil aberto mudou antes da foto ser confirmada.');
         if(window.CloudStorage&&CloudStorage.user){
-          await CloudStorage.renameProfile(S.currentProfile.id,S.currentProfile.name,profileAvatarBg(S.currentProfile),croppedDataUrl);
-          const fresh = S.profiles.find(x=>x.id===S.currentProfile.id); if(fresh) S.currentProfile=fresh;
+          await CloudStorage.renameProfile(target.id,typedIdentity.name,typedIdentity.avatarColor,croppedDataUrl);
+          const fresh = S.profiles.find(x=>String(x.id)===profileId); if(fresh) S.currentProfile=fresh;
         } else {
-          S.currentProfile.avatarImage=croppedDataUrl; setProfiles(S.profiles);
-          if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.queueSave({source:'profile_change'});
+          target.name=typedIdentity.name;
+          target.avatarColor=typedIdentity.avatarColor;
+          target.avatarImage=croppedDataUrl;
+          S.currentProfile=target;
+          markProfileMetadataPending64611(target);
+          setProfiles(S.profiles);
+          await confirmProfileMetadataSave64611();
         }
-        renderApp(); toast('Foto do perfil atualizada e confirmada.');
+        renderApp(); toast('Nome e foto do perfil confirmados.');
       }catch(e){ alert(e.message||String(e)); }
     });
   };
@@ -538,10 +583,15 @@ Settings.removeAvatarImage = async function(){
       await CloudStorage.renameProfile(S.currentProfile.id,S.currentProfile.name,profileAvatarBg(S.currentProfile),'');
       const fresh = S.profiles.find(x=>x.id===S.currentProfile.id); if(fresh) S.currentProfile=fresh;
     } else {
-      delete S.currentProfile.avatarImage; setProfiles(S.profiles);
-      if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.queueSave({source:'profile_change'});
+      const identity=currentProfileFormIdentity64611(S.currentProfile);
+      S.currentProfile.name=identity.name;
+      S.currentProfile.avatarColor=identity.avatarColor;
+      delete S.currentProfile.avatarImage;
+      markProfileMetadataPending64611(S.currentProfile);
+      setProfiles(S.profiles);
+      await confirmProfileMetadataSave64611();
     }
-    renderApp(); toast('Foto removida e confirmada.');
+    renderApp(); toast('Perfil atualizado e confirmado.');
   }catch(e){ alert(e.message||String(e)); }
 };
 Settings.setPasswordFlow = function(){
@@ -553,8 +603,8 @@ Settings.setPasswordFlow = function(){
       if(window.CloudStorage&&CloudStorage.user){
         await CloudStorage.updateProfilePassword(p.id,'',v.pw,'set');
       } else {
-        p.salt=randomSalt(); p.passwordHash=await hashPassword(v.pw,p.salt); setProfiles(S.profiles);
-        if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.queueSave({source:'profile_change'});
+        p.salt=randomSalt(); p.passwordHash=await hashPassword(v.pw,p.salt); markProfileMetadataPending64611(p); setProfiles(S.profiles);
+        await confirmProfileMetadataSave64611();
       }
       closeModal(); renderApp(); toast('Senha do perfil definida.');
     }catch(e){ alert(e.message||String(e)); }
@@ -571,8 +621,8 @@ Settings.changePassword = function(){
         await CloudStorage.updateProfilePassword(p.id,v.atual||'',v.pw,'change');
       } else {
         if(hasCurrent){ const oldHash=await hashPassword(v.atual||'',p.salt||''); if(oldHash!==p.passwordHash) throw new Error('Senha atual do perfil incorreta.'); }
-        p.salt=randomSalt(); p.passwordHash=await hashPassword(v.pw,p.salt); setProfiles(S.profiles);
-        if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.queueSave({source:'profile_change'});
+        p.salt=randomSalt(); p.passwordHash=await hashPassword(v.pw,p.salt); markProfileMetadataPending64611(p); setProfiles(S.profiles);
+        await confirmProfileMetadataSave64611();
       }
       closeModal(); renderApp(); toast('Senha do perfil alterada.');
     }catch(e){ alert(e.message||String(e)); }
@@ -586,8 +636,8 @@ Settings.removePassword = function(){
         await CloudStorage.updateProfilePassword(p.id,v.atual||'',null,'remove');
       } else {
         if(p.passwordHash){ const oldHash=await hashPassword(v.atual||'',p.salt||''); if(oldHash!==p.passwordHash) throw new Error('Senha atual do perfil incorreta.'); }
-        p.passwordHash=null; p.salt=null; setProfiles(S.profiles);
-        if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.queueSave({source:'profile_change'});
+        p.passwordHash=null; p.salt=null; markProfileMetadataPending64611(p); setProfiles(S.profiles);
+        await confirmProfileMetadataSave64611();
       }
       closeModal(); renderApp(); toast('Senha do perfil removida.');
     }catch(e){ alert(e.message||String(e)); }
@@ -1103,7 +1153,7 @@ window.Settings = Settings;
 /* ================= V6.33.1 — refinamento extra de Configurações, padronização de ordenação
    e bloco flutuante de Anotações persistente entre abas ================= */
 (function(){
-  const SETTINGS_VERSION = '6.46.10';
+  const SETTINGS_VERSION = '6.46.11';
 
   function floatingNotesPrefs(create=false){
     const fallback={enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};
@@ -1175,7 +1225,7 @@ window.Settings = Settings;
     else if(S.settingsTab==='backup') content = renderSettingsBackup();
     else if(S.settingsTab==='integrations') content = window.BorionInterop ? BorionInterop.renderSettings() : '<div class="settings-section">Integração indisponível.</div>';
     else if(S.settingsTab==='help') content = window.BorionHelp ? BorionHelp.render() : HelpCenterLoader.placeholder();
-    return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. ${SETTINGS_VERSION} • Importação JSON Suprema</div><footer class="app-release-footer" aria-label="Informações do Borion">
+    return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. ${SETTINGS_VERSION}</div><footer class="app-release-footer" aria-label="Informações do Borion">
 <div><strong>Versão:</strong> ${SETTINGS_VERSION}</div>
 <div><strong>Lançamento:</strong> 23/07/2026</div>
 <div>Desenvolvido por <strong>Pedro Bardella</strong></div>

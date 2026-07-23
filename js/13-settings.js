@@ -14,7 +14,7 @@ const HelpCenterLoader = {
     this.promise = new Promise((resolve,reject)=>{
       if(!document.querySelector('link[data-borion-help-css]')){
         const link=document.createElement('link');
-        link.rel='stylesheet'; link.href='css/help-center.css?v=6.46.11'; link.dataset.borionHelpCss='1';
+        link.rel='stylesheet'; link.href='css/help-center.css?v=6.46.12'; link.dataset.borionHelpCss='1';
         document.head.appendChild(link);
       }
       const existing=document.querySelector('script[data-borion-help-script]');
@@ -24,7 +24,7 @@ const HelpCenterLoader = {
         return;
       }
       const script=document.createElement('script');
-      script.src='js/26-help-center.js?v=6.46.11'; script.async=true; script.dataset.borionHelpScript='1';
+      script.src='js/26-help-center.js?v=6.46.12'; script.async=true; script.dataset.borionHelpScript='1';
       script.onload=()=>window.BorionHelp?resolve(window.BorionHelp):reject(new Error('A Central do Borion não iniciou.'));
       script.onerror=()=>{ script.remove(); reject(new Error('Falha ao carregar a Central do Borion.')); };
       document.head.appendChild(script);
@@ -431,7 +431,7 @@ Settings.switchFinancialProfile = async function(id){
   if(window.CloudStorage && CloudStorage.user) await CloudStorage.guardExit(doSwitch);
   else await doSwitch();
 };
-/* V6.46.11 — recorte de foto de perfil. Sem dependências externas, só canvas puro.
+/* V6.46.12 — recorte de foto de perfil. Sem dependências externas, só canvas puro.
    Usa Pointer Events (unifica mouse no computador e toque no celular no mesmo
    código): arrastar para posicionar, controle deslizante (ou roda do mouse) para
    zoom. O quadro de recorte é sempre um círculo, igual ao avatar exibido no app. */
@@ -491,9 +491,9 @@ function openAvatarCropper(srcDataUrl, onConfirm){
   img.onerror = ()=>alert('Não foi possível abrir essa imagem para recorte.');
   img.src = srcDataUrl;
 }
-const BORION_AVATAR_MAX_BYTES = 3*1024*1024; // V6.46.11 — antes 900 KB; a foto final sai redimensionada (512×512) pelo recorte, então não pesa o backup
+const BORION_AVATAR_MAX_BYTES = 3*1024*1024; // V6.46.12 — antes 900 KB; a foto final sai redimensionada (512×512) pelo recorte, então não pesa o backup
 
-/* V6.46.11 — nome, foto, cor e senha pertencem ao metadado do perfil, não aos
+/* V6.46.12 — nome, foto, cor e senha pertencem ao metadado do perfil, não aos
    lançamentos. Durante uma gravação no Drive, um snapshot confirmado mais antigo
    podia voltar para a tela e apagar uma segunda alteração feita enquanto a primeira
    ainda estava em trânsito. Este marcador mantém a identidade mais nova do perfil
@@ -556,23 +556,57 @@ Settings.readAvatarFile = function(input){
   const reader=new FileReader();
   reader.onload=()=>{
     openAvatarCropper(reader.result, async (croppedDataUrl)=>{
+      let target=null;
+      let previousIdentity=null;
+      const usingCloud=!!(window.CloudStorage&&CloudStorage.user);
       try{
-        const target=(S.profiles||[]).find(x=>String(x.id)===profileId);
+        target=(S.profiles||[]).find(x=>String(x.id)===profileId);
         if(!target) throw new Error('O perfil aberto mudou antes da foto ser confirmada.');
-        if(window.CloudStorage&&CloudStorage.user){
-          await CloudStorage.renameProfile(target.id,typedIdentity.name,typedIdentity.avatarColor,croppedDataUrl);
-          const fresh = S.profiles.find(x=>String(x.id)===profileId); if(fresh) S.currentProfile=fresh;
-        } else {
-          target.name=typedIdentity.name;
-          target.avatarColor=typedIdentity.avatarColor;
-          target.avatarImage=croppedDataUrl;
-          S.currentProfile=target;
+
+        previousIdentity={
+          name:target.name,
+          avatarColor:target.avatarColor,
+          avatarImage:target.avatarImage
+        };
+
+        // V6.46.12 — atualização otimista da interface: nome/cor/foto entram no estado
+        // e a tela é redesenhada ANTES de aguardar Google Drive/Supabase. Assim o avatar
+        // muda no mesmo instante em que o usuário confirma o recorte, sem trocar de aba.
+        target.name=typedIdentity.name;
+        target.avatarColor=typedIdentity.avatarColor;
+        target.avatarImage=croppedDataUrl;
+        S.currentProfile=target;
+
+        if(!usingCloud){
           markProfileMetadataPending64611(target);
           setProfiles(S.profiles);
+        }
+
+        renderApp();
+
+        if(usingCloud){
+          await CloudStorage.renameProfile(target.id,typedIdentity.name,typedIdentity.avatarColor,croppedDataUrl);
+          const fresh=S.profiles.find(x=>String(x.id)===profileId);
+          if(fresh) S.currentProfile=fresh;
+        } else {
           await confirmProfileMetadataSave64611();
         }
-        renderApp(); toast('Nome e foto do perfil confirmados.');
-      }catch(e){ alert(e.message||String(e)); }
+
+        renderApp();
+        toast('Nome e foto do perfil confirmados.');
+      }catch(e){
+        // No modo Supabase, se a gravação falhar, restaura a identidade anterior para
+        // não deixar a tela mostrando algo que não foi aceito pelo servidor.
+        if(usingCloud&&target&&previousIdentity){
+          target.name=previousIdentity.name;
+          target.avatarColor=previousIdentity.avatarColor;
+          if(previousIdentity.avatarImage) target.avatarImage=previousIdentity.avatarImage;
+          else delete target.avatarImage;
+          S.currentProfile=target;
+          renderApp();
+        }
+        alert(e.message||String(e));
+      }
     });
   };
   reader.readAsDataURL(file); input.value='';
@@ -1153,7 +1187,7 @@ window.Settings = Settings;
 /* ================= V6.33.1 — refinamento extra de Configurações, padronização de ordenação
    e bloco flutuante de Anotações persistente entre abas ================= */
 (function(){
-  const SETTINGS_VERSION = '6.46.11';
+  const SETTINGS_VERSION = '6.46.12';
 
   function floatingNotesPrefs(create=false){
     const fallback={enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};

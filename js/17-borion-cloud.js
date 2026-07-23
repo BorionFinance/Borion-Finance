@@ -1031,6 +1031,7 @@ const CloudAuth={
   render(){
     applyFont(); applyTheme();
     const root=document.getElementById('root');
+    if(this.mode==='driveFolder'){this.renderDriveFolderSelection(root);return;}
     if(this.mode==='login' && !this.emailExpanded){ this.renderCleanLogin(root); return; }
     this.renderEmailForm(root);
   },
@@ -1047,30 +1048,89 @@ const CloudAuth={
       <div class="gate-card cloud-card">
         <p class="gate-title">Entrar no Borion</p>
         <p class="gate-sub">Entre com sua conta Google para carregar seus perfis financeiros.</p>
-        ${this.error?`<p class="gate-error">${esc(this.error)}</p>`:''}
+        <p class="gate-error" id="cloud_google_inline_error"${this.error?'':' hidden'}>${esc(this.error||'')}</p>
         ${this.info?`<p class="gate-info">${esc(this.info)}</p>`:''}
         <button class="btn btn-primary btn-block" id="cloud_gdrive" disabled>Preparando Google...</button>
         <div style="text-align:center;margin-top:20px;"><button class="link-btn" id="cloud_more_info" style="opacity:.65;">Instruções e mais opções</button></div>
       </div>
     </div></div>`;
     const gd=document.getElementById('cloud_gdrive');
-    const markReady=()=>{if(!gd)return;gd.disabled=false;gd.dataset.googleReady='1';gd.textContent='Continuar com Google';};
-    const markLoadFailure=(error)=>{if(!gd)return;gd.disabled=false;gd.dataset.googleReady='0';gd.textContent='Preparar conexão Google';this.error=this.googleLoginError(error);};
+    const inlineError=document.getElementById('cloud_google_inline_error');
+    const markReady=()=>{if(!gd)return;gd.disabled=false;gd.dataset.googleReady='1';gd.textContent='Continuar com Google';if(inlineError){inlineError.hidden=true;inlineError.textContent='';}};
+    const markLoadFailure=(error)=>{if(!gd)return;gd.disabled=false;gd.dataset.googleReady='0';gd.textContent='Tentar preparar Google';this.error=this.googleLoginError(error);if(inlineError){inlineError.hidden=false;inlineError.textContent=this.error;}};
     if(window.GoogleDriveAuth&&typeof GoogleDriveAuth.prepareInteractiveLogin==='function'){
-      GoogleDriveAuth.prepareInteractiveLogin().then(markReady).catch(error=>{markLoadFailure(error);this.render();});
+      GoogleDriveAuth.prepareInteractiveLogin().then(markReady).catch(markLoadFailure);
     }else markReady();
     if(gd) gd.onclick=async()=>{
       if(gd.dataset.googleReady!=='1'){
         gd.disabled=true;gd.textContent='Preparando Google...';this.error='';
         try{await GoogleDriveAuth.prepareInteractiveLogin();markReady();this.info='Conexão preparada. Clique em “Continuar com Google” para entrar.';this.render();}
-        catch(error){this.error=this.googleLoginError(error);this.render();}
+        catch(error){markLoadFailure(error);}
         return;
       }
       gd.disabled=true;gd.textContent='Conectando...';this.error='';this.info='';
-      try{ await GoogleDriveProvider.connect(true); }
+      try{
+        const result=await GoogleDriveProvider.connect(true);
+        if(result&&result.needsFolderSelection){
+          this.mode='driveFolder';this.error='';this.info='';this.render();
+        }
+      }
       catch(error){ this.returnToSimpleLogin(this.googleLoginError(error)); }
     };
     const mi=document.getElementById('cloud_more_info'); if(mi) mi.onclick=()=>this.showMoreInfoModal();
+  },
+
+  renderDriveFolderSelection(root){
+    const user=window.GoogleDriveAuth&&GoogleDriveAuth.user;
+    root.innerHTML=`<div class="gate-wrap cloud-login-wrap"><div class="gate-box">
+      <div class="gate-logo"><img src="borion-emblem.png" alt="Borion Finance"/><div class="appname">Borion Finance</div></div>
+      <div class="gate-card cloud-card">
+        <p class="gate-title">Vincular a pasta do Borion</p>
+        <p class="gate-sub">Conta confirmada: <strong>${esc(user&&user.email||'Google')}</strong></p>
+        <p class="gate-sub">Este navegador ainda não conhece a pasta compartilhada. Escolha-a abaixo. Isso não publica nem move nenhum arquivo.</p>
+        ${this.error?`<p class="gate-error">${esc(this.error)}</p>`:''}
+        ${this.info?`<p class="gate-info">${esc(this.info)}</p>`:''}
+        <button class="btn btn-primary btn-block" id="cloud_gdrive_pick" disabled>Preparando seletor do Google...</button>
+        <div class="drive-folder-fallback">
+          <p class="gate-sub" style="margin:18px 0 8px">Se o Firefox, Brave ou Opera bloquear o seletor, cole o link da pasta:</p>
+          <div class="field"><input id="cloud_gdrive_folder_link" type="text" inputmode="url" autocomplete="off" placeholder="https://drive.google.com/drive/folders/..."></div>
+          <button class="btn btn-secondary btn-block" id="cloud_gdrive_use_link" style="margin-top:10px">Usar este link</button>
+        </div>
+        <div style="text-align:center;margin-top:18px"><button class="link-btn" id="cloud_gdrive_folder_back">Voltar ao login</button></div>
+      </div>
+    </div></div>`;
+    const pick=document.getElementById('cloud_gdrive_pick');
+    const link=document.getElementById('cloud_gdrive_folder_link');
+    const useLink=document.getElementById('cloud_gdrive_use_link');
+    const back=document.getElementById('cloud_gdrive_folder_back');
+    const pickerReady=()=>{if(!pick)return;pick.disabled=false;pick.textContent='Selecionar pasta no Google Drive';};
+    const pickerFailed=(error)=>{if(!pick)return;pick.disabled=true;pick.textContent='Seletor indisponível — use o link abaixo';this.info='O seletor do Google foi bloqueado neste navegador. O acesso pelo link continua seguro.';};
+    GoogleDriveProvider.prepareFolderPicker().then(pickerReady).catch(pickerFailed);
+    if(pick)pick.onclick=async()=>{
+      pick.disabled=true;pick.textContent='Abrindo seletor...';this.error='';this.info='';
+      try{await GoogleDriveProvider.selectFolderAndFinish();}
+      catch(error){
+        this.error=this.googleFolderError(error);this.mode='driveFolder';this.render();
+      }
+    };
+    if(useLink)useLink.onclick=async()=>{
+      useLink.disabled=true;useLink.textContent='Verificando pasta...';this.error='';this.info='';
+      try{await GoogleDriveProvider.connectWithFolderInput(link&&link.value||'');}
+      catch(error){this.error=this.googleFolderError(error);this.mode='driveFolder';this.render();}
+    };
+    if(link)link.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();useLink&&useLink.click();}});
+    if(back)back.onclick=()=>this.returnToSimpleLogin('');
+  },
+
+  googleFolderError(error){
+    const code=String(error&&error.code||'');
+    const message=String(error&&error.message||error||'');
+    if(/AUTH_REQUIRED|sessão Google|expirou/i.test(code+' '+message))return 'A sessão Google expirou. Volte ao login e confirme a conta novamente.';
+    if(/DRIVE_PICKER_CANCELLED|Nenhuma pasta/i.test(code+' '+message))return 'Nenhuma pasta foi selecionada.';
+    if(/DRIVE_PICKER|seletor/i.test(code+' '+message))return 'O navegador bloqueou o seletor do Google. Cole o link da pasta no campo abaixo.';
+    if(/LINK_INVALID|link completo|ID da pasta/i.test(code+' '+message))return 'O link da pasta não é válido. Abra a pasta no Google Drive e copie o endereço completo.';
+    if(/NOT_ACCESSIBLE|não foi encontrada|compartilhada/i.test(code+' '+message))return 'A pasta não foi encontrada ou não está compartilhada com esta conta Google.';
+    return message||'Não foi possível vincular essa pasta.';
   },
 
   googleLoginError(error){
@@ -1078,6 +1138,7 @@ const CloudAuth={
     const message=String(error&&error.message||error||'');
     if(/AUTH_POPUP_BLOCKED|popup.*failed|failed.*popup/i.test(code+' '+message)) return 'O navegador bloqueou a janela do Google. Permita pop-ups para este site e tente novamente.';
     if(/AUTH_POPUP_CLOSED|popup.*closed|closed.*popup/i.test(code+' '+message)) return 'A janela do Google foi fechada antes de concluir o login. Tente novamente.';
+    if(/Falha ao carregar script|AUTH_SCRIPT_INVALID/i.test(code+' '+message)) return 'O navegador bloqueou o serviço de login do Google. Permita accounts.google.com para este site e tente novamente.';
     if(/AUTH_TIMEOUT|demorou|timeout/i.test(code+' '+message)) return 'O Google demorou para responder. Tente entrar novamente.';
     if(/access_denied|recusou|cancel/i.test(code+' '+message)) return 'O acesso do Google não foi concluído. Tente novamente.';
     return 'Não foi possível conectar sua conta Google. Tente novamente.';

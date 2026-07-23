@@ -203,13 +203,23 @@ async function runBorionBoot642(){
 
     if(storageMode==='google_drive'){
       if(!navigator.onLine)throw Object.assign(new Error('Sem internet. O Borion usa somente o Google Drive e não abre offline.'),{code:'STRICT_DRIVE_OFFLINE'});
-      // Identity, deviceId e IndexedDB são preparados em paralelo. BackupFS e SW
-      // continuam em segundo plano e não seguram a conexão com o Google.
-      const identity=GoogleDriveAuth.ensureIdentityLoaded();
-      const prep=await Promise.allSettled([deviceInit,queueInit,localPrep,identity]);
-      const criticalFailure=prep.find(x=>x.status==='rejected');
-      if(criticalFailure)throw criticalFailure.reason;
+      // V6.46.5 — Google Identity Services precisa abrir uma janela para emitir
+      // um token novo. Firefox, Brave e Opera bloqueiam essa janela quando ela é
+      // disparada automaticamente durante o boot. Em uma abertura nova, mostramos
+      // o botão e só autenticamos após um clique real do usuário.
+      await Promise.allSettled([deviceInit,queueInit,localPrep]);
+      if(!GoogleDriveProvider.hasUsableToken()){
+        if(window.BootProgress)await BootProgress.complete({fadeMs:0});
+        CloudAuth.mode='login';CloudAuth.emailExpanded=false;CloudAuth.error='';
+        CloudAuth.info='Confirme sua conta Google para abrir o Borion neste navegador.';
+        CloudAuth.render();
+        return;
+      }
       const result=await GoogleDriveProvider.connect(false,{suppressRender:true});
+      if(result&&result.needsFolderSelection){
+        if(window.BootProgress)await BootProgress.complete({fadeMs:0});
+        CloudAuth.mode='driveFolder';CloudAuth.error='';CloudAuth.info='';CloudAuth.render();return;
+      }
       if(window.BootProgress){BootProgress.setStage('render');await BootProgress.complete();}
       if(result&&result.empty)renderGoogleDriveOnboarding();else{S.gate={mode:'list',error:''};renderGate();}
       ExitSaveGuard.refresh();

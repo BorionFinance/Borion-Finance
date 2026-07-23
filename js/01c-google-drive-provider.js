@@ -1,4 +1,4 @@
-/* Borion Finance — Google Drive Provider (V6.42.0 — Boot e Sync Otimizados)
+/* Borion Finance — Google Drive Provider (V6.46.5 — Compatibilidade Multinavegador)
 
    Arquitetura 6.40.2: current.json é apenas o snapshot consolidado. Toda alteração
    é protegida primeiro como operação imutável, identificada por operationId, e só
@@ -146,7 +146,7 @@ const GoogleDriveAuth = {
       if(existing&&existing.dataset.borionLoaded==='1'){resolve();return;}
       const script=existing||document.createElement('script');
       let settled=false;
-      const done=(err)=>{if(settled)return;settled=true;clearTimeout(timer);if(err)reject(err);else{script.dataset.borionLoaded='1';resolve();}};
+      const done=(err)=>{if(settled)return;settled=true;clearTimeout(timer);if(err){try{if(script&&script.parentNode&&script.dataset.borionLoaded!=='1')script.remove();}catch(_e){}reject(err);}else{script.dataset.borionLoaded='1';resolve();}};
       const timer=setTimeout(()=>done(Object.assign(new Error('O script do Google demorou além do limite seguro.'),{code:'AUTH_TIMEOUT'})),timeoutMs);
       script.addEventListener('load',()=>done(),{once:true});
       script.addEventListener('error',()=>done(new Error('Falha ao carregar script do Google. Verifique sua internet.')),{once:true});
@@ -231,16 +231,23 @@ const GoogleDriveAuth = {
   },
 
   async login(interactive){
-    if(window.BootProgress)BootProgress.setStage('google_token',{detail:interactive?'Aguardando a confirmação da conta Google':'Renovando o acesso ao Google Drive'});
+    if(window.BootProgress)BootProgress.setStage('google_token',{detail:interactive?'Aguardando a confirmação da conta Google':'Verificando o acesso ao Google Drive'});
     if(window.BorionPerf)BorionPerf.startStage('google_token');
+    if(!interactive){
+      if(this.accessToken&&Date.now()<this.tokenExpiresAt-60000){
+        if(window.BorionPerf)BorionPerf.endStage('google_token');
+        return this.user||await this.fetchUserInfo();
+      }
+      throw Object.assign(new Error('A sessão do Google precisa ser confirmada por um clique.'),{code:'AUTH_REQUIRED'});
+    }
     let tokenPromise;
     // No clique do usuário, abre o popup antes do primeiro await. Isso preserva a
     // ativação do clique e evita "Failed to open popup window" em navegadores mais rígidos.
-    if(interactive&&this._gisReady&&window.google&&google.accounts&&google.accounts.oauth2){
+    if(this._gisReady&&window.google&&google.accounts&&google.accounts.oauth2){
       tokenPromise=this.requestToken(true);
     }else{
       await this.ensureIdentityLoaded();
-      tokenPromise=this.requestToken(!!interactive);
+      tokenPromise=this.requestToken(true);
     }
     await tokenPromise;
     if(window.BorionPerf)BorionPerf.endStage('google_token');
@@ -253,8 +260,12 @@ const GoogleDriveAuth = {
 
   async ensureFreshToken(interactive=false){
     if(this.accessToken&&Date.now()<this.tokenExpiresAt-60000)return this.accessToken;
+    // V6.46.5 — nunca tenta abrir/renovar a janela Google sem um clique real.
+    // Firefox, Brave e Opera bloqueiam popups automáticos; o modo estrito então
+    // apresenta o botão de reconexão e preserva qualquer alteração pendente.
+    if(!interactive)throw Object.assign(new Error('A sessão do Google expirou. Confirme o login para continuar.'),{code:'AUTH_REQUIRED'});
     await this.ensureIdentityLoaded();
-    return await this.requestToken(!!interactive);
+    return await this.requestToken(true);
   },
 
   invalidateToken(){this.accessToken=null;this.tokenExpiresAt=0;},
@@ -490,28 +501,53 @@ const GoogleDriveFS = {
   }
 };
 
-/* Abre o seletor nativo do Google ("Picker") pra pessoa escolher a pasta que foi
-   compartilhada com ela. Só roda na primeira conexão — depois o folderId fica salvo. */
+/* V6.46.5 — compatibilidade entre navegadores.
+   Firefox, Brave e Opera são mais rígidos com janelas abertas depois de awaits.
+   O Picker agora é preparado antes e exibido diretamente por um segundo clique
+   explícito. Também existe fallback por link/ID da pasta, sem depender do Picker. */
+function parseGoogleDriveFolderId(value){
+  const raw=String(value||'').trim();
+  if(!raw)return '';
+  const byUrl=raw.match(/(?:drive\.google\.com\/(?:drive\/(?:u\/\d+\/)?folders|folders)\/)([A-Za-z0-9_-]{10,})/i);
+  if(byUrl&&byUrl[1])return byUrl[1];
+  const rawId=raw.match(/^([A-Za-z0-9_-]{10,})$/);
+  return rawId?rawId[1]:'';
+}
+window.parseGoogleDriveFolderId=parseGoogleDriveFolderId;
+
+function openDriveFolderPickerReady(){
+  if(!(GoogleDriveAuth._gapiReady&&window.google&&google.picker)){
+    throw Object.assign(new Error('O seletor do Google ainda não terminou de carregar.'),{code:'DRIVE_PICKER_NOT_READY'});
+  }
+  return new Promise((resolve,reject)=>{
+    let settled=false;
+    const finish=(error,folder)=>{if(settled)return;settled=true;clearTimeout(timer);if(error)reject(error);else resolve(folder);};
+    const timer=setTimeout(()=>finish(Object.assign(new Error('O seletor do Google não respondeu. Use o link da pasta como alternativa.'),{code:'DRIVE_PICKER_TIMEOUT'})),120000);
+    try{
+      const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+        .setSelectFolderEnabled(true)
+        .setIncludeFolders(true)
+        .setMimeTypes('application/vnd.google-apps.folder');
+      const picker = new google.picker.PickerBuilder()
+        .setTitle('Escolha a pasta do Borion Finance compartilhada com você')
+        .addView(view)
+        .setOAuthToken(GoogleDriveAuth.accessToken)
+        .setDeveloperKey(GOOGLE_API_KEY)
+        .setAppId(GOOGLE_PROJECT_NUMBER)
+        .setCallback((data)=>{
+          if(data.action===google.picker.Action.PICKED)finish(null,data.docs&&data.docs[0]);
+          else if(data.action===google.picker.Action.CANCEL)finish(Object.assign(new Error('Nenhuma pasta selecionada.'),{code:'DRIVE_PICKER_CANCELLED'}));
+          else if(data.action===google.picker.Action.ERROR)finish(Object.assign(new Error('O Google não conseguiu abrir o seletor de pastas. Cole o link da pasta abaixo.'),{code:'DRIVE_PICKER_FAILED'}));
+        })
+        .build();
+      picker.setVisible(true);
+    }catch(error){finish(error);}
+  });
+}
+
 async function openDriveFolderPicker(){
   await GoogleDriveAuth.ensurePickerLoaded();
-  return new Promise((resolve, reject)=>{
-    const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
-      .setSelectFolderEnabled(true)
-      .setIncludeFolders(true)
-      .setMimeTypes('application/vnd.google-apps.folder');
-    const picker = new google.picker.PickerBuilder()
-      .setTitle('Escolha a pasta do Borion Finance compartilhada com você')
-      .addView(view)
-      .setOAuthToken(GoogleDriveAuth.accessToken)
-      .setDeveloperKey(GOOGLE_API_KEY)
-      .setAppId(GOOGLE_PROJECT_NUMBER)
-      .setCallback((data)=>{
-        if(data.action === google.picker.Action.PICKED){ resolve(data.docs[0]); }
-        else if(data.action === google.picker.Action.CANCEL){ reject(new Error('Nenhuma pasta selecionada.')); }
-      })
-      .build();
-    picker.setVisible(true);
-  });
+  return openDriveFolderPickerReady();
 }
 
 /* Aplica um payload de conta (mesmo formato de buildFullBackupPayload) direto no
@@ -1034,9 +1070,10 @@ const GoogleDriveProvider = {
     return canonical;
   },
 
-  /* Login + (primeira vez) escolher pasta + carregar/ou perguntar o que fazer. Essa
-     função já decide sozinha pra qual tela ir (Gate normal ou onboarding de pasta
-     vazia) — quem chama connect() não precisa mais renderizar nada depois. */
+  /* V6.46.5 — login e seleção de pasta em etapas explícitas.
+     Em navegadores rígidos, o popup do Google consome a ativação do primeiro clique.
+     Por isso, quando a pasta ainda não está vinculada neste navegador, connect()
+     autentica e devolve needsFolderSelection; a tela pede um segundo clique. */
   async connect(interactive,options={}){
     if(window.BootProgress)BootProgress.setStage('google_identity');
     await GoogleDriveAuth.login(interactive);
@@ -1048,22 +1085,51 @@ const GoogleDriveProvider = {
         onAccountUpdated:meta=>this.applySharedAccountUpdateFromLeader6402(meta)
       });
     }
-    const sub=GoogleDriveAuth.user.sub;let folderId=gdriveReadFolderId(sub),justPicked=false,folderMeta=null;
+    const sub=GoogleDriveAuth.user.sub;let folderId=gdriveReadFolderId(sub),folderMeta=null;
     if(window.BootProgress)BootProgress.setStage('folder');
     if(folderId){
       const validated=await this.getValidatedFolderMeta(folderId);
       if(!validated.exists){gdriveForgetFolderId(sub);gdriveForgetCurrentFileCache(folderId);folderId=null;}
       else folderMeta=validated.meta;
     }
-    if(!folderId){
-      if(window.BootProgress)BootProgress.setDetail('Aguardando você escolher a pasta compartilhada');
-      const folder=await openDriveFolderPicker();
-      folderId=folder.id;folderMeta={id:folder.id,name:folder.name||folder.displayName||'Pasta do Borion',mimeType:'application/vnd.google-apps.folder'};
-      gdriveWriteFolderId(sub,folderId);justPicked=true;
-    }
     await devicePromise;
+    if(!folderId){
+      this._pendingFolderAccountSub=sub;
+      this._pendingFolderOptions=Object.assign({},options);
+      return {needsFolderSelection:true,user:Object.assign({},GoogleDriveAuth.user)};
+    }
+    return await this._finishConnectedFolder(folderId,folderMeta,false,options);
+  },
+
+  async prepareFolderPicker(){
+    if(!this.hasUsableToken())throw Object.assign(new Error('A sessão Google precisa ser confirmada novamente.'),{code:'AUTH_REQUIRED'});
+    return await GoogleDriveAuth.ensurePickerLoaded();
+  },
+
+  async selectFolderAndFinish(options={}){
+    if(!this.hasUsableToken()||!GoogleDriveAuth.user)throw Object.assign(new Error('A sessão Google expirou. Volte e entre novamente.'),{code:'AUTH_REQUIRED'});
+    const folder=await openDriveFolderPickerReady();
+    if(!folder||!folder.id)throw Object.assign(new Error('O Google não devolveu uma pasta válida.'),{code:'DRIVE_FOLDER_INVALID'});
+    const folderMeta={id:folder.id,name:folder.name||folder.displayName||'Pasta do Borion',mimeType:'application/vnd.google-apps.folder'};
+    return await this._finishConnectedFolder(folder.id,folderMeta,true,Object.assign({},this._pendingFolderOptions||{},options));
+  },
+
+  async connectWithFolderInput(value,options={}){
+    if(!this.hasUsableToken()||!GoogleDriveAuth.user)throw Object.assign(new Error('A sessão Google expirou. Volte e entre novamente.'),{code:'AUTH_REQUIRED'});
+    const folderId=parseGoogleDriveFolderId(value);
+    if(!folderId)throw Object.assign(new Error('Cole o link completo da pasta do Google Drive ou somente o ID da pasta.'),{code:'DRIVE_FOLDER_LINK_INVALID'});
+    const validated=await this.getValidatedFolderMeta(folderId);
+    if(!validated.exists)throw Object.assign(new Error('Essa pasta não foi encontrada ou não está compartilhada com esta conta Google.'),{code:'DRIVE_FOLDER_NOT_ACCESSIBLE'});
+    return await this._finishConnectedFolder(folderId,validated.meta,true,Object.assign({},this._pendingFolderOptions||{},options));
+  },
+
+  async _finishConnectedFolder(folderId,folderMeta,justPicked,options={}){
+    const sub=GoogleDriveAuth.user&&GoogleDriveAuth.user.sub;
+    if(!sub)throw Object.assign(new Error('Não foi possível identificar a conta Google conectada.'),{code:'AUTH_USERINFO_FAILED'});
+    gdriveWriteFolderId(sub,folderId);
+    this._pendingFolderAccountSub=null;this._pendingFolderOptions=null;
     this.folderId=folderId;this.folderName=folderMeta&&folderMeta.name||null;
-    if(justPicked&&typeof toast==='function')toast('Conectado à pasta \"'+(this.folderName||'')+'\" — confira em Configurações → Nuvem.');
+    if(justPicked&&typeof toast==='function')toast('Conectado à pasta "'+(this.folderName||'')+'" — confira em Configurações → Nuvem.');
     setStorageMode('google_drive');
     this.autosaveSlotIndex=gdriveReadSlotIndex(this.folderId,'autosave');this.forcesaveSlotIndex=gdriveReadSlotIndex(this.folderId,'forcesave');
     const result=await this.loadFromDrive();
@@ -1891,6 +1957,7 @@ const GoogleDriveProvider = {
     this.conflict=false;this.dirty=false;this.authRequired=false;this.lastSyncError='';
     this._syncInFlight=false;this._syncAgain=false;this._forceRequested=false;this._forceSavePromise=null;
     this._lastConsolidatedPayload=null;this._operationBasePayload=null;this._queueOperationId=null;
+    this._pendingFolderAccountSub=null;this._pendingFolderOptions=null;
     this.pendingMergeConflicts=[];this._clearRetry();
     // IDs de pasta, dados locais e alterações pendentes persistidas são mantidos.
     // Só o estado transitório da tentativa de login é descartado.

@@ -3161,8 +3161,9 @@ html[data-theme="light"] .interop-source-value{background:rgba(122,85,29,.025)}
 .mit-expense-modal .quickcat-box{margin-top:8px;}
 html[data-theme="light"] .mit-expense-modal .field input[type="text"],html[data-theme="light"] .mit-expense-modal .field input[type="date"],html[data-theme="light"] .mit-expense-modal .field select{background:rgba(255,255,255,.92);border-color:rgba(122,85,29,.18);color:var(--text);}
 
-/* V6.46.13 — Dashboard totalmente flexível da Visão Geral */
+/* V6.46.14 — Dashboard livre: posições fixas, espaços preservados e colisão vertical */
 .overview-dashboard-grid{gap:12px;margin-bottom:18px;align-items:start;grid-auto-flow:dense;}
+.overview-dashboard-grid.module-free-placement{grid-auto-flow:row;}
 .overview-dashboard-slot{min-width:0;transition:border-color .16s ease,background .16s ease,box-shadow .16s ease,opacity .16s ease,transform .16s ease;}
 .overview-dashboard-slot>.module-layout-content{height:100%;min-height:0;}
 .overview-dashboard-slot>.module-layout-content>.card,
@@ -3199,12 +3200,19 @@ html[data-theme="light"] .mit-expense-modal .field input[type="text"],html[data-
 .module-resizing .module-layout-content{pointer-events:none;}
 .module-grid-dragging,.module-resizing{user-select:none;}
 .module-layout-content{scrollbar-width:thin;scrollbar-color:rgba(204,161,96,.45) transparent;}
+/* No posicionamento livre, os controles ficam sobre o módulo e não alteram sua altura. */
+.module-free-placement .module-layout-slot.organizing{padding:0;overflow:visible;}
+.module-free-placement .module-slot-toolbar{position:absolute;left:7px;right:7px;top:7px;z-index:20;height:32px;padding:0 4px;border:1px solid rgba(204,161,96,.34);border-radius:9px;background:rgba(8,14,21,.92);box-shadow:0 8px 22px rgba(0,0,0,.28);backdrop-filter:blur(12px);overflow:visible;}
+.module-free-placement .module-layout-content{height:100%;min-height:0;}
+.module-free-placement .module-spatial-dragging{z-index:35;opacity:.78;box-shadow:0 0 0 2px rgba(229,193,124,.4),0 18px 48px rgba(0,0,0,.38);}
+.module-free-placement.module-grid-organizer{min-height:180px;}
+html[data-theme="light"] .module-free-placement .module-slot-toolbar{background:rgba(252,249,242,.94);box-shadow:0 8px 22px rgba(76,51,15,.16);}
 
 html[data-theme="light"] .module-widget-menu{background:rgba(252,249,242,.99);box-shadow:0 18px 50px rgba(76,51,15,.18);}
 
 @media(max-width:1050px){
-  .overview-dashboard-grid{--module-columns:2!important;}
-  .overview-dashboard-slot{grid-column:span min(var(--module-span,2),2);}
+  .overview-dashboard-grid:not(.module-free-placement){--module-columns:2!important;}
+  .overview-dashboard-grid:not(.module-free-placement) .overview-dashboard-slot{grid-column:span min(var(--module-span,2),2);}
 }
 @media(max-width:760px){
   .module-layout-toolbar.active{position:relative;top:auto;}

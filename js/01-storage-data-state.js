@@ -1155,7 +1155,11 @@ const S = {
 function toggleValuesHidden(){
   S.valuesHidden = !S.valuesHidden;
   writeJSON('mc_values_hidden', S.valuesHidden);
-  renderView();
+  applyBorionValuePrivacyDOM();
+  document.querySelectorAll('.topbar h1 .eye').forEach(eye=>{
+    eye.innerHTML=eyeIconSVG(S.valuesHidden);
+    eye.title=S.valuesHidden?'Mostrar valores':'Ocultar valores';
+  });
 }
 
 const BorionDataActions6401 = {

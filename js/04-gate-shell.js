@@ -416,7 +416,7 @@ const MobileMenu = {
 };
 window.MobileMenu = MobileMenu;
 
-const Nav = { go(key){ S.view=key; MobileMenu.close(); renderApp(); } };
+const Nav = { go(key){ if(key!=='settings'&&window.BorionIntegrationsAccess){ BorionIntegrationsAccess.clearTemporary(); if(S.settingsTab==='integrations'&&!BorionIntegrationsAccess.remembered()) S.settingsTab='modules'; } if(key==='budget'&&typeof isSmartphoneMode==='function'&&isSmartphoneMode()) S.budgetTab='receita'; S.view=key; MobileMenu.close(); renderApp(); } };
 
 function renderView(){
   if(S.view==='cheques' && !(S.data && S.data.cheques && S.data.cheques.enabled)) S.view='overview';
@@ -446,6 +446,7 @@ function renderView(){
           <p class="hello">${greeting()}, ${esc(S.currentProfile.name)}</p>
           <h1>${titles[S.view]} <span class="eye" onclick="toggleValuesHidden()" title="${S.valuesHidden?'Mostrar valores':'Ocultar valores'}">${eyeIconSVG(S.valuesHidden)}</span></h1>
         </div>
+        ${S.view==='reservas'&&typeof renderReservaLastMovementTopbar64616==='function'?renderReservaLastMovementTopbar64616():''}
       </div>
       <div class="global-search-wrap">
         <input type="text" id="global_search" placeholder="Pesquisar compras, contas, categorias..." oninput="GlobalSearch.onInput()" onfocus="GlobalSearch.onInput()"/>
@@ -484,6 +485,7 @@ function renderView(){
   wireViewEvents();
   if(window.OrderPreferences) OrderPreferences.ensureBanner();
   Clock.start(); // V6.22 — relógio "Atualizado em dd/mm/aaaa hh:mm" abaixo do filtro de mês, em toda página
+  if(typeof applyBorionValuePrivacyDOM==='function') requestAnimationFrame(applyBorionValuePrivacyDOM);
 }
 
 /* ---------------- V6.22 — data/hora abaixo do filtro global (seção 8 do pedido) ----------------

@@ -522,7 +522,7 @@ function cloneAccountValue6401(value){
   return value==null ? value : JSON.parse(JSON.stringify(value));
 }
 
-/* V6.46.14 — comparação restrita aos campos que formam a identidade do perfil.
+/* V6.46.16 — comparação restrita aos campos que formam a identidade do perfil.
    Dados financeiros ficam em dataByProfile e continuam usando o merge normal. */
 function profileMetadataComparable64611(profile){
   const p=profile||{};

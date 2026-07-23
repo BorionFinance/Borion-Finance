@@ -417,6 +417,15 @@ function renderReservaReportsControls(){
   return `<div class="reserve-history-compact"><button type="button" class="reserve-history-link" onclick="openReservaReportsModal()" title="${esc(title)}"><span aria-hidden="true">◷</span> Histórico mensal</button><span class="reserve-history-auto">Automático na virada do mês</span></div>`;
 }
 
+function reservaLatestMovement64616(){
+  const moves=(S.data&&S.data.reservas&&Array.isArray(S.data.reservas.moves))?S.data.reservas.moves:[];
+  return moves.slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))||Number(b.createdAt||0)-Number(a.createdAt||0))[0]||null;
+}
+function renderReservaLastMovementTopbar64616(){
+  const last=reservaLatestMovement64616();
+  return `<div class="reserve-last-movement-top"><span>Última movimentação</span><strong>${last?reservaFmtDate(last.data):'—'}</strong></div>`;
+}
+
 function renderReservasPage(){
   ensureAutomaticReservaMonthlyReports();
   if(!reservasEnabled()){
@@ -426,14 +435,10 @@ function renderReservasPage(){
   const moves = reservaMovesFiltered();
   const total = sumBy(boxes,'valorAtual');
   const metaTotal = sumBy(boxes,'valorMeta');
-  const ativas = boxes.filter(r=>(r.status||'Ativa')==='Ativa').length;
-  const ultimo = moves[0];
   return `
-    <div class="cards-row">
+    <div class="cards-row reserve-summary-cards">
       <div class="card hero-gold"><div class="clabel">Reservado</div><div class="cval">${brl(total)}</div></div>
-      <div class="card"><div class="clabel">Reservas ativas</div><div class="cval">${ativas}</div></div>
       <div class="card"><div class="clabel">Meta total</div><div class="cval">${brl(metaTotal)}</div></div>
-      <div class="card"><div class="clabel">Última movimentação</div><div class="cval" style="font-size:18px">${ultimo?reservaFmtDate(ultimo.data):'—'}</div></div>
     </div>
     ${renderReservaRendimentosPanel(S.patrView.reservaRendimentosCollapsed!==false)}
     ${renderReservasPanel()}
@@ -443,6 +448,7 @@ function renderReservasPage(){
 function renderReservasPanel(){
   const boxes = reservaBoxesFiltered();
   const total = sumBy(boxes,'valorAtual');
+  const ativas = boxes.filter(r=>(r.status||'Ativa')==='Ativa').length;
   const moves = reservaMovesFiltered();
   /* Organização visual (opcional): mesma regra das outras listas — alça/setas só aparecem
      com o modo Organizar ligado e sem filtro de banco ativo (a ordem salva é sempre da
@@ -481,7 +487,7 @@ function renderReservasPanel(){
     return `<tr><td>${reservaFmtDate(m.data)}</td><td>${esc(box?box.nome:'Reserva removida')}</td><td>${esc(m.tipo)}</td><td>${esc(m.banco||'')}</td><td>${reservaSignedValue(delta)}</td><td>${esc(m.descricao||'')}${linked}</td><td style="text-align:right;white-space:nowrap;"><button class="ledit" onclick="Reservas.editMove('${m.id}')">✎</button><button class="ledit danger-mini" onclick="Reservas.deleteMove('${m.id}')">×</button></td></tr>`;
   }).join('');
   return `<div class="panel-box reservas-panel">
-    <div class="toolbar"><div class="toolbar-left">◈ <span class="lmeta">Reservado: ${brl(total)}</span></div><div class="reserva-toolbar-actions">${renderReservaReportsControls()}${window.OrderPreferences?OrderPreferences.sortSelectHTML('reservas'):''}<button class="btn-outline" onclick="Reservas.add()">+ Nova reserva</button><button class="btn-outline" onclick="Reservas.move()">+ Movimentação</button></div></div>
+    <div class="toolbar reserve-main-toolbar"><div class="toolbar-left reserve-toolbar-summary">◈ <span class="lmeta">Reservado: ${brl(total)}</span><span class="reserve-active-inline">${ativas} reserva${ativas===1?'':'s'} ativa${ativas===1?'':'s'}</span></div><div class="reserva-toolbar-actions">${renderReservaReportsControls()}${window.OrderPreferences?OrderPreferences.sortSelectHTML('reservas'):''}<button class="btn-outline" onclick="Reservas.add()">+ Nova reserva</button><button class="btn-outline" onclick="Reservas.move()">+ Movimentação</button></div></div>
     ${orgFilterNotice}
     ${reservaGridOrganizer ? OrderPreferences.reservaLayoutControlsHTML() : ''}
     ${boxes.length?`<div class="reserva-grid reserva-layout-custom ${reservaGridOrganizer?'reserva-grid-organizer':''}" style="--reserva-cols:${reservaColumns};--reserva-card-min:${reservaColumns===4?'205px':reservaColumns===3?'230px':'280px'};" data-order-list="reservas">${boxCards}</div>`:'<div class="empty-note">Nenhuma reserva cadastrada ainda. Use para separar reserva de emergência, viagem, manutenção, impostos e objetivos.</div>'}
@@ -881,8 +887,8 @@ const Reservas = {
         if(delta>0)entradas+=delta;
         else if(delta<0)saidas+=Math.abs(delta);
       });
-      $('#rzx_in').textContent = brl(entradas);
-      $('#rzx_out').textContent = '- '+brl(saidas).replace('R$ -','R$ ');
+      $('#rzx_in').textContent = brlText(entradas);
+      $('#rzx_out').textContent = S.valuesHidden?'$':'- '+brlPlain(saidas).replace('R$ -','R$ ');
       const rows = moves.map(m=>{
         const delta = reservaMoveDelta(m);
         const fixaRef = m.despesaFixaId ? (S.data.fixas||[]).find(f=>f.id===m.despesaFixaId) : null;

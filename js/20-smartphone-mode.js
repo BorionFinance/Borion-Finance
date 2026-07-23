@@ -237,7 +237,7 @@ const SmartphoneMode={
     const reserveKey=reserves?'reservas':'patrimony';
     return `<nav class="smart-bottom-nav" aria-label="Navegação do Smartphone Mode">
       <button class="${S.view==='overview'?'active':''}" onclick="Nav.go('overview')">${smartNavIconHTML('overview')}<small>Início</small></button>
-      <button class="${S.view==='budget'?'active':''}" onclick="SmartphoneMode.goBudget('central')">${smartNavIconHTML('budget')}<small>Lançamentos</small></button>
+      <button class="${S.view==='budget'?'active':''}" onclick="SmartphoneMode.goBudget('receita')">${smartNavIconHTML('budget')}<small>Lançamentos</small></button>
       <button class="smart-bottom-launch" onclick="SmartphoneMode.openQuickLaunch()" aria-label="Novo lançamento">${smartNavIconHTML('launch')}<small>Lançar</small></button>
       <button class="${S.view===reserveKey?'active':''}" onclick="Nav.go('${reserveKey}')">${smartNavIconHTML(reserves?'reservas':'patrimony')}<small>${reserves?'Reservas':'Metas'}</small></button>
       <button onclick="MobileMenu.open()">${smartNavIconHTML('more')}<small>Mais</small></button>
@@ -284,7 +284,7 @@ const SmartphoneMode={
     }
     if(action==='contas'){ Nav.go('cards'); }
   },
-  goBudget(tab){ S.view='budget'; S.budgetTab=tab||'central'; renderApp(); },
+  goBudget(tab){ S.view='budget'; S.budgetTab=tab||'receita'; renderApp(); },
   editTransaction(id,type){
     S.view='budget'; S.budgetTab=type==='receita'?'receita':'variavel'; renderApp();
     setTimeout(()=>Budget.edit(id),60);

@@ -73,11 +73,7 @@ const MobileExperience = {
   },
 
   runViewTransition(update){
-    if(!this.isSmart() || this.reducedMotion() || typeof document.startViewTransition!=='function'){
-      update();
-      return;
-    }
-    try{document.startViewTransition(update);}catch(e){update();}
+    update();
   },
 
   restoreScroll(key){

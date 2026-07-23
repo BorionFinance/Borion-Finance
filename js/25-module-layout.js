@@ -1,7 +1,7 @@
 /* Borion Finance — editor reutilizável de módulos.
    Permite arrastar, redimensionar, ocultar/exibir e salvar layouts por perfil.
-   V6.46.14: a Visão Geral no computador usa posicionamento livre persistente,
-   preserva espaços vazios e só empurra para baixo os módulos que colidirem. */
+   V6.46.16: a Visão Geral no computador funciona como uma área de trabalho livre:
+   posições e tamanhos em pixels, sobreposição permitida e nenhuma reorganização automática. */
 (() => {
   'use strict';
 
@@ -58,6 +58,11 @@
         if(finiteNumber(raw.h)&&Number(raw.h)>0) item.h=Math.max(120,Math.round(Number(raw.h)/10)*10);
         if(finiteNumber(raw.x)) item.x=Math.max(0,Math.round(Number(raw.x)));
         if(finiteNumber(raw.y)) item.y=Math.max(0,Math.round(Number(raw.y)));
+        if(finiteNumber(raw.pxX)) item.pxX=Math.max(0,Math.round(Number(raw.pxX)));
+        if(finiteNumber(raw.pxY)) item.pxY=Math.max(0,Math.round(Number(raw.pxY)));
+        if(finiteNumber(raw.pxW)) item.pxW=Math.max(180,Math.round(Number(raw.pxW)));
+        if(finiteNumber(raw.pxH)&&Number(raw.pxH)>0) item.pxH=Math.max(120,Math.round(Number(raw.pxH)));
+        if(finiteNumber(raw.z)) item.z=Math.max(0,Math.round(Number(raw.z)));
         items[String(id)]=item;
       });
       const hidden=Array.isArray(src.hidden)?src.hidden.map(String):[];
@@ -151,6 +156,52 @@
       if(!finiteNumber(item.x)||!finiteNumber(item.y)) return null;
       return {x:Math.max(0,Math.round(Number(item.x))),y:Math.max(0,Math.round(Number(item.y)))};
     },
+    hasFreeFrame(scope,id){
+      if(!this.isFreePlacement(scope)) return false;
+      const item=this.get(scope).items[String(id)]||{};
+      return finiteNumber(item.pxX)&&finiteNumber(item.pxY)&&finiteNumber(item.pxW)&&Number(item.pxW)>=180;
+    },
+    hasCompleteFreeLayout(scope,ids=[]){
+      if(!this.isFreePlacement(scope)) return true;
+      const safe=Array.isArray(ids)?ids.map(item=>String(item&&item.id!=null?item.id:item)):[];
+      return safe.every(id=>this.hasFreeFrame(scope,id));
+    },
+    freeFrame(scope,id,slot=null){
+      const item=this.get(scope).items[String(id)]||{};
+      if(this.hasFreeFrame(scope,id)){
+        return {
+          x:Math.max(0,Math.round(Number(item.pxX)||0)),
+          y:Math.max(0,Math.round(Number(item.pxY)||0)),
+          w:Math.max(180,Math.round(Number(item.pxW)||180)),
+          h:finiteNumber(item.pxH)&&Number(item.pxH)>0?Math.max(120,Math.round(Number(item.pxH))):0,
+          z:finiteNumber(item.z)?Math.max(0,Math.round(Number(item.z))):1
+        };
+      }
+      if(slot){
+        const grid=slot.closest('[data-module-layout]'),gridRect=grid&&grid.getBoundingClientRect(),rect=slot.getBoundingClientRect();
+        if(gridRect) return {x:Math.max(0,Math.round(rect.left-gridRect.left)),y:Math.max(0,Math.round(rect.top-gridRect.top)),w:Math.max(180,Math.round(rect.width)),h:Number(item.h)>0?Math.max(120,Math.round(Number(item.h))):0,z:finiteNumber(item.z)?Math.max(0,Math.round(Number(item.z))):1};
+      }
+      return null;
+    },
+    maxZ(scope){
+      const layout=this.get(scope);
+      return Math.max(0,...Object.values(layout.items||{}).map(item=>finiteNumber(item&&item.z)?Number(item.z):0));
+    },
+    bringToFront(scope,id,{render=true}={}){
+      if(!this.isFreePlacement(scope)) return;
+      const layout=this.get(scope),key=String(id),item=layout.items[key]||(layout.items[key]={});
+      item.z=this.maxZ(scope)+1;
+      this.save(scope,layout,{quiet:true,render});
+    },
+    sendToBack(scope,id){
+      if(!this.isFreePlacement(scope)) return;
+      const layout=this.get(scope),key=String(id),item=layout.items[key]||(layout.items[key]={});
+      Object.entries(layout.items).forEach(([otherId,entry])=>{
+        if(otherId!==key&&entry) entry.z=(finiteNumber(entry.z)?Math.max(0,Math.round(Number(entry.z))):1)+1;
+      });
+      item.z=0;
+      this.save(scope,layout,{quiet:true,render:true});
+    },
     grid(scope){ return document.querySelector(`[data-module-layout="${scope}"]`); },
     gridMetrics(grid,scope){
       const style=getComputedStyle(grid);
@@ -172,9 +223,9 @@
     setSize(scope,id,w,h,{render=true}={}){
       if(this.isFreePlacement(scope)){
         const grid=this.grid(scope),slot=grid&&Array.from(grid.querySelectorAll(':scope > [data-module-id]')).find(el=>String(el.dataset.moduleId)===String(id));
-        if(grid&&slot){
-          const pos=this.itemPosition(scope,id)||this.positionFromRect(grid,slot,scope);
-          this.commitSpatialChange(scope,id,{x:pos.x,y:pos.y,w,h:Number(h)>0?Number(h):0},{grid,slot,render});
+        const frame=this.freeFrame(scope,id,slot);
+        if(grid&&slot&&frame){
+          this.commitFreeFrame(scope,id,{x:frame.x,y:frame.y,w:Math.max(180,Number(w)||frame.w),h:Number(h)>0?Number(h):0,z:frame.z},{grid,slot,render});
           return;
         }
       }
@@ -186,6 +237,16 @@
       this.save(scope,layout,{quiet:true,render});
     },
     adjust(scope,id,axis,delta,defaultWidth=1){
+      if(this.isFreePlacement(scope)){
+        const grid=this.grid(scope),slot=grid&&Array.from(grid.querySelectorAll(':scope > [data-module-id]')).find(el=>String(el.dataset.moduleId)===String(id));
+        const frame=this.freeFrame(scope,id,slot);
+        if(frame){
+          const step=Number(delta||0);
+          if(axis==='w') this.commitFreeFrame(scope,id,{...frame,w:Math.max(180,frame.w+step*80)},{grid,slot,render:true});
+          else this.commitFreeFrame(scope,id,{...frame,h:Math.max(120,(frame.h||240)+step*60)},{grid,slot,render:true});
+          return;
+        }
+      }
       const current=this.itemSize(scope,id,{w:defaultWidth});
       if(axis==='w') this.setSize(scope,id,current.w+Number(delta||0),current.h,{render:true});
       else this.setSize(scope,id,current.w,Math.max(120,(current.h||240)+(Number(delta||0)*60)),{render:true});
@@ -194,6 +255,7 @@
       const layout=this.get(scope),key=String(id);
       layout.items[key]=Object.assign({},layout.items[key]||{});
       delete layout.items[key].h;
+      delete layout.items[key].pxH;
       this.save(scope,layout,{quiet:true,render:true});
     },
     saveOrderFromDom(scope,container){
@@ -219,16 +281,22 @@
       const visibleCount=catalog.filter(item=>!hidden.has(item.id)).length;
       const mode=this.modeLabel(scope);
       const cfg=this.config(scope);
+      const free=this.isFreePlacement(scope);
       const columnButtons=this.deviceMode(scope)==='mobile'?[1]:Array.from({length:(cfg.maxColumns||6)-(cfg.minColumns||2)+1},(_,i)=>(cfg.minColumns||2)+i);
       const chooser=catalog.length?`<details class="module-widget-chooser"><summary>Widgets ${visibleCount}/${catalog.length}</summary><div class="module-widget-menu">${catalog.map(item=>`<label><input type="checkbox" ${hidden.has(item.id)?'':'checked'} onchange="ModuleLayout.toggleHidden('${scope}','${esc(item.id)}')"><span>${esc(item.label)}</span></label>`).join('')}<button type="button" class="btn-outline btn-sm" onclick="ModuleLayout.showAll('${scope}')">Mostrar todos</button></div></details>`:'';
-      const activeHelp=this.isFreePlacement(scope)?`Modo de edição · ${mode}. Arraste para qualquer espaço vazio; nada será compactado automaticamente.`:`Modo de edição · ${mode}. Arraste pelo cabeçalho e redimensione pelo canto.`;
-      return `<div class="module-layout-toolbar ${active?'active':''}"><div><strong>${esc(title||cfg.label)}</strong><span>${active?activeHelp:`Personalize posição e tamanho dos blocos · layout de ${mode}.`}</span></div><div class="module-layout-actions">${active?`${chooser}<div class="module-column-picker"><span>COLUNAS</span>${columnButtons.map(n=>`<button type="button" class="${layout.columns===n?'active':''}" onclick="ModuleLayout.setColumns('${scope}',${n})">${n}</button>`).join('')}</div><button class="btn-outline btn-sm" onclick="ModuleLayout.reset('${scope}')">Restaurar padrão</button>`:''}<button class="btn ${active?'btn-primary':'btn-outline'} btn-sm" onclick="ModuleLayout.toggle('${scope}')">${active?'Concluir edição':'Editar layout'}</button></div></div>`;
+      const activeHelp=free?`Modo livre · ${mode}. Mova e redimensione como janelas; módulos podem ficar sobrepostos e nenhum outro bloco será deslocado.`:`Modo de edição · ${mode}. Arraste pelo cabeçalho e redimensione pelo canto.`;
+      const layoutMode=free?'<span class="module-free-badge">POSIÇÃO LIVRE</span>':`<div class="module-column-picker"><span>COLUNAS</span>${columnButtons.map(n=>`<button type="button" class="${layout.columns===n?'active':''}" onclick="ModuleLayout.setColumns('${scope}',${n})">${n}</button>`).join('')}</div>`;
+      if(!active) return `<button type="button" class="module-layout-pencil" onclick="ModuleLayout.toggle('${scope}')" title="Editar layout" aria-label="Editar layout">✎</button>`;
+      return `<div class="module-layout-toolbar active"><div><strong>${esc(title||cfg.label)}</strong><span>${activeHelp}</span></div><div class="module-layout-actions">${chooser}${layoutMode}<button class="btn-outline btn-sm" onclick="ModuleLayout.reset('${scope}')">Restaurar padrão</button><button class="btn btn-primary btn-sm" onclick="ModuleLayout.toggle('${scope}')">Concluir edição</button></div></div>`;
     },
     slotControlsHTML(scope,id,label,defaultWidth=1){
       if(!this.isActive(scope)) return '';
       const size=this.itemSize(scope,id,{w:defaultWidth});
+      const free=this.isFreePlacement(scope),frame=free?this.freeFrame(scope,id):null;
       const canHide=this.catalog(scope).some(item=>item.id===String(id));
-      return `<div class="module-slot-toolbar"><button type="button" class="module-drag-handle" data-module-drag-handle title="Arrastar ${esc(label||'módulo')}"><span aria-hidden="true">⠿</span><b>${esc(label||'Módulo')}</b></button><div class="module-size-controls"><span title="Largura atual">L ${size.w}</span><button type="button" onclick="ModuleLayout.adjust('${scope}','${esc(String(id))}','w',-1,${defaultWidth})" title="Diminuir largura">−</button><button type="button" onclick="ModuleLayout.adjust('${scope}','${esc(String(id))}','w',1,${defaultWidth})" title="Aumentar largura">+</button><button type="button" onclick="ModuleLayout.autoHeight('${scope}','${esc(String(id))}')" title="Usar altura automática">Auto</button>${canHide?`<button type="button" onclick="ModuleLayout.toggleHidden('${scope}','${esc(String(id))}')" title="Ocultar widget">Ocultar</button>`:''}</div></div>`;
+      const sizeLabel=free&&frame?`${Math.round(frame.w)}×${frame.h?Math.round(frame.h):'auto'}`:`L ${size.w}`;
+      const layers=free?`<button type="button" onclick="ModuleLayout.sendToBack('${scope}','${esc(String(id))}')" title="Enviar este módulo para trás">↓</button><button type="button" onclick="ModuleLayout.bringToFront('${scope}','${esc(String(id))}')" title="Trazer este módulo para frente">↑</button>`:'';
+      return `<div class="module-slot-toolbar"><button type="button" class="module-drag-handle" data-module-drag-handle title="Arrastar ${esc(label||'módulo')}"><span aria-hidden="true">⠿</span><b>${esc(label||'Módulo')}</b></button><div class="module-size-controls"><span title="Tamanho atual">${sizeLabel}</span><button type="button" onclick="ModuleLayout.adjust('${scope}','${esc(String(id))}','w',-1,${defaultWidth})" title="Diminuir largura">−</button><button type="button" onclick="ModuleLayout.adjust('${scope}','${esc(String(id))}','w',1,${defaultWidth})" title="Aumentar largura">+</button><button type="button" onclick="ModuleLayout.autoHeight('${scope}','${esc(String(id))}')" title="Usar altura automática">Auto</button>${layers}${canHide?`<button type="button" onclick="ModuleLayout.toggleHidden('${scope}','${esc(String(id))}')" title="Ocultar widget">Ocultar</button>`:''}</div></div>`;
     },
     resizeHandleHTML(scope,id,label){
       if(!this.isActive(scope)) return '';
@@ -236,6 +304,10 @@
     },
     slotStyle(scope,id,defaultWidth=1){
       const size=this.itemSize(scope,id,{w:defaultWidth});
+      if(this.isFreePlacement(scope)&&this.hasFreeFrame(scope,id)){
+        const frame=this.freeFrame(scope,id);
+        return `--module-span:${size.w};left:${frame.x}px;top:${frame.y}px;width:${frame.w}px;z-index:${frame.z};${frame.h?`height:${frame.h}px;--module-fixed-height:${frame.h}px;`:''}`;
+      }
       const pos=this.itemPosition(scope,id);
       return `--module-span:${size.w};${size.h?`--module-fixed-height:${size.h}px;`:''}${pos?`grid-column-start:${pos.x+1};grid-row-start:${pos.y+1};`:''}`;
     },
@@ -248,108 +320,98 @@
         y:Math.max(0,Math.round((rect.top-gridRect.top)/Math.max(1,metrics.rowStep)))
       };
     },
-    captureMissingPositions(scope,grid){
+    captureFreeFrames(scope,grid){
       if(!this.isFreePlacement(scope)) return false;
-      const layout=this.get(scope),metrics=this.gridMetrics(grid,scope);
-      let changed=false;
+      const layout=this.get(scope),gridRect=grid.getBoundingClientRect();
+      let changed=false,index=0;
       grid.querySelectorAll(':scope > [data-module-id]').forEach(slot=>{
-        const id=String(slot.dataset.moduleId),item=layout.items[id]||(layout.items[id]={});
-        const size=this.itemSize(scope,id);
-        item.w=Math.max(1,Math.min(metrics.columns,size.w));
-        if(!finiteNumber(item.x)||!finiteNumber(item.y)){
-          const pos=this.positionFromRect(grid,slot,scope);
-          item.x=pos.x; item.y=pos.y; changed=true;
-        }else{
-          const x=clamp(item.x,0,Math.max(0,metrics.columns-item.w));
-          if(x!==item.x){item.x=x;changed=true;}
-          item.y=Math.max(0,Math.round(Number(item.y)||0));
-        }
-        slot.style.gridColumnStart=String(item.x+1);
-        slot.style.gridRowStart=String(item.y+1);
+        const id=String(slot.dataset.moduleId),item=layout.items[id]||(layout.items[id]={}),rect=slot.getBoundingClientRect();
+        if(!finiteNumber(item.pxX)){item.pxX=Math.max(0,Math.round(rect.left-gridRect.left));changed=true;}
+        if(!finiteNumber(item.pxY)){item.pxY=Math.max(0,Math.round(rect.top-gridRect.top));changed=true;}
+        if(!finiteNumber(item.pxW)||Number(item.pxW)<180){item.pxW=Math.max(180,Math.round(rect.width));changed=true;}
+        if(!finiteNumber(item.z)){item.z=index+1;changed=true;}
+        if(!finiteNumber(item.pxH)&&Number(item.h)>0){item.pxH=Math.max(120,Math.round(Number(item.h)));changed=true;}
+        index++;
       });
       if(changed) this.save(scope,layout,{quiet:true});
+      grid.classList.remove('module-free-bootstrap');
+      this.applyFreeFrames(scope,grid);
       return changed;
     },
-    collectSpatialGeometry(scope,grid,overrideId=null,override={}){
-      const layout=this.get(scope),metrics=this.gridMetrics(grid,scope);
-      const orderMap=new Map(layout.order.map((id,index)=>[String(id),index]));
-      return Array.from(grid.querySelectorAll(':scope > [data-module-id]')).map((slot,index)=>{
-        const id=String(slot.dataset.moduleId),saved=layout.items[id]||{};
-        const isOverride=id===String(overrideId||'');
-        const baseSize=this.itemSize(scope,id);
-        const w=Math.max(1,Math.min(metrics.columns,Math.round(isOverride&&finiteNumber(override.w)?Number(override.w):baseSize.w)));
-        const fallback=this.positionFromRect(grid,slot,scope);
-        const x=clamp(isOverride&&finiteNumber(override.x)?Number(override.x):(finiteNumber(saved.x)?saved.x:fallback.x),0,Math.max(0,metrics.columns-w));
-        const y=Math.max(0,Math.round(isOverride&&finiteNumber(override.y)?Number(override.y):(finiteNumber(saved.y)?saved.y:fallback.y)));
-        let rows=Math.max(1,Number(slot.dataset.moduleRows)||1);
-        if(isOverride&&finiteNumber(override.h)&&Number(override.h)>0) rows=this.heightToRows(grid,scope,Number(override.h));
-        return {id,slot,x,y,w,rows,order:orderMap.get(id)??index};
-      });
-    },
-    overlaps(a,b){
-      return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.rows&&a.y+a.rows>b.y;
-    },
-    resolveSpatialGeometry(items,pinnedId=null){
-      const pinned=String(pinnedId||'');
-      const first=pinned?items.find(item=>item.id===pinned):null;
-      const rest=items.filter(item=>!first||item!==first).sort((a,b)=>a.y-b.y||a.x-b.x||a.order-b.order);
-      const sequence=first?[first].concat(rest):rest;
-      const placed=[];
-      sequence.forEach(original=>{
-        const item=Object.assign({},original);
-        let guard=0;
-        while(guard++<500){
-          const collisions=placed.filter(other=>this.overlaps(item,other));
-          if(!collisions.length) break;
-          item.y=Math.max(item.y,...collisions.map(other=>other.y+other.rows));
-        }
-        placed.push(item);
-      });
-      return placed;
-    },
-    applySpatialGeometry(scope,grid,geometry,{save=true,render=false,targetId=null,targetH=undefined}={}){
-      const layout=this.get(scope); let changed=false;
-      geometry.forEach(item=>{
-        const saved=layout.items[item.id]||(layout.items[item.id]={});
-        if(saved.x!==item.x||saved.y!==item.y||saved.w!==item.w) changed=true;
-        saved.x=item.x; saved.y=item.y; saved.w=item.w;
-        if(targetId&&item.id===String(targetId)){
-          if(Number(targetH)>0){
-            const h=Math.max(120,Math.round(Number(targetH)/10)*10);
-            if(saved.h!==h) changed=true;
-            saved.h=h;
-          }else if(targetH===0&&Object.prototype.hasOwnProperty.call(saved,'h')){
-            delete saved.h; changed=true;
-          }
-        }
-        if(item.slot){
-          item.slot.style.gridColumnStart=String(item.x+1);
-          item.slot.style.gridRowStart=String(item.y+1);
-          item.slot.style.setProperty('--module-span',String(item.w));
+    applyFreeFrames(scope,grid){
+      if(!this.isFreePlacement(scope)) return;
+      grid.querySelectorAll(':scope > [data-module-id]').forEach(slot=>{
+        const id=String(slot.dataset.moduleId),frame=this.freeFrame(scope,id,slot);
+        if(!frame) return;
+        const content=slot.querySelector(':scope > .module-layout-content');
+        slot.style.position='absolute';
+        slot.style.left=`${frame.x}px`;
+        slot.style.top=`${frame.y}px`;
+        slot.style.width=`${frame.w}px`;
+        slot.style.zIndex=String(frame.z);
+        slot.style.gridColumnStart='auto';
+        slot.style.gridRowStart='auto';
+        slot.style.gridRowEnd='auto';
+        if(frame.h){
+          slot.style.height=`${frame.h}px`;
+          slot.style.setProperty('--module-fixed-height',`${frame.h}px`);
+          if(content){content.style.height='100%';content.style.overflow='auto';}
+        }else{
+          slot.style.height='auto';
+          slot.style.removeProperty('--module-fixed-height');
+          if(content){content.style.height='auto';content.style.overflow='visible';}
         }
       });
-      if(save&&changed) this.save(scope,layout,{quiet:true,render});
-      else if(render&&typeof renderView==='function') renderView();
-      return changed;
+      this.updateFreeCanvas(scope,grid);
     },
-    stabilizeSpatial(scope,grid,pinnedId=null){
-      if(!this.isFreePlacement(scope)) return false;
-      const geometry=this.collectSpatialGeometry(scope,grid);
-      const resolved=this.resolveSpatialGeometry(geometry,pinnedId);
-      return this.applySpatialGeometry(scope,grid,resolved,{save:true,render:false});
+    updateFreeCanvas(scope,grid){
+      if(!this.isFreePlacement(scope)||grid.classList.contains('module-free-bootstrap')) return;
+      let bottom=180;
+      grid.querySelectorAll(':scope > [data-module-id]').forEach(slot=>{
+        const top=parseFloat(slot.style.top)||0;
+        bottom=Math.max(bottom,top+Math.max(80,slot.offsetHeight||0));
+      });
+      grid.style.height=`${Math.ceil(bottom+24)}px`;
     },
-    commitSpatialChange(scope,id,change,{grid=null,slot=null,render=true}={}){
-      grid=grid||this.grid(scope); if(!grid) return;
-      this.captureMissingPositions(scope,grid);
-      const geometry=this.collectSpatialGeometry(scope,grid,id,change);
-      const resolved=this.resolveSpatialGeometry(geometry,id);
-      this.applySpatialGeometry(scope,grid,resolved,{save:true,render,targetId:id,targetH:Object.prototype.hasOwnProperty.call(change,'h')?change.h:undefined});
+    commitFreeFrame(scope,id,frame,{grid=null,slot=null,render=true}={}){
+      if(!this.isFreePlacement(scope)) return;
+      grid=grid||this.grid(scope);
+      const layout=this.get(scope),key=String(id),item=layout.items[key]||(layout.items[key]={});
+      const gridWidth=grid?Math.max(180,grid.getBoundingClientRect().width):Infinity;
+      const w=Math.max(180,Math.round(Number(frame.w)||item.pxW||180));
+      item.pxW=Number.isFinite(gridWidth)?Math.min(w,gridWidth):w;
+      item.pxX=Math.max(0,Math.round(Number(frame.x)||0));
+      if(Number.isFinite(gridWidth)) item.pxX=Math.min(item.pxX,Math.max(0,gridWidth-item.pxW));
+      item.pxY=Math.max(0,Math.round(Number(frame.y)||0));
+      if(Number(frame.h)>0){
+        item.pxH=Math.max(120,Math.round(Number(frame.h)));
+        item.h=item.pxH;
+      }else{
+        delete item.pxH;
+        delete item.h;
+      }
+      item.z=finiteNumber(frame.z)?Math.max(0,Math.round(Number(frame.z))):this.maxZ(scope)+1;
+      if(slot){
+        slot.style.left=`${item.pxX}px`;
+        slot.style.top=`${item.pxY}px`;
+        slot.style.width=`${item.pxW}px`;
+        slot.style.zIndex=String(item.z);
+        if(item.pxH) slot.style.height=`${item.pxH}px`; else slot.style.height='auto';
+      }
+      this.save(scope,layout,{quiet:true,render});
+      if(grid&&!render) this.updateFreeCanvas(scope,grid);
     },
     refresh(scope){
       if(this._refreshing.has(scope)) return;
       this._refreshing.add(scope);
       try{
         document.querySelectorAll(`[data-module-layout="${scope}"]`).forEach(grid=>{
+          const free=this.isFreePlacement(scope);
+          const bootstrap=free&&grid.classList.contains('module-free-bootstrap');
+          if(free&&!bootstrap){
+            this.applyFreeFrames(scope,grid);
+            return;
+          }
           const gridStyle=getComputedStyle(grid);
           const row=parseFloat(gridStyle.gridAutoRows)||8;
           const gap=parseFloat(gridStyle.rowGap)||8;
@@ -360,16 +422,13 @@
             if(fixed){content.style.height=fixed;content.style.overflow='auto';}
             else{content.style.height='auto';content.style.overflow='visible';}
             slot.style.gridRowEnd='auto';
-            const toolbarAllowance=this.isFreePlacement(scope)?0:(this.isActive(scope)?48:0);
+            const toolbarAllowance=free?0:(this.isActive(scope)?48:0);
             const height=Math.max(40,content.getBoundingClientRect().height+toolbarAllowance);
             const rows=Math.max(1,Math.ceil((height+gap)/(row+gap)));
             slot.dataset.moduleRows=String(rows);
             slot.style.gridRowEnd=`span ${rows}`;
           });
-          if(this.isFreePlacement(scope)){
-            this.captureMissingPositions(scope,grid);
-            this.stabilizeSpatial(scope,grid);
-          }
+          if(free&&bootstrap) this.captureFreeFrames(scope,grid);
         });
       }finally{
         this._refreshing.delete(scope);
@@ -388,23 +447,27 @@
     event.preventDefault();
 
     if(ModuleLayout.isFreePlacement(scope)){
-      ModuleLayout.captureMissingPositions(scope,grid);
-      const pointerId=event.pointerId,id=String(slot.dataset.moduleId),size=ModuleLayout.itemSize(scope,id);
-      const metrics=ModuleLayout.gridMetrics(grid,scope),gridRect=grid.getBoundingClientRect(),slotRect=slot.getBoundingClientRect();
-      const startPos=ModuleLayout.itemPosition(scope,id)||ModuleLayout.positionFromRect(grid,slot,scope);
-      const grabX=event.clientX-slotRect.left,grabY=event.clientY-slotRect.top;
-      let nextX=startPos.x,nextY=startPos.y,active=true,raf=0;
+      if(grid.classList.contains('module-free-bootstrap')) ModuleLayout.captureFreeFrames(scope,grid);
+      const pointerId=event.pointerId,id=String(slot.dataset.moduleId),gridRect=grid.getBoundingClientRect();
+      const startFrame=ModuleLayout.freeFrame(scope,id,slot);
+      if(!startFrame) return;
+      const topZ=ModuleLayout.maxZ(scope)+1;
+      let nextX=startFrame.x,nextY=startFrame.y,active=true,raf=0;
+      slot.style.zIndex=String(topZ);
       slot.classList.add('module-dragging','module-spatial-dragging'); grid.classList.add('module-grid-dragging');
+      const startX=event.clientX,startY=event.clientY;
       const paint=()=>{
         raf=0;
-        slot.style.gridColumnStart=String(nextX+1);
-        slot.style.gridRowStart=String(nextY+1);
+        slot.style.left=`${nextX}px`;
+        slot.style.top=`${nextY}px`;
+        ModuleLayout.updateFreeCanvas(scope,grid);
       };
       const move=ev=>{
         if(!active||ev.pointerId!==pointerId) return;
         if(ev.cancelable) ev.preventDefault();
-        nextX=clamp(Math.round((ev.clientX-gridRect.left-grabX)/Math.max(1,metrics.colStep)),0,Math.max(0,metrics.columns-size.w));
-        nextY=Math.max(0,Math.round((ev.clientY-gridRect.top-grabY)/Math.max(1,metrics.rowStep)));
+        const maxX=Math.max(0,gridRect.width-startFrame.w);
+        nextX=clamp(Math.round(startFrame.x+ev.clientX-startX),0,maxX);
+        nextY=Math.max(0,Math.round(startFrame.y+ev.clientY-startY));
         if(!raf) raf=requestAnimationFrame(paint);
       };
       const cleanup=()=>{
@@ -419,7 +482,7 @@
       const done=ev=>{
         if(!active||ev.pointerId!==pointerId) return;
         unbind();cleanup();
-        ModuleLayout.commitSpatialChange(scope,id,{x:nextX,y:nextY,w:size.w,h:size.h},{grid,slot,render:true});
+        ModuleLayout.commitFreeFrame(scope,id,{x:nextX,y:nextY,w:startFrame.w,h:startFrame.h,z:topZ},{grid,slot,render:true});
       };
       const cancel=ev=>{
         if(!active||(ev&&ev.pointerId!=null&&ev.pointerId!==pointerId)) return;
@@ -473,7 +536,47 @@
     const scope=grid.dataset.moduleLayout;
     if(!ModuleLayout.isActive(scope)) return;
     event.preventDefault(); event.stopPropagation();
-    if(ModuleLayout.isFreePlacement(scope)) ModuleLayout.captureMissingPositions(scope,grid);
+
+    if(ModuleLayout.isFreePlacement(scope)){
+      if(grid.classList.contains('module-free-bootstrap')) ModuleLayout.captureFreeFrames(scope,grid);
+      const pointerId=event.pointerId,id=String(slot.dataset.moduleId),content=slot.querySelector(':scope > .module-layout-content');
+      const startFrame=ModuleLayout.freeFrame(scope,id,slot);
+      if(!startFrame) return;
+      const gridWidth=Math.max(180,grid.getBoundingClientRect().width),topZ=ModuleLayout.maxZ(scope)+1;
+      const startX=event.clientX,startY=event.clientY;
+      const naturalH=Math.max(120,slot.getBoundingClientRect().height||content&&content.getBoundingClientRect().height||240);
+      let nextW=startFrame.w,nextH=startFrame.h||naturalH,active=true,raf=0;
+      slot.style.zIndex=String(topZ);
+      slot.classList.add('module-resizing');
+      const paint=()=>{
+        raf=0;
+        slot.style.width=`${nextW}px`;
+        slot.style.height=`${nextH}px`;
+        slot.style.setProperty('--module-fixed-height',`${nextH}px`);
+        if(content){content.style.height='100%';content.style.overflow='auto';}
+        ModuleLayout.updateFreeCanvas(scope,grid);
+      };
+      const move=ev=>{
+        if(!active||ev.pointerId!==pointerId) return;
+        if(ev.cancelable) ev.preventDefault();
+        const maxW=Math.max(180,gridWidth-startFrame.x);
+        nextW=clamp(Math.round(startFrame.w+ev.clientX-startX),180,maxW);
+        nextH=Math.max(120,Math.round((startFrame.h||naturalH)+(ev.clientY-startY)));
+        if(!raf) raf=requestAnimationFrame(paint);
+      };
+      const cleanup=()=>{slot.classList.remove('module-resizing');if(raf)cancelAnimationFrame(raf);};
+      const unbind=()=>{if(!active)return;active=false;document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',done);document.removeEventListener('pointercancel',cancel);window.removeEventListener('blur',cancel);handle.removeEventListener('lostpointercapture',cancel);};
+      const done=ev=>{
+        if(!active||ev.pointerId!==pointerId) return;
+        unbind();cleanup();
+        ModuleLayout.commitFreeFrame(scope,id,{x:startFrame.x,y:startFrame.y,w:nextW,h:nextH,z:topZ},{grid,slot,render:true});
+      };
+      const cancel=ev=>{if(!active||(ev&&ev.pointerId!=null&&ev.pointerId!==pointerId))return;unbind();cleanup();if(typeof renderView==='function')renderView();};
+      document.addEventListener('pointermove',move,{passive:false});document.addEventListener('pointerup',done);document.addEventListener('pointercancel',cancel);window.addEventListener('blur',cancel);handle.addEventListener('lostpointercapture',cancel);
+      try{handle.setPointerCapture(pointerId);}catch(err){}
+      return;
+    }
+
     const pointerId=event.pointerId,layout=ModuleLayout.get(scope),id=slot.dataset.moduleId;
     const content=slot.querySelector(':scope > .module-layout-content');
     const gridStyle=getComputedStyle(grid),gap=parseFloat(gridStyle.columnGap)||8;
@@ -482,16 +585,11 @@
     const gridWidth=grid.getBoundingClientRect().width;
     const colWidth=Math.max(1,(gridWidth-gap*(activeColumns-1))/activeColumns);
     const startSize=ModuleLayout.itemSize(scope,id);
-    const startPos=ModuleLayout.itemPosition(scope,id)||{x:0,y:0};
     const startX=event.clientX,startY=event.clientY,startH=startSize.h||Math.max(120,content?content.getBoundingClientRect().height:240);
-    let nextW=startSize.w,nextH=startH,nextX=startPos.x,active=true,raf=0;
+    let nextW=startSize.w,nextH=startH,active=true,raf=0;
     slot.classList.add('module-resizing');
     const paint=()=>{
       raf=0;
-      if(ModuleLayout.isFreePlacement(scope)){
-        nextX=Math.min(startPos.x,Math.max(0,activeColumns-nextW));
-        slot.style.gridColumnStart=String(nextX+1);
-      }
       slot.style.setProperty('--module-span',String(nextW));
       slot.style.setProperty('--module-fixed-height',`${nextH}px`);
       if(content){content.style.height=`${nextH}px`;content.style.overflow='auto';}
@@ -506,12 +604,7 @@
     };
     const cleanup=()=>{slot.classList.remove('module-resizing');if(raf)cancelAnimationFrame(raf);};
     const unbind=()=>{if(!active)return;active=false;document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',done);document.removeEventListener('pointercancel',cancel);window.removeEventListener('blur',cancel);handle.removeEventListener('lostpointercapture',cancel);};
-    const done=ev=>{
-      if(!active||ev.pointerId!==pointerId)return;
-      unbind();cleanup();
-      if(ModuleLayout.isFreePlacement(scope)) ModuleLayout.commitSpatialChange(scope,id,{x:nextX,y:startPos.y,w:nextW,h:nextH},{grid,slot,render:true});
-      else ModuleLayout.setSize(scope,id,nextW,nextH,{render:true});
-    };
+    const done=ev=>{if(!active||ev.pointerId!==pointerId)return;unbind();cleanup();ModuleLayout.setSize(scope,id,nextW,nextH,{render:true});};
     const cancel=ev=>{if(!active||(ev&&ev.pointerId!=null&&ev.pointerId!==pointerId))return;unbind();cleanup();if(typeof renderView==='function')renderView();};
     document.addEventListener('pointermove',move,{passive:false});document.addEventListener('pointerup',done);document.addEventListener('pointercancel',cancel);window.addEventListener('blur',cancel);handle.addEventListener('lostpointercapture',cancel);
     try{handle.setPointerCapture(pointerId);}catch(err){}

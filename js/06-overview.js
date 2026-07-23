@@ -312,12 +312,14 @@ function renderOverview(){
   let columns=4;
   let editing=false;
   let freePlacement=false;
+  let freeReady=true;
   if(window.ModuleLayout){
     ModuleLayout.register(scope,catalog);
     visible=ModuleLayout.visibleItems(scope,catalog);
     columns=ModuleLayout.get(scope).columns;
     editing=ModuleLayout.isActive(scope);
     freePlacement=ModuleLayout.isFreePlacement(scope);
+    freeReady=!freePlacement||ModuleLayout.hasCompleteFreeLayout(scope,visible);
   }
   const slots=visible.map(item=>{
     const style=window.ModuleLayout?ModuleLayout.slotStyle(scope,item.id,item.defaultW):`--module-span:${item.defaultW};`;
@@ -329,5 +331,5 @@ function renderOverview(){
   if(window.ModuleLayout) ModuleLayout.schedule(scope);
   const toolbar=window.ModuleLayout?ModuleLayout.toolbarHTML(scope,'Personalização da Visão Geral'):'';
   const empty=`<div class="panel-box overview-layout-empty"><div class="empty-note">Nenhum widget está visível neste layout. Use “Widgets” para reativar os blocos.</div></div>`;
-  return `${toolbar}<div class="module-layout-grid overview-dashboard-grid ${editing?'module-grid-organizer':''} ${freePlacement?'module-free-placement':''}" data-module-layout="${scope}" data-free-placement="${freePlacement?'true':'false'}" style="--module-columns:${columns};">${slots||empty}</div>`;
+  return `${toolbar}<div class="module-layout-grid overview-dashboard-grid ${editing?'module-grid-organizer':''} ${freePlacement?'module-free-placement':''} ${freePlacement&&!freeReady?'module-free-bootstrap':''}" data-module-layout="${scope}" data-free-placement="${freePlacement?'true':'false'}" style="--module-columns:${columns};">${slots||empty}</div>`;
 }

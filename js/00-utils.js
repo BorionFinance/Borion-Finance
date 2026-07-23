@@ -53,9 +53,36 @@ function brlPlain(n){
   const sign = n<0 ? '-' : '';
   return sign + 'R$ ' + Math.abs(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
+function brlText(n){
+  return (typeof S!=='undefined' && S.valuesHidden) ? '$' : brlPlain(n);
+}
 function brl(n){
-  if(typeof S!=='undefined' && S.valuesHidden) return '<span class="value-mask">⎯⎯⎯⎯</span>';
-  return brlPlain(n);
+  const plain=brlPlain(n);
+  const hidden=typeof S!=='undefined' && S.valuesHidden;
+  return `<span class="borion-money${hidden?' value-mask':''}" data-borion-money="${encodeURIComponent(plain)}">${hidden?'$':esc(plain)}</span>`;
+}
+function applyBorionValuePrivacyDOM(){
+  const hidden=!!(typeof S!=='undefined' && S.valuesHidden);
+  document.documentElement.classList.toggle('borion-values-hidden',hidden);
+  document.querySelectorAll('[data-borion-money]').forEach(node=>{
+    let plain='';
+    try{ plain=decodeURIComponent(node.getAttribute('data-borion-money')||''); }catch(e){ plain=node.getAttribute('data-borion-money')||''; }
+    const prev=node.previousSibling;
+    if(hidden&&prev&&prev.nodeType===Node.TEXT_NODE){
+      const txt=prev.nodeValue||'',m=txt.match(/([+\-−]\s*)$/);
+      if(m){ node.dataset.borionPrefix=m[1]; prev.nodeValue=txt.slice(0,-m[1].length); }
+    }else if(!hidden&&node.dataset.borionPrefix&&prev&&prev.nodeType===Node.TEXT_NODE){
+      prev.nodeValue=(prev.nodeValue||'')+node.dataset.borionPrefix;
+      delete node.dataset.borionPrefix;
+    }
+    node.textContent=hidden?'$':plain;
+    node.classList.toggle('value-mask',hidden);
+  });
+  document.querySelectorAll('[data-borion-money-value]').forEach(node=>{
+    let plain='';
+    try{ plain=decodeURIComponent(node.getAttribute('data-borion-money-value')||''); }catch(e){ plain=node.getAttribute('data-borion-money-value')||''; }
+    node.setAttribute('data-value',hidden?'$':plain);
+  });
 }
 function pct(n){return (Number(n)||0).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%';}
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];

@@ -14,7 +14,7 @@ const HelpCenterLoader = {
     this.promise = new Promise((resolve,reject)=>{
       if(!document.querySelector('link[data-borion-help-css]')){
         const link=document.createElement('link');
-        link.rel='stylesheet'; link.href='css/help-center.css?v=6.46.14'; link.dataset.borionHelpCss='1';
+        link.rel='stylesheet'; link.href='css/help-center.css?v=6.46.16'; link.dataset.borionHelpCss='1';
         document.head.appendChild(link);
       }
       const existing=document.querySelector('script[data-borion-help-script]');
@@ -24,7 +24,7 @@ const HelpCenterLoader = {
         return;
       }
       const script=document.createElement('script');
-      script.src='js/26-help-center.js?v=6.46.14'; script.async=true; script.dataset.borionHelpScript='1';
+      script.src='js/26-help-center.js?v=6.46.16'; script.async=true; script.dataset.borionHelpScript='1';
       script.onload=()=>window.BorionHelp?resolve(window.BorionHelp):reject(new Error('A Central do Borion não iniciou.'));
       script.onerror=()=>{ script.remove(); reject(new Error('Falha ao carregar a Central do Borion.')); };
       document.head.appendChild(script);
@@ -69,7 +69,7 @@ function renderSettingsModules(){
   const popupEnabled = popupCfg.enabled !== false;
   const dur = Number(popupCfg.durationMs)||40000;
   return `
-    <div class="settings-section settings-hero-section"><h3>Módulos do Borion</h3><p class="desc">Ative só o que você usa. Desativar uma função apenas oculta a tela; não apaga seus dados.</p></div>
+    <div class="settings-section settings-hero-section"><h3>Menu do Borion</h3><p class="desc">Ative só o que você usa no menu. Desativar uma função apenas oculta a tela; não apaga seus dados.</p></div>
     <div class="settings-module-grid">
       ${moduleToggleHTML({key:'investments',title:'Investimentos',desc:'Ativos, dinheiro em caixa e evolução de investimentos — aparece em Investimentos e no card de Patrimônio.',enabled:investmentsEnabledNow,onClick:'Settings.toggleInvestments()'})}
       ${moduleToggleHTML({key:'agenda',title:'Agenda Financeira',desc:'Compromissos e lembretes financeiros com data.',enabled:agendaEnabledNow,onClick:'Settings.toggleAgenda()'})}
@@ -311,13 +311,13 @@ function renderSettingsProfiles(){
   return `
     <div class="settings-section settings-hero-section"><h3>Perfil financeiro atual</h3><p class="desc">A conta faz login. O perfil guarda os dados financeiros. Exportar/importar usa sempre o perfil ativo por padrão.</p></div>
     <div class="profile-editor-card">
-      <div class="profile-editor-avatar">${profileAvatarHTML(p,'profile-avatar-xl')}<button class="btn-outline btn-sm" onclick="document.getElementById('pf_avatar_file').click()">Trocar foto</button><button class="btn-outline btn-sm" onclick="Settings.removeAvatarImage()">Remover foto</button></div>
+      <div class="profile-editor-avatar">${profileAvatarHTML(p,'profile-avatar-xl')}<div class="profile-avatar-actions"><button class="btn-outline btn-sm" onclick="document.getElementById('pf_avatar_file').click()">Trocar foto ou GIF</button><button class="btn-outline btn-sm" onclick="Settings.openPresetAvatarPicker()">Escolher foto pronta</button><button class="btn-outline btn-sm" onclick="Settings.removeAvatarImage()">Remover foto</button></div><small class="profile-avatar-hint">GIF animado é reproduzido normalmente no avatar.</small></div>
       <div class="profile-editor-fields">
         <div class="field"><label>Nome do perfil financeiro</label><input type="text" id="pf_name" value="${esc(p.name||'Perfil')}"/></div>
         <div class="field"><label>Conta logada</label><input type="email" id="pf_email" value="${esc((CloudStorage&&CloudStorage.user&&CloudStorage.user.email)||p.email||'')}" disabled/></div>
         <div class="field"><label>Cor do fundo do avatar</label><input type="color" id="pf_avatar_color" value="${esc(profileAvatarBg(p))}"/></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="Settings.savePersonal()">Salvar perfil financeiro</button><button class="btn-outline btn-sm" onclick="Settings.createFinancialProfile()">+ Novo perfil</button>${p.passwordHash?`<button class="btn-outline btn-sm" onclick="Settings.changePassword()">Trocar senha do perfil</button><button class="btn-outline btn-sm" onclick="Settings.removePassword()">Remover senha do perfil</button>`:`<button class="btn-outline btn-sm" onclick="Settings.setPasswordFlow()">Colocar senha no perfil</button>`}${isCloud?`<button class="btn-outline btn-sm" onclick="cloudChangePasswordFromSettings()">Trocar senha da conta</button>`:''}</div>
-        <input type="file" id="pf_avatar_file" accept="image/*" style="display:none" onchange="Settings.readAvatarFile(this)">
+        <input type="file" id="pf_avatar_file" accept="image/png,image/jpeg,image/webp,image/avif,image/gif" style="display:none" onchange="Settings.readAvatarFile(this)">
       </div>
     </div>
     <div class="settings-section"><h3>Perfis desta conta (${(S.profiles||[]).length})</h3><p class="desc">Troque entre perfis sem misturar dados. Cada perfil tem armazenamento local e registro separado no Supabase.</p>${profilesRows}<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;"><button class="btn-outline btn-sm" onclick="Settings.createFinancialProfile()">+ Criar perfil</button><button class="btn-outline btn-sm" onclick="document.getElementById('import_file').click()">Importar JSON</button></div><input type="file" id="import_file" accept="application/json" style="display:none;"></div>`;
@@ -431,7 +431,7 @@ Settings.switchFinancialProfile = async function(id){
   if(window.CloudStorage && CloudStorage.user) await CloudStorage.guardExit(doSwitch);
   else await doSwitch();
 };
-/* V6.46.14 — recorte de foto de perfil. Sem dependências externas, só canvas puro.
+/* V6.46.16 — recorte de foto de perfil. Sem dependências externas, só canvas puro.
    Usa Pointer Events (unifica mouse no computador e toque no celular no mesmo
    código): arrastar para posicionar, controle deslizante (ou roda do mouse) para
    zoom. O quadro de recorte é sempre um círculo, igual ao avatar exibido no app. */
@@ -491,9 +491,9 @@ function openAvatarCropper(srcDataUrl, onConfirm){
   img.onerror = ()=>alert('Não foi possível abrir essa imagem para recorte.');
   img.src = srcDataUrl;
 }
-const BORION_AVATAR_MAX_BYTES = 3*1024*1024; // V6.46.14 — antes 900 KB; a foto final sai redimensionada (512×512) pelo recorte, então não pesa o backup
+const BORION_AVATAR_MAX_BYTES = 3*1024*1024; // V6.46.16 — antes 900 KB; a foto final sai redimensionada (512×512) pelo recorte, então não pesa o backup
 
-/* V6.46.14 — nome, foto, cor e senha pertencem ao metadado do perfil, não aos
+/* V6.46.16 — nome, foto, cor e senha pertencem ao metadado do perfil, não aos
    lançamentos. Durante uma gravação no Drive, um snapshot confirmado mais antigo
    podia voltar para a tela e apagar uma segunda alteração feita enquanto a primeira
    ainda estava em trânsito. Este marcador mantém a identidade mais nova do perfil
@@ -569,7 +569,7 @@ Settings.readAvatarFile = function(input){
           avatarImage:target.avatarImage
         };
 
-        // V6.46.14 — atualização otimista da interface: nome/cor/foto entram no estado
+        // V6.46.16 — atualização otimista da interface: nome/cor/foto entram no estado
         // e a tela é redesenhada ANTES de aguardar Google Drive/Supabase. Assim o avatar
         // muda no mesmo instante em que o usuário confirma o recorte, sem trocar de aba.
         target.name=typedIdentity.name;
@@ -1187,7 +1187,7 @@ window.Settings = Settings;
 /* ================= V6.33.1 — refinamento extra de Configurações, padronização de ordenação
    e bloco flutuante de Anotações persistente entre abas ================= */
 (function(){
-  const SETTINGS_VERSION = '6.46.14';
+  const SETTINGS_VERSION = '6.46.16';
 
   function floatingNotesPrefs(create=false){
     const fallback={enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};
@@ -1240,7 +1240,7 @@ window.Settings = Settings;
     if(S.settingsTab==='cloud') S.settingsTab='backup';
     const tabs = `
       <div class="settings-tabs">
-        ${originalSettingsTabButton('modules','Módulos')}
+        ${originalSettingsTabButton('modules','Menu')}
         ${originalSettingsTabButton('dashboard','Dashboard')}
         ${originalSettingsTabButton('profiles','Perfis')}
         ${originalSettingsTabButton('categories','Categorias')}
@@ -1717,4 +1717,173 @@ window.Settings = Settings;
     renderApp = function(){ const r=_renderApp.apply(this, arguments); setTimeout(()=>window.FloatingNotes&&FloatingNotes.render(),0); return r; };
   }
   window.addEventListener('resize', ()=>{ try{ window.FloatingNotes&&FloatingNotes.render(); }catch(e){} });
+})();
+
+
+/* ================= V6.46.16 — Avatares animados, galeria pronta e proteção das integrações ================= */
+(function(){
+  const BORION_PRESET_AVATARS_64616 = [
+    'assets/profile-avatars/perfil-padrao-01.webp',
+    'assets/profile-avatars/perfil-padrao-02.webp',
+    'assets/profile-avatars/perfil-padrao-03.webp',
+    'assets/profile-avatars/perfil-padrao-04.webp',
+    'assets/profile-avatars/perfil-padrao-05.webp',
+    'assets/profile-avatars/perfil-padrao-06.webp'
+  ];
+  const BORION_AVATAR_UPLOAD_MAX_BYTES_64616 = 5*1024*1024;
+
+  Settings.applyAvatarImage64616 = async function(imageSource, options={}){
+    const profileAtSelection=S.currentProfile;
+    if(!profileAtSelection) return false;
+    const profileId=String(profileAtSelection.id);
+    const typedIdentity=currentProfileFormIdentity64611(profileAtSelection);
+    const usingCloud=!!(window.CloudStorage&&CloudStorage.user);
+    let target=null, previousIdentity=null;
+    try{
+      target=(S.profiles||[]).find(x=>String(x.id)===profileId);
+      if(!target) throw new Error('O perfil aberto mudou antes da foto ser confirmada.');
+      previousIdentity={name:target.name,avatarColor:target.avatarColor,avatarImage:target.avatarImage};
+      target.name=typedIdentity.name;
+      target.avatarColor=typedIdentity.avatarColor;
+      if(imageSource) target.avatarImage=String(imageSource);
+      else delete target.avatarImage;
+      S.currentProfile=target;
+
+      if(!usingCloud){
+        markProfileMetadataPending64611(target);
+        setProfiles(S.profiles);
+      }
+      renderApp();
+
+      if(usingCloud){
+        await CloudStorage.renameProfile(target.id,typedIdentity.name,typedIdentity.avatarColor,imageSource?String(imageSource):'');
+        const fresh=(S.profiles||[]).find(x=>String(x.id)===profileId);
+        if(fresh) S.currentProfile=fresh;
+      }else{
+        await confirmProfileMetadataSave64611();
+      }
+      renderApp();
+      toast(options.removed?'Foto removida e confirmada.':'Nome e foto do perfil confirmados.');
+      return true;
+    }catch(e){
+      if(usingCloud&&target&&previousIdentity){
+        target.name=previousIdentity.name;
+        target.avatarColor=previousIdentity.avatarColor;
+        if(previousIdentity.avatarImage) target.avatarImage=previousIdentity.avatarImage;
+        else delete target.avatarImage;
+        S.currentProfile=target;
+        renderApp();
+      }
+      alert(e.message||String(e));
+      return false;
+    }
+  };
+
+  Settings.readAvatarFile = function(input){
+    const file=input.files&&input.files[0];
+    if(!file) return;
+    if(file.size>BORION_AVATAR_UPLOAD_MAX_BYTES_64616){
+      alert('Escolha uma foto ou GIF menor que 5 MB para não pesar a sincronização.');
+      input.value='';
+      return;
+    }
+    const isGif=(file.type||'').toLowerCase()==='image/gif'||/\.gif$/i.test(file.name||'');
+    const reader=new FileReader();
+    reader.onload=()=>{
+      if(isGif){
+        Settings.applyAvatarImage64616(reader.result,{animated:true});
+        return;
+      }
+      openAvatarCropper(reader.result, croppedDataUrl=>Settings.applyAvatarImage64616(croppedDataUrl));
+    };
+    reader.onerror=()=>alert('Não foi possível abrir esta imagem.');
+    reader.readAsDataURL(file);
+    input.value='';
+  };
+
+  Settings.openPresetAvatarPicker = function(){
+    const cards=BORION_PRESET_AVATARS_64616.map((src,index)=>`
+      <button type="button" class="preset-avatar-card" data-avatar-src="${esc(src)}" title="Usar foto pronta ${index+1}">
+        <img src="${esc(src)}" alt="Foto de perfil pronta ${index+1}">
+        <span>Opção ${index+1}</span>
+      </button>`).join('');
+    const box=el(`<div class="modal-overlay"><div class="modal-box preset-avatar-modal">
+      <div class="modal-head"><div><h2>Escolher foto pronta</h2><p class="modal-sub">Escolha uma das imagens incluídas no próprio Borion.</p></div><button type="button" id="preset_avatar_close">&times;</button></div>
+      <div class="preset-avatar-grid">${cards}</div>
+      <button type="button" class="btn-outline btn-block" id="preset_avatar_cancel">Cancelar</button>
+    </div></div>`);
+    $('#modal-root').replaceChildren(box);
+    attachModalGuard(box);
+    const close=()=>closeModal();
+    box.querySelector('#preset_avatar_close').onclick=close;
+    box.querySelector('#preset_avatar_cancel').onclick=close;
+    box.querySelectorAll('[data-avatar-src]').forEach(btn=>{
+      btn.onclick=()=>{
+        const src=btn.dataset.avatarSrc;
+        closeModal();
+        Settings.applyAvatarImage64616(src,{preset:true});
+      };
+    });
+  };
+
+  Settings.removeAvatarImage = function(){
+    return Settings.applyAvatarImage64616('',{removed:true});
+  };
+
+  const IntegrationsAccess64616 = {
+    password:'38554273',
+    temporaryProfileId:'',
+    profileId(){ return String(S&&S.currentProfile&&S.currentProfile.id||'sem_perfil'); },
+    rememberKey(){ return 'borion_integrations_remember_64616_'+this.profileId(); },
+    remembered(){ try{return localStorage.getItem(this.rememberKey())==='1';}catch(e){return false;} },
+    hasAccess(){ return this.remembered()||this.temporaryProfileId===this.profileId(); },
+    clearTemporary(){ this.temporaryProfileId=''; },
+    open(){
+      const box=el(`<div class="modal-overlay"><div class="modal-box integrations-password-modal">
+        <div class="modal-head"><div><h2>Proteger Integrações</h2><p class="modal-sub">Digite a senha para abrir as configurações de integração.</p></div><button type="button" id="integrations_password_close">&times;</button></div>
+        <div class="field"><label>Senha</label><div class="password-input-wrap"><input type="password" id="integrations_password_input" inputmode="numeric" autocomplete="current-password" placeholder="Digite a senha"><button type="button" class="password-eye-btn" id="integrations_password_eye" aria-label="Mostrar senha">${eyeIconSVG(true)}</button></div></div>
+        <label class="field-check integrations-remember"><input type="checkbox" id="integrations_password_remember"><span>Sempre lembrar senha neste dispositivo</span></label>
+        <div class="row-btns"><button type="button" class="btn btn-secondary" id="integrations_password_cancel">Cancelar</button><button type="button" class="btn btn-primary" id="integrations_password_enter">Entrar</button></div>
+      </div></div>`);
+      $('#modal-root').replaceChildren(box);
+      attachModalGuard(box);
+      const input=box.querySelector('#integrations_password_input');
+      const close=()=>closeModal();
+      box.querySelector('#integrations_password_close').onclick=close;
+      box.querySelector('#integrations_password_cancel').onclick=close;
+      box.querySelector('#integrations_password_eye').onclick=()=>{
+        input.type=input.type==='password'?'text':'password';
+        box.querySelector('#integrations_password_eye').innerHTML=eyeIconSVG(input.type==='password');
+      };
+      const enter=()=>{
+        if(input.value!==this.password){
+          input.value='';
+          input.focus();
+          toast('Senha incorreta.');
+          return;
+        }
+        this.temporaryProfileId=this.profileId();
+        if(box.querySelector('#integrations_password_remember').checked){
+          try{localStorage.setItem(this.rememberKey(),'1');}catch(e){}
+        }
+        closeModal();
+        S.settingsTab='integrations';
+        renderView();
+      };
+      box.querySelector('#integrations_password_enter').onclick=enter;
+      input.addEventListener('keydown',e=>{if(e.key==='Enter')enter();});
+      setTimeout(()=>input.focus(),20);
+    }
+  };
+  window.BorionIntegrationsAccess=IntegrationsAccess64616;
+
+  const baseSetTab64616=Settings.setTab.bind(Settings);
+  Settings.setTab=function(tab){
+    if(tab==='integrations'&&!IntegrationsAccess64616.hasAccess()){
+      IntegrationsAccess64616.open();
+      return;
+    }
+    if(tab!=='integrations') IntegrationsAccess64616.clearTemporary();
+    baseSetTab64616(tab);
+  };
 })();

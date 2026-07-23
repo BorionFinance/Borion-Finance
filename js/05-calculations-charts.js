@@ -432,7 +432,7 @@ function renderDonut(segments, centerTop, centerBottom){
     const f0 = total? acc/total : 0; acc += s.value; const f1 = total? acc/total : 0;
     const pctTxt = total? Math.round(s.value/total*100)+'%' : '0%';
     const d = donutSlicePath(100,100,90,54,f0,f1);
-    return `<path d="${d}" fill="${s.color}" style="animation-delay:${(idx*0.05).toFixed(2)}s" data-label="${esc(s.label)}" data-pct="${pctTxt}" data-value="${esc(brl(s.value))}" onmousemove="ChartTooltip.showEl(event,this)" onmouseleave="ChartTooltip.hide()"></path>`;
+    return `<path d="${d}" fill="${s.color}" style="animation-delay:${(idx*0.05).toFixed(2)}s" data-label="${esc(s.label)}" data-pct="${pctTxt}" data-borion-money-value="${encodeURIComponent(brlPlain(s.value))}" data-value="${esc(brlText(s.value))}" onmousemove="ChartTooltip.showEl(event,this)" onmouseleave="ChartTooltip.hide()"></path>`;
   }).join('');
   const svg = filtered.length
     ? `<svg class="donut-svg" viewBox="0 0 200 200">${paths}</svg>`
@@ -440,7 +440,7 @@ function renderDonut(segments, centerTop, centerBottom){
   const legend = filtered.map((s,idx)=>{
     const pctTxt = total? Math.round(s.value/total*100)+'%' : '0%';
     return `
-    <div class="legend-item" style="animation-delay:${(idx*0.06).toFixed(2)}s" data-label="${esc(s.label)}" data-pct="${pctTxt}" data-value="${esc(brl(s.value))}" onmousemove="ChartTooltip.showEl(event,this)" onmouseleave="ChartTooltip.hide()">
+    <div class="legend-item" style="animation-delay:${(idx*0.06).toFixed(2)}s" data-label="${esc(s.label)}" data-pct="${pctTxt}" data-borion-money-value="${encodeURIComponent(brlPlain(s.value))}" data-value="${esc(brlText(s.value))}" onmousemove="ChartTooltip.showEl(event,this)" onmouseleave="ChartTooltip.hide()">
       <span class="dot" style="background:${s.color}"></span>
       <span class="lp">${pctTxt}</span>
       <span class="ln">${esc(s.label)}</span>
@@ -494,7 +494,7 @@ const ChartTooltip = {
 
 /* ---------------- bar / line chart builders (SVG, com tooltip) ---------------- */
 function renderBarChart({series, labels, height=180, valueFormatter}){
-  valueFormatter = valueFormatter || brl;
+  valueFormatter = valueFormatter || brlText;
   const maxVal = Math.max(1, ...series.flatMap(s=>s.values));
   const W=640, H=height, padL=10, padR=10, padT=10, padB=26;
   const plotW=W-padL-padR, plotH=H-padT-padB;
@@ -510,7 +510,7 @@ function renderBarChart({series, labels, height=180, valueFormatter}){
       const bh = maxVal>0 ? (val/maxVal)*plotH : 0;
       const x = groupX + barGap + si*(barW+barGap);
       const y = padT + (plotH-Math.max(1,bh));
-      bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1,bh).toFixed(1)}" rx="2.5" fill="${s.color}" style="animation-delay:${(i*0.02+si*0.015).toFixed(2)}s" data-label="${esc(lab)}${series.length>1?' · '+esc(s.name):''}" data-value="${esc(valueFormatter(val))}" onmousemove="ChartTooltip.showEl(event,this)" onmouseleave="ChartTooltip.hide()"></rect>`;
+      bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1,bh).toFixed(1)}" rx="2.5" fill="${s.color}" style="animation-delay:${(i*0.02+si*0.015).toFixed(2)}s" data-label="${esc(lab)}${series.length>1?' · '+esc(s.name):''}" data-borion-money-value="${encodeURIComponent(brlPlain(val))}" data-value="${esc(valueFormatter(val))}" onmousemove="ChartTooltip.showEl(event,this)" onmouseleave="ChartTooltip.hide()"></rect>`;
     });
   });
   const step = Math.max(1, Math.ceil(n/7));
@@ -524,7 +524,7 @@ function renderBarChart({series, labels, height=180, valueFormatter}){
 }
 
 function renderLineChart({series, labels, height=180, valueFormatter}){
-  valueFormatter = valueFormatter || brl;
+  valueFormatter = valueFormatter || brlText;
   const allVals = series.flatMap(s=>s.values);
   const maxVal = Math.max(1, ...allVals);
   const minVal = Math.min(0, ...allVals);
@@ -540,7 +540,7 @@ function renderLineChart({series, labels, height=180, valueFormatter}){
     const pts = s.values.map((v,i)=>`${xFor(i).toFixed(1)},${yFor(v).toFixed(1)}`).join(' ');
     linesHTML += `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" style="animation:lineDraw .6s ease;"></polyline>`;
     s.values.forEach((v,i)=>{
-      pointsHTML += `<circle cx="${xFor(i).toFixed(1)}" cy="${yFor(v).toFixed(1)}" r="4" fill="${s.color}" data-label="${esc(labels[i])}${series.length>1?' · '+esc(s.name):''}" data-value="${esc(valueFormatter(v))}" onmousemove="ChartTooltip.showEl(event,this)" onmouseleave="ChartTooltip.hide()"></circle>`;
+      pointsHTML += `<circle cx="${xFor(i).toFixed(1)}" cy="${yFor(v).toFixed(1)}" r="4" fill="${s.color}" data-label="${esc(labels[i])}${series.length>1?' · '+esc(s.name):''}" data-borion-money-value="${encodeURIComponent(brlPlain(v))}" data-value="${esc(valueFormatter(v))}" onmousemove="ChartTooltip.showEl(event,this)" onmouseleave="ChartTooltip.hide()"></circle>`;
     });
   });
   const step = Math.max(1, Math.ceil(n/7));

@@ -1,6 +1,6 @@
 /* Borion Finance — editor reutilizável de módulos.
    Permite arrastar, redimensionar, ocultar/exibir e salvar layouts por perfil.
-   V6.46.16: a Visão Geral no computador funciona como uma área de trabalho livre:
+   V6.46.17: a Visão Geral no computador funciona como uma área de trabalho livre:
    posições e tamanhos em pixels, sobreposição permitida e nenhuma reorganização automática. */
 (() => {
   'use strict';

@@ -160,11 +160,11 @@ function renderBudget(){
       rows = list.map(e=>{
         const nameHTML=budgetLaunchNameHTML(e.f.nome,{source:budgetExpenseSourceLabel(e.f),recurrence:'Recorrente desde '+shortMonthLabel(e.f.startMonth)});
         return `<tr>
-          <td>${e.ocorrencias}x</td>
-          <td>${nameHTML}</td>
-          <td><span class="cat-pill"><span class="dot" style="background:${catColor(e.f.categoria)}"></span>${esc(e.f.categoria)}</span></td>
-          <td class="val-neg">- ${brl(e.total)}</td>
-          <td class="tbl-actions"><div class="launch-actions"><button onclick="Budget.edit('${e.f.id}')" title="Editar despesa fixa">✎</button></div></td>
+          <td class="launch-date-cell">${e.ocorrencias}x</td>
+          <td class="launch-name-column">${nameHTML}</td>
+          <td class="launch-category-cell"><span class="cat-pill"><span class="dot" style="background:${catColor(e.f.categoria)}"></span>${esc(e.f.categoria)}</span></td>
+          <td class="launch-value-cell val-neg">- ${brl(e.total)}</td>
+          <td class="tbl-actions launch-actions-cell"><div class="launch-actions"><button onclick="Budget.edit('${e.f.id}')" title="Editar despesa fixa">✎</button></div></td>
         </tr>`;
       }).join('');
       listLength = list.length;
@@ -185,12 +185,12 @@ function renderBudget(){
         const nameHTML=budgetLaunchNameHTML(f.nome,{source:budgetExpenseSourceLabel(f,occurrence),recurrence:'Recorrente desde '+shortMonthLabel(f.startMonth)});
         return `
         <tr>
-          <td>Dia ${f.dia||1}</td>
-          <td>${nameHTML}</td>
-          <td><span class="cat-pill"><span class="dot" style="background:${catColor(f.categoria)}"></span>${esc(f.categoria)}</span></td>
-          <td class="val-neg">- ${brl(f.valor)}</td>
-          <td><span class="cheque-status ${statusCls}">${statusLabel}</span></td>
-          <td class="tbl-actions"><div class="launch-actions"><button onclick="Budget.toggleFixaPago('${f.id}')" title="${status==='Pago'?'Marcar em aberto':'Marcar como paga'}">${status==='Pago'?'↺':'✔'}</button><button onclick="Budget.edit('${f.id}')" title="Editar despesa fixa">✎</button></div></td>
+          <td class="launch-date-cell">Dia ${f.dia||1}</td>
+          <td class="launch-name-column">${nameHTML}</td>
+          <td class="launch-category-cell"><span class="cat-pill"><span class="dot" style="background:${catColor(f.categoria)}"></span>${esc(f.categoria)}</span></td>
+          <td class="launch-value-cell val-neg">- ${brl(f.valor)}</td>
+          <td class="launch-status-cell"><span class="cheque-status ${statusCls}">${statusLabel}</span></td>
+          <td class="tbl-actions launch-actions-cell"><div class="launch-actions"><button onclick="Budget.toggleFixaPago('${f.id}')" title="${status==='Pago'?'Marcar em aberto':'Marcar como paga'}">${status==='Pago'?'↺':'✔'}</button><button onclick="Budget.edit('${f.id}')" title="Editar despesa fixa">✎</button></div></td>
         </tr>`;
       }).join('');
       listLength = list.length;
@@ -223,12 +223,12 @@ function renderBudget(){
       const statusCls=status==='Pago'?'ok':'neutral';
       return `
       <tr>
-        <td>${t.data.slice(8,10)}/${t.data.slice(5,7)}</td>
-        <td>${nameHTML}</td>
-        <td><span class="cat-pill"><span class="dot" style="background:${catColor(t.categoria)}"></span>${esc(t.categoria)}</span></td>
-        <td class="${tab==='receita'?'val-pos':'val-neg'}">${tab==='receita'?'':'- '}${brl(t.valor)}</td>
-        ${tab==='variavel'?`<td><span class="cheque-status ${statusCls}">${status}</span></td>`:''}
-        <td class="tbl-actions"><div class="launch-actions">${tab==='variavel'?`<button onclick="Budget.toggleVariavelPago('${t.id}')" title="${status==='Pago'?'Marcar em aberto':'Marcar como pago'}">${status==='Pago'?'↺':'✔'}</button>`:''}<button onclick="Budget.edit('${t.id}')" title="Editar lançamento">✎</button></div></td>
+        <td class="launch-date-cell">${t.data.slice(8,10)}/${t.data.slice(5,7)}</td>
+        <td class="launch-name-column">${nameHTML}</td>
+        <td class="launch-category-cell"><span class="cat-pill"><span class="dot" style="background:${catColor(t.categoria)}"></span>${esc(t.categoria)}</span></td>
+        <td class="launch-value-cell ${tab==='receita'?'val-pos':'val-neg'}">${tab==='receita'?'':'- '}${brl(t.valor)}</td>
+        ${tab==='variavel'?`<td class="launch-status-cell"><span class="cheque-status ${statusCls}">${status}</span></td>`:''}
+        <td class="tbl-actions launch-actions-cell"><div class="launch-actions">${tab==='variavel'?`<button onclick="Budget.toggleVariavelPago('${t.id}')" title="${status==='Pago'?'Marcar em aberto':'Marcar como pago'}">${status==='Pago'?'↺':'✔'}</button>`:''}<button onclick="Budget.edit('${t.id}')" title="Editar lançamento">✎</button></div></td>
       </tr>`;}).join('');
     listLength = list.length;
   }

@@ -438,6 +438,9 @@ function renderView(){
   const unread = (S.data && Array.isArray(S.data.notificacoes) ? S.data.notificacoes : []).filter(n=>!n.lida).length;
   const bfLabel = (!S.bankFilter || S.bankFilter.size===0) ? 'Todos' : (S.bankFilter.size===1 ? Array.from(S.bankFilter)[0] : S.bankFilter.size+' selecionados');
   const bankBtn = `<button class="btn-outline bank-filter-btn ${S.bankFilter&&S.bankFilter.size?'filter-active':''}" onclick="BankFilter.togglePanel(event)">☷ ${esc(bfLabel)}</button>`;
+  const reserveLastMovement = S.view==='reservas'&&typeof renderReservaLastMovementTopbar64616==='function'
+    ? renderReservaLastMovementTopbar64616()
+    : '';
   container.innerHTML = `
     <div class="topbar">
       <div class="topbar-title-row">
@@ -446,13 +449,12 @@ function renderView(){
           <p class="hello">${greeting()}, ${esc(S.currentProfile.name)}</p>
           <h1>${titles[S.view]} <span class="eye" onclick="toggleValuesHidden()" title="${S.valuesHidden?'Mostrar valores':'Ocultar valores'}">${eyeIconSVG(S.valuesHidden)}</span></h1>
         </div>
-        ${S.view==='reservas'&&typeof renderReservaLastMovementTopbar64616==='function'?renderReservaLastMovementTopbar64616():''}
       </div>
       <div class="global-search-wrap">
         <input type="text" id="global_search" placeholder="Pesquisar compras, contas, categorias..." oninput="GlobalSearch.onInput()" onfocus="GlobalSearch.onInput()"/>
         <div id="global_search_results" class="search-results hidden"></div>
       </div>
-      <div style="display:flex;gap:12px;align-items:center;">
+      <div class="topbar-controls" style="display:flex;gap:12px;align-items:center;">
         ${(window.CloudStorage && CloudStorage.user)
           ? `<button id="cloud_status_badge" class="cloud-status syncing" onclick="CloudStorage.syncNow()">Sincronizando...</button>`
           : (window.GoogleDriveProvider && GoogleDriveProvider.isConnected() && GoogleDriveProvider.blockedSuspicious)
@@ -465,6 +467,7 @@ function renderView(){
           ? `<button id="cloud_status_badge" class="cloud-status ${GoogleDriveProvider.dirty?'syncing':'local'}" onclick="GoogleDriveProvider.handleStatusClick()" title="Conectado ao Google Drive — ${esc(GoogleDriveAuth.user?GoogleDriveAuth.user.email:'')} — pasta: ${esc(GoogleDriveProvider.folderName||'?')}">Google Drive${GoogleDriveProvider.dirty?' — salvando...':' — salvo'}</button>`
           : `<button id="cloud_status_badge" class="cloud-status local" onclick="Nav.go('settings')" title="Sem conexão confirmada com o Google Drive">Sem conexão</button>`}
         ${bankBtn}
+        ${reserveLastMovement}
         ${monthNav}
         <button class="bell-btn" onclick="Notifs.togglePanel(event)">${bellIconSVG()}${unread?`<span class="bell-badge">${unread>9?'9+':unread}</span>`:''}</button>
       </div>

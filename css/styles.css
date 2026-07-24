@@ -3161,7 +3161,7 @@ html[data-theme="light"] .interop-source-value{background:rgba(122,85,29,.025)}
 .mit-expense-modal .quickcat-box{margin-top:8px;}
 html[data-theme="light"] .mit-expense-modal .field input[type="text"],html[data-theme="light"] .mit-expense-modal .field input[type="date"],html[data-theme="light"] .mit-expense-modal .field select{background:rgba(255,255,255,.92);border-color:rgba(122,85,29,.18);color:var(--text);}
 
-/* V6.46.16 — Dashboard estilo área de trabalho: posição e tamanho livres, sobreposição e camadas */
+/* V6.46.17 — Dashboard estilo área de trabalho: posição e tamanho livres, sobreposição e camadas */
 .overview-dashboard-grid{gap:12px;margin-bottom:18px;align-items:start;grid-auto-flow:dense;}
 .overview-dashboard-grid.module-free-placement{display:block;position:relative;min-height:180px;overflow:visible;}
 .overview-dashboard-grid.module-free-placement.module-free-bootstrap{display:grid;grid-auto-flow:row;height:auto!important;}
@@ -3231,7 +3231,7 @@ html[data-theme="light"] .module-widget-menu{background:rgba(252,249,242,.99);bo
 }
 
 
-/* ---------- V6.46.16 — acabamento solicitado: avatar, privacidade, lápis e reservas ---------- */
+/* ---------- V6.46.17 — acabamento solicitado: avatar, privacidade, lápis e reservas ---------- */
 .borion-money{display:inline;white-space:nowrap;}
 .value-mask{letter-spacing:0!important;color:var(--muted-2);font-weight:800;}
 .profile-avatar-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;}
@@ -3282,3 +3282,247 @@ html[data-interface-mode="smartphone"] #view-body .line-chart-svg polyline{
 }
 ::view-transition-old(borion-content),
 ::view-transition-new(borion-content){animation:none!important;}
+
+/* ---------- V6.46.17 — cabeçalho mobile limpo e lançamentos compactos ---------- */
+html[data-interface-mode="smartphone"] .topbar{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr)!important;
+  align-items:start!important;
+  gap:8px!important;
+}
+html[data-interface-mode="smartphone"] .topbar-title-row{
+  width:100%!important;
+  min-width:0!important;
+  align-items:flex-start!important;
+}
+html[data-interface-mode="smartphone"] .topbar-title{
+  width:100%;
+  min-width:0;
+}
+html[data-interface-mode="smartphone"] .topbar .hello{
+  max-width:100%;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-size:11px!important;
+  line-height:1.25;
+  margin:0 0 2px!important;
+}
+html[data-interface-mode="smartphone"] .topbar h1{
+  font-size:21px!important;
+  line-height:1.08!important;
+  white-space:nowrap;
+}
+html[data-interface-mode="smartphone"] .topbar-controls{
+  width:100%!important;
+  min-width:0;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-end;
+  gap:7px!important;
+  margin-left:0!important;
+}
+html[data-interface-mode="smartphone"] .topbar-controls .reserve-last-movement-top{
+  order:0;
+  flex:0 0 auto;
+  align-self:center;
+  margin:0 auto 0 0!important;
+  padding:0!important;
+  border-left:0!important;
+  gap:1px;
+}
+html[data-interface-mode="smartphone"] .topbar-controls .reserve-last-movement-top span{
+  font-size:7.5px!important;
+  letter-spacing:.45px;
+}
+html[data-interface-mode="smartphone"] .topbar-controls .reserve-last-movement-top strong{
+  font-size:9.5px!important;
+  line-height:1.1;
+}
+html[data-interface-mode="smartphone"] .topbar-controls .month-nav-wrap{
+  order:1;
+  flex:0 1 190px;
+  min-width:138px;
+  max-width:210px;
+  margin-left:auto;
+}
+html[data-interface-mode="smartphone"] .topbar-controls .month-nav{
+  width:100%;
+  box-sizing:border-box;
+}
+html[data-interface-mode="smartphone"] .topbar-controls .month-nav .mlabel{
+  font-size:11px!important;
+  min-width:0!important;
+  white-space:nowrap;
+}
+html[data-interface-mode="smartphone"] .topbar-controls .bell-btn{
+  order:2;
+  flex:0 0 38px;
+}
+
+/* A listagem móvel vira uma linha compacta de duas faixas: nome/origem em cima,
+   valor/status/ações embaixo. O nome recebe toda a largura útil e não quebra palavra por palavra. */
+html[data-interface-mode="smartphone"] .budget-launch-table{
+  display:block;
+  width:100%;
+  min-width:0;
+  table-layout:auto;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table thead{
+  display:none;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table tbody{
+  display:block;
+  width:100%;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table tbody tr{
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr) auto auto;
+  grid-template-areas:
+    "date name name name"
+    "date value status actions";
+  column-gap:7px;
+  row-gap:5px;
+  align-items:center;
+  width:100%;
+  padding:10px 0;
+  border-bottom:1px solid rgba(255,255,255,.055);
+}
+html[data-interface-mode="smartphone"] .budget-launch-table tbody tr:last-child{
+  border-bottom:0;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table tbody td{
+  display:block!important;
+  width:auto!important;
+  min-width:0;
+  padding:0!important;
+  border:0!important;
+  word-break:normal!important;
+  overflow-wrap:normal!important;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-date-cell{
+  grid-area:date;
+  align-self:center;
+  font-size:11px;
+  line-height:1.2;
+  color:var(--text);
+  white-space:nowrap;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-name-column{
+  grid-area:name;
+  min-width:0;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-category-cell{
+  display:none!important;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-value-cell{
+  grid-area:value;
+  justify-self:start;
+  text-align:left!important;
+  font-size:12px;
+  font-weight:800;
+  line-height:1.15;
+  white-space:nowrap;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-status-cell{
+  grid-area:status;
+  justify-self:end;
+  white-space:nowrap;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-actions-cell{
+  grid-area:actions;
+  justify-self:end;
+  text-align:right!important;
+  white-space:nowrap;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-name-cell{
+  display:flex;
+  align-items:center;
+  align-content:center;
+  gap:5px 7px;
+  flex-wrap:wrap;
+  min-width:0;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-name-main{
+  display:flex;
+  align-items:center;
+  gap:5px;
+  flex:0 1 auto;
+  min-width:0;
+  flex-wrap:nowrap;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-name-text{
+  display:block;
+  font-size:clamp(11.5px,3.25vw,13px);
+  line-height:1.2;
+  font-weight:780;
+  letter-spacing:-.01em;
+  white-space:nowrap;
+  word-break:normal;
+  overflow-wrap:normal;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-location-inline,
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-destination-inline,
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-source-line{
+  display:inline-flex;
+  align-items:center;
+  flex:0 1 auto;
+  max-width:100%;
+  margin:0!important;
+  padding:2px 6px;
+  border-radius:999px;
+  font-size:9px;
+  line-height:1.2;
+  font-weight:700;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-source-line{
+  color:var(--muted);
+  background:rgba(255,255,255,.035);
+  border:1px solid rgba(255,255,255,.055);
+}
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-recurrence,
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-meta-row{
+  flex:1 0 100%;
+  margin:0!important;
+  font-size:8.7px;
+  line-height:1.2;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table .cheque-status{
+  padding:3px 7px;
+  gap:5px;
+  font-size:9.5px;
+  line-height:1.15;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table .cheque-status::before{
+  width:5px;
+  height:5px;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-actions{
+  gap:0;
+}
+html[data-interface-mode="smartphone"] .budget-launch-table .launch-actions button{
+  width:27px;
+  height:27px;
+  min-width:27px;
+  min-height:27px;
+  padding:0;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:12px;
+}
+html[data-interface-mode="smartphone"] #view-body>.dash-grid>.panel-box:first-child{
+  padding-left:12px;
+  padding-right:12px;
+}
+
+@media(max-width:370px){
+  html[data-interface-mode="smartphone"] .topbar-controls .month-nav-wrap{min-width:126px;flex-basis:166px;}
+  html[data-interface-mode="smartphone"] .topbar-controls .reserve-last-movement-top span{font-size:7px!important;}
+  html[data-interface-mode="smartphone"] .topbar-controls .reserve-last-movement-top strong{font-size:9px!important;}
+  html[data-interface-mode="smartphone"] .budget-launch-table tbody tr{grid-template-columns:38px minmax(0,1fr) auto auto;column-gap:5px;}
+  html[data-interface-mode="smartphone"] .budget-launch-table .launch-name-text{font-size:11px;}
+}

@@ -49,7 +49,7 @@ body::before{
   content:'';
   position:fixed;
   inset:0;
-  background-image:url('../icon-512-maskable.png');
+  background-image:url('../borion-emblem.png');
   background-size:min(42vw, 540px);
   background-position:center 58%;
   background-repeat:no-repeat;
@@ -4228,7 +4228,7 @@ html[data-interface-mode="smartphone"] .topbar > .topbar-title-row .topbar-title
 
 
 /* ---------- V6.46.35 — microajustes mobile sem sobreposição ---------- */
-.topbar h1 .topbar-title-text{min-width:0;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+html[data-interface-mode="smartphone"] .topbar h1 .topbar-title-text{min-width:0;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 html[data-interface-mode="smartphone"] .topbar h1{min-width:0!important;overflow:hidden!important;}
 html[data-interface-mode="smartphone"] .topbar h1 .topbar-title-text{flex:1 1 auto;min-width:0;}
 html[data-interface-mode="smartphone"] .topbar h1 .eye{flex:0 0 18px!important;width:18px;height:18px;}
@@ -4246,4 +4246,23 @@ html[data-interface-mode="smartphone"] .topbar-controls .mobile-month-picker{min
   }
   html[data-interface-mode="smartphone"] .topbar h1{font-size:15px!important;}
   html[data-interface-mode="smartphone"] .topbar h1 .eye{flex-basis:16px!important;width:16px;height:16px;}
+}
+
+/* ---------- V6.46.36 — topo Pro restaurado e marca d’água sem quadrado ---------- */
+/* No modo desktop/Pro, status, filtro, competência e sino voltam a ocupar uma linha
+   organizada. As regras do Smartphone Mode acima permanecem intactas. */
+html:not([data-interface-mode="smartphone"]) .topbar-controls{
+  display:flex;
+  align-items:flex-start;
+  justify-content:flex-end;
+  gap:10px;
+  flex-wrap:wrap;
+  max-width:100%;
+  min-width:0;
+}
+html:not([data-interface-mode="smartphone"]) .topbar-controls > *{
+  flex:0 0 auto;
+}
+html:not([data-interface-mode="smartphone"]) .topbar-controls .month-nav-wrap{
+  margin:0;
 }

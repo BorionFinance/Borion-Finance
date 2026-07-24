@@ -611,7 +611,7 @@ function renderView(){
         <button class="mobile-menu-btn" title="Abrir menu" aria-label="Abrir menu" onclick="MobileMenu.open()"><span></span><span></span><span></span></button>
         <div class="topbar-title">
           <p class="hello">${greeting()}, ${esc(S.currentProfile.name)}</p>
-          <h1><span class="topbar-title-text">${topbarTitle}</span><span class="eye" onclick="toggleValuesHidden()" title="${S.valuesHidden?'Mostrar valores':'Ocultar valores'}">${eyeIconSVG(S.valuesHidden)}</span></h1>
+          <h1>${smartphoneMode?`<span class="topbar-title-text">${topbarTitle}</span>`:titles[S.view]}<span class="eye" onclick="toggleValuesHidden()" title="${S.valuesHidden?'Mostrar valores':'Ocultar valores'}">${eyeIconSVG(S.valuesHidden)}</span></h1>
           ${reserveLastMovement?`<div class="mobile-reserve-last">${reserveLastMovement}</div>`:''}
         </div>
       </div>

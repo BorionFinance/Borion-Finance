@@ -17,7 +17,7 @@ function el(html){const t=document.createElement('template');t.innerHTML=html.tr
    que troque o conteúdo de #root por baixo dele. */
 function ensureBorionVersionBadge(){
   if(typeof document==='undefined')return;
-  const v=(typeof BORION_APP_VERSION!=='undefined'&&BORION_APP_VERSION)?BORION_APP_VERSION:'6.46.35';
+  const v=(typeof BORION_APP_VERSION!=='undefined'&&BORION_APP_VERSION)?BORION_APP_VERSION:'6.46.36';
   let badge=document.getElementById('borion_version_badge');
   if(!badge){
     badge=document.createElement('div');

@@ -1,0 +1,12 @@
+BORION FINANCE — V6.46.36
+
+AJUSTES DESTA ENTREGA
+- Restaura no modo desktop/Pro a disposição horizontal e espaçada da área acima do calendário.
+- Mantém o cabeçalho compacto atual do Smartphone Mode sem alterações visuais ou funcionais.
+- Remove o quadrado preto da marca d’água do fundo ao trocar o ícone maskable opaco pelo emblema transparente.
+- Mantém as integrações Marco Iris e Amanda Estética em segundo plano, sem modal bloqueante.
+- Mantém a versão visível somente nas telas de acesso, carregamento e erro.
+
+BASE
+- Construída sobre a v6.46.35.
+- Nenhuma regra de sincronização, importação, lançamento ou exclusão foi revertida.

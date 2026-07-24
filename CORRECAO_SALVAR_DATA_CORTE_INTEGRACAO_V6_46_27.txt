@@ -1,0 +1,29 @@
+BORION FINANCE V6.46.27 — CORREÇÃO AO SALVAR DATA DE CORTE DA INTEGRAÇÃO
+
+PROBLEMA
+Ao confirmar a data de corte em Configurações > Integrações, o app abria imediatamente a tela "Falha ao confirmar no Google Drive". Em alguns testes aparecia "Alteração protegida no Drive; aguardando consolidação do snapshot".
+
+CAUSA CONFIRMADA
+O fluxo fazia saveProfileData(), que no modo Drive estrito já chama queueSave() e inicia um commit imediato. Logo depois, forceImmediateSync() chamava queueSave() e forceSyncNow() novamente. A segunda chamada aumentava a revisão durante a consolidação da primeira. O mecanismo de proteção interpretava que existia uma revisão nova no meio do salvamento e bloqueava a interface, embora a própria tela de integração tivesse criado essa concorrência artificial.
+
+CORREÇÃO
+- Criado GoogleDriveProvider.joinOrRequestStrictCommit().
+- No modo Drive estrito, a integração agora aguarda o commit já em andamento; não inicia outro por cima.
+- Se a operação já estiver protegida no journal, o commit estrito conclui a consolidação pendente do current.json antes de declarar sucesso.
+- Data de corte, "Só a partir de agora", remoção do corte e modo de aprovação aguardam a confirmação do único commit antes de exibir sucesso.
+- Fora do modo estrito, o salvamento imediato anterior foi preservado.
+- Proteção do journal, consolidação do current.json e bloqueio em erro real continuam ativos.
+
+ARQUIVOS ALTERADOS
+- js/01c-google-drive-provider.js
+- js/24-interconnections.js
+- index.html, sw.js, manifest.json, js/02-backup-local.js e js/13-settings.js (versão/cache 6.46.27)
+
+VALIDAÇÃO
+- Sintaxe JavaScript validada.
+- Manifest JSON validado.
+- Referências locais do index verificadas.
+- Pacote sem current.json ou dados financeiros de usuário.
+
+TESTE REAL
+Escolher uma data de corte, confirmar, aguardar a mensagem de sucesso, recarregar o app e verificar se a data permaneceu. Repetir com "Só a partir de agora" e "Importar todo o histórico".

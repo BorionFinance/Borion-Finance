@@ -1739,7 +1739,7 @@
       applyConfirmedInstanceRebind(live.data,live.config,snapshot);
       saveProfileData(live.profile.id,live.data);
       if(S.currentProfile&&String(S.currentProfile.id)===String(live.profile.id)) saveCurrentData();
-      forceImmediateSync();
+      forceImmediateSync('interop_instance_rebind');
       uiSourceAppId=sourceAppId;uiTab='connection';
       if(typeof renderView==='function') renderView();
       if(typeof toast==='function') toast('Nova instalação vinculada. Revise a data de corte e clique em Sincronizar agora.');
@@ -1796,29 +1796,41 @@
   function confirmCutoffChange(message){
     return typeof confirm!=='function' || confirm(message);
   }
-  // V6.45.4 — além do saveProfileData (grava local na hora), força uma sincronização
-  // imediata com o Drive em vez de esperar o debounce normal de fila (1.2s). Um
-  // ajuste crítico como a data de corte não deve ficar nem um instante exposto a uma
-  // atualização remota concorrente sobrescrever o que acabou de ser salvo.
+  // V6.46.27 — saveProfileData() já inicia o commit no modo Drive estrito.
+  // Não pode chamar queueSave()+forceSyncNow() de novo por cima: isso aumentava a
+  // revisão enquanto o primeiro snapshot ainda estava consolidando e disparava o
+  // bloqueio ao salvar a data de corte. No modo estrito, apenas entra na mesma
+  // Promise já em andamento. Fora dele, preserva o salvamento imediato anterior.
   function forceImmediateSync(reason='interop_critical_setting'){
     return Promise.resolve().then(async()=>{
       try{
-        if(!(window.GoogleDriveProvider&&GoogleDriveProvider.isConnected()))return {localOnly:true};
-        GoogleDriveProvider.queueSave();
-        const result=typeof GoogleDriveProvider.forceSyncNow==='function'
-          ?await GoogleDriveProvider.forceSyncNow({reason})
-          :await GoogleDriveProvider.syncNow({source:reason});
-        return {synced:true,result};
+        const provider=window.GoogleDriveProvider||null;
+        if(!(provider&&provider.isConnected()))return {localOnly:true,synced:false};
+        let result;
+        const strict=typeof provider._isStrictMode==='function'&&provider._isStrictMode();
+        if(strict){
+          result=typeof provider.joinOrRequestStrictCommit==='function'
+            ?await provider.joinOrRequestStrictCommit(reason)
+            :(provider._strictCommitPromise
+              ?await provider._strictCommitPromise
+              :await provider.queueSave({source:reason}));
+        }else{
+          provider.queueSave({source:reason});
+          result=typeof provider.forceSyncNow==='function'
+            ?await provider.forceSyncNow({reason})
+            :await provider.syncNow({source:reason});
+        }
+        const consolidationPending=typeof provider.hasPersistedConsolidation==='function'&&provider.hasPersistedConsolidation();
+        const pending=result!==true||!!provider.dirty||!!consolidationPending;
+        return {synced:!pending,pending,result};
       }catch(error){
         console.warn('[BORION_INTEROP][IMMEDIATE_SYNC_PENDING]',error);
-        /* A pendência já ficou gravada localmente pela queueSave. Não rejeitar aqui
-           evita tratar uma falha temporária de rede como perda da exclusão. */
         return {synced:false,pending:true,error:String(error?.message||error)};
       }
     });
   }
   function persistCriticalChange(reason='interop_critical_change'){return forceImmediateSync(reason);}
-  function setImportCutoff(sourceAppId, dateValue){
+  async function setImportCutoff(sourceAppId, dateValue){
     const row = findSourceConfig(sourceAppId);
     if(!row) return false;
     const trimmed = String(dateValue || '').trim();
@@ -1829,29 +1841,32 @@
     if(!confirmCutoffChange('Confirmar o corte de importação? Somente registros a partir de '+displayDate+' serão considerados.')) return false;
     row.config.importCutoffAt = parsed.toISOString();
     saveProfileData(row.profile.id, row.data);
-    forceImmediateSync();
+    const syncResult=await persistCriticalChange('interop_import_cutoff_date');
+    if(window.GoogleDriveProvider&&GoogleDriveProvider._isStrictMode?.()&&!syncResult.synced)return false;
     if(typeof toast === 'function') toast('A partir de agora, só entram sozinhos lançamentos de ' + sourceName(sourceAppId) + ' a partir de ' + dateText(row.config.importCutoffAt) + '. O que já foi importado antes continua como está.');
     if(typeof renderView === 'function') renderView();
     return true;
   }
-  function setImportCutoffNow(sourceAppId){
+  async function setImportCutoffNow(sourceAppId){
     const row = findSourceConfig(sourceAppId);
     if(!row) return false;
     if(!confirmCutoffChange('Confirmar o corte a partir de agora? Registros anteriores não serão importados automaticamente.')) return false;
     row.config.importCutoffAt = nowIso();
     saveProfileData(row.profile.id, row.data);
-    forceImmediateSync();
+    const syncResult=await persistCriticalChange('interop_import_cutoff_now');
+    if(window.GoogleDriveProvider&&GoogleDriveProvider._isStrictMode?.()&&!syncResult.synced)return false;
     if(typeof toast === 'function') toast('Definido: a partir de agora, só entram sozinhos lançamentos novos de ' + sourceName(sourceAppId) + '. Testes e histórico anteriores a agora não serão importados automaticamente.');
     if(typeof renderView === 'function') renderView();
     return true;
   }
-  function clearImportCutoff(sourceAppId){
+  async function clearImportCutoff(sourceAppId){
     const row = findSourceConfig(sourceAppId);
     if(!row) return false;
     if(!confirmCutoffChange('Remover o corte e permitir que todo o histórico volte a ser considerado?')) return false;
     row.config.importCutoffAt = '';
     saveProfileData(row.profile.id, row.data);
-    forceImmediateSync();
+    const syncResult=await persistCriticalChange('interop_import_cutoff_clear');
+    if(window.GoogleDriveProvider&&GoogleDriveProvider._isStrictMode?.()&&!syncResult.synced)return false;
     if(typeof toast === 'function') toast('Corte removido: todo o histórico de ' + sourceName(sourceAppId) + ' volta a valer para importação automática.');
     if(typeof renderView === 'function') renderView();
     return true;
@@ -1863,13 +1878,14 @@
   // nunca importar sozinha — ela só avisa que há lançamentos novos disponíveis e
   // aguarda confirmação explícita (ver checkAskModeSource/syncAll). É por perfil,
   // não por integração: vale para todas as origens conectadas àquele perfil.
-  function setImportApprovalMode(mode, {silent=false}={}){
+  async function setImportApprovalMode(mode, {silent=false}={}){
     const normalized = mode === 'ask' ? 'ask' : 'auto';
     if(!S.currentProfile || !S.data) return false;
     const interop = ensureInterop(S.data);
     interop.importApprovalMode = normalized;
     saveProfileData(S.currentProfile.id, S.data);
-    forceImmediateSync();
+    const syncResult=await persistCriticalChange('interop_import_approval_mode');
+    if(window.GoogleDriveProvider&&GoogleDriveProvider._isStrictMode?.()&&!syncResult.synced)return false;
     if(!silent && typeof toast === 'function'){
       toast(normalized==='ask'
         ? 'A partir de agora, o Borion sempre pergunta antes de importar novos lançamentos automaticamente.'

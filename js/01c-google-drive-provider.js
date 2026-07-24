@@ -1,4 +1,4 @@
-/* Borion Finance — Google Drive Provider (V6.46.26 — Corrige loop de "sessão expirada" na reconexão)
+/* Borion Finance — Google Drive Provider (V6.46.27 — Corrige corrida ao salvar data de corte da integração)
 
    Arquitetura 6.40.2: current.json é apenas o snapshot consolidado. Toda alteração
    é protegida primeiro como operação imutável, identificada por operationId, e só
@@ -1033,7 +1033,14 @@ const GoogleDriveProvider = {
           let ok=false;
           for(let attempt=0;;attempt++){
             ok=await this.forceSyncNow({payload,reason:'strict_'+source});
-            if(ok===true)break;
+            // V6.46.27 — syncNow() considera a alteração segura assim que a operação
+            // imutável existe no Drive, mesmo que o current.json ainda esteja aguardando
+            // consolidação. Para o commit ESTRITO isso ainda não é confirmação final.
+            // Conclui a consolidação pendente na mesma fila antes de liberar a tela.
+            if(ok===true&&this.hasPersistedConsolidation()){
+              ok=await this.resumePendingSync('strict_'+source+'_consolidation');
+            }
+            if(ok===true&&!this.hasPersistedConsolidation())break;
             if(navigator.onLine&&attempt<2&&!this.authRequired&&this._looksLikeTransientNetworkError(this.lastSyncError)){
               await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)));
               continue;
@@ -1059,6 +1066,19 @@ const GoogleDriveProvider = {
       }finally{this._strictCommitPromise=null;}
     })();
     return this._strictCommitPromise;
+  },
+
+  // V6.46.27 — configurações críticas da integração já passam primeiro por
+  // saveProfileData(), que chama queueSave() e inicia o commit estrito. O código
+  // antigo chamava forceSyncNow() logo em seguida, criando uma segunda revisão no
+  // meio da consolidação da primeira. Isso fazia um salvamento válido parecer uma
+  // alteração concorrente e abria a tela de falha ao confirmar a data de corte.
+  // Este ponto de entrada apenas aguarda o commit que já existe; só inicia um novo
+  // quando realmente não há nenhum em andamento.
+  joinOrRequestStrictCommit(source='change'){
+    if(!this._isStrictMode())return null;
+    if(this._strictCommitPromise)return this._strictCommitPromise;
+    return this.requestStrictCommit(source);
   },
 
   async _refreshPendingQueueCount(){

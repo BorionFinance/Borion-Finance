@@ -1,4 +1,4 @@
-/* Borion Finance — Google Drive Provider (V6.46.22 — Reconexão OAuth estável)
+/* Borion Finance — Google Drive Provider (V6.46.23 — Corrige loop de "sessão expirada" na reconexão)
 
    Arquitetura 6.40.2: current.json é apenas o snapshot consolidado. Toda alteração
    é protegida primeiro como operação imutável, identificada por operationId, e só
@@ -759,6 +759,7 @@ const GoogleDriveProvider = {
   _lastFailureToastAt: 0,
   _strictCommitPromise:null,_strictCommitAgain:false,_strictPendingPayload:null,_strictOverlay:null,_strictAuthTimer:null,
   _strictReconnectPromise:null,_strictReconnectInProgress:false,
+  _connecting:false,
   _pendingProfileMetadata:new Map(),
 
   markProfileMetadataChanged(profile){
@@ -813,6 +814,7 @@ const GoogleDriveProvider = {
 
   _isAuthError(error){
     if(error&&Number(error.status)===401) return true;
+    if(error&&error.code==='AUTH_WRONG_ACCOUNT') return true;
     const msg = String((error && error.message) || error || '');
     return /status\s*401|oauth|token|google recusou|login com google|renova|popup|access[_ -]?denied|interaction[_ -]?required/i.test(msg);
   },
@@ -823,7 +825,7 @@ const GoogleDriveProvider = {
   hasUsableToken(){return !!(GoogleDriveAuth.accessToken&&Date.now()<GoogleDriveAuth.tokenExpiresAt-60000);},
 
   isAuthFlowInProgress(){
-    return !!(this._strictReconnectInProgress||(GoogleDriveAuth&&typeof GoogleDriveAuth.isLoginInProgress==='function'&&GoogleDriveAuth.isLoginInProgress()));
+    return !!(this._connecting||this._strictReconnectInProgress||(GoogleDriveAuth&&typeof GoogleDriveAuth.isLoginInProgress==='function'&&GoogleDriveAuth.isLoginInProgress()));
   },
 
   isStrictCloudReady(){return !!(this._isStrictMode()&&this.isConnected()&&this.currentFileId&&navigator.onLine&&!this.authRequired&&this.hasUsableToken());},
@@ -902,7 +904,7 @@ const GoogleDriveProvider = {
       try{
         if(status)status.textContent='Aguardando a confirmação do Google...';
         await GoogleDriveAuth.login(true);
-        if(previousSub&&GoogleDriveAuth.user&&GoogleDriveAuth.user.sub!==previousSub)throw new Error('Use a mesma conta Google que já está vinculada a esta pasta.');
+        if(previousSub&&GoogleDriveAuth.user&&GoogleDriveAuth.user.sub!==previousSub)throw Object.assign(new Error('Use a mesma conta Google que já está vinculada a esta pasta.'),{code:'AUTH_WRONG_ACCOUNT'});
 
         // Confirma a pasta e o current.json com o token recém-renovado antes de
         // liberar o aplicativo. Isso impede falso positivo de login concluído.
@@ -936,12 +938,24 @@ const GoogleDriveProvider = {
         this._refreshStatusUI();
         return true;
       }catch(e){
-        this.authRequired=true;
+        // V6.46.23 — antes, QUALQUER falha aqui (mesmo sem nenhuma relação com login/
+        // token, como a pasta ainda não ter sido validada ou o current.json ainda não
+        // ter sido encontrado logo após ganhar acesso a uma pasta compartilhada) forçava
+        // authRequired=true e só oferecia "Entrar novamente com o Google" — obrigando
+        // um novo popup de consentimento inteiro a cada tentativa, mesmo que o login em
+        // si já tivesse acabado de funcionar segundos antes. Isso prendia a pessoa (ex:
+        // um colaborador entrando pela primeira vez numa pasta recém-compartilhada) num
+        // loop de "sessão expirada" que nunca se resolvia, porque o problema real nunca
+        // era a sessão do Google. Agora só marca authRequired=true quando o erro É
+        // mesmo de autenticação (via _isAuthError); qualquer outra falha libera um
+        // "Tentar novamente" que reaproveita o token que acabou de ser confirmado.
+        const isAuth=this._isAuthError(e);
+        this.authRequired=isAuth;
         this.lastSyncError=String(e&&e.message||e);
         const liveStatus=this._strictStatusElement()||status;
         const liveButton=typeof document!=='undefined'?document.getElementById('gdrive_strict_reconnect')||button:null;
         if(liveStatus)liveStatus.textContent=this.lastSyncError;
-        if(liveButton){liveButton.disabled=false;liveButton.textContent='Entrar novamente com o Google';}
+        if(liveButton){liveButton.disabled=false;liveButton.textContent=isAuth?'Entrar novamente com o Google':'Tentar novamente';}
         return false;
       }
     })();
@@ -1174,52 +1188,69 @@ const GoogleDriveProvider = {
      função já decide sozinha pra qual tela ir (Gate normal ou onboarding de pasta
      vazia) — quem chama connect() não precisa mais renderizar nada depois. */
   async connect(interactive,options={}){
-    if(window.BootProgress)BootProgress.setStage('google_identity');
-    await GoogleDriveAuth.login(interactive);
-    const devicePromise=(async()=>{if(!this._deviceId&&window.BorionDevice640)this._deviceId=await BorionDevice640.getOrCreateDeviceId();if(window.BorionDevice640)BorionDevice640.newSessionId();})();
-    if(window.BorionMultiTab640&&!BorionMultiTab640.tabId){
-      BorionMultiTab640.init({
-        onBecomeLeader:()=>{if(this.dirty||this.hasPersistedPending()||this.hasPersistedConsolidation())this.resumePendingSync('multitab_leader');},
-        onPendingFromFollower:()=>{if(this.hasPersistedPending())this.dirty=true;this.resumePendingSync('multitab_follower_notify');},
-        onAccountUpdated:meta=>this.applySharedAccountUpdateFromLeader6402(meta)
-      });
+    // V6.46.23 — antes, o guard isAuthFlowInProgress() (usado pelo watchdog e pelos
+    // listeners de pointerdown/submit que travam a tela com "sessão expirada") só
+    // ficava "ligado" durante a troca do token OAuth em si — GoogleDriveAuth.login()
+    // já tinha terminado (e o guard já desligado) bem ANTES da pessoa escolher a
+    // pasta e do loadFromDrive() ler o current.json, que é justamente a parte mais
+    // demorada e mais provável de coincidir com um toque impaciente na tela. Um
+    // toque nesse meio-tempo (isStrictCloudReady() ainda false porque currentFileId
+    // não foi setado) disparava lockStrictCloud() por cima do connect() ainda em
+    // andamento, prendendo quem estava entrando pela primeira vez (ex: um
+    // colaborador novo numa pasta recém-compartilhada) num loop de "sessão
+    // expirada" que nunca era sobre a sessão de verdade. Agora o guard cobre a
+    // conexão inteira, do login à leitura do Drive.
+    this._connecting=true;
+    try{
+      if(window.BootProgress)BootProgress.setStage('google_identity');
+      await GoogleDriveAuth.login(interactive);
+      const devicePromise=(async()=>{if(!this._deviceId&&window.BorionDevice640)this._deviceId=await BorionDevice640.getOrCreateDeviceId();if(window.BorionDevice640)BorionDevice640.newSessionId();})();
+      if(window.BorionMultiTab640&&!BorionMultiTab640.tabId){
+        BorionMultiTab640.init({
+          onBecomeLeader:()=>{if(this.dirty||this.hasPersistedPending()||this.hasPersistedConsolidation())this.resumePendingSync('multitab_leader');},
+          onPendingFromFollower:()=>{if(this.hasPersistedPending())this.dirty=true;this.resumePendingSync('multitab_follower_notify');},
+          onAccountUpdated:meta=>this.applySharedAccountUpdateFromLeader6402(meta)
+        });
+      }
+      const sub=GoogleDriveAuth.user.sub;let folderId=gdriveReadFolderId(sub),justPicked=false,folderMeta=null;
+      if(window.BootProgress)BootProgress.setStage('folder');
+      if(folderId){
+        const validated=await this.getValidatedFolderMeta(folderId);
+        if(!validated.exists){gdriveForgetFolderId(sub);gdriveForgetCurrentFileCache(folderId);folderId=null;}
+        else folderMeta=validated.meta;
+      }
+      if(!folderId){
+        if(window.BootProgress)BootProgress.setDetail('Aguardando você escolher a pasta compartilhada');
+        const folder=await openDriveFolderPicker();
+        folderId=folder.id;folderMeta={id:folder.id,name:folder.name||folder.displayName||'Pasta do Borion',mimeType:'application/vnd.google-apps.folder'};
+        gdriveWriteFolderId(sub,folderId);justPicked=true;
+      }
+      await devicePromise;
+      this.folderId=folderId;this.folderName=folderMeta&&folderMeta.name||null;
+      if(justPicked&&typeof toast==='function')toast('Conectado à pasta \"'+(this.folderName||'')+'\" — confira em Configurações → Nuvem.');
+      setStorageMode('google_drive');
+      this.autosaveSlotIndex=gdriveReadSlotIndex(this.folderId,'autosave');this.forcesaveSlotIndex=gdriveReadSlotIndex(this.folderId,'forcesave');
+      const result=await this.loadFromDrive();
+      if(window.BorionStrictDrive&&!BorionStrictDrive.shouldUseMemory()&&result&&result.pending){
+        const recovered=await this.resumePendingSync('strict_migration_recovery');
+        if(recovered!==true&&(this.dirty||this.hasPersistedConsolidation()))throw new Error('Existe uma alteração antiga pendente e o Google Drive ainda não confirmou a recuperação. O app permanecerá bloqueado.');
+      }
+      if(window.BorionStrictDrive)await BorionStrictDrive.activate();
+      if(this._isStrictMode()&&(this.dirty||this.hasPersistedConsolidation())){
+        const confirmed=await this.resumePendingSync('strict_boot_confirmation');
+        if(confirmed!==true&&(this.dirty||this.hasPersistedConsolidation()))throw new Error('O Google Drive não confirmou todas as alterações antes da abertura. O app permanecerá bloqueado.');
+      }
+      this.startAutosaveLoop();this.startLivePollLoop();this.startStrictAuthWatchdog();this._refreshPendingQueueCount().catch(()=>{});
+      if(window.BorionDriveJournal640&&BorionDriveJournal640.ensureAppliedFolder)setTimeout(()=>BorionDriveJournal640.ensureAppliedFolder(this.folderId).catch(e=>console.warn('[GoogleDriveProvider] organização gradual do journal foi adiada:',e)),0);
+      if(window.BackupFS)BackupFS.maybeDailyDriveSnapshot().catch(e=>console.warn('[GoogleDriveProvider] ponto diário imutável falhou (não crítico):',e));
+      if(!options.suppressRender){
+        if(result&&result.empty)renderGoogleDriveOnboarding();
+        else{S.gate={mode:'list',error:''};renderGate();}
+      }
+      return result;
+    }finally{
+      this._connecting=false;
     }
-    const sub=GoogleDriveAuth.user.sub;let folderId=gdriveReadFolderId(sub),justPicked=false,folderMeta=null;
-    if(window.BootProgress)BootProgress.setStage('folder');
-    if(folderId){
-      const validated=await this.getValidatedFolderMeta(folderId);
-      if(!validated.exists){gdriveForgetFolderId(sub);gdriveForgetCurrentFileCache(folderId);folderId=null;}
-      else folderMeta=validated.meta;
-    }
-    if(!folderId){
-      if(window.BootProgress)BootProgress.setDetail('Aguardando você escolher a pasta compartilhada');
-      const folder=await openDriveFolderPicker();
-      folderId=folder.id;folderMeta={id:folder.id,name:folder.name||folder.displayName||'Pasta do Borion',mimeType:'application/vnd.google-apps.folder'};
-      gdriveWriteFolderId(sub,folderId);justPicked=true;
-    }
-    await devicePromise;
-    this.folderId=folderId;this.folderName=folderMeta&&folderMeta.name||null;
-    if(justPicked&&typeof toast==='function')toast('Conectado à pasta \"'+(this.folderName||'')+'\" — confira em Configurações → Nuvem.');
-    setStorageMode('google_drive');
-    this.autosaveSlotIndex=gdriveReadSlotIndex(this.folderId,'autosave');this.forcesaveSlotIndex=gdriveReadSlotIndex(this.folderId,'forcesave');
-    const result=await this.loadFromDrive();
-    if(window.BorionStrictDrive&&!BorionStrictDrive.shouldUseMemory()&&result&&result.pending){
-      const recovered=await this.resumePendingSync('strict_migration_recovery');
-      if(recovered!==true&&(this.dirty||this.hasPersistedConsolidation()))throw new Error('Existe uma alteração antiga pendente e o Google Drive ainda não confirmou a recuperação. O app permanecerá bloqueado.');
-    }
-    if(window.BorionStrictDrive)await BorionStrictDrive.activate();
-    if(this._isStrictMode()&&(this.dirty||this.hasPersistedConsolidation())){
-      const confirmed=await this.resumePendingSync('strict_boot_confirmation');
-      if(confirmed!==true&&(this.dirty||this.hasPersistedConsolidation()))throw new Error('O Google Drive não confirmou todas as alterações antes da abertura. O app permanecerá bloqueado.');
-    }
-    this.startAutosaveLoop();this.startLivePollLoop();this.startStrictAuthWatchdog();this._refreshPendingQueueCount().catch(()=>{});
-    if(window.BorionDriveJournal640&&BorionDriveJournal640.ensureAppliedFolder)setTimeout(()=>BorionDriveJournal640.ensureAppliedFolder(this.folderId).catch(e=>console.warn('[GoogleDriveProvider] organização gradual do journal foi adiada:',e)),0);
-    if(window.BackupFS)BackupFS.maybeDailyDriveSnapshot().catch(e=>console.warn('[GoogleDriveProvider] ponto diário imutável falhou (não crítico):',e));
-    if(!options.suppressRender){
-      if(result&&result.empty)renderGoogleDriveOnboarding();
-      else{S.gate={mode:'list',error:''};renderGate();}
-    }
-    return result;
   },
 
   /* V6.13.0 — bug real corrigido: essa função tratava QUALQUER erro (rede

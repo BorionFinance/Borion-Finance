@@ -1,0 +1,15 @@
+BORION FINANCE V6.46.23 — CORREÇÃO DO LOOP DE "SESSÃO EXPIRADA" NO LOGIN
+
+- Corrige o guard que impedia a tela de travar durante o login: antes ele só
+  cobria a troca do token OAuth; agora cobre a conexão inteira (login +
+  escolha da pasta + carregamento do current.json). Um toque na tela nesse
+  meio-tempo não dispara mais "sessão expirada" por cima de uma conexão que
+  ainda está em andamento.
+- Corrige reconnectStrictCloud(): antes, qualquer falha na reconexão (mesmo
+  sem relação nenhuma com login/token) forçava um novo popup completo do
+  Google a cada tentativa. Agora só exige login novo quando o erro é
+  realmente de autenticação; outras falhas liberam "Tentar novamente"
+  reaproveitando o token que acabou de ser confirmado.
+- Identifica de forma explícita o erro de "conta Google errada" (em vez de
+  depender de texto solto na mensagem), evitando falso negativo nessa
+  checagem.

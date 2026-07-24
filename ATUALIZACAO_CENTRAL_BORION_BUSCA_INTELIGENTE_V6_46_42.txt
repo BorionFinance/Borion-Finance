@@ -1,0 +1,12 @@
+BORION FINANCE — V6.46.42
+
+Atualizações da Central do Borion:
+- Central atualizada sem alterar regras financeiras ou sincronização.
+- Busca melhorada com tokens, sinônimos e correspondência por passo a passo.
+- Consultas como "como lançar compra parcelada" agora localizam o guia correto.
+- Resultados do guia são reordenados por relevância durante a pesquisa.
+- Primeiros resultados relevantes podem abrir automaticamente para acelerar a leitura.
+- Estrutura preparada para exibir imagens nos guias no futuro.
+
+Observação sobre imagens:
+- Para imagens exatas da interface, o ideal é usar screenshots reais do Borion.

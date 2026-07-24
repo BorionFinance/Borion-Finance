@@ -1,0 +1,15 @@
+BORION FINANCE — V6.46.43
+
+Atualização visual e organizacional das Configurações:
+- Backups, importação, exportação e sincronização centralizados em Backups / Dados.
+- Pasta local integrada ao bloco Backups neste dispositivo.
+- Criar backup agora em verde.
+- Importar JSON em azul escuro.
+- Exportar conta completa em azul claro.
+- Sair da conta Google em vermelho.
+- Campo Conta logada removido do Perfil.
+- Importar JSON e Backup deste perfil removidos da aba Perfis.
+- Salvar perfil financeiro virou um botão compacto com símbolo de salvar.
+- Textos repetitivos de Menu, Dashboard e Personalização removidos.
+- Ajuda contextual por ? com explicação curta e botão Ver mais para a Central do Borion.
+- Central atualizada com os novos fluxos e palavras-chave.

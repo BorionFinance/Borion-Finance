@@ -4,7 +4,7 @@
 (function(){
 'use strict';
 
-const HELP_VERSION='1.1.0';
+const HELP_VERSION='1.3.0';
 const HELP_CATEGORIES=[
   {id:'inicio',icon:'✦',title:'Primeiros passos'},
   {id:'navegacao',icon:'⌘',title:'Navegação e visão geral'},
@@ -21,7 +21,7 @@ const HELP_CATEGORIES=[
 ];
 const CAT_BY_ID=Object.fromEntries(HELP_CATEGORIES.map(c=>[c.id,c]));
 
-function article(id,category,title,intro,steps,tips=[],keywords=[]){return {id,category,title,intro,steps,tips,keywords};}
+function article(id,category,title,intro,steps,tips=[],keywords=[],media=[]){return {id,category,title,intro,steps,tips,keywords,media};}
 const HELP_ARTICLES=[
   article('primeiro-acesso','inicio','Começar a usar o Borion do zero','O fluxo seguro é criar ou abrir um perfil, cadastrar onde o dinheiro existe e só depois lançar movimentações.',[
     'Abra ou crie seu perfil financeiro na tela inicial. A senha do perfil é opcional e protege somente aquele perfil.',
@@ -123,7 +123,7 @@ const HELP_ARTICLES=[
     'Confira a previsão das parcelas e a primeira competência calculada com base no fechamento do cartão.',
     'Salve e abra Cartões e Contas → Faturas para conferir todas as parcelas.',
     'Edite a compra de origem quando precisar corrigir valor, categoria, loja ou parcelamento.'
-  ],['Não lance manualmente cada parcela como uma nova despesa. Isso duplica a dívida.'],['parcelado','parcelas','dia da fatura','fechamento','crédito']),
+  ] ,['Não lance manualmente cada parcela como uma nova despesa. Isso duplica a dívida.'],['parcelado','parcelas','dia da fatura','fechamento','crédito','como lançar compra parcelada','compra em parcelas','parcelamento no cartão','comprar parcelado','lançar no cartão','compra parcelada no cartão']),
 
   article('compra-compartilhada','cartoes','Dividir compra entre pessoas e controlar reembolsos','Compra compartilhada mantém o valor integral na fatura, conta apenas a parte do titular em Despesas e controla o que cada pessoa ainda precisa devolver.',[
     'Ao lançar uma despesa no Crédito, ative Compra compartilhada dentro do bloco do cartão.',
@@ -135,7 +135,7 @@ const HELP_ARTICLES=[
     'O recebimento será lançado automaticamente como Reembolso recebido: aumenta a conta escolhida, mas não aumenta a Receita do mês.',
     'Para corrigir um recebimento, abra o histórico da pessoa e use ↺. O saldo e o valor pendente serão restaurados.',
     'Para compras totalmente de outra pessoa, deixe Minha parte em R$ 0,00. A compra ficará na fatura e não contará como despesa pessoal.'
-  ],['Nunca lance o reembolso como Receita própria. Use o botão da compra compartilhada para manter fatura, despesa, saldo e valor a receber sincronizados.'],['compra compartilhada','dividir compra','reembolso','a receber','shopee','mercado livre','cartão compartilhado']),
+  ] ,['Nunca lance o reembolso como Receita própria. Use o botão da compra compartilhada para manter fatura, despesa, saldo e valor a receber sincronizados.'],['compra compartilhada','dividir compra','reembolso','a receber','shopee','mercado livre','cartão compartilhado','compra de várias pessoas','dividir com minha mãe','dividir com meu pai','como lançar compra compartilhada']),
 
   article('status-pagamento','lancamentos','Pago, Em aberto, Vencido e estorno','O status controla se a obrigação já afetou o saldo e como aparece nos relatórios.',[
     'Marque Pago quando o dinheiro já saiu da conta, carteira ou reserva.',
@@ -339,7 +339,7 @@ const HELP_ARTICLES=[
     'Abra Configurações → Dashboard para ligar ou desligar blocos da Visão geral.',
     'Ao reativar um bloco, ele pode subir para o topo para facilitar a montagem.',
     'Use Restaurar dashboard padrão quando quiser desfazer a seleção.'
-  ],[],['ativar módulo','ocultar módulo','dashboard','restaurar']),
+  ],[],['ativar módulo','ocultar módulo','dashboard','restaurar','desativar módulo apaga dados','módulo desativado perde dados','mostrar esconder menu']),
 
   article('categorias','personalizacao','Criar, renomear, colorir e ordenar categorias','Categorias são separadas entre Receita, Despesa fixa e Despesa variável.',[
     'Abra Configurações → Categorias.',
@@ -359,6 +359,15 @@ const HELP_ARTICLES=[
     'Teste a mudança em uma tela longa e em um formulário antes de manter.'
   ],[],['tema claro','tema escuro','fonte','smartphone mode','modo pro']),
 
+  article('ajuda-contextual-configuracoes','personalizacao','Usar os botões de ajuda nas Configurações','As Configurações foram simplificadas para mostrar somente controles essenciais. As explicações ficam nos pequenos botões de interrogação e na Central do Borion.',[
+    'Procure o símbolo ? ao lado do título de uma configuração.',
+    'Clique para abrir uma explicação curta sem sair da tela.',
+    'Use Ver mais para abrir a Central do Borion já pesquisando aquele assunto.',
+    'Em Menu e Dashboard, desativar uma área apenas oculta a interface; os dados continuam salvos.',
+    'Importação, exportação e backups ficam centralizados em Configurações → Backups / Dados.',
+    'No perfil, o botão com símbolo de disquete salva somente nome, avatar, cor e senha do perfil.'
+  ],[],['interrogação','ajuda rápida','ver mais','configurações clean','desativar módulo apaga dados','backup dados']),
+
   article('organizar-modulos','personalizacao','Reordenar e redimensionar módulos','O editor de layout muda posição, largura, altura e quantidade de colunas sem alterar os dados.',[
     'Abra a tela compatível e clique em Organizar módulos.',
     'Escolha entre 2 e 6 colunas quando o controle estiver disponível.',
@@ -368,6 +377,17 @@ const HELP_ARTICLES=[
     'Clique em Concluir para bloquear o layout.',
     'Use Restaurar para voltar ao padrão daquele conjunto.'
   ],['No celular, os módulos voltam para uma coluna para preservar leitura e scroll.'],['organizar módulos','redimensionar','altura','largura','colunas','arrastar']),
+
+  article('backup-dados-organizados','backup','Entender a área Backups / Dados','A tela reúne sincronização, exportação, importação, backups do Drive e backups locais em um único lugar.',[
+    'Sincronizar agora confirma alterações com a nuvem conectada.',
+    'Exportar conta completa cria um arquivo com todos os perfis da conta.',
+    'Exportar perfil atual cria uma cópia somente do perfil aberto.',
+    'Importar JSON restaura ou adiciona dados conforme a revisão apresentada pelo Borion.',
+    'Backups no Drive guardam o histórico remoto da conta.',
+    'Backups neste dispositivo guardam histórico no navegador e podem usar uma pasta local autorizada.',
+    'Escolher pasta de backups permite gravar cópias extras na subpasta Backups_Borion.',
+    'Sair da conta Google desconecta a nuvem e por isso aparece como ação vermelha.'
+  ],[],['backups dados','exportar conta completa','importar json','escolher pasta de backups','backup neste dispositivo','sair conta google']),
 
   article('backup-manual','backup','Salvar Drive & Local','O botão unificado usa o mesmo snapshot para o Google Drive e para o dispositivo, reduzindo divergências.',[
     'Abra Configurações ou use o atalho fixo do Modo Pro.',
@@ -532,6 +552,76 @@ const ORIGIN_TIMELINE=[
 ];
 
 function normalize(value){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR').replace(/\s+/g,' ').trim();}
+
+const HELP_STOPWORDS=new Set(['a','as','ao','aos','com','como','da','das','de','do','dos','e','em','entre','na','nas','no','nos','o','os','ou','para','por','pra','que','se','sem','um','uma','uns','umas']);
+const HELP_SYNONYMS={
+  lancar:['adicionar','cadastrar','criar','registrar','incluir'],
+  adicionar:['lancar','registrar','criar','cadastrar'],
+  compra:['despesa','gasto','compra'],
+  despesa:['compra','gasto','despesa'],
+  parcelada:['parcelado','parcelamento','parcelas','prestacoes'],
+  parcelado:['parcelada','parcelamento','parcelas','prestacoes'],
+  parcelas:['parcelada','parcelado','parcelamento','prestacoes'],
+  cartao:['credito','fatura','nubank','visa','mastercard'],
+  credito:['cartao','fatura'],
+  fatura:['cartao','credito','vencimento'],
+  reserva:['cofrinho','caixinha','objetivo'],
+  reembolso:['devolucao','ressarcimento','devolver'],
+  backup:['restaurar','exportar','importar','seguranca','copia'],
+  restaurar:['backup','voltar','recuperar'],
+  conta:['banco','conta'],
+  transferencia:['transferir','mover','enviar'],
+  transferir:['transferencia','mover','enviar'],
+  assinatura:['recorrencia','mensalidade','plano'],
+  pesquisa:['buscar','procurar','pesquisar'],
+  buscar:['pesquisa','procurar','pesquisar']
+};
+function helpTokens(value){
+  return Array.from(new Set(normalize(value).split(/[^a-z0-9]+/).filter(t=>t&&!HELP_STOPWORDS.has(t))));
+}
+function helpTokenVariants(token){
+  const out=new Set([token]);
+  (HELP_SYNONYMS[token]||[]).forEach(v=>out.add(v));
+  return Array.from(out);
+}
+function articleSearchText(a){
+  const c=CAT_BY_ID[a.category];
+  return normalize([c&&c.title,a.title,a.intro,...a.steps,...a.tips,...a.keywords].join(' '));
+}
+function articleSearchIndex(a){
+  const base=articleSearchText(a);
+  const extras=(a.keywords||[]).flatMap(k=>helpTokenVariants(normalize(k)));
+  return normalize([base,...extras].join(' '));
+}
+function computeSearchScore(query,searchText){
+  const qRaw=normalize(query),hay=normalize(searchText);
+  if(!qRaw) return 1;
+  const qTokens=helpTokens(qRaw);
+  if(!qTokens.length) return hay.includes(qRaw)?8:0;
+  const hayTokens=helpTokens(hay);
+  const haySet=new Set(hayTokens);
+  let matched=0,score=0;
+  qTokens.forEach(token=>{
+    const variants=helpTokenVariants(token);
+    let found=0;
+    for(const variant of variants){
+      if(haySet.has(variant)){ found=Math.max(found, variant===token?3:2); continue; }
+      if(variant.length>=4 && hayTokens.some(ht=>ht.startsWith(variant)||variant.startsWith(ht))){ found=Math.max(found,1); }
+    }
+    if(found>0){ matched++; score+=found; }
+  });
+  const ratio=matched/qTokens.length;
+  if(hay.includes(qRaw)) score+=8;
+  if(qTokens.length===1) return matched?score+2:0;
+  if(qTokens.length===2) return ratio===1?score+4:0;
+  if(ratio===1) return score+4;
+  if(ratio>=0.66) return score+1;
+  return 0;
+}
+function renderArticleMedia(a){
+  if(!a.media||!a.media.length) return '';
+  return `<div class="help-media-grid">${a.media.map(item=>`<figure class="help-media-card">${item.src?`<img src="${esc(item.src)}" alt="${esc(item.alt||item.caption||a.title)}" loading="lazy">`:''}${item.caption?`<figcaption>${esc(item.caption)}</figcaption>`:''}</figure>`).join('')}</div>`;
+}
 function state(){
   if(!S.helpCenter) S.helpCenter={tab:'guides',query:'',category:'all'};
   if(!['guides','checklist','origin'].includes(S.helpCenter.tab)) S.helpCenter.tab='guides';
@@ -550,12 +640,11 @@ function categoryChips(){const s=state();return `<div class="help-category-chips
   HELP_CATEGORIES.map(c=>`<button type="button" class="help-category-chip ${s.category===c.id?'active':''}" data-help-category-chip="${c.id}" onclick="BorionHelp.setCategory('${c.id}')"><span>${c.icon}</span>${esc(c.title)}</button>`).join('')+
   `</div>`;
 }
-function searchBlock(){const s=state();return `<div class="help-search-shell"><span class="help-search-icon">⌕</span><input id="borion_help_search" type="search" autocomplete="off" value="${esc(s.query)}" placeholder="Ex.: como lançar compra parcelada, restaurar backup, ordenar reservas..." oninput="BorionHelp.search(this.value)"><button type="button" class="help-search-clear ${s.query?'':'hidden'}" id="borion_help_clear" onclick="BorionHelp.clearSearch()" aria-label="Limpar pesquisa">×</button></div><div class="help-search-meta"><span id="help-results-count">Digite uma dúvida ou escolha uma área.</span><span>Pesquisa por palavras, sinônimos e passos.</span></div>`;}
+function searchBlock(){const s=state();return `<div class="help-search-shell"><span class="help-search-icon">⌕</span><input id="borion_help_search" type="search" autocomplete="off" value="${esc(s.query)}" placeholder="Ex.: como lançar compra parcelada, restaurar backup, ordenar reservas..." oninput="BorionHelp.search(this.value)"><button type="button" class="help-search-clear ${s.query?'':'hidden'}" id="borion_help_clear" onclick="BorionHelp.clearSearch()" aria-label="Limpar pesquisa">×</button></div><div class="help-search-meta"><span id="help-results-count">Digite uma dúvida ou escolha uma área.</span><span>Pesquisa inteligente por palavras, sinônimos, dúvidas e passos.</span></div>`;}
 function renderHero(){return `<section class="help-hero"><div class="help-hero-copy"><div class="help-kicker">CENTRAL DO BORION</div><h2>Tudo o que o Borion faz, explicado dentro dele.</h2><p>Pesquise uma dúvida, siga o passo a passo, audite cada função e conheça a história do sistema.</p></div><div class="help-hero-stats"><div><strong>${HELP_ARTICLES.length}</strong><span>guias</span></div><div><strong>${countFeatures()}</strong><span>funções no checklist</span></div><div><strong>100%</strong><span>local e pesquisável</span></div></div></section>`;}
-function articleSearchText(a){const c=CAT_BY_ID[a.category];return normalize([c&&c.title,a.title,a.intro,...a.steps,...a.tips,...a.keywords].join(' '));}
 function renderGuides(){
   const grouped=HELP_CATEGORIES.map(c=>({cat:c,articles:HELP_ARTICLES.filter(a=>a.category===c.id)})).filter(x=>x.articles.length);
-  return `<div class="help-guides">${grouped.map(({cat,articles})=>`<section class="help-guide-group help-searchable-group" data-help-group="${cat.id}"><div class="help-group-heading"><span>${cat.icon}</span><div><h3>${esc(cat.title)}</h3><p>${articles.length} guia${articles.length===1?'':'s'} nesta área</p></div></div><div class="help-article-list">${articles.map((a,index)=>`<details class="help-article help-searchable" data-help-category="${a.category}" data-help-search="${esc(articleSearchText(a))}" ${a.id==='primeiro-acesso'&&index===0?'open':''}><summary><div><span class="help-article-category">${esc(cat.title)}</span><h4>${esc(a.title)}</h4><p>${esc(a.intro)}</p></div><span class="help-article-chevron">⌄</span></summary><div class="help-article-body"><ol>${a.steps.map(s=>`<li>${esc(s)}</li>`).join('')}</ol>${a.tips.length?`<div class="help-tip"><strong>Atenção</strong>${a.tips.map(t=>`<p>${esc(t)}</p>`).join('')}</div>`:''}${a.keywords.length?`<div class="help-keywords">Também encontra por: ${a.keywords.map(k=>`<span>${esc(k)}</span>`).join('')}</div>`:''}</div></details>`).join('')}</div></section>`).join('')}<div class="help-empty" id="help-empty-guides"><strong>Nenhum guia encontrado.</strong><span>Tente uma palavra mais simples, como “fatura”, “reserva”, “backup” ou “ordem”.</span></div></div>`;
+  return `<div class="help-guides">${grouped.map(({cat,articles},groupIndex)=>`<section class="help-guide-group help-searchable-group" data-help-group="${cat.id}" data-help-group-index="${groupIndex}"><div class="help-group-heading"><span>${cat.icon}</span><div><h3>${esc(cat.title)}</h3><p>${articles.length} guia${articles.length===1?'':'s'} nesta área</p></div></div><div class="help-article-list">${articles.map((a,index)=>`<details class="help-article help-searchable" data-help-id="${a.id}" data-help-index="${index}" data-help-category="${a.category}" data-help-search="${esc(articleSearchIndex(a))}" ${a.id==='primeiro-acesso'&&index===0?'open':''}><summary><div><span class="help-article-category">${esc(cat.title)}</span><h4>${esc(a.title)}</h4><p>${esc(a.intro)}</p></div><span class="help-article-chevron">⌄</span></summary><div class="help-article-body"><ol>${a.steps.map(s=>`<li>${esc(s)}</li>`).join('')}</ol>${renderArticleMedia(a)}${a.tips.length?`<div class="help-tip"><strong>Atenção</strong>${a.tips.map(t=>`<p>${esc(t)}</p>`).join('')}</div>`:''}${a.keywords.length?`<div class="help-keywords">Também encontra por: ${a.keywords.map(k=>`<span>${esc(k)}</span>`).join('')}</div>`:''}</div></details>`).join('')}</div></section>`).join('')}<div class="help-empty" id="help-empty-guides"><strong>Nenhum guia encontrado.</strong><span>Tente uma palavra mais simples, como “fatura”, “reserva”, “backup” ou “ordem”.</span></div></div>`;
 }
 function checklistProgressHTML(set){const total=countFeatures(),done=allChecklistIds().filter(id=>set.has(id)).length,pct=total?Math.round(done/total*100):0;return `<div class="help-check-progress"><div><strong id="help-check-done">${done}</strong><span> de ${total} funções verificadas</span></div><div class="help-progress-track"><span id="help-progress-bar" style="width:${pct}%"></span></div><b id="help-progress-pct">${pct}%</b></div>`;}
 function renderChecklist(){
@@ -578,14 +667,61 @@ function updateProgress(){
   FEATURE_GROUPS.forEach(g=>{const el=document.querySelector(`[data-help-group-count="${g.id}"]`);if(el)el.textContent=g.items.filter((_,i)=>set.has(g.id+'-'+(i+1))).length+'/'+g.items.length;});
 }
 function visibleMatches(){return Array.from(document.querySelectorAll('.borion-help-center .help-searchable')).filter(el=>!el.hidden).length;}
+function sortGuideResults(root,hasQuery){
+  root.querySelectorAll('.help-article-list').forEach(list=>{
+    const items=Array.from(list.querySelectorAll('.help-article'));
+    items.sort((a,b)=>{
+      if(hasQuery){
+        const scoreDiff=Number(b.dataset.helpScore||0)-Number(a.dataset.helpScore||0);
+        if(scoreDiff) return scoreDiff;
+      }
+      return Number(a.dataset.helpIndex||0)-Number(b.dataset.helpIndex||0);
+    });
+    items.forEach(item=>list.appendChild(item));
+    if(hasQuery){
+      let opened=0;
+      items.forEach(item=>{
+        const visible=!item.hidden && Number(item.dataset.helpScore||0)>0;
+        item.open=visible && opened<3;
+        if(visible && opened<3) opened++;
+      });
+    }
+  });
+  const guides=root.querySelector('.help-guides');
+  const empty=guides?guides.querySelector('#help-empty-guides'):null;
+  if(guides){
+    const groups=Array.from(guides.querySelectorAll(':scope > .help-guide-group'));
+    groups.sort((a,b)=>{
+      if(hasQuery){
+        const maxA=Math.max(0,...Array.from(a.querySelectorAll('.help-article')).filter(el=>!el.hidden).map(el=>Number(el.dataset.helpScore||0)));
+        const maxB=Math.max(0,...Array.from(b.querySelectorAll('.help-article')).filter(el=>!el.hidden).map(el=>Number(el.dataset.helpScore||0)));
+        if(maxB!==maxA) return maxB-maxA;
+      }
+      return Number(a.dataset.helpGroupIndex||0)-Number(b.dataset.helpGroupIndex||0);
+    });
+    groups.forEach(g=>guides.insertBefore(g,empty));
+  }
+}
 function applyFilters(){
   const root=document.querySelector('.borion-help-center');if(!root)return;
-  const s=state(),q=normalize(s.query),cat=s.category;
-  root.querySelectorAll('.help-searchable').forEach(el=>{const matchQ=!q||String(el.dataset.helpSearch||'').includes(q);const matchC=cat==='all'||el.dataset.helpCategory===cat;el.hidden=!(matchQ&&matchC);});
-  root.querySelectorAll('.help-searchable-group').forEach(groupEl=>{const category=groupEl.dataset.helpGroup;const catOkay=cat==='all'||category===cat;const any=Array.from(groupEl.querySelectorAll('.help-searchable')).some(el=>!el.hidden);groupEl.hidden=!(catOkay&&any);});
+  const s=state(),q=String(s.query||''),cat=s.category,hasQuery=!!normalize(q);
+  root.querySelectorAll('.help-searchable').forEach(el=>{
+    const score=hasQuery?computeSearchScore(q,String(el.dataset.helpSearch||'')):1;
+    const matchQ=!hasQuery||score>0;
+    const matchC=cat==='all'||el.dataset.helpCategory===cat;
+    el.dataset.helpScore=String(score||0);
+    el.hidden=!(matchQ&&matchC);
+  });
+  root.querySelectorAll('.help-searchable-group').forEach(groupEl=>{
+    const category=groupEl.dataset.helpGroup;
+    const catOkay=cat==='all'||category===cat;
+    const any=Array.from(groupEl.querySelectorAll('.help-searchable')).some(el=>!el.hidden);
+    groupEl.hidden=!(catOkay&&any);
+  });
+  sortGuideResults(root,hasQuery);
   root.querySelectorAll('[data-help-category-chip]').forEach(b=>b.classList.toggle('active',b.dataset.helpCategoryChip===cat));
   const count=visibleMatches();
-  const countEl=document.getElementById('help-results-count');if(countEl)countEl.textContent=q||cat!=='all'?`${count} resultado${count===1?'':'s'} encontrado${count===1?'':'s'}.`:'Digite uma dúvida ou escolha uma área.';
+  const countEl=document.getElementById('help-results-count');if(countEl)countEl.textContent=hasQuery||cat!=='all'?`${count} resultado${count===1?'':'s'} encontrado${count===1?'':'s'}.`:'Digite uma dúvida ou escolha uma área.';
   const clear=document.getElementById('borion_help_clear');if(clear)clear.classList.toggle('hidden',!s.query);
   const emptyGuides=document.getElementById('help-empty-guides');if(emptyGuides)emptyGuides.classList.toggle('show',count===0);
   const emptyChecklist=document.getElementById('help-empty-checklist');if(emptyChecklist)emptyChecklist.classList.toggle('show',count===0);

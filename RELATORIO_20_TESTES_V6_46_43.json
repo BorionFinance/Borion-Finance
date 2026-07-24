@@ -1,0 +1,92 @@
+{
+  "passed": 20,
+  "total": 20,
+  "results": [
+    {
+      "name": "01. App carrega sem page errors",
+      "passed": true
+    },
+    {
+      "name": "02. App carrega sem console errors",
+      "passed": true
+    },
+    {
+      "name": "03. Badge mostra v6.46.43",
+      "passed": true
+    },
+    {
+      "name": "04. Aba Menu renderiza",
+      "passed": true
+    },
+    {
+      "name": "05. Menu possui ajuda contextual",
+      "passed": true
+    },
+    {
+      "name": "06. Cartões de módulo não mostram textos repetidos de status",
+      "passed": true
+    },
+    {
+      "name": "07. Dashboard mantém todos os controles",
+      "passed": true
+    },
+    {
+      "name": "08. Cards do Dashboard ficaram sem parágrafos repetidos",
+      "passed": true
+    },
+    {
+      "name": "09. Campo Conta logada foi removido do Perfil",
+      "passed": true
+    },
+    {
+      "name": "10. Importar JSON não aparece na aba Perfis",
+      "passed": true
+    },
+    {
+      "name": "11. Backup deste perfil não aparece na aba Perfis",
+      "passed": true
+    },
+    {
+      "name": "12. Salvar perfil virou botão compacto com ícone",
+      "passed": true
+    },
+    {
+      "name": "13. Aba foi renomeada para Backups / Dados",
+      "passed": true
+    },
+    {
+      "name": "14. Exportar conta completa usa azul claro",
+      "passed": true
+    },
+    {
+      "name": "15. Importar JSON usa azul escuro",
+      "passed": true
+    },
+    {
+      "name": "16. Sair da conta Google usa estilo vermelho",
+      "passed": true
+    },
+    {
+      "name": "17. Criar backup agora está verde no Drive e no dispositivo",
+      "passed": true
+    },
+    {
+      "name": "18. Pasta local foi integrada a Backups neste dispositivo",
+      "passed": true
+    },
+    {
+      "name": "19. Bloco separado Pasta local extra não aparece",
+      "passed": true
+    },
+    {
+      "name": "20. Ajuda rápida abre caixa com botão Ver mais",
+      "passed": true
+    }
+  ],
+  "extra_sanity": {
+    "help_version": "1.3.0",
+    "context_article": 1,
+    "backup_article": 1,
+    "visible_help_results": 4
+  }
+}

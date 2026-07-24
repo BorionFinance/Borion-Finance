@@ -1,0 +1,86 @@
+{
+  "passed": 20,
+  "total": 20,
+  "results": [
+    {
+      "name": "01. App carrega sem page errors",
+      "passed": true
+    },
+    {
+      "name": "02. App carrega sem console errors",
+      "passed": true
+    },
+    {
+      "name": "03. Badge mostra v6.46.42",
+      "passed": true
+    },
+    {
+      "name": "04. BorionHelp está disponível",
+      "passed": true
+    },
+    {
+      "name": "05. Central renderiza com HELP_VERSION 1.2.0",
+      "passed": true
+    },
+    {
+      "name": "06. Guias aparecem por padrão",
+      "passed": true
+    },
+    {
+      "name": "07. Busca por frase longa retorna resultados",
+      "passed": true
+    },
+    {
+      "name": "08. Melhor resultado para \"como lançar compra parcelada\" é o guia correto",
+      "passed": true
+    },
+    {
+      "name": "09. Melhor resultado abre automaticamente",
+      "passed": true
+    },
+    {
+      "name": "10. Busca por Shopee/reembolso encontra compra compartilhada",
+      "passed": true
+    },
+    {
+      "name": "11. Busca por pagar fatura encontra guia de faturas",
+      "passed": true
+    },
+    {
+      "name": "12. Busca por restaurar backup encontra guia de backup",
+      "passed": true
+    },
+    {
+      "name": "13. Busca por cofrinho/rendimento encontra guias de reserva",
+      "passed": true
+    },
+    {
+      "name": "14. Busca por repasse de terceiros encontra receita",
+      "passed": true
+    },
+    {
+      "name": "15. Filtro por categoria continua localizando compra parcelada",
+      "passed": true
+    },
+    {
+      "name": "16. Limpar pesquisa restaura a lista ampla",
+      "passed": true
+    },
+    {
+      "name": "17. Sinônimo \"parcelamento no cartao\" encontra o guia correto",
+      "passed": true
+    },
+    {
+      "name": "18. Sinônimo de devolução encontra guia de reembolso/compra compartilhada",
+      "passed": true
+    },
+    {
+      "name": "19. Pesquisa também funciona no checklist",
+      "passed": true
+    },
+    {
+      "name": "20. Estrutura da central segue estável e a dica de busca foi atualizada",
+      "passed": true
+    }
+  ]
+}

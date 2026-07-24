@@ -1,0 +1,17 @@
+BORION FINANCE — V6.46.35
+SINCRONIZAÇÃO DAS INTEGRAÇÕES SEM BLOQUEAR A INTERFACE
+
+Correções principais
+- Importações automáticas do Marco Iris Tecnologia e Amanda Estética continuam sendo confirmadas no Google Drive, mas não abrem mais a camada de tela cheia “Salvando no Google Drive”.
+- Inclusões, atualizações e exclusões vindas das integrações entram na fila estrita e são protegidas/consolidadas em segundo plano.
+- Ações manuais da tela de Integrações mostram o estado no próprio botão e em um indicador discreto, sem congelar a navegação.
+- Falhas temporárias deixam a operação pendente e acionam retry automático sem substituir a tela atual.
+- Importação silenciosa não reconstrói a tela enquanto houver modal aberto ou campo sendo editado, evitando fechar janelas e apagar texto digitado.
+- A versão v6.46.35 permanece visível somente nas telas de acesso/erro, conforme o padrão definido.
+
+Arquivos funcionais alterados
+- js/01c-google-drive-provider.js
+- js/24-interconnections.js
+
+Demais alterações
+- Versionamento e cache-busting para v6.46.35.

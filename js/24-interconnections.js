@@ -1496,7 +1496,7 @@
       // Ler/atualizar a origem também altera a configuração descoberta. Confirma
       // esse estado em um único commit antes de dizer que a atualização terminou.
       saveProfileData(row.profile.id,row.data,{deferGoogleCommit:true,source:'interop_inspect_'+sourceAppId});
-      const inspectConfirmation=await persistCriticalChange('interop_inspect_'+sourceAppId);
+      const inspectConfirmation=await persistCriticalChange('interop_inspect_'+sourceAppId,{nonBlocking:true,label:'Atualizando integração…'});
       if(window.GoogleDriveProvider&&GoogleDriveProvider._isStrictMode?.()&&!inspectConfirmation.synced){
         throw new Error(inspectConfirmation.error||GoogleDriveProvider.lastSyncError||'O Google Drive ainda não confirmou a atualização da integração.');
       }
@@ -1530,8 +1530,9 @@
     }
     if(syncing) throw new Error('Outra integração já está sincronizando.');
     const provider=window.GoogleDriveProvider||null;
-    const foregroundToken=!silent&&provider&&typeof provider.beginForegroundSave==='function'
-      ?provider.beginForegroundSave('Sincronizando integração…','interop_sync_'+sourceAppId):null;
+    // V6.46.35 — sincronização de Marco/Amanda nunca cria a camada bloqueante de
+    // tela cheia. O botão manual continua mostrando “Sincronizando…”, e o commit
+    // confirmado aparece apenas no indicador discreto do Drive.
     const criticalToken=!silent&&provider&&typeof provider.beginCriticalSave==='function'
       ?provider.beginCriticalSave('interop_sync_'+sourceAppId):null;
     syncing=true;syncingSourceAppId=sourceAppId;setAsyncButtonState(button,true,'Sincronizando…');
@@ -1573,14 +1574,23 @@
         // perfil. Não chama saveCurrentData logo depois de saveProfileData, pois
         // isso criava duas revisões concorrentes no mesmo clique.
         saveProfileData(commitRow.profile.id,commitRow.data,{deferGoogleCommit:true,source:'interop_sync_'+sourceAppId});
-        const syncConfirmation=await persistCriticalChange('interop_sync_'+sourceAppId);
+        const syncConfirmation=await persistCriticalChange('interop_sync_'+sourceAppId,{
+          nonBlocking:true,
+          label:silent?'Atualizando integrações…':'Salvando integração…'
+        });
         if(window.GoogleDriveProvider&&GoogleDriveProvider._isStrictMode?.()&&!syncConfirmation.synced){
           throw new Error(syncConfirmation.error||GoogleDriveProvider.lastSyncError||'O Google Drive ainda não confirmou a sincronização.');
         }
       }
       if(result.changed!==false&&S.currentProfile&&String(S.currentProfile.id)===String(commitRow.profile.id)){
         const editingIntegrationSettings=silent&&S.view==='settings'&&S.settingsTab==='integrations';
-        if(typeof renderView==='function'&&!editingIntegrationSettings) renderView();
+        const modalOpen=!!document.getElementById('modal-root')?.childElementCount;
+        const activeTag=String(document.activeElement?.tagName||'').toUpperCase();
+        const userEditing=/^(INPUT|TEXTAREA|SELECT)$/.test(activeTag);
+        // Importação automática não fecha modal, não apaga texto em edição e não
+        // reconstrói a tela debaixo do dedo. Os dados já estão em S.data; a próxima
+        // renderização normal os exibirá. Fora de edição, atualiza imediatamente.
+        if(typeof renderView==='function'&&!editingIntegrationSettings&&(!silent||(!modalOpen&&!userEditing))) renderView();
       }
       autoRetryAfter64622.delete(autoRetryKey64622(commitRow));
       if(!silent&&typeof toast==='function'){
@@ -1622,7 +1632,6 @@
     }finally{
       syncing=false;syncingSourceAppId='';setAsyncButtonState(button,false);
       if(provider&&typeof provider.endCriticalSave==='function')provider.endCriticalSave(criticalToken);
-      if(provider&&typeof provider.endForegroundSave==='function')provider.endForegroundSave(foregroundToken);
     }
   }
 
@@ -1849,7 +1858,7 @@
   // V6.46.33 — o ajuste crítico é colocado UMA vez na fila. O próprio provider
   // serializa qualquer sincronização automática/consolidação que já esteja em curso
   // e só devolve sucesso depois que o current.json foi realmente confirmado.
-  function forceImmediateSync(reason='interop_critical_setting'){
+  function forceImmediateSync(reason='interop_critical_setting',options={}){
     return Promise.resolve().then(async()=>{
       try{
         const provider=window.GoogleDriveProvider||null;
@@ -1866,7 +1875,15 @@
           // plano. A tela permanece aberta, mostra progresso e só libera depois
           // de o current.json ser relido e validado.
           result=typeof provider.runForegroundConfirmedSave==='function'
-            ?await provider.runForegroundConfirmedSave({source:reason,label:'Salvando no Google Drive…',timeoutMs:90000})
+            ?await provider.runForegroundConfirmedSave({
+                source:reason,
+                label:String(options.label||'Salvando no Google Drive…'),
+                timeoutMs:Number(options.timeoutMs)||90000,
+                // Integrações devem salvar com confirmação real, mas nunca congelar
+                // o aplicativo. Quem realmente precisar de tela cheia precisa pedir
+                // nonBlocking:false de forma explícita.
+                nonBlocking:options.nonBlocking!==false
+              })
             :await provider.queueSave({source:reason});
         }else{
           provider.queueSave({source:reason});
@@ -1884,7 +1901,7 @@
       }
     });
   }
-  function persistCriticalChange(reason='interop_critical_change'){return forceImmediateSync(reason);}
+  function persistCriticalChange(reason='interop_critical_change',options={}){return forceImmediateSync(reason,options);}
   async function withCutoffCriticalSave(sourceAppId,reason,confirmationMessage,applyChange,successMessage,{button=null}={}){
     const provider=window.GoogleDriveProvider||null;
     const token=provider&&typeof provider.beginCriticalSave==='function'?provider.beginCriticalSave(reason):null;

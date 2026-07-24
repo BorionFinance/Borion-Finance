@@ -4227,7 +4227,7 @@ html[data-interface-mode="smartphone"] .topbar > .topbar-title-row .topbar-title
 }
 
 
-/* ---------- V6.46.34 — microajustes mobile sem sobreposição ---------- */
+/* ---------- V6.46.35 — microajustes mobile sem sobreposição ---------- */
 .topbar h1 .topbar-title-text{min-width:0;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 html[data-interface-mode="smartphone"] .topbar h1{min-width:0!important;overflow:hidden!important;}
 html[data-interface-mode="smartphone"] .topbar h1 .topbar-title-text{flex:1 1 auto;min-width:0;}

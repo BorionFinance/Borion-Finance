@@ -14,7 +14,7 @@ const HelpCenterLoader = {
     this.promise = new Promise((resolve,reject)=>{
       if(!document.querySelector('link[data-borion-help-css]')){
         const link=document.createElement('link');
-        link.rel='stylesheet'; link.href='css/help-center.css?v=6.46.34'; link.dataset.borionHelpCss='1';
+        link.rel='stylesheet'; link.href='css/help-center.css?v=6.46.35'; link.dataset.borionHelpCss='1';
         document.head.appendChild(link);
       }
       const existing=document.querySelector('script[data-borion-help-script]');
@@ -24,7 +24,7 @@ const HelpCenterLoader = {
         return;
       }
       const script=document.createElement('script');
-      script.src='js/26-help-center.js?v=6.46.34'; script.async=true; script.dataset.borionHelpScript='1';
+      script.src='js/26-help-center.js?v=6.46.35'; script.async=true; script.dataset.borionHelpScript='1';
       script.onload=()=>window.BorionHelp?resolve(window.BorionHelp):reject(new Error('A Central do Borion não iniciou.'));
       script.onerror=()=>{ script.remove(); reject(new Error('Falha ao carregar a Central do Borion.')); };
       document.head.appendChild(script);
@@ -1198,7 +1198,7 @@ window.Settings = Settings;
 /* ================= V6.33.1 — refinamento extra de Configurações, padronização de ordenação
    e bloco flutuante de Anotações persistente entre abas ================= */
 (function(){
-  const SETTINGS_VERSION = '6.46.34';
+  const SETTINGS_VERSION = '6.46.35';
 
   function floatingNotesPrefs(create=false){
     const fallback={enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};

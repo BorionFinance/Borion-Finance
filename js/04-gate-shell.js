@@ -66,7 +66,7 @@ function redirectUnresolvedRemoteGate64618(){
   return false;
 }
 
-/* V6.46.34 — perfis com senha entram automaticamente assim que a senha completa
+/* V6.46.35 — perfis com senha entram automaticamente assim que a senha completa
    estiver correta. A comparação é silenciosa enquanto a pessoa digita: senha parcial
    ou incorreta não mostra erro; o botão Entrar e a tecla Enter continuam disponíveis. */
 function wireAutomaticProfilePasswordEntry(profileId){

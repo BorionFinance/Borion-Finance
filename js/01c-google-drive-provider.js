@@ -1,4 +1,4 @@
-/* Borion Finance — Google Drive Provider (V6.46.34 — Transação exclusiva ao salvar data de corte da integração)
+/* Borion Finance — Google Drive Provider (V6.46.35 — Transação exclusiva ao salvar data de corte da integração)
 
    Arquitetura 6.40.2: current.json é apenas o snapshot consolidado. Toda alteração
    é protegida primeiro como operação imutável, identificada por operationId, e só
@@ -858,6 +858,11 @@ const GoogleDriveProvider = {
       pill=document.createElement('div');pill.id='borion_background_save_pill';pill.setAttribute('role','status');pill.setAttribute('aria-live','polite');
       pill.style.cssText='position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:2147482500;display:flex;align-items:center;gap:10px;max-width:min(92vw,440px);padding:10px 14px;border-radius:14px;background:rgba(10,18,27,.96);border:1px solid rgba(222,179,92,.34);box-shadow:0 12px 32px rgba(0,0,0,.42);color:#f5f7fa;font:600 13px/1.25 system-ui,sans-serif;pointer-events:none;';
       pill.innerHTML='<span data-pill-spinner style="width:16px;height:16px;flex:0 0 16px;border:2px solid rgba(222,179,92,.28);border-top-color:#deb35c;border-radius:50%;animation:borionForegroundSpin .8s linear infinite"></span><span style="min-width:0"><strong data-pill-title style="display:block;font-size:12.5px"></strong><small data-pill-detail style="display:block;color:#aebaca;font-weight:500;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></small></span>';
+      if(!document.getElementById('borion_background_save_style')){
+        const style=document.createElement('style');style.id='borion_background_save_style';
+        style.textContent='@keyframes borionForegroundSpin{to{transform:rotate(360deg)}}@media(max-width:768px){#borion_background_save_pill{bottom:calc(92px + env(safe-area-inset-bottom))!important;max-width:calc(100vw - 24px)!important}}';
+        document.head.appendChild(style);
+      }
       document.body.appendChild(pill);
     }
     const spin=pill.querySelector('[data-pill-spinner]'),t=pill.querySelector('[data-pill-title]'),d=pill.querySelector('[data-pill-detail]');
@@ -923,6 +928,7 @@ const GoogleDriveProvider = {
   },
 
   isForegroundSaveInProgress(){return (Number(this._foregroundSaveDepth)||0)>0;},
+  isNonBlockingSaveInProgress(){return (Number(this._nonBlockingSaveDepth)||0)>0;},
 
   _renderForegroundSaveOverlay(title,detail,state='busy'){
     if(typeof document==='undefined'||!document.body)return;
@@ -979,13 +985,24 @@ const GoogleDriveProvider = {
   async runForegroundConfirmedSave(options={}){
     const source=String(options.source||'user_save');
     const label=String(options.label||'Salvando no Google Drive…');
-    const foregroundToken=this.beginForegroundSave(label,source);
+    // V6.46.35 — integrações automáticas e ações da tela de Integrações usam a
+    // mesma confirmação estrita, porém sem cobrir a interface. O usuário continua
+    // navegando enquanto a operação entra na fila, é protegida no journal e depois
+    // consolidada no current.json. A camada de tela cheia fica reservada apenas a
+    // fluxos que pedirem explicitamente foreground.
+    const nonBlocking=options.nonBlocking===true;
+    if(nonBlocking)this._nonBlockingSaveDepth=Math.max(0,Number(this._nonBlockingSaveDepth)||0)+1;
+    const foregroundToken=nonBlocking?null:this.beginForegroundSave(label,source);
     const criticalToken=this.beginCriticalSave(source);
     let keepError=false;
+    const report=(title,detail,state='busy')=>{
+      if(nonBlocking)this._showBackgroundSavePill(title,detail,state);
+      else this.updateForegroundSave(title,detail,state);
+    };
     try{
       if(!this.isConnected()||!this.currentFileId)throw new Error('O Google Drive não está conectado ao arquivo current.json.');
       if(!navigator.onLine)throw new Error('Sem internet. Conecte o dispositivo para confirmar o salvamento.');
-      this.updateForegroundSave(label,'Preparando e protegendo a alteração no Google Drive…','busy');
+      report(label,'Preparando e protegendo a alteração no Google Drive…','busy');
       // Sempre registra ESTA alteração na fila, mesmo quando já existe um commit
       // anterior em andamento. queueSave() marca dirty/revisão e requestStrictCommit()
       // apenas entra na mesma Promise serializada. Assim uma configuração aplicada
@@ -996,7 +1013,7 @@ const GoogleDriveProvider = {
       while((ok!==true||!this._strictCommitIsFullyConfirmed())&&Date.now()<deadline){
         if(this.authRequired)break;
         attempt++;
-        this.updateForegroundSave(label,'Confirmando o current.json… tentativa '+attempt,'busy');
+        report(label,'Confirmando o current.json… tentativa '+attempt,'busy');
         await new Promise(resolve=>setTimeout(resolve,Math.min(1500,250*attempt)));
         if(this.hasPersistedConsolidation())ok=await this.syncNow({source:source+'_consolidation',consolidationOnly:true});
         else if(this.dirty||this.hasPersistedPending())ok=await this.requestStrictCommit(source+'_retry');
@@ -1004,16 +1021,27 @@ const GoogleDriveProvider = {
       }
       if(ok!==true||!this._strictCommitIsFullyConfirmed())throw new Error(this.lastSyncError||'O Google Drive ainda não confirmou o salvamento.');
       this._hideStrictRecoveryOverlay();
-      this.updateForegroundSave('Salvo no Google Drive','Confirmação concluída com sucesso.','success');
-      await new Promise(resolve=>setTimeout(resolve,280));
+      report('Salvo no Google Drive','Confirmação concluída com sucesso.','success');
+      if(nonBlocking)this._hideBackgroundSavePill(650);
+      else await new Promise(resolve=>setTimeout(resolve,280));
       return true;
     }catch(error){
       this.lastSyncError=String(error&&error.message||error||'Falha ao confirmar no Google Drive.');
       this.authRequired=this._isAuthError(error);
-      // V6.46.33 — falha transitória não cobre nem desmonta a tela atual. O
-      // salvamento continua pendente e recebe retry automático. Somente falta de
-      // internet ou autenticação expirada pede intervenção explícita.
-      if(this.authRequired||!navigator.onLine){
+      if(nonBlocking){
+        // Importação/remoção automática nunca toma a tela inteira. A pendência fica
+        // visível no selo discreto e no status da nuvem; o journal/retry continua
+        // ativo. Até autenticação/offline preservam a tela atual para a pessoa poder
+        // concluir o que estava fazendo e reconectar pelo status quando necessário.
+        keepError=false;
+        this._hideStrictRecoveryOverlay();
+        this._deferStrictRetry(source+'_background');
+        const detail=this.authRequired
+          ?'A sincronização ficou pendente. Toque no status do Drive para reconectar.'
+          :(!navigator.onLine?'Sem internet. A sincronização continuará quando a conexão voltar.':'O Drive demorou; o Borion continuará tentando em segundo plano.');
+        this._showBackgroundSavePill('Sincronização pendente',detail,'warning');
+        this._hideBackgroundSavePill(3500);
+      }else if(this.authRequired||!navigator.onLine){
         keepError=true;
         this._showStrictRecoveryOverlay(this.lastSyncError);
       }else{
@@ -1025,7 +1053,8 @@ const GoogleDriveProvider = {
       return false;
     }finally{
       this.endCriticalSave(criticalToken);
-      this.endForegroundSave(foregroundToken,{keepError});
+      if(foregroundToken)this.endForegroundSave(foregroundToken,{keepError});
+      if(nonBlocking)this._nonBlockingSaveDepth=Math.max(0,(Number(this._nonBlockingSaveDepth)||0)-1);
     }
   },
 
@@ -1089,6 +1118,22 @@ const GoogleDriveProvider = {
     if(window.console&&console.warn)console.warn('[BORION][STRICT_LOCK] origem='+(source||'desconhecida')+' authRequiredAntes='+this.authRequired+' msg='+String(message||''));
     this._lastLockSource=source||'';
     if(payload)this._strictPendingPayload=payload;
+    // V6.46.35 — se o bloqueio foi disparado pela fila de uma integração em
+    // segundo plano, autenticação/offline/atraso não podem cobrir a interface.
+    // A pendência continua no journal/fila e o status da nuvem passa a indicar a
+    // ação necessária. Erros de integridade continuam bloqueantes por segurança.
+    const backgroundSource=/^(commit_|record_|integration_|interop_|foreground_|retry_|strict_)/.test(String(source||''));
+    if(this.isNonBlockingSaveInProgress()&&backgroundSource&&!this._isFatalStrictError(message)){
+      if(!navigator.onLine)this.authRequired=false;
+      else if(/sess[aã]o|login|autentica|token|oauth/i.test(String(message||'')))this.authRequired=true;
+      this.lastSyncError=String(message||'A sincronização da integração ficou pendente.');
+      this._hideStrictSaving();
+      this._hideStrictRecoveryOverlay();
+      this._showBackgroundSavePill('Sincronização pendente',this.authRequired?'Toque no status do Drive para reconectar.':(!navigator.onLine?'Sem internet; o envio continuará quando a conexão voltar.':'O Drive demorou; tentando novamente em segundo plano.'),'warning');
+      this._refreshStatusUI();
+      this._scheduleRetry(this.authRequired?15000:1200);
+      return false;
+    }
     // V6.46.33 — uma falha transitória de commit não desmonta nem cobre o app.
     // A alteração permanece pendente e a fila força nova confirmação no Drive.
     // Somente autenticação expirada, offline real ou integridade suspeita exigem

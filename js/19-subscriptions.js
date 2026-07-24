@@ -291,7 +291,7 @@ const Assinaturas={
       {key:'reservaId',label:'Reserva',type:'select',options:reserveOpts.length?reserveOpts:[{value:'',label:'Cadastre uma reserva primeiro'}],default:currentRule.reservaId||'',visibleWhen:{key:'origem',value:'reserva'}},
       {key:'cartaoId',label:'Cartão de crédito',type:'select',options:cardOpts.length?cardOpts:[{value:'',label:'Cadastre um cartão em Cartões e Contas'}],default:currentRule.cartaoId||'',visibleWhen:{key:'origem',value:'cartao'}}
     ];
-    openModal({title:isEdit?'Editar assinatura':'Adicionar assinatura',sub:isEdit?'A alteração vale do mês selecionado em diante. Ocorrências consolidadas mantêm a fotografia original.':'Cadastre a regra recorrente; o saldo só muda quando a cobrança vencer e for processada.',fields,saveLabel:'Salvar assinatura',onDelete:isEdit?()=>{this.remove(existing.id);return false;}:null,deleteLabel:'Excluir assinatura',onSave:v=>{
+    openModal({modalClass:'subscription-modal',title:isEdit?'Editar assinatura':'Adicionar assinatura',sub:isEdit?'A alteração vale do mês selecionado em diante. Ocorrências consolidadas mantêm a fotografia original.':'Cadastre a regra recorrente; o saldo só muda quando a cobrança vencer e for processada.',fields,saveLabel:'Salvar assinatura',onDelete:isEdit?()=>{this.remove(existing.id);return false;}:null,deleteLabel:'Excluir assinatura',onSave:v=>{
       const nome=(v.nome||'').trim();if(!nome){alert('Dê um nome para a assinatura.');return;}
       const tipo=v.tipo==='anual'?'anual':'mensal',valor=Number(tipo==='anual'?v.valorAnual:v.valorMensal)||0;if(valor<=0){alert('Digite um valor maior que zero.');return;}
       const origem=['carteira','conta','reserva','cartao'].includes(v.origem)?v.origem:'conta';

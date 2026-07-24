@@ -1,0 +1,10 @@
+BORION FINANCE — V6.46.39
+
+Melhorias aplicadas:
+- Ícone de salvamento refinado visualmente, agora discreto e bonito no topo direito.
+- Indicador animado compacto para salvar/confirmar/aviso, sem tomar a tela.
+- Layout do modal de Receita ajustado para deixar os botões mais alinhados no mobile e no desktop.
+- Grupo "Onde a receita entra" mantido em grade limpa com 4 opções: Carteira, Conta, Reserva e Conta + Reserva.
+
+Validação:
+- Pacote submetido a 20 verificações automatizadas antes da entrega.

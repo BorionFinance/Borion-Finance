@@ -1,0 +1,118 @@
+{
+  "passed": 20,
+  "total": 20,
+  "results": [
+    {
+      "name": "01. App mobile carrega sem erros de página",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "02. App mobile carrega sem erros de console",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "03. Versão visível é v6.46.40",
+      "passed": true
+    },
+    {
+      "name": "04. Modal de Receita recebe padrão transaction-modal",
+      "passed": true
+    },
+    {
+      "name": "05. Modal de Receita vira bottom sheet no mobile",
+      "passed": true
+    },
+    {
+      "name": "06. Receita mantém os 4 destinos corretos",
+      "passed": true,
+      "detail": [
+        "Carteira",
+        "Conta",
+        "Reserva",
+        "Conta + Reserva"
+      ]
+    },
+    {
+      "name": "07. Campos da Receita têm altura confortável no mobile",
+      "passed": true,
+      "detail": 52
+    },
+    {
+      "name": "08. Botões segmentados da Receita têm altura padronizada",
+      "passed": true,
+      "detail": 52
+    },
+    {
+      "name": "09. Botão principal da Receita tem altura padronizada",
+      "passed": true,
+      "detail": 54
+    },
+    {
+      "name": "10. Modal de Receita não cria rolagem horizontal",
+      "passed": true
+    },
+    {
+      "name": "11. Modal de Despesa variável abre com o mesmo padrão",
+      "passed": true
+    },
+    {
+      "name": "12. Botões da Despesa variável seguem a mesma altura",
+      "passed": true,
+      "detail": 52
+    },
+    {
+      "name": "13. Modal de Despesa fixa abre com o mesmo padrão",
+      "passed": true
+    },
+    {
+      "name": "14. Botão principal da Despesa fixa segue o padrão",
+      "passed": true,
+      "detail": 54
+    },
+    {
+      "name": "15. Modal de Assinatura possui classe semântica própria",
+      "passed": true
+    },
+    {
+      "name": "16. Modal de Assinatura vira bottom sheet no mobile",
+      "passed": true
+    },
+    {
+      "name": "17. Campos e seletores da Assinatura seguem o mesmo padrão",
+      "passed": true,
+      "detail": {
+        "input": 52,
+        "segment": 52
+      }
+    },
+    {
+      "name": "18. Botão principal da Assinatura segue o mesmo padrão",
+      "passed": true,
+      "detail": 54
+    },
+    {
+      "name": "19. Calendário mobile tem células legíveis e dia atual destacado",
+      "passed": true,
+      "detail": {
+        "height": 62,
+        "radius": "11px",
+        "dayBg": "linear-gradient(rgb(232, 201, 138), rgb(201, 164, 92))",
+        "dayW": 21
+      }
+    },
+    {
+      "name": "20. Função de Compra compartilhada permanece íntegra",
+      "passed": true
+    }
+  ],
+  "desktop_sanity": {
+    "page_errors": [],
+    "console_errors": [],
+    "modal_width": 448.19287109375,
+    "modal_radius": "22px",
+    "subscription_class": true,
+    "calendar_height": 88
+  }
+}

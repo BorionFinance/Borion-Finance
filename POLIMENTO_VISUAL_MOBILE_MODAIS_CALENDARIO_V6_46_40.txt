@@ -1,0 +1,23 @@
+BORION FINANCE — V6.46.40
+
+POLIMENTO VISUAL APLICADO
+
+1. MOBILE
+- Espaçamentos internos mais equilibrados.
+- Campos com altura confortável para toque.
+- Botões principais maiores e consistentes.
+- Rodapé dos formulários respeita a área segura do celular.
+
+2. MODAIS
+- Receita, Despesa variável, Despesa fixa e Assinaturas agora seguem o mesmo padrão visual.
+- Cabeçalhos, campos, seletores segmentados, botões e painéis auxiliares foram uniformizados.
+- A função financeira de cada tela foi preservada.
+
+3. CALENDÁRIO
+- Campo de data com indicador mais limpo.
+- Seletor de mês no topo mobile refinado.
+- Agenda mensal com células, dia atual e eventos mais legíveis.
+
+4. DESEMPENHO
+- Sem novas animações pesadas.
+- Alterações concentradas em CSS e identificação semântica do modal de Assinaturas.

@@ -1,0 +1,43 @@
+BORION FINANCE — V6.46.37
+ATUALIZAÇÃO: COMPRAS COMPARTILHADAS E REEMBOLSOS
+
+IMPLEMENTADO
+
+- Nova opção “Compra compartilhada” em lançamentos de cartão.
+- Compatível com Despesa variável, Despesa fixa e cadastro direto em Cartões e Contas.
+- Divisão entre o titular e quantidade livre de pessoas.
+- Compra 100% de outra pessoa com parte própria em R$ 0,00.
+- Fatura preservada pelo valor integral.
+- Relatórios e Despesas contabilizam somente a parte do titular.
+- Controle de valores a receber por pessoa.
+- Formas “Conforme as parcelas” e “Valor total de uma vez”.
+- Reembolsos parciais ou integrais.
+- Status Pendente, Parcial e Recebido.
+- Entrada do reembolso em Conta ou Carteira.
+- Reembolso classificado fora da Receita mensal.
+- Histórico de recebimentos e ação para desfazer.
+- Resumo global em Cartões e Contas.
+- Identificação visual da compra e da parte própria.
+- Rateio exato de centavos entre competências.
+- Edição posterior sem perder o histórico.
+- Bloqueios contra nomes repetidos, soma incorreta, recebimento acima do pendente e redução abaixo do já recebido.
+- Proteção contra remoção de pessoa, desativação ou exclusão que deixaria dados financeiros órfãos.
+- Novo artigo na Central de Ajuda.
+- Layout responsivo para computador e celular.
+
+VALIDAÇÕES EXECUTADAS
+
+- 16 verificações funcionais automatizadas em Chromium, sem falhas.
+- Rateio de R$ 100,00 em três parcelas validado como R$ 33,34 + R$ 33,33 + R$ 33,33.
+- Cenário Shopee de R$ 400,00 validado com parte própria de R$ 120,00 e R$ 280,00 a receber.
+- Fatura integral e Despesa pessoal separadas corretamente.
+- Reembolso parcial, alteração de saldo e reversão validados.
+- Compra 100% alheia validada sem gerar despesa pessoal.
+- Despesa fixa com diferença de centavos por competência validada.
+- Inicialização completa do aplicativo em navegador validada sem erro de JavaScript.
+- 38 arquivos JavaScript aprovados em verificação de sintaxe.
+- Manifesto, referências locais e versão 6.46.37 conferidos.
+
+ARQUIVO DE USO
+
+Consulte GUIA_COMPRA_COMPARTILHADA_MARCO_V6_46_37.txt.

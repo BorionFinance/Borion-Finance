@@ -4266,3 +4266,398 @@ html:not([data-interface-mode="smartphone"]) .topbar-controls > *{
 html:not([data-interface-mode="smartphone"]) .topbar-controls .month-nav-wrap{
   margin:0;
 }
+
+
+/* ---------- V6.46.39 — ajuste visual do modal de receita ---------- */
+.transaction-modal .revenue-origin-toggle .seg-btn,
+.transaction-modal .revenue-destination-toggle .seg-btn{
+  min-height:52px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  line-height:1.16;
+  padding:11px 8px;
+}
+.transaction-modal .revenue-destination-toggle{
+  gap:8px;
+  align-items:stretch;
+}
+.transaction-modal .revenue-destination-toggle .seg-btn{
+  font-size:12.2px;
+}
+@media (min-width: 721px){
+  .transaction-modal .revenue-destination-toggle{
+    grid-template-columns:repeat(4,minmax(0,1fr));
+  }
+}
+html[data-interface-mode="smartphone"] .transaction-modal .revenue-origin-toggle .seg-btn,
+html[data-interface-mode="smartphone"] .transaction-modal .revenue-destination-toggle .seg-btn{
+  min-height:54px;
+  font-size:12px;
+  padding:12px 7px;
+  border-radius:0;
+}
+html[data-interface-mode="smartphone"] .transaction-modal .revenue-destination-toggle .seg-btn{
+  font-size:12.2px;
+}
+/* ---------- V6.46.37 — compras compartilhadas e reembolsos ---------- */
+.shared-purchase-builder{margin-top:14px;border:1px solid rgba(214,174,91,.24);border-radius:14px;background:rgba(214,174,91,.045);overflow:hidden}
+.shared-purchase-toggle-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 15px}
+.shared-purchase-toggle-row>div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.shared-purchase-toggle-row strong{font-size:13.5px;color:var(--text)}
+.shared-purchase-toggle-row span{font-size:11.5px;color:var(--muted)}
+.shared-switch{position:relative;display:inline-flex;flex:0 0 auto;width:44px;height:24px;cursor:pointer}
+.shared-switch input{position:absolute;opacity:0;pointer-events:none}
+.shared-switch>span{position:absolute;inset:0;border-radius:999px;background:rgba(148,163,184,.24);border:1px solid rgba(148,163,184,.28);transition:background .16s ease,border-color .16s ease}
+.shared-switch>span:after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:var(--text);box-shadow:0 2px 7px rgba(0,0,0,.28);transition:transform .16s ease}
+.shared-switch input:checked+span{background:rgba(214,174,91,.78);border-color:rgba(214,174,91,.9)}
+.shared-switch input:checked+span:after{transform:translateX(20px);background:#10151d}
+.shared-purchase-details{padding:0 15px 15px;border-top:1px solid rgba(214,174,91,.15)}
+.shared-info-box{margin:13px 0;padding:11px 12px;border-radius:10px;background:rgba(59,130,246,.08);border:1px solid rgba(96,165,250,.18);color:var(--muted);font-size:11.8px;line-height:1.45}
+.shared-info-box b{color:var(--text)}
+.shared-mode-toggle .seg-btn{white-space:normal;line-height:1.2}
+.shared-people-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0 8px}
+.shared-people-head strong{font-size:12.5px;color:var(--text)}
+.shared-people-list{display:flex;flex-direction:column;gap:9px}
+.shared-person-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,.72fr) 34px;gap:9px;align-items:end;padding:10px;border-radius:11px;background:rgba(255,255,255,.025);border:1px solid rgba(148,163,184,.12)}
+.shared-person-row .field{margin:0}
+.shared-person-remove{height:40px;border-radius:9px;border:1px solid rgba(239,68,68,.28);background:rgba(239,68,68,.08);color:#fca5a5;font-size:19px;cursor:pointer}
+.shared-person-remove:disabled{opacity:.35;cursor:not-allowed}
+.shared-person-received-lock{grid-column:1/-1;color:var(--muted);font-size:10.8px}
+.shared-builder-actions{display:flex;justify-content:flex-end;margin-top:8px}
+.shared-sum-card{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:10px;padding:11px;border-radius:11px;border:1px solid rgba(148,163,184,.15);background:rgba(2,6,23,.18)}
+.shared-sum-card>div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.shared-sum-card span{font-size:10.5px;color:var(--muted)}
+.shared-sum-card b{font-size:12.5px;color:var(--text);overflow-wrap:anywhere}
+.shared-sum-card p{grid-column:1/-1;margin:2px 0 0;font-size:11px;color:var(--muted);line-height:1.4}
+.shared-sum-card.ok{border-color:rgba(34,197,94,.25)}
+.shared-sum-card.bad{border-color:rgba(239,68,68,.3)}
+.shared-sum-card.bad>div:last-of-type b{color:#f87171}
+.shared-purchase-pill .dot{background:#60a5fa!important}
+.shared-received-pill{border-color:rgba(34,197,94,.24)!important;color:#86efac!important}
+.shared-receivable-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:0 0 14px;padding:13px;border-radius:13px;border:1px solid rgba(96,165,250,.2);background:rgba(59,130,246,.055)}
+.shared-receivable-summary>div{display:flex;flex-direction:column;gap:4px}
+.shared-receivable-summary span{font-size:10.8px;color:var(--muted)}
+.shared-receivable-summary b{font-size:15px;color:var(--text)}
+.shared-receivable-summary p{grid-column:1/-1;margin:2px 0 0;font-size:11px;color:var(--muted)}
+.shared-manage-modal{width:min(760px,calc(100vw - 24px));max-height:min(90vh,900px);overflow:auto}
+.shared-manage-modal .modal-head>div{min-width:0}
+.shared-manage-modal .modal-head p{margin:4px 0 0;font-size:11.5px;color:var(--muted)}
+.shared-manage-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:3px 0 12px}
+.shared-manage-summary>div{padding:10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(148,163,184,.12);display:flex;flex-direction:column;gap:4px}
+.shared-manage-summary span{font-size:10.5px;color:var(--muted)}
+.shared-manage-summary b{font-size:13px;color:var(--text)}
+.shared-manage-explanation{padding:11px 12px;border-radius:10px;background:rgba(214,174,91,.06);border:1px solid rgba(214,174,91,.16);font-size:11.5px;line-height:1.45;color:var(--muted)}
+.shared-manage-people{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+.shared-person-manage-card{padding:13px;border-radius:13px;border:1px solid rgba(148,163,184,.14);background:rgba(255,255,255,.025)}
+.shared-person-manage-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.shared-person-manage-head>div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.shared-person-manage-head strong{font-size:13.5px;color:var(--text)}
+.shared-person-manage-head span{font-size:11px;color:var(--muted)}
+.shared-person-progress{height:6px;border-radius:999px;background:rgba(148,163,184,.16);overflow:hidden;margin:10px 0}
+.shared-person-progress span{display:block;height:100%;border-radius:999px;background:var(--gold-bright)}
+.shared-person-money-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.shared-person-money-grid>div{display:flex;flex-direction:column;gap:2px}
+.shared-person-money-grid small{font-size:10.5px;color:var(--muted)}
+.shared-person-money-grid b{font-size:13px;color:var(--text)}
+.shared-complete-note{padding:9px;text-align:center;border-radius:9px;background:rgba(34,197,94,.08);color:#86efac;font-size:11.5px}
+.shared-history{margin-top:9px}
+.shared-history summary{cursor:pointer;font-size:11px;color:var(--muted)}
+.shared-receipt-history-row{display:grid;grid-template-columns:minmax(0,1fr) auto 30px;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(148,163,184,.1);font-size:10.8px;color:var(--muted)}
+.shared-receipt-history-row b{color:var(--text)}
+.shared-receipt-history-row button{height:27px;border-radius:7px;border:1px solid rgba(148,163,184,.18);background:rgba(255,255,255,.03);color:var(--text);cursor:pointer}
+.shared-manage-footer{margin-top:14px}
+html[data-theme="light"] .shared-purchase-builder,html[data-theme="light"] .shared-person-row,html[data-theme="light"] .shared-person-manage-card{background:rgba(120,85,20,.025)}
+html[data-theme="light"] .shared-sum-card,html[data-theme="light"] .shared-manage-summary>div{background:rgba(15,23,42,.025)}
+@media(max-width:760px){
+  .shared-person-row{grid-template-columns:1fr 38px}
+  .shared-person-value{grid-column:1/2}
+  .shared-person-remove{grid-column:2;grid-row:1/3;height:100%;min-height:74px}
+  .shared-sum-card{grid-template-columns:1fr 1fr}
+  .shared-manage-summary{grid-template-columns:1fr 1fr}
+  .shared-manage-summary>div:last-child{grid-column:1/-1}
+  .shared-manage-people{grid-template-columns:1fr}
+  .shared-receivable-summary{grid-template-columns:1fr 1fr}
+  .shared-receivable-summary>div:first-child{grid-column:1/-1}
+}
+
+
+/* =====================================================================================
+   V6.46.40 — POLIMENTO VISUAL: MOBILE, MODAIS E CALENDÁRIO
+   Mantém regras financeiras e sincronização intactas; apenas uniformiza apresentação.
+===================================================================================== */
+
+/* Modais de Receita, Despesa e Assinatura com a mesma linguagem visual. */
+.transaction-modal,
+.subscription-modal{
+  width:min(100%,448px);
+  max-width:448px;
+  border-radius:22px;
+  border-color:rgba(201,164,92,.18);
+  background:
+    linear-gradient(180deg,rgba(18,28,38,.985),rgba(10,17,25,.985));
+  box-shadow:0 26px 72px rgba(0,0,0,.46),inset 0 1px 0 rgba(255,255,255,.035);
+  padding:22px;
+}
+.transaction-modal .modal-head,
+.subscription-modal .modal-head{
+  min-height:38px;
+  margin-bottom:8px;
+  gap:12px;
+}
+.transaction-modal .modal-head h2,
+.subscription-modal .modal-head h2{
+  font-size:18px;
+  line-height:1.18;
+  letter-spacing:-.012em;
+}
+.transaction-modal .modal-head button,
+.subscription-modal .modal-head button{
+  flex:0 0 34px;
+  width:34px;
+  height:34px;
+  border-radius:11px;
+  font-size:21px;
+  background:rgba(255,255,255,.025);
+  border:1px solid rgba(255,255,255,.045);
+}
+.transaction-modal .modal-sub,
+.subscription-modal .modal-sub{
+  margin-bottom:17px;
+  line-height:1.5;
+}
+.transaction-modal .field,
+.subscription-modal .field,
+.subscription-modal .mf-conditional{
+  margin-bottom:15px;
+}
+.transaction-modal .field label,
+.subscription-modal .field label{
+  margin-bottom:7px;
+  font-size:12.5px;
+  font-weight:720;
+  letter-spacing:.006em;
+}
+.transaction-modal .field input[type=text],
+.transaction-modal .field input[type=password],
+.transaction-modal .field input[type=email],
+.transaction-modal .field input[type=number],
+.transaction-modal .field input[type=date],
+.transaction-modal .field input[type=month],
+.transaction-modal .field select,
+.subscription-modal .field input[type=text],
+.subscription-modal .field input[type=password],
+.subscription-modal .field input[type=email],
+.subscription-modal .field input[type=number],
+.subscription-modal .field input[type=date],
+.subscription-modal .field input[type=month],
+.subscription-modal .field select{
+  min-height:48px;
+  padding:12px 13px;
+  border-radius:14px;
+  border-color:rgba(255,255,255,.075);
+  background:rgba(12,20,29,.92);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.018);
+}
+.transaction-modal .field input:focus,
+.transaction-modal .field select:focus,
+.subscription-modal .field input:focus,
+.subscription-modal .field select:focus{
+  border-color:rgba(201,164,92,.74);
+  box-shadow:0 0 0 3px rgba(201,164,92,.10),inset 0 1px 0 rgba(255,255,255,.025);
+}
+.transaction-modal .segmented-toggle,
+.subscription-modal .segmented-toggle{
+  border-radius:14px;
+  border-color:rgba(255,255,255,.075);
+  background:rgba(12,20,29,.86);
+}
+.transaction-modal .segmented-toggle .seg-btn,
+.subscription-modal .segmented-toggle .seg-btn{
+  min-height:46px;
+  padding:10px 9px;
+  line-height:1.18;
+  font-size:12.3px;
+}
+.transaction-modal .segmented-toggle .seg-btn.active,
+.subscription-modal .segmented-toggle .seg-btn.active{
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 5px 16px rgba(201,164,92,.13);
+}
+.transaction-modal .row-btns .btn,
+.subscription-modal .row-btns .btn{
+  min-height:50px;
+  border-radius:15px;
+  font-size:14px;
+}
+.transaction-modal .payment-source-panel,
+.subscription-modal .payment-source-panel,
+.transaction-modal .reserve-destination-box,
+.subscription-modal .reserve-destination-box{
+  border-radius:15px;
+}
+
+/* Calendários e campos de data mais limpos, sem o quadrado escuro exagerado. */
+.transaction-modal .field input[type=date],
+.transaction-modal .field input[type=month],
+.subscription-modal .field input[type=date],
+.subscription-modal .field input[type=month]{
+  padding-right:54px!important;
+  color-scheme:dark;
+}
+.transaction-modal .field input[type=date]::-webkit-calendar-picker-indicator,
+.transaction-modal .field input[type=month]::-webkit-calendar-picker-indicator,
+.subscription-modal .field input[type=date]::-webkit-calendar-picker-indicator,
+.subscription-modal .field input[type=month]::-webkit-calendar-picker-indicator{
+  width:21px;
+  height:21px;
+  padding:6px;
+  margin-right:-2px;
+  border-radius:11px;
+  background-color:rgba(201,164,92,.11);
+  box-shadow:inset 0 0 0 1px rgba(201,164,92,.12);
+}
+
+/* Agenda: células mais equilibradas e leitura mais clara. */
+.cal-weekdays{
+  gap:6px;
+  margin-bottom:9px;
+  padding:0 3px 9px;
+  font-size:10.5px;
+  letter-spacing:.06em;
+}
+.cal-grid{gap:6px;}
+.cal-cell{
+  min-height:88px;
+  padding:8px;
+  border-radius:14px;
+  border-color:rgba(255,255,255,.065);
+  background:linear-gradient(180deg,rgba(18,28,38,.82),rgba(10,17,25,.88));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.018);
+}
+.cal-cell:not(.empty):hover{
+  transform:translateY(-1px);
+  box-shadow:0 10px 24px rgba(0,0,0,.24),inset 0 1px 0 rgba(255,255,255,.025);
+}
+.cal-cell.today{
+  border-color:rgba(201,164,92,.72);
+  box-shadow:inset 0 0 0 1px rgba(201,164,92,.34),0 0 18px rgba(201,164,92,.10);
+}
+.cal-daynum{
+  width:24px;
+  height:24px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin:0 0 5px;
+  border-radius:8px;
+  font-size:11.5px;
+}
+.cal-cell.today .cal-daynum{
+  color:#17120a;
+  background:linear-gradient(180deg,var(--gold-bright),var(--gold));
+}
+.cal-item{
+  border-radius:7px;
+  padding:4px 6px;
+  line-height:1.15;
+}
+
+/* Seletor de mês do topo mobile com aparência de controle principal. */
+html[data-interface-mode="smartphone"] .topbar-controls .month-nav.mobile-month-picker{
+  border-color:rgba(201,164,92,.20)!important;
+  background:linear-gradient(180deg,rgba(18,28,38,.92),rgba(10,17,25,.92))!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025),0 8px 20px rgba(0,0,0,.17)!important;
+}
+html[data-interface-mode="smartphone"] .topbar-controls .month-nav.mobile-month-picker:active{
+  transform:scale(.992);
+}
+html[data-interface-mode="smartphone"] .mobile-month-calendar-icon{
+  width:20px!important;
+  height:20px!important;
+  flex-basis:20px!important;
+  filter:drop-shadow(0 3px 8px rgba(201,164,92,.18));
+}
+html[data-interface-mode="smartphone"] .mobile-month-calendar-icon svg{
+  width:20px!important;
+  height:20px!important;
+}
+
+/* Mobile: mais respiro, toque confortável e consistência entre os três formulários. */
+html[data-interface-mode="smartphone"] .transaction-modal.mobile-bottom-sheet,
+html[data-interface-mode="smartphone"] .subscription-modal.mobile-bottom-sheet{
+  border-radius:24px 24px 0 0!important;
+  border-left-color:rgba(201,164,92,.14)!important;
+  border-right-color:rgba(201,164,92,.14)!important;
+  border-top-color:rgba(201,164,92,.24)!important;
+  padding-left:max(16px,env(safe-area-inset-left))!important;
+  padding-right:max(16px,env(safe-area-inset-right))!important;
+}
+html[data-interface-mode="smartphone"] .transaction-modal .mobile-sheet-scroll,
+html[data-interface-mode="smartphone"] .subscription-modal .mobile-sheet-scroll{
+  padding-bottom:calc(24px + env(safe-area-inset-bottom));
+}
+html[data-interface-mode="smartphone"] .transaction-modal .mobile-sheet-scroll > .modal-head,
+html[data-interface-mode="smartphone"] .subscription-modal .mobile-sheet-scroll > .modal-head{
+  padding-top:10px;
+  padding-bottom:12px;
+  margin-bottom:5px;
+  background:linear-gradient(180deg,rgba(18,28,38,.995) 78%,rgba(18,28,38,0));
+}
+html[data-interface-mode="smartphone"] .transaction-modal .field,
+html[data-interface-mode="smartphone"] .subscription-modal .field,
+html[data-interface-mode="smartphone"] .subscription-modal .mf-conditional{
+  margin-bottom:16px;
+}
+html[data-interface-mode="smartphone"] .transaction-modal .field input[type=text],
+html[data-interface-mode="smartphone"] .transaction-modal .field input[type=password],
+html[data-interface-mode="smartphone"] .transaction-modal .field input[type=email],
+html[data-interface-mode="smartphone"] .transaction-modal .field input[type=number],
+html[data-interface-mode="smartphone"] .transaction-modal .field input[type=date],
+html[data-interface-mode="smartphone"] .transaction-modal .field input[type=month],
+html[data-interface-mode="smartphone"] .transaction-modal .field select,
+html[data-interface-mode="smartphone"] .subscription-modal .field input[type=text],
+html[data-interface-mode="smartphone"] .subscription-modal .field input[type=password],
+html[data-interface-mode="smartphone"] .subscription-modal .field input[type=email],
+html[data-interface-mode="smartphone"] .subscription-modal .field input[type=number],
+html[data-interface-mode="smartphone"] .subscription-modal .field input[type=date],
+html[data-interface-mode="smartphone"] .subscription-modal .field input[type=month],
+html[data-interface-mode="smartphone"] .subscription-modal .field select{
+  min-height:52px;
+  font-size:16px;
+}
+html[data-interface-mode="smartphone"] .transaction-modal .segmented-toggle .seg-btn,
+html[data-interface-mode="smartphone"] .subscription-modal .segmented-toggle .seg-btn{
+  min-height:52px;
+  padding:11px 7px;
+  font-size:12px;
+}
+html[data-interface-mode="smartphone"] .transaction-modal .row-btns .btn,
+html[data-interface-mode="smartphone"] .subscription-modal .row-btns .btn{
+  min-height:54px;
+  font-size:15px;
+}
+html[data-interface-mode="smartphone"] .transaction-modal .info-box,
+html[data-interface-mode="smartphone"] .subscription-modal .info-box,
+html[data-interface-mode="smartphone"] .transaction-modal .gold-box,
+html[data-interface-mode="smartphone"] .subscription-modal .gold-box{
+  border-radius:14px;
+  padding:12px 13px;
+}
+
+/* Agenda no celular: células compactas, mas sem esmagar os números. */
+@media(max-width:760px){
+  .cal-weekdays{gap:4px;font-size:9.5px;padding-inline:1px;}
+  .cal-grid{gap:4px;}
+  .cal-cell{min-height:62px;padding:5px;border-radius:11px;}
+  .cal-daynum{width:21px;height:21px;margin-bottom:3px;border-radius:7px;font-size:10.5px;}
+  .cal-item{font-size:8px;padding:3px 4px;}
+  .cal-more{font-size:8px;}
+}
+@media(max-width:360px){
+  html[data-interface-mode="smartphone"] .transaction-modal.mobile-bottom-sheet,
+  html[data-interface-mode="smartphone"] .subscription-modal.mobile-bottom-sheet{
+    padding-left:12px!important;
+    padding-right:12px!important;
+  }
+}

@@ -148,7 +148,7 @@ function renderBudget(){
       months.forEach(({y,m})=>{
         fixasAtivasNoMes(y,m).forEach(f=>{
           if(!agg.has(f.id)) agg.set(f.id, {f, total:0, ocorrencias:0});
-          const e = agg.get(f.id); e.total += Number(f.valor||0); e.ocorrencias += 1;
+          const e = agg.get(f.id); e.total += fixaValorNoMes(f,y,m); e.ocorrencias += 1;
         });
       });
       const allEntries = Array.from(agg.values());
@@ -171,24 +171,26 @@ function renderBudget(){
     } else {
       const allActive = fixasAtivasNoMes(S.month.y,S.month.m);
       const catTotals={};
-      allActive.forEach(f=> catTotals[f.categoria]=(catTotals[f.categoria]||0)+Number(f.valor||0));
+      allActive.forEach(f=> catTotals[f.categoria]=(catTotals[f.categoria]||0)+fixaValorNoMes(f,S.month.y,S.month.m));
       segments = Object.keys(catTotals).map(k=>({label:k,value:catTotals[k],color:catColor(k)}));
       let list = hasFilter ? allActive.filter(f=>matchesFilter(f.nome,f.categoria)) : allActive.slice();
       list.sort((a,b)=>BudgetDateSort.compare('fixa',monthKey(S.month.y,S.month.m)+'-'+pad2(a.dia||1),monthKey(S.month.y,S.month.m)+'-'+pad2(b.dia||1),a.createdAt,b.createdAt));
-      total = sumBy(list,'valor');
+      total = list.reduce((sum,f)=>sum+fixaValorNoMes(f,S.month.y,S.month.m),0);
       const mesKeyAtual = monthKey(S.month.y,S.month.m);
       rows = list.map(f=>{
         const status = fixaOcorrenciaStatus(f, mesKeyAtual);
         const statusCls = status==='Pago'?'ok':status==='Vencido'?'bad':'neutral';
         const occurrence=fixaOcorrenciaFor(f.id,mesKeyAtual);
         const statusLabel=status==='Pago'?'Pago':(status==='Vencido'?'Em aberto · vencida':'Em aberto');
-        const nameHTML=budgetLaunchNameHTML(f.nome,{source:budgetExpenseSourceLabel(f,occurrence),recurrence:'Recorrente desde '+shortMonthLabel(f.startMonth)});
+        const fixedValue=fixaValorNoMes(f,S.month.y,S.month.m);
+        const fixedMeta=f.compartilhamentoId?['Compra compartilhada','Fatura '+brl(f.valorFaturaParcela||0),'Minha parte '+brl(fixedValue)]:[];
+        const nameHTML=budgetLaunchNameHTML(f.nome,{source:budgetExpenseSourceLabel(f,occurrence),recurrence:'Recorrente desde '+shortMonthLabel(f.startMonth),meta:fixedMeta});
         return `
         <tr>
           <td class="launch-date-cell">Dia ${f.dia||1}</td>
           <td class="launch-name-column">${nameHTML}</td>
           <td class="launch-category-cell"><span class="cat-pill"><span class="dot" style="background:${catColor(f.categoria)}"></span>${esc(f.categoria)}</span></td>
-          <td class="launch-value-cell val-neg">- ${brl(f.valor)}</td>
+          <td class="launch-value-cell val-neg">- ${brl(fixedValue)}</td>
           <td class="launch-status-cell"><span class="cheque-status ${statusCls}">${statusLabel}</span></td>
           <td class="tbl-actions launch-actions-cell"><div class="launch-actions"><button onclick="Budget.toggleFixaPago('${f.id}')" title="${status==='Pago'?'Marcar em aberto':'Marcar como paga'}">${status==='Pago'?'↺':'✔'}</button><button onclick="Budget.edit('${f.id}')" title="Editar despesa fixa">✎</button></div></td>
         </tr>`;
@@ -213,6 +215,7 @@ function renderBudget(){
       const meta=[];
       if(tab==='receita' && origemKey!=='propria') meta.push(txOrigemToLabel(origemKey));
       if(tab==='variavel' && Number(t.parcelaTotal||0)>1 && Number(t.parcelaAtual||0)>0) meta.push('Parcela '+Number(t.parcelaAtual)+'/'+Number(t.parcelaTotal));
+      if(tab==='variavel'&&window.SharedPurchases){const sharedMeta=SharedPurchases.transactionMeta(t);if(sharedMeta)meta.push(...sharedMeta);}
       const nameHTML=budgetLaunchNameHTML(t.nome,{
         local:tab==='variavel'?(t.localCompra||t.local||''):'',
         inline:tab==='receita'?budgetRevenueDestinationLabel(t):'',
@@ -359,7 +362,8 @@ function centralBuildEntries(){
       const dueDate = key+'-'+pad2(f.dia||1);
       const rec = fixaOcorrenciaFor(f.id, key);
       const status = fixaOcorrenciaStatus(f, key);
-      const valor = (rec&&rec.pago) ? (Number(rec.valorPago)||Number(f.valor)||0) : (Number(f.valor)||0);
+      const monthlyValue=fixaValorNoMes(f,Number(key.slice(0,4)),Number(key.slice(5,7))-1);
+      const valor = (rec&&rec.pago) ? (Number(rec.valorPago)||monthlyValue) : monthlyValue;
       const origemUsada = rec ? rec.origemPagamento : (f.origemPagamento||'conta');
       const reservaIdUsada = origemUsada==='reserva' ? (rec?rec.reservaId:f.reservaOrigemId) : null;
       const box = reservaIdUsada ? boxesById[reservaIdUsada] : null;
@@ -955,7 +959,8 @@ function payFixaOcorrencia(f, mesKey, options={}){
   const persist=options.persist!==false, notify=options.notify!==false;
   const jaExiste = fixaOcorrenciaFor(f.id, mesKey);
   if(jaExiste && jaExiste.pago){ if(notify)toast('Essa ocorrência já está marcada como paga.'); return true; } // proteção contra duplicidade
-  const valor = Number(f.valor)||0;
+  const parts=String(mesKey||monthKey(S.month.y,S.month.m)).split('-').map(Number);
+  const valor = fixaValorNoMes(f,parts[0]||S.month.y,(parts[1]||S.month.m+1)-1);
   if((f.origemPagamento||'conta')==='reserva'){
     const box = findReservaBoxById(f.reservaOrigemId);
     if(!box){ if(notify)toast('A reserva vinculada a esta despesa fixa não existe mais. Edite a despesa e escolha outra reserva.'); return false; }
@@ -1154,6 +1159,7 @@ function openTransactionModal({type, existing}){
       <div class="field"><label>Tipo de compra</label><select id="tm_credito_tipo"><option value="avista">Crédito à vista</option><option value="parcelado">Crédito parcelado</option></select></div>
       <div class="field hidden" id="tm_parcelas_wrap"><label>Quantidade de parcelas <span id="tm_parcela_preview" style="color:var(--muted);font-weight:600;"></span></label><input type="number" id="tm_parcelas" min="2" step="1" value="2"/></div>
       <p class="modal-sub" style="margin:4px 0 0;">O dia da data da compra será usado como dia de entrada na fatura.</p>
+      ${window.SharedPurchases?SharedPurchases.formHTML('tm',null):''}
     </div>
     <div class="field"><label>Status do lançamento</label><div class="segmented-toggle" id="tm_status_group">
       <button type="button" class="seg-btn ${initialStatus==='Pago'?'active':''}" data-value="Pago">Pago</button>
@@ -1176,7 +1182,7 @@ function openTransactionModal({type, existing}){
         <button type="button" class="seg-btn ${initialDestino==='carteira'?'active':''}" data-value="carteira">Carteira</button>
         <button type="button" class="seg-btn ${initialDestino==='conta'?'active':''}" data-value="conta">Conta</button>
         ${reservasEnabled()?`<button type="button" class="seg-btn ${initialDestino==='reserva'?'active':''}" data-value="reserva" ${reservaBoxes.length?'':'disabled title="Crie uma reserva primeiro"'}>Reserva</button>`:''}
-        ${reservasEnabled()?`<button type="button" class="seg-btn seg-btn-wide ${initialDestino==='dividir'?'active':''}" data-value="dividir" ${reservaBoxes.length?'':'disabled title="Crie uma reserva primeiro"'}>Dividir entre Conta e Reserva</button>`:''}
+        ${reservasEnabled()?`<button type="button" class="seg-btn ${initialDestino==='dividir'?'active':''}" data-value="dividir" ${reservaBoxes.length?'':'disabled title="Crie uma reserva primeiro"'}>Conta + Reserva</button>`:''}
       </div><input type="hidden" id="tm_receita_destino" value="${initialDestino}"/>
     </div>
     <div id="tm_receita_carteira_fields" class="payment-source-panel ${initialDestino==='carteira'?'':'hidden'}"><div class="info-box">A receita entra automaticamente na <b>Carteira</b>, como dinheiro em espécie.</div></div>
@@ -1253,6 +1259,7 @@ function openTransactionModal({type, existing}){
   if($('#tm_credito_tipo'))$('#tm_credito_tipo').onchange=updateCreditoParcelPreview;
   if($('#tm_parcelas'))$('#tm_parcelas').oninput=updateCreditoParcelPreview;
   if($('#tm_valor'))$('#tm_valor').addEventListener('input',()=>{updateCreditoParcelPreview();syncRevenueSplitFromTotal();});
+  if(isDespesaVariavel&&window.SharedPurchases)SharedPurchases.bindForm({prefix:'tm',existing:null,totalResolver:()=>parseInt(($('#tm_valor')&&$('#tm_valor').dataset.cents)||'0',10)/100,installmentsResolver:()=>($('#tm_credito_tipo')&&$('#tm_credito_tipo').value==='parcelado')?Math.max(2,Math.round(Number(($('#tm_parcelas')&&$('#tm_parcelas').value)||2))):1});
   if(isDespesaVariavel)syncPaymentSourceUI(initialPaymentSource);
   if(isReceita)syncRevenueDestinationUI(initialDestino);
 
@@ -1268,10 +1275,12 @@ function openTransactionModal({type, existing}){
         const importedSource=isEdit&&window.BorionInterop?BorionInterop.captureImportReference(existing):null;
         const cartao=(S.data.cartoes||[]).find(c=>c.id===$('#tm_cartao').value);if(!cartao){alert('Escolha um cartão de crédito válido.');return;}
         const parcelaTotal=$('#tm_credito_tipo').value==='parcelado'?Math.max(2,Math.round(Number($('#tm_parcelas').value)||2)):1;
+        const sharedResult=window.SharedPurchases?SharedPurchases.readForm({prefix:'tm',totalValue:valor,installmentCount:parcelaTotal,existing:null}):{ok:true,model:null};
+        if(!sharedResult.ok){alert(sharedResult.error);return;}
         const valorParcela=Math.round((valor/parcelaTotal)*100)/100,diaCompra=Math.max(1,Math.min(31,parseInt(data.slice(8,10),10)||1));
         if(!commitAtomic(()=>{
           if(isEdit){reverseTxSaldoEffect(existing);removeLinkedReservaMoveFromTransaction(existing);removeLinkedReservaWithdrawalFromDespesa(existing);S.data.transacoes=S.data.transacoes.filter(x=>x.id!==existing.id);}
-          const p={id:uid(),descricao:nome,local:localCompra,categoria:categoria||'Outro',valorParcela,parcelaTotal,dataCompra:data.slice(0,7),dataCompraCompleta:data,diaEntrada:diaCompra,apareceDespesas:true,despesaTipo:'variavel',statusPagamento:status,statusFaturaPorCompetencia:{},despesaTransacaoId:null,despesaTransacaoIds:[],despesaFixaId:null};
+          const p={id:uid(),descricao:nome,local:localCompra,categoria:categoria||'Outro',valorParcela,parcelaTotal,dataCompra:data.slice(0,7),dataCompraCompleta:data,diaEntrada:diaCompra,apareceDespesas:sharedResult.model?sharedResult.model.valorProprioTotal>0:true,despesaTipo:'variavel',statusPagamento:status,statusFaturaPorCompetencia:{},despesaTransacaoId:null,despesaTransacaoIds:[],despesaFixaId:null,compartilhamento:sharedResult.model};
           cartao.parcelas.push(p);linkParcelaToDespesa(cartao,p);
           if(importedSource&&window.BorionInterop)BorionInterop.transferImportReference(existing,p.despesaTransacaoIds||[],S.data);
         }))return;
@@ -1319,6 +1328,7 @@ function openTransactionModal({type, existing}){
       destinoModo='Dividir entre conta e reserva';
     }
     const banco=accountNameSnapshot(accountId),origem=$('#tm_origem').value||'propria';
+    if(isEdit&&existing.compartilhamentoId&&origem!=='reembolso'){alert('Este lançamento está vinculado a uma compra compartilhada e precisa continuar como Reembolso recebido. Para removê-lo, use o histórico da compra compartilhada.');return;}
     let tx;if(!commitAtomic(()=>{if(isEdit){reverseTxSaldoEffect(existing);removeLinkedReservaMoveFromTransaction(existing);}const payload={nome,data,categoria,valor,accountId,banco,origem,reservaValor:0,destinoModo:'Conta livre'};if(isEdit){Object.assign(existing,payload);tx=existing;}else{tx=Object.assign({id:uid(),tipo:'receita'},payload);S.data.transacoes.push(tx);}if(reservaBox){tx.destinoModo=destinoModo;createLinkedReservaMoveFromTransaction(tx,reservaBox,reservaValor);}if(!applyTxSaldoEffect(tx))throw new Error('Conta inválida para aplicar saldo.');}))return;
     saveCurrentData();closeModal();renderView();toast(isEdit?'Receita atualizada.':(reservaBox?'Receita adicionada com destino aplicado.':'Receita adicionada.'));
   };
@@ -1394,6 +1404,7 @@ function openFixaModal(existing){
       <div class="field"><label>Tipo de compra</label><select id="fm_credito_tipo"><option value="avista">Crédito à vista</option><option value="parcelado">Crédito parcelado</option></select></div>
       <div class="field hidden" id="fm_parcelas_wrap"><label>Quantidade de parcelas <span id="fm_parcela_preview" style="color:var(--muted);font-weight:600;"></span></label><input type="number" id="fm_parcelas" min="2" step="1" value="2"/></div>
       <p class="modal-sub" style="margin:4px 0 0;">No crédito, o dia do vencimento será usado como dia de entrada na fatura.</p>
+      ${window.SharedPurchases?SharedPurchases.formHTML('fm',null):''}
     </div>
     <div class="field"><label>Status deste mês</label><div class="segmented-toggle" id="fm_status_group">
       <button type="button" class="seg-btn ${initialStatus==='Pago'?'active':''}" data-value="Pago">Pago</button>
@@ -1440,6 +1451,7 @@ function openFixaModal(existing){
   if($('#fm_credito_tipo'))$('#fm_credito_tipo').onchange=updateCreditoParcelPreview;
   if($('#fm_parcelas'))$('#fm_parcelas').oninput=updateCreditoParcelPreview;
   if($('#fm_valor'))$('#fm_valor').addEventListener('input',updateCreditoParcelPreview);
+  if(window.SharedPurchases)SharedPurchases.bindForm({prefix:'fm',existing:null,totalResolver:()=>parseInt(($('#fm_valor')&&$('#fm_valor').dataset.cents)||'0',10)/100,installmentsResolver:()=>($('#fm_credito_tipo')&&$('#fm_credito_tipo').value==='parcelado')?Math.max(2,Math.round(Number(($('#fm_parcelas')&&$('#fm_parcelas').value)||2))):1});
   syncPaymentSourceUI(initialPaymentSource);
 
   $('#fm_save').onclick=()=>{
@@ -1460,13 +1472,15 @@ function openFixaModal(existing){
       const cartao=(S.data.cartoes||[]).find(c=>c.id===$('#fm_cartao').value);
       if(!cartao){alert('Escolha um cartão de crédito válido.');return;}
       const parcelaTotal=$('#fm_credito_tipo').value==='parcelado'?Math.max(2,Math.round(Number($('#fm_parcelas').value)||2)):1;
+      const sharedResult=window.SharedPurchases?SharedPurchases.readForm({prefix:'fm',totalValue:valor,installmentCount:parcelaTotal,existing:null}):{ok:true,model:null};
+      if(!sharedResult.ok){alert(sharedResult.error);return;}
       const valorParcela=Math.round((valor/parcelaTotal)*100)/100;
       const ok=runAtomicFinancialMutation(()=>{
         if(isEdit){
           refundAndCleanFixaOcorrencias(existing.id,inPlace?null:monthKeyNow);
           if(inPlace)S.data.fixas=S.data.fixas.filter(x=>x.id!==existing.id);else existing.endMonth=monthBeforeKey(monthKeyNow);
         }
-        const p={id:uid(),descricao:nome,local:localCompra,categoria:categoria||'Outro',valorParcela,parcelaTotal,dataCompra:newStartMonth,dataCompraCompleta:dataCadastro,diaEntrada:dia,apareceDespesas:true,despesaTipo:'fixa',statusPagamento:requestedStatus,statusFaturaPorCompetencia:{},despesaTransacaoId:null,despesaTransacaoIds:[],despesaFixaId:null};
+        const p={id:uid(),descricao:nome,local:localCompra,categoria:categoria||'Outro',valorParcela,parcelaTotal,dataCompra:newStartMonth,dataCompraCompleta:dataCadastro,diaEntrada:dia,apareceDespesas:sharedResult.model?sharedResult.model.valorProprioTotal>0:true,despesaTipo:'fixa',statusPagamento:requestedStatus,statusFaturaPorCompetencia:{},despesaTransacaoId:null,despesaTransacaoIds:[],despesaFixaId:null,compartilhamento:sharedResult.model};
         cartao.parcelas.push(p);linkParcelaToDespesa(cartao,p);
       },()=>alert('Não foi possível salvar a compra no cartão. Os dados anteriores foram preservados.'));
       if(!ok)return;

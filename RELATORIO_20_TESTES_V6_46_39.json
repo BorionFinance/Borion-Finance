@@ -1,0 +1,92 @@
+{
+  "passed": 20,
+  "total": 20,
+  "results": [
+    {
+      "name": "01. App mobile carrega sem page errors",
+      "passed": true
+    },
+    {
+      "name": "02. App mobile carrega sem console errors",
+      "passed": true
+    },
+    {
+      "name": "03. Badge de versão mostra v6.46.39",
+      "passed": true
+    },
+    {
+      "name": "04. Modal de receita abre no mobile",
+      "passed": true
+    },
+    {
+      "name": "05. Grupo de destino da receita tem 4 botões corretos",
+      "passed": true
+    },
+    {
+      "name": "06. Destino da receita usa grade de 2 colunas no mobile",
+      "passed": true
+    },
+    {
+      "name": "07. Botão padrão do destino é Conta",
+      "passed": true
+    },
+    {
+      "name": "08. Clique em Conta + Reserva ativa modo dividir",
+      "passed": true
+    },
+    {
+      "name": "09. Voltar para Conta esconde o painel dividir",
+      "passed": true
+    },
+    {
+      "name": "10. Grupo de origem da receita tem 4 botões",
+      "passed": true
+    },
+    {
+      "name": "11. Clique em Reembolso recebido funciona",
+      "passed": true
+    },
+    {
+      "name": "12. Botões do destino têm altura ajustada no mobile",
+      "passed": true
+    },
+    {
+      "name": "13. Indicador de salvamento aparece",
+      "passed": true
+    },
+    {
+      "name": "14. Indicador fica no topo direito",
+      "passed": true
+    },
+    {
+      "name": "15. Estado busy mostra spinner",
+      "passed": true
+    },
+    {
+      "name": "16. Estado success mostra check",
+      "passed": true
+    },
+    {
+      "name": "17. Estado warning mostra aviso",
+      "passed": true
+    },
+    {
+      "name": "18. Salvamento foreground continua compacto e sem overlay grande",
+      "passed": true
+    },
+    {
+      "name": "19. Indicador some ao finalizar",
+      "passed": true
+    },
+    {
+      "name": "20. Rotina SharedPurchases continua íntegra",
+      "passed": true
+    }
+  ],
+  "desktop_sanity": {
+    "page_errors": [],
+    "console_errors": [],
+    "dest_buttons": 4,
+    "grid_cols": "80px 80px 80px 80px"
+  }
+}

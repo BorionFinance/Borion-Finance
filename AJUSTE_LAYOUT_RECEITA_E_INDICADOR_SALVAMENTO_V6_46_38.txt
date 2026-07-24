@@ -1,0 +1,11 @@
+BORION FINANCE — V6.46.38
+
+Ajustes aplicados:
+- Tela de Adicionar receita: o destino "Conta + Reserva" agora aparece como quarto botão dentro da mesma grade, sem sobrar uma linha inteira só para ele.
+- O texto do botão foi encurtado para manter o layout limpo no mobile e no desktop.
+- Removida a notificação grande de salvamento do Google Drive.
+- No lugar dela, agora aparece apenas um ícone animado e discreto no topo da tela durante o salvamento.
+- O comportamento vale para mobile e desktop.
+
+Observação:
+- Fluxos de erro crítico/autenticação continuam protegidos pelas telas de recuperação quando realmente necessário.

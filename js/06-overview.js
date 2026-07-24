@@ -31,7 +31,7 @@ function evolucaoDividasData(){
 }
 function gastosPorCategoriaSegments(y=S.month.y, m=S.month.m){
   const totals = {};
-  fixasAtivasNoMes(y,m).forEach(f=> totals[f.categoria]=(totals[f.categoria]||0)+Number(f.valor||0));
+  fixasAtivasNoMes(y,m).forEach(f=> totals[f.categoria]=(totals[f.categoria]||0)+fixaValorNoMes(f,y,m));
   txInMonth(S.data.transacoes.filter(t=>t.tipo==='variavel'&&bankMatches(t.banco,t.accountId)), y, m).forEach(t=> totals[t.categoria]=(totals[t.categoria]||0)+Number(t.valor||0));
   const assinaturaPeriod=monthKey(y,m);
   assinaturasAtivasNoMes(y,m).filter(a=>!assinaturaTemDespesaNoMes(a.assinaturaId||a.id,assinaturaPeriod)).forEach(a=> totals[a.categoria]=(totals[a.categoria]||0)+Number(a.valor||0));
@@ -40,7 +40,7 @@ function gastosPorCategoriaSegments(y=S.month.y, m=S.month.m){
 function gastosPorCartaoSegments(y=S.month.y, m=S.month.m){
   return S.data.cartoes.filter(c=>bankMatches(c.banco)).map(c=>{
     let total=0;
-    c.parcelas.forEach(p=>{ const st=parcelaStatus(p,y,m); if(st.ativo) total+=p.valorParcela; });
+    c.parcelas.forEach(p=>{ const st=parcelaStatus(p,y,m); if(st.ativo) total+=window.SharedPurchases&&SharedPurchases.isShared(p)?SharedPurchases.currentOwnValue(p,st.atual-1):(Number(p.valorParcela)||0); });
     return {label:c.banco, value:total, color:bankColor(c.banco)};
   }).filter(s=>s.value>0);
 }
@@ -63,7 +63,7 @@ function bankSummaryList(y=S.month.y, m=S.month.m){
           return acc+d;
         },0);
     const receitas = sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&t.banco===bn), y, m),'valor');
-    const despesasFixas = sumBy(fixasAtivasNoMes(y,m).filter(f=>f.banco===bn),'valor');
+    const despesasFixas = fixasAtivasNoMes(y,m).filter(f=>f.banco===bn).reduce((sum,f)=>sum+fixaValorNoMes(f,y,m),0);
     const despesasVar = sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='variavel'&&t.banco===bn), y, m),'valor');
     const despesas = despesasFixas+despesasVar;
     const investVinc = sumBy(S.data.investimentos.ativos.filter(a=>a.banco===bn),'atual');

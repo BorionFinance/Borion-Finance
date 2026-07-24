@@ -211,7 +211,7 @@ function modalFieldInitialValue(field, values={}){
   if(f.type==='month'){ const now=todayYM(); return monthKey(now.y,now.m); }
   return '';
 }
-function openModal({title, sub, fields, values={}, saveLabel, onSave, onDelete, deleteLabel, extraHTML}){
+function openModal({title, sub, fields, values={}, saveLabel, onSave, onDelete, deleteLabel, extraHTML, modalClass=''}){
   const moneyFields=[];
   const fieldInitialVal=f=>modalFieldInitialValue(f,values);
   const body = fields.map(f=>{
@@ -248,7 +248,7 @@ function openModal({title, sub, fields, values={}, saveLabel, onSave, onDelete, 
 
   const box = el(`
   <div class="modal-overlay">
-    <div class="modal-box">
+    <div class="modal-box ${esc(modalClass||'')}">
       <div class="modal-head"><h2>${esc(title)}</h2><button id="mf_close">&times;</button></div>
       ${sub?`<p class="modal-sub">${esc(sub)}</p>`:''}
       <div id="mf_body">${body}</div>

@@ -11,6 +11,14 @@ function fixasAtivasNoMes(y=S.month.y, m=S.month.m){
   const key = monthKey(y,m);
   return S.data.fixas.filter(f=> f.startMonth<=key && (!f.endMonth || key<=f.endMonth) && bankMatches(f.banco,f.accountId));
 }
+/* V6.46.37 — despesas fixas vindas de compra compartilhada podem ter diferença de
+   um centavo entre parcelas. O vetor mensal preserva o total exato da parte própria. */
+function fixaValorNoMes(f,y=S.month.y,m=S.month.m){
+  if(!f)return 0;
+  const values=Array.isArray(f.compartilhamentoValoresMensais)?f.compartilhamentoValoresMensais:null;
+  if(values&&f.startMonth){const index=monthDiffYM(monthKey(y,m),f.startMonth);if(index>=0&&index<values.length)return Number(values[index])||0;}
+  return Number(f.valor)||0;
+}
 /* V5.37.0 — lista de {y,m,key} (y/m 0-indexados, no formato usado por S.month) entre
    duas datas ISO (yyyy-mm-dd), inclusive, cobrindo cada mês tocado pelo intervalo.
    Usado pelo filtro de período de Orçamento, que pode olhar vários meses (inclusive
@@ -59,7 +67,7 @@ function fixaOcorrenciaStatus(f, mesKey){
   const dueDate = mesKey+'-'+pad2(f.dia||1);
   return dueDate < todayISO() ? 'Vencido' : 'Pendente';
 }
-function fixaMes(y=S.month.y, m=S.month.m){ return sumBy(fixasAtivasNoMes(y,m),'valor'); }
+function fixaMes(y=S.month.y, m=S.month.m){ return fixasAtivasNoMes(y,m).reduce((sum,f)=>sum+fixaValorNoMes(f,y,m),0); }
 function variavelMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='variavel'&&bankMatches(t.banco,t.accountId)), y, m),'valor'); }
 /* Receita do mês = dinheiro próprio + rendimentos. Reembolso/repasse de terceiros não contam como renda. */
 function receitaMes(y=S.month.y, m=S.month.m){ return sumBy(txInMonth(S.data.transacoes.filter(t=>t.tipo==='receita'&&(t.origem==null||t.origem==='propria'||t.origem==='rendimento')&&bankMatches(t.banco,t.accountId)), y, m),'valor'); }
@@ -215,23 +223,26 @@ function boletoRestanteValor(b, y=S.month.y, m=S.month.m){
 function parcelaDescricaoMensal(nome, atual, total){
   return total>1 ? `${nome} (${atual}/${total})` : nome;
 }
-function createParcelaDespesaVariavel({nome, categoria, valorParcela, totalParcelas, startMonth, banco, formaPagamento, extra}){
+function createParcelaDespesaVariavel({nome, categoria, valorParcela, valoresParcelas, totalParcelas, startMonth, banco, formaPagamento, diaEntrada, extra}){
   const ids=[];
-  const valor = Number(valorParcela)||0;
+  const valorPadrao = Number(valorParcela)||0;
+  const valoresMensais=Array.isArray(valoresParcelas)?valoresParcelas.map(v=>Math.round((Number(v)||0)*100)/100):null;
   /* V6.35.3 — antes, toda parcela virava uma despesa variável travada no dia 01 do
      mês (data:ym+'-01'), não importa que dia o usuário tivesse escolhido na compra.
      O dia certo (diaEntrada) já era calculado e guardado na parcela do cartão — ele
      só não era usado para montar a data desta despesa espelhada. Por isso uma compra
      no crédito à vista no dia 15/07, por exemplo, aparecia em Despesas variáveis como
      01/07. Agora usamos diaEntrada (quando existir em extra) para todas as parcelas. */
-  const dia = Math.max(1,Math.min(31,parseInt((extra&&extra.diaEntrada)||1,10)||1));
+  const dia = Math.max(1,Math.min(31,parseInt(diaEntrada||(extra&&typeof extra==='object'&&extra.diaEntrada)||1,10)||1));
   for(let i=0;i<totalParcelas;i++){
     const ym = shiftYM(startMonth, i);
+    const valor=valoresMensais&&valoresMensais[i]!=null?valoresMensais[i]:valorPadrao;
+    const extraForMonth=typeof extra==='function'?extra(i,valor):extra;
     const t = Object.assign({
       id:uid(), tipo:'variavel', nome:parcelaDescricaoMensal(nome, i+1, totalParcelas),
       data:ym+'-'+pad2(dia), categoria, valor, banco:banco||'', formaPagamento,
       parcelaAtual:i+1, parcelaTotal:totalParcelas
-    }, extra||{});
+    }, extraForMonth||{});
     S.data.transacoes.push(t);
     ids.push(t.id);
   }
@@ -251,6 +262,12 @@ function linkParcelaToDespesa(cartao, parcela){
   const totalParcelas = Math.max(1, Math.round(parcela.parcelaTotal||1));
   const startMonth = parcela.dataCompra || monthKey(S.month.y,S.month.m);
   const valorParcela = Number(parcela.valorParcela)||0;
+  /* V6.46.37 — compra compartilhada mantém 100% na fatura, mas o espelho em
+     Despesas usa exclusivamente a parte do titular. O rateio exato por competência
+     evita que arredondamentos de centavos alterem o total pessoal. */
+  const sharedModel=window.SharedPurchases&&SharedPurchases.normalizeModel(parcela);
+  const ownValues=sharedModel?SharedPurchases.ownInstallments(parcela):null;
+  const ownMonthly=ownValues&&ownValues.length?ownValues[0]:valorParcela;
   /* A despesa espelhada herda o banco/nome do cartão para respeitar o filtro por banco/cartão. */
   if(parcela.despesaTipo==='fixa'){
     const endMonth = shiftYM(startMonth, totalParcelas-1);
@@ -260,15 +277,15 @@ function linkParcelaToDespesa(cartao, parcela){
       setParcelaCompetenciaPagoManual(cartao.id,parcela.id,startMonth,true);
       parcela.statusPagamento='Em aberto';
     }
-    const f = {id:uid(), nome, localCompra:parcela.local||'', categoria, valor:valorParcela, dia:parcela.diaEntrada||1, startMonth, endMonth:totalParcelas>1?endMonth:startMonth, banco:cartao.banco||'', formaPagamento:'Crédito', viaCartaoId:cartao.id, viaParcelaId:parcela.id, parcelaTotal:totalParcelas};
+    const f = {id:uid(), nome, localCompra:parcela.local||'', categoria, valor:ownMonthly, dia:parcela.diaEntrada||1, startMonth, endMonth:totalParcelas>1?endMonth:startMonth, banco:cartao.banco||'', formaPagamento:'Crédito', viaCartaoId:cartao.id, viaParcelaId:parcela.id, parcelaTotal:totalParcelas, compartilhamentoId:sharedModel?sharedModel.id:null, valorFaturaParcela:valorParcela, valorProprioTotal:sharedModel?sharedModel.valorProprioTotal:null, compartilhamentoValoresMensais:ownValues};
     S.data.fixas.push(f);
     parcela.despesaFixaId = f.id;
     parcela.despesaTransacaoId = null;
     parcela.despesaTransacaoIds = [];
   } else {
     parcela.despesaTransacaoIds = createParcelaDespesaVariavel({
-      nome, categoria, valorParcela, totalParcelas, startMonth, banco:cartao.banco||'', formaPagamento:'Crédito',
-      extra:{viaCartaoId:cartao.id, viaParcelaId:parcela.id, localCompra:parcela.local||'', statusPagamento:parcela.statusPagamento==='Em aberto'?'Em aberto':'Pago', diaEntrada:parcela.diaEntrada||1, viaAssinaturaId:parcela.viaAssinaturaId||null, assinaturaCobrancaId:parcela.assinaturaCobrancaId||null}
+      nome, categoria, valorParcela:sharedModel?ownMonthly:valorParcela, valoresParcelas:ownValues, totalParcelas, startMonth, banco:cartao.banco||'', formaPagamento:'Crédito', diaEntrada:parcela.diaEntrada||1,
+      extra:(index,ownValue)=>({viaCartaoId:cartao.id, viaParcelaId:parcela.id, localCompra:parcela.local||'', statusPagamento:parcela.statusPagamento==='Em aberto'?'Em aberto':'Pago', diaEntrada:parcela.diaEntrada||1, viaAssinaturaId:parcela.viaAssinaturaId||null, assinaturaCobrancaId:parcela.assinaturaCobrancaId||null, compartilhamentoId:sharedModel?sharedModel.id:null, compartilhamentoParcela:true, valorFaturaParcela:valorParcela, valorProprioParcela:ownValue, valorProprioTotal:sharedModel?sharedModel.valorProprioTotal:null})
     });
     parcela.despesaTransacaoId = parcela.despesaTransacaoIds[0] || null; // compatibilidade com dados antigos
     parcela.despesaTransacaoIds.forEach(id=>{
@@ -302,7 +319,7 @@ function linkBoletoToDespesa(boleto){
     boleto.despesaTransacaoIds = [];
   } else {
     boleto.despesaTransacaoIds = createParcelaDespesaVariavel({
-      nome, categoria, valorParcela, totalParcelas, startMonth, banco:boleto.banco||'', formaPagamento:'Boleto',
+      nome, categoria, valorParcela, totalParcelas, startMonth, banco:boleto.banco||'', formaPagamento:'Boleto', diaEntrada:boleto.diaVencimento||1,
       extra:{viaBoletoId:boleto.id}
     });
     boleto.despesaTransacaoId = boleto.despesaTransacaoIds[0] || null;

@@ -4,7 +4,7 @@
 (function(){
 'use strict';
 
-const HELP_VERSION='1.0.0';
+const HELP_VERSION='1.1.0';
 const HELP_CATEGORIES=[
   {id:'inicio',icon:'✦',title:'Primeiros passos'},
   {id:'navegacao',icon:'⌘',title:'Navegação e visão geral'},
@@ -124,6 +124,18 @@ const HELP_ARTICLES=[
     'Salve e abra Cartões e Contas → Faturas para conferir todas as parcelas.',
     'Edite a compra de origem quando precisar corrigir valor, categoria, loja ou parcelamento.'
   ],['Não lance manualmente cada parcela como uma nova despesa. Isso duplica a dívida.'],['parcelado','parcelas','dia da fatura','fechamento','crédito']),
+
+  article('compra-compartilhada','cartoes','Dividir compra entre pessoas e controlar reembolsos','Compra compartilhada mantém o valor integral na fatura, conta apenas a parte do titular em Despesas e controla o que cada pessoa ainda precisa devolver.',[
+    'Ao lançar uma despesa no Crédito, ative Compra compartilhada dentro do bloco do cartão.',
+    'Informe sua parte e adicione cada pessoa com o valor que pertence a ela. A soma precisa fechar exatamente com o total da compra.',
+    'Escolha Conforme as parcelas quando as pessoas devolverem mês a mês, ou Valor total de uma vez quando pagarão tudo antecipadamente.',
+    'Salve. A fatura continuará com 100% do valor, mas Despesas mostrará somente sua parte.',
+    'Abra Cartões e Contas e clique no botão 👥 da compra para acompanhar Pendente, Parcial ou Recebido.',
+    'Clique em Registrar reembolso, informe o valor, a data e a conta onde o dinheiro entrou. Pagamentos parciais são permitidos.',
+    'O recebimento será lançado automaticamente como Reembolso recebido: aumenta a conta escolhida, mas não aumenta a Receita do mês.',
+    'Para corrigir um recebimento, abra o histórico da pessoa e use ↺. O saldo e o valor pendente serão restaurados.',
+    'Para compras totalmente de outra pessoa, deixe Minha parte em R$ 0,00. A compra ficará na fatura e não contará como despesa pessoal.'
+  ],['Nunca lance o reembolso como Receita própria. Use o botão da compra compartilhada para manter fatura, despesa, saldo e valor a receber sincronizados.'],['compra compartilhada','dividir compra','reembolso','a receber','shopee','mercado livre','cartão compartilhado']),
 
   article('status-pagamento','lancamentos','Pago, Em aberto, Vencido e estorno','O status controla se a obrigação já afetou o saldo e como aparece nos relatórios.',[
     'Marque Pago quando o dinheiro já saiu da conta, carteira ou reserva.',

@@ -853,27 +853,56 @@ const GoogleDriveProvider = {
 
   _showBackgroundSavePill(title='Salvando no Google Drive…',detail='Aguardando confirmação real do Drive.',state='busy'){
     if(typeof document==='undefined'||!document.body)return;
-    let pill=document.getElementById('borion_background_save_pill');
-    if(!pill){
-      pill=document.createElement('div');pill.id='borion_background_save_pill';pill.setAttribute('role','status');pill.setAttribute('aria-live','polite');
-      pill.style.cssText='position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:2147482500;display:flex;align-items:center;gap:10px;max-width:min(92vw,440px);padding:10px 14px;border-radius:14px;background:rgba(10,18,27,.96);border:1px solid rgba(222,179,92,.34);box-shadow:0 12px 32px rgba(0,0,0,.42);color:#f5f7fa;font:600 13px/1.25 system-ui,sans-serif;pointer-events:none;';
-      pill.innerHTML='<span data-pill-spinner style="width:16px;height:16px;flex:0 0 16px;border:2px solid rgba(222,179,92,.28);border-top-color:#deb35c;border-radius:50%;animation:borionForegroundSpin .8s linear infinite"></span><span style="min-width:0"><strong data-pill-title style="display:block;font-size:12.5px"></strong><small data-pill-detail style="display:block;color:#aebaca;font-weight:500;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></small></span>';
-      if(!document.getElementById('borion_background_save_style')){
-        const style=document.createElement('style');style.id='borion_background_save_style';
-        style.textContent='@keyframes borionForegroundSpin{to{transform:rotate(360deg)}}@media(max-width:768px){#borion_background_save_pill{bottom:calc(92px + env(safe-area-inset-bottom))!important;max-width:calc(100vw - 24px)!important}}';
+    let indicator=document.getElementById('borion_save_top_indicator');
+    if(!indicator){
+      indicator=document.createElement('div');
+      indicator.id='borion_save_top_indicator';
+      indicator.setAttribute('role','status');
+      indicator.setAttribute('aria-live','polite');
+      indicator.setAttribute('aria-label','Salvando no Google Drive');
+      indicator.style.cssText='position:fixed;right:max(14px,calc(env(safe-area-inset-right) + 12px));top:max(10px,calc(env(safe-area-inset-top) + 8px));z-index:2147483200;width:42px;height:42px;border-radius:999px;background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.16),transparent 36%),rgba(10,18,27,.96);border:1px solid rgba(222,179,92,.34);box-shadow:0 12px 30px rgba(0,0,0,.34),0 0 0 1px rgba(255,255,255,.03) inset;display:flex;align-items:center;justify-content:center;pointer-events:none;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);';
+      indicator.innerHTML='        <span data-save-spinner style="display:block;width:18px;height:18px;border:2px solid rgba(222,179,92,.2);border-top-color:#deb35c;border-radius:50%;animation:borionForegroundSpin .78s linear infinite"></span>        <span data-save-check style="display:none;font:800 16px/1 system-ui,sans-serif;color:#6ee7b7">✓</span>        <span data-save-warn style="display:none;font:900 16px/1 system-ui,sans-serif;color:#f4bf5f">!</span>        <span data-save-sr style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"></span>';
+      if(!document.getElementById('borion_save_top_indicator_style')){
+        const style=document.createElement('style');
+        style.id='borion_save_top_indicator_style';
+        style.textContent='@keyframes borionForegroundSpin{to{transform:rotate(360deg)}}@keyframes borionSaveHalo{0%{transform:scale(1);opacity:.55}100%{transform:scale(1.28);opacity:0}}#borion_save_top_indicator::after{content:"";position:absolute;inset:3px;border-radius:inherit;border:1px solid rgba(222,179,92,.14);opacity:0;pointer-events:none}#borion_save_top_indicator[data-state="busy"]::after{animation:borionSaveHalo 1s ease-out infinite}#borion_save_top_indicator[data-state="success"]{border-color:rgba(110,231,183,.4);box-shadow:0 12px 30px rgba(0,0,0,.34),0 0 20px rgba(110,231,183,.12)}#borion_save_top_indicator[data-state="warning"]{border-color:rgba(244,191,95,.4);box-shadow:0 12px 30px rgba(0,0,0,.34),0 0 20px rgba(244,191,95,.12)}@media(max-width:768px){#borion_save_top_indicator{top:max(8px,calc(env(safe-area-inset-top) + 6px));right:max(10px,calc(env(safe-area-inset-right) + 10px));width:40px;height:40px;}}';
         document.head.appendChild(style);
       }
-      document.body.appendChild(pill);
+      document.body.appendChild(indicator);
     }
-    const spin=pill.querySelector('[data-pill-spinner]'),t=pill.querySelector('[data-pill-title]'),d=pill.querySelector('[data-pill-detail]');
-    if(t)t.textContent=String(title||'Salvando no Google Drive…');
-    if(d)d.textContent=String(detail||'');
-    if(spin){spin.style.display=state==='success'?'none':'block';spin.style.borderTopColor=state==='warning'?'#f4bf5f':'#deb35c';}
-    pill.dataset.state=state;this._backgroundSavePill=pill;
+    this._saveIndicatorSeq=Math.max(0,Number(this._saveIndicatorSeq)||0)+1;
+    indicator.dataset.seq=String(this._saveIndicatorSeq);
+    indicator.dataset.state=state;
+    const label=[String(title||''),String(detail||'')].filter(Boolean).join(' — ');
+    indicator.setAttribute('aria-label',label||'Salvando no Google Drive');
+    indicator.setAttribute('title',label||'Salvando no Google Drive');
+    const sr=indicator.querySelector('[data-save-sr]');
+    if(sr)sr.textContent=label||'Salvando no Google Drive';
+    const spinner=indicator.querySelector('[data-save-spinner]');
+    const check=indicator.querySelector('[data-save-check]');
+    const warn=indicator.querySelector('[data-save-warn]');
+    if(spinner){
+      spinner.style.display=state==='busy'?'block':'none';
+      spinner.style.borderTopColor=state==='warning'?'#f4bf5f':'#deb35c';
+      spinner.style.borderColor=state==='warning'?'rgba(244,191,95,.22)':'rgba(222,179,92,.24)';
+      spinner.style.borderTopColor=state==='warning'?'#f4bf5f':'#deb35c';
+      indicator.style.borderColor=state==='warning'?'rgba(244,191,95,.34)':(state==='success'?'rgba(110,231,183,.34)':'rgba(222,179,92,.34)');
+    }
+    if(check)check.style.display=state==='success'?'block':'none';
+    if(warn)warn.style.display=state==='warning'?'block':'none';
+    this._backgroundSavePill=indicator;
   },
 
   _hideBackgroundSavePill(delay=0){
-    const remove=()=>{const pill=typeof document!=='undefined'?document.getElementById('borion_background_save_pill'):null;if(pill)pill.remove();this._backgroundSavePill=null;};
+    const seq=String(this._saveIndicatorSeq||0);
+    const remove=()=>{
+      const indicator=typeof document!=='undefined'?document.getElementById('borion_save_top_indicator'):null;
+      if(!indicator)return;
+      if(indicator.dataset.seq!==seq)return;
+      if(this.isForegroundSaveInProgress()||this.isNonBlockingSaveInProgress())return;
+      indicator.remove();
+      this._backgroundSavePill=null;
+    };
     if(delay>0)setTimeout(remove,delay);else remove();
   },
 
@@ -931,33 +960,13 @@ const GoogleDriveProvider = {
   isNonBlockingSaveInProgress(){return (Number(this._nonBlockingSaveDepth)||0)>0;},
 
   _renderForegroundSaveOverlay(title,detail,state='busy'){
-    if(typeof document==='undefined'||!document.body)return;
-    let overlay=document.getElementById('borion_foreground_save_overlay');
-    if(!overlay){
-      overlay=document.createElement('div');
-      overlay.id='borion_foreground_save_overlay';
-      overlay.setAttribute('role','status');
-      overlay.setAttribute('aria-live','polite');
-      overlay.style.cssText='position:fixed;inset:0;z-index:2147483200;background:rgba(3,10,17,.72);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;';
-      overlay.innerHTML='<div style="width:min(430px,100%);background:#0d1722;border:1px solid rgba(222,179,92,.35);border-radius:18px;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.48);color:#f5f7fa;text-align:center"><div data-save-spinner style="width:34px;height:34px;border:3px solid rgba(222,179,92,.25);border-top-color:#deb35c;border-radius:50%;margin:0 auto 16px;animation:borionForegroundSpin .8s linear infinite"></div><h2 data-save-title style="margin:0 0 10px;font-size:22px"></h2><p data-save-detail style="margin:0;color:#aebaca;line-height:1.45"></p></div>';
-      if(!document.getElementById('borion_foreground_save_style')){
-        const style=document.createElement('style');style.id='borion_foreground_save_style';style.textContent='@keyframes borionForegroundSpin{to{transform:rotate(360deg)}}';document.head.appendChild(style);
-      }
-      document.body.appendChild(overlay);
-    }
-    const spinner=overlay.querySelector('[data-save-spinner]');
-    const titleEl=overlay.querySelector('[data-save-title]');
-    const detailEl=overlay.querySelector('[data-save-detail]');
-    if(titleEl)titleEl.textContent=String(title||'Salvando no Google Drive…');
-    if(detailEl)detailEl.textContent=String(detail||'');
-    if(spinner)spinner.style.display=state==='success'?'none':'block';
-    overlay.dataset.state=state;
-    this._foregroundSaveOverlay=overlay;
+    this._showBackgroundSavePill(title,detail,state);
+    this._foregroundSaveOverlay=typeof document!=='undefined'?document.getElementById('borion_save_top_indicator'):null;
   },
 
   _hideForegroundSaveOverlay(){
-    const overlay=typeof document!=='undefined'?document.getElementById('borion_foreground_save_overlay'):null;
-    if(overlay)overlay.remove();this._foregroundSaveOverlay=null;
+    this._hideBackgroundSavePill();
+    this._foregroundSaveOverlay=null;
   },
 
   _showStrictRecoveryOverlay(message){

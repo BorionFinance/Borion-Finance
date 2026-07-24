@@ -1,0 +1,183 @@
+BORION FINANCE — GUIA DO MARCO
+COMPRA COMPARTILHADA E CONTROLE DE REEMBOLSOS
+Versão: 6.46.37
+
+O QUE ESSA FUNÇÃO RESOLVE
+
+Use Compra compartilhada quando uma compra feita no seu cartão tiver:
+- uma parte sua e uma parte de outra pessoa;
+- partes de duas ou mais pessoas;
+- ou 100% do valor pertencente a outra pessoa.
+
+O Borion separa automaticamente:
+1. o valor integral que precisa continuar na fatura do cartão;
+2. a parte que realmente é sua despesa;
+3. o valor que as outras pessoas ainda precisam devolver;
+4. os reembolsos já recebidos.
+
+O reembolso aumenta o saldo da conta escolhida, mas NÃO é contabilizado como renda.
+
+============================================================
+PASSO A PASSO — LANÇAR UMA COMPRA COMPARTILHADA
+============================================================
+
+CAMINHO 1 — PELO BOTÃO LANÇAR
+
+1. Abra Lançar.
+2. Escolha Despesa variável ou Despesa fixa.
+3. Preencha nome, loja, categoria, data e valor TOTAL da compra.
+4. Em “De onde será pago”, escolha Crédito.
+5. Escolha o cartão.
+6. Informe se a compra é à vista ou parcelada.
+7. Ative “Compra compartilhada”.
+8. Em “Minha parte na compra”, informe somente o valor que pertence a você.
+9. Clique em “+ Pessoa”.
+10. Digite o nome da pessoa e o valor que pertence a ela.
+11. Repita para todas as pessoas necessárias.
+12. Confira o quadro final:
+    - Total da compra;
+    - Minha despesa;
+    - A receber;
+    - Diferença.
+13. A Diferença precisa ficar em R$ 0,00.
+14. Salve o lançamento.
+
+CAMINHO 2 — DIRETAMENTE EM CARTÕES E CONTAS
+
+1. Abra Cartões e Contas.
+2. Localize o cartão desejado.
+3. Clique para adicionar uma compra parcelada.
+4. Informe o valor DE CADA PARCELA e a quantidade de parcelas.
+5. Ative “Compra compartilhada”.
+6. Informe sua parte total e as partes das outras pessoas.
+7. Confirme que a diferença ficou em R$ 0,00.
+8. Salve.
+
+============================================================
+QUAL FORMA DE RECEBIMENTO ESCOLHER
+============================================================
+
+CONFORME AS PARCELAS
+Use quando a pessoa devolverá a parte dela mês a mês.
+
+Exemplo:
+Compra de R$ 1.200,00 em 12 vezes.
+Sua parte: R$ 600,00.
+Parte do Luiz: R$ 600,00.
+O Borion sugerirá aproximadamente R$ 50,00 por recebimento mensal do Luiz.
+
+VALOR TOTAL DE UMA VEZ
+Use quando a pessoa devolverá toda a parte dela em um único pagamento.
+
+Exemplo:
+Compra de R$ 400,00.
+Sua parte: R$ 120,00.
+Parte da mãe: R$ 180,00.
+Parte do pai: R$ 100,00.
+O Borion controlará R$ 280,00 a receber, mesmo que a compra esteja parcelada no cartão.
+
+A escolha é apenas uma orientação para o recebimento. Pagamentos parciais continuam permitidos.
+
+============================================================
+COMO REGISTRAR UM REEMBOLSO
+============================================================
+
+1. Abra Cartões e Contas.
+2. Localize a compra compartilhada.
+3. Clique no botão com o símbolo de pessoas “👥”.
+4. Localize a pessoa que pagou.
+5. Clique em “Registrar reembolso”.
+6. Informe:
+   - o valor recebido;
+   - a data;
+   - a conta ou Carteira onde o dinheiro entrou.
+7. Confirme.
+
+O status da pessoa será atualizado automaticamente:
+- Pendente: ainda não houve pagamento;
+- Parcial: recebeu apenas uma parte;
+- Recebido: a parte foi quitada por completo.
+
+O recebimento aparecerá como “Reembolso recebido”. Ele altera o saldo da conta, mas não aumenta a Receita do mês.
+
+============================================================
+COMO CORRIGIR UM REEMBOLSO LANÇADO ERRADO
+============================================================
+
+1. Abra a compra pelo botão “👥”.
+2. Abra o Histórico de recebimentos da pessoa.
+3. Clique em “↺” no recebimento incorreto.
+4. Confirme.
+
+O Borion irá:
+- retirar o valor da conta onde havia entrado;
+- apagar o lançamento de reembolso;
+- devolver o valor para o total pendente da pessoa.
+
+============================================================
+COMPRA 100% DE OUTRA PESSOA
+============================================================
+
+Exemplo: compra de R$ 300,00 feita para o pai.
+
+1. Informe R$ 300,00 como total da compra.
+2. Ative Compra compartilhada.
+3. Deixe “Minha parte” em R$ 0,00.
+4. Adicione “Pai” com R$ 300,00.
+5. Salve.
+
+Resultado:
+- a fatura continuará com R$ 300,00;
+- Despesas pessoais contará R$ 0,00;
+- o Borion mostrará R$ 300,00 a receber do pai.
+
+============================================================
+EXEMPLO PRÁTICO — SHOPEE
+============================================================
+
+Compra total: R$ 400,00 em 4 parcelas de R$ 100,00.
+Sua parte: R$ 120,00.
+Parte da mãe: R$ 180,00.
+Parte do pai: R$ 100,00.
+
+O Borion registrará:
+- Fatura: 4 parcelas de R$ 100,00;
+- Despesa pessoal: 4 parcelas de R$ 30,00;
+- A receber da mãe: R$ 180,00;
+- A receber do pai: R$ 100,00;
+- Total a receber: R$ 280,00.
+
+Se a mãe pagar R$ 50,00:
+- recebido da mãe: R$ 50,00;
+- ainda pendente da mãe: R$ 130,00;
+- total geral ainda a receber: R$ 230,00.
+
+============================================================
+REGRAS DE SEGURANÇA
+============================================================
+
+- A soma da sua parte com as partes das pessoas precisa fechar exatamente com o total.
+- Nomes repetidos na mesma divisão são bloqueados.
+- Uma parte não pode ser reduzida abaixo do valor já recebido.
+- Uma pessoa com reembolso registrado não pode ser removida antes de desfazer os recebimentos.
+- A divisão não pode ser desativada enquanto existirem reembolsos registrados.
+- A compra não pode ser excluída enquanto a divisão estiver ativa, houver valor pendente ou existirem reembolsos vinculados.
+- Para excluir corretamente: desfaça os recebimentos, edite a compra, desative a divisão, salve e depois exclua.
+- Valores de centavos são distribuídos entre as parcelas sem alterar o total final.
+
+============================================================
+ONDE VER OS TOTAIS
+============================================================
+
+Em Cartões e Contas há um resumo com:
+- quantidade de compras compartilhadas;
+- total a receber;
+- total já reembolsado.
+
+Cada compra também mostra:
+- sua parte;
+- valor ainda a receber;
+- valor já recebido;
+- botão “👥” para gerenciar a divisão.
+
+Também existe uma explicação dentro da Central de Ajuda do Borion. Pesquise por “Compra compartilhada”, “reembolso” ou “dividir compra”.

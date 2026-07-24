@@ -115,22 +115,22 @@ function renderCards(){
       return `<div class="installment-row installment-purchase-row">
         <span class="installment-main">
           <span class="installment-title-line"><strong class="installment-description">${esc(p.descricao)}</strong>${p.local?` <span class="installment-local">(${esc(p.local)})</span>`:''}</span>
-          <span class="installment-tags">${p.categoria?`<span class="cat-pill installment-category-pill"><span class="dot" style="background:${catColor(p.categoria)}"></span>${esc(p.categoria)}</span>`:''}${p.apareceDespesas?`<span class="cat-pill installment-linked-pill"><span class="dot" style="background:var(--gold-bright)"></span>Também em Despesas (${p.despesaTipo==='fixa'?'fixa':'variável'})</span>`:''}${paymentPill}</span>
+          <span class="installment-tags">${p.categoria?`<span class="cat-pill installment-category-pill"><span class="dot" style="background:${catColor(p.categoria)}"></span>${esc(p.categoria)}</span>`:''}${p.apareceDespesas?`<span class="cat-pill installment-linked-pill"><span class="dot" style="background:var(--gold-bright)"></span>Também em Despesas (${p.despesaTipo==='fixa'?'fixa':'variável'})</span>`:''}${window.SharedPurchases?SharedPurchases.badgeHTML(p):''}${paymentPill}</span>
         </span>
         <span class="installment-value">${brl(p.valorParcela)}<span class="installment-monthly-suffix">/mês</span></span>
         <span class="installment-count">${p.atual} de ${p.parcelaTotal}</span>
         <span class="installment-day">Dia ${p.diaEntrada || '—'}</span>
-        <span class="installment-actions">${paymentButton}<button onclick="Cards.editParcela('${c.id}','${p.id}')" title="Editar compra">✎</button></span>
+        <span class="installment-actions">${paymentButton}${window.SharedPurchases&&SharedPurchases.isShared(p)?`<button onclick="SharedPurchases.openManage('${c.id}','${p.id}')" title="Gerenciar divisão e reembolsos">👥</button>`:''}<button onclick="Cards.editParcela('${c.id}','${p.id}')" title="Editar compra">✎</button></span>
       </div>`;
     }).join('');
     const inactiveRows = inactive.map(p=>{
       const fim = shiftYM(p.dataCompra, p.parcelaTotal-1);
       return `<div class="installment-row installment-purchase-row installment-inactive-row muted">
-        <span class="installment-main"><span class="installment-title-line"><strong class="installment-description">${esc(p.descricao)}</strong>${p.local?` <span class="installment-local">(${esc(p.local)})</span>`:''}</span></span>
+        <span class="installment-main"><span class="installment-title-line"><strong class="installment-description">${esc(p.descricao)}</strong>${p.local?` <span class="installment-local">(${esc(p.local)})</span>`:''}</span><span class="installment-tags">${window.SharedPurchases?SharedPurchases.badgeHTML(p):''}</span></span>
         <span class="installment-value">${brl(p.valorParcela)}<span class="installment-monthly-suffix">/mês</span></span>
         <span class="installment-count">Compra ${shortMonthLabel(p.dataCompra)}</span>
         <span class="installment-day">Fim ${shortMonthLabel(fim)}</span>
-        <span class="installment-actions"><button onclick="Cards.editParcela('${c.id}','${p.id}')">✎</button></span>
+        <span class="installment-actions">${window.SharedPurchases&&SharedPurchases.isShared(p)?`<button onclick="SharedPurchases.openManage('${c.id}','${p.id}')" title="Gerenciar divisão e reembolsos">👥</button>`:''}<button onclick="Cards.editParcela('${c.id}','${p.id}')">✎</button></span>
       </div>`;
     }).join('');
     const faturaHTML = fatura.paga
@@ -195,6 +195,7 @@ function renderCards(){
     <div data-order-list="contas" style="display:contents;">${accRows || '<div class="empty-note" style="margin-bottom:20px;">Nenhuma conta cadastrada ainda.</div>'}</div>
     <div class="toolbar" style="margin-top:10px;"><div class="toolbar-left">Cartões de crédito</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">${window.OrderPreferences?OrderPreferences.sortSelectHTML('cartoes'):''}<button class="btn-outline" onclick="Cards.addCartao()">+ Adicionar cartão</button></div></div>
     <p style="font-size:11.5px;color:var(--muted-2);margin:-6px 0 12px;">Compras no cartão viram parcelas dentro da fatura e não mexem no saldo do banco. O saldo só muda quando você marcar a fatura como paga.</p>
+    ${window.SharedPurchases?SharedPurchases.summaryHTML():''}
     ${orgFilterNoticeCartoes}
     <div data-order-list="cartoes" style="display:contents;">${cardBlocks || '<div class="empty-note">Nenhum cartão cadastrado ainda.</div>'}</div>
     <div class="toolbar" style="margin-top:18px;"><div class="toolbar-left">Boletos</div><button class="btn-outline" onclick="Cards.addBoleto()">+ Adicionar boleto</button></div>
@@ -291,17 +292,21 @@ const Cards = {
       {key:'diaEntrada',label:'Dia do mês que entra na fatura',type:'number',step:'1'},
       {key:'apareceDespesas',label:'Aparecer também em Despesas?',type:'checkbox'},
       {key:'despesaTipo',label:'Aparecer como',type:'segmented',default:'variavel',options:[{value:'variavel',label:'Despesa variável'},{value:'fixa',label:'Despesa fixa'}],visibleWhen:{key:'apareceDespesas',value:true}},
-    ], onSave(v){
+    ], extraHTML:window.SharedPurchases?SharedPurchases.formHTML('mf',null):'', onSave(v){
       const c = S.data.cartoes.find(x=>x.id===cartaoId);
       const dataCompraCompleta=v.dataCompra||todayISO();
       /* V6.35.4 — mesma prioridade de editParcela: a data escolhida manda no dia. */
       const diaCompra=Math.max(1,Math.min(31,parseInt(dataCompraCompleta.slice(8,10),10)||Number(v.diaEntrada)||1));
-      const p = {id:uid(), descricao:v.descricao, local:v.local, categoria:v.categoria||'Outro', valorParcela:Number(v.valorParcela)||0, parcelaTotal:Math.max(1,Math.round(v.parcelaTotal)||1), dataCompra:dataCompraCompleta.slice(0,7), dataCompraCompleta, diaEntrada:diaCompra, apareceDespesas:!!v.apareceDespesas, despesaTipo:v.despesaTipo||'variavel', statusFaturaPorCompetencia:{}, despesaTransacaoId:null, despesaTransacaoIds:[], despesaFixaId:null};
+      const parcelaTotal=Math.max(1,Math.round(v.parcelaTotal)||1),valorParcela=Number(v.valorParcela)||0;
+      const sharedResult=window.SharedPurchases?SharedPurchases.readForm({prefix:'mf',totalValue:valorParcela*parcelaTotal,installmentCount:parcelaTotal,existing:null}):{ok:true,model:null};
+      if(!sharedResult.ok){alert(sharedResult.error);return;}
+      const p = {id:uid(), descricao:v.descricao, local:v.local, categoria:v.categoria||'Outro', valorParcela, parcelaTotal, dataCompra:dataCompraCompleta.slice(0,7), dataCompraCompleta, diaEntrada:diaCompra, apareceDespesas:sharedResult.model?sharedResult.model.valorProprioTotal>0:!!v.apareceDespesas, despesaTipo:v.despesaTipo||'variavel', statusFaturaPorCompetencia:{}, despesaTransacaoId:null, despesaTransacaoIds:[], despesaFixaId:null, compartilhamento:sharedResult.model};
       c.parcelas.push(p);
       linkParcelaToDespesa(c, p);
       saveCurrentData(); closeModal(); renderView();
       toast(p.apareceDespesas ? 'Compra adicionada ao cartão e em Despesas.' : 'Compra adicionada ao cartão.');
     }});
+    if(window.SharedPurchases)SharedPurchases.bindForm({prefix:'mf',existing:null,totalResolver:()=>{const input=document.getElementById('mf_valorParcela'),qtd=document.getElementById('mf_parcelaTotal');return (parseInt(input&&input.dataset.cents||'0',10)/100)*Math.max(1,Math.round(Number(qtd&&qtd.value)||1));},installmentsResolver:()=>Math.max(1,Math.round(Number(document.getElementById('mf_parcelaTotal')&&document.getElementById('mf_parcelaTotal').value)||1))});
     wireParcelaCategoriaPorTipo((S.data.categorias.variavel||[])[0]);
   },
   editParcela(cartaoId, parcelaId){
@@ -317,8 +322,16 @@ const Cards = {
       {key:'diaEntrada',label:'Dia do mês que entra na fatura',type:'number',step:'1'},
       {key:'apareceDespesas',label:'Aparecer também em Despesas?',type:'checkbox'},
       {key:'despesaTipo',label:'Aparecer como',type:'segmented',options:[{value:'variavel',label:'Despesa variável'},{value:'fixa',label:'Despesa fixa'}],visibleWhen:{key:'apareceDespesas',value:true}},
-    ], values:Object.assign({},p,{dataCompra:p.dataCompraCompleta||(p.dataCompra?(p.dataCompra+'-'+pad2(p.diaEntrada||1)): '')}),
-    onDelete(){ unlinkParcelaFromDespesa(p); c.parcelas = c.parcelas.filter(x=>x.id!==parcelaId); saveCurrentData(); closeModal(); renderView(); },
+    ], values:Object.assign({},p,{dataCompra:p.dataCompraCompleta||(p.dataCompra?(p.dataCompra+'-'+pad2(p.diaEntrada||1)): '')}), extraHTML:window.SharedPurchases?SharedPurchases.formHTML('mf',p):'',
+    onDelete(){
+      if(window.SharedPurchases){const check=SharedPurchases.canDelete(p);if(!check.ok){
+        alert(check.received>0
+          ? 'Esta compra possui '+brl(check.received)+' em reembolsos registrados. Desfaça os recebimentos, desative a divisão e só então exclua a compra.'
+          : 'Esta compra ainda possui '+brl(check.pending)+' a receber. Edite a compra, desative a divisão e só então exclua.');
+        return false;
+      }}
+      unlinkParcelaFromDespesa(p); c.parcelas = c.parcelas.filter(x=>x.id!==parcelaId); saveCurrentData(); closeModal(); renderView();
+    },
     onSave(v){
       const dataCompraCompleta=v.dataCompra||p.dataCompraCompleta||(p.dataCompra?(p.dataCompra+'-'+pad2(p.diaEntrada||1)):'');
       /* V6.35.4 — "Data da compra" e "Dia do mês que entra na fatura" são dois campos
@@ -330,10 +343,14 @@ const Cards = {
          primeiro da própria data escolhida — que é o campo que o usuário efetivamente
          está editando — e só cai para "Dia da fatura" se a data vier vazia. */
       const diaCompra=Math.max(1,Math.min(31,parseInt(dataCompraCompleta.slice(8,10),10)||Number(v.diaEntrada)||p.diaEntrada||1));
-      Object.assign(p,{descricao:v.descricao, local:v.local, categoria:v.categoria||p.categoria||'Outro', valorParcela:Number(v.valorParcela)||0, parcelaTotal:Math.max(1,Math.round(v.parcelaTotal)||1), dataCompra:dataCompraCompleta.slice(0,7), dataCompraCompleta, diaEntrada:diaCompra, apareceDespesas:!!v.apareceDespesas, despesaTipo:v.despesaTipo||'variavel'});
+      const parcelaTotal=Math.max(1,Math.round(v.parcelaTotal)||1),valorParcela=Number(v.valorParcela)||0;
+      const sharedResult=window.SharedPurchases?SharedPurchases.readForm({prefix:'mf',totalValue:valorParcela*parcelaTotal,installmentCount:parcelaTotal,existing:p}):{ok:true,model:p.compartilhamento||null};
+      if(!sharedResult.ok){alert(sharedResult.error);return;}
+      Object.assign(p,{descricao:v.descricao, local:v.local, categoria:v.categoria||p.categoria||'Outro', valorParcela, parcelaTotal, dataCompra:dataCompraCompleta.slice(0,7), dataCompraCompleta, diaEntrada:diaCompra, apareceDespesas:sharedResult.model?sharedResult.model.valorProprioTotal>0:!!v.apareceDespesas, despesaTipo:v.despesaTipo||'variavel', compartilhamento:sharedResult.model});
       linkParcelaToDespesa(c, p);
       saveCurrentData(); closeModal(); renderView();
     }});
+    if(window.SharedPurchases)SharedPurchases.bindForm({prefix:'mf',existing:p,totalResolver:()=>{const input=document.getElementById('mf_valorParcela'),qtd=document.getElementById('mf_parcelaTotal');return (parseInt(input&&input.dataset.cents||'0',10)/100)*Math.max(1,Math.round(Number(qtd&&qtd.value)||1));},installmentsResolver:()=>Math.max(1,Math.round(Number(document.getElementById('mf_parcelaTotal')&&document.getElementById('mf_parcelaTotal').value)||1))});
     wireParcelaCategoriaPorTipo(p.categoria);
   },
   /* Marca a fatura do mês selecionado como paga: debita o banco escolhido e some da dívida em aberto. */

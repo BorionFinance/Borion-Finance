@@ -1,4 +1,4 @@
-/* Borion Finance — Google Drive Provider (V6.46.24 — Corrige loop de "sessão expirada" na reconexão)
+/* Borion Finance — Google Drive Provider (V6.46.25 — Corrige loop de "sessão expirada" na reconexão)
 
    Arquitetura 6.40.2: current.json é apenas o snapshot consolidado. Toda alteração
    é protegida primeiro como operação imutável, identificada por operationId, e só
@@ -760,6 +760,7 @@ const GoogleDriveProvider = {
   _strictCommitPromise:null,_strictCommitAgain:false,_strictPendingPayload:null,_strictOverlay:null,_strictAuthTimer:null,
   _strictReconnectPromise:null,_strictReconnectInProgress:false,
   _connecting:false,
+  _onboarding:false,
   _pendingProfileMetadata:new Map(),
 
   markProfileMetadataChanged(profile){
@@ -825,7 +826,7 @@ const GoogleDriveProvider = {
   hasUsableToken(){return !!(GoogleDriveAuth.accessToken&&Date.now()<GoogleDriveAuth.tokenExpiresAt-60000);},
 
   isAuthFlowInProgress(){
-    return !!(this._connecting||this._strictReconnectInProgress||(GoogleDriveAuth&&typeof GoogleDriveAuth.isLoginInProgress==='function'&&GoogleDriveAuth.isLoginInProgress()));
+    return !!(this._connecting||this._onboarding||this._strictReconnectInProgress||(GoogleDriveAuth&&typeof GoogleDriveAuth.isLoginInProgress==='function'&&GoogleDriveAuth.isLoginInProgress()));
   },
 
   isStrictCloudReady(){return !!(this._isStrictMode()&&this.isConnected()&&this.currentFileId&&navigator.onLine&&!this.authRequired&&this.hasUsableToken());},
@@ -2187,6 +2188,15 @@ if(typeof window!=='undefined'){
 function renderGoogleDriveOnboarding(){
   applyFont(); applyTheme();
   ensureBorionVersionBadge();
+  // V6.46.25 — achado real do loop do Marco: quando connect() termina numa
+  // pasta vazia, BorionStrictDrive já está ativo (activate() roda antes de
+  // decidir qual tela mostrar) mas currentFileId ainda não existe DE PROPÓSITO
+  // — é isso que "Começar do zero"/"Importar" vão criar. Os guards de
+  // pointerdown/submit/keydown não sabiam disso: viam isStrictCloudReady()
+  // false e travavam o PRÓPRIO clique nesses botões antes do onclick deles
+  // rodar, mostrando "sessão expirada" sem nenhuma tentativa real de conexão
+  // ter falhado. _onboarding avisa esses guards que esse estado é esperado.
+  if(window.GoogleDriveProvider)GoogleDriveProvider._onboarding=true;
   const root = document.getElementById('root');
   root.innerHTML = `
     <div class="gate-wrap">
@@ -2205,6 +2215,7 @@ function renderGoogleDriveOnboarding(){
   document.getElementById('gdrive_start_fresh').onclick = async ()=>{
     try{ await GoogleDriveProvider.createEmptyCurrentFile(); S.gate={mode:'list',error:''}; renderGate(); }
     catch(e){ alert(e.message||String(e)); }
+    finally{ GoogleDriveProvider._onboarding=false; }
   };
   document.getElementById('gdrive_import_old').onclick = ()=>{ document.getElementById('gdrive_import_file').click(); };
   document.getElementById('gdrive_import_file').onchange = async (ev)=>{
@@ -2222,8 +2233,10 @@ function renderGoogleDriveOnboarding(){
       S.gate = { mode: 'list', error: '' };
       renderGate();
     }catch(e){ alert('Arquivo inválido: ' + (e.message || String(e))); }
+    finally{ GoogleDriveProvider._onboarding=false; }
   };
   document.getElementById('gdrive_onboarding_back').onclick = ()=>{
+    GoogleDriveProvider._onboarding=false;
     GoogleDriveProvider.disconnect();
     CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info=''; CloudAuth.emailExpanded=false;
     CloudAuth.render();

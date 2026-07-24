@@ -1,0 +1,26 @@
+BORION FINANCE V6.46.25 — CORRIGE "SESSÃO EXPIRADA" AO CLICAR EM "COMEÇAR DO
+ZERO" NUMA PASTA VAZIA
+
+ACHADO REAL, reproduzido: pasta nova (não compartilhada, criada direto na
+conta do Marco) → onboarding aparece certinho → clica em "Começar do zero" →
+trava na hora em "sessão expirada", sem nenhuma tentativa real de conexão ter
+falhado.
+
+CAUSA: quando o Borion termina de conectar numa pasta que ainda não tem
+current.json, o modo estrito (Google Drive obrigatório) já liga ANTES da
+pessoa escolher "Começar do zero" ou "Importar" — porque é assim mesmo que
+esse modo funciona, ligar assim que a conexão termina. Só que os guards que
+travam a tela quando "algo não está pronto" não sabiam que, nessa tela
+específica, current.json ainda não existir é esperado — é literalmente o que
+o botão vai criar. Resultado: o clique no PRÓPRIO botão "Começar do zero" já
+era barrado pelos guards antes do clique sequer chegar no código que cria o
+arquivo, mostrando "sessão expirada" sem sentido nenhum.
+
+CORREÇÃO: os guards agora sabem que a tela de onboarding (pasta vazia) é um
+estado esperado, do mesmo jeito que já sabiam disso durante o login. Os
+botões "Começar do zero" e "Importar um JSON antigo" agora funcionam
+normalmente numa pasta recém-criada.
+
+Mantém as correções da v6.46.23 (reconexão) e v6.46.24 (selo de versão no
+canto inferior direito + log [BORION][STRICT_LOCK] no console mostrando a
+origem de qualquer travamento futuro).

@@ -1,0 +1,26 @@
+BORION FINANCE V6.46.24 — SELO DE VERSÃO E DIAGNÓSTICO DO TRAVAMENTO
+
+- Adiciona um selo fixo (ex: "v6.46.24") no canto inferior direito de toda tela
+  de entrada: login, escolha/onboarding de pasta, reconexão e o bloqueio
+  "Confirme o login do Google". Serve pra confirmar visualmente, na hora, se um
+  deploy novo já chegou ao navegador (GitHub Pages/cache/service worker) sem
+  precisar abrir o console.
+- lockStrictCloud() agora registra no console (F12 → Console) qual ponto exato
+  do código disparou cada travamento: watchdog periódico, o toque na tela
+  (pointerdown), o campo/tecla (submit/keydown), a troca de aba
+  (visibilitychange), a janela recuperando foco (window focus), o app ficando
+  offline, ou uma falha real ao salvar. Antes, todos esses pontos mostravam o
+  mesmo texto genérico pra pessoa, então não dava pra saber qual deles era o
+  culpado quando o loop se repetia.
+- Mantém a correção da v6.46.23 (reconexão só exige um novo login completo do
+  Google quando o erro é mesmo de autenticação; o guard contra travamento
+  falso agora cobre a conexão inteira, não só a troca do token).
+
+COMO USAR PRA DIAGNOSTICAR SE O LOOP VOLTAR
+1. Confirme no canto inferior direito que o selo mostra v6.46.24 — se mostrar
+   uma versão mais antiga, o navegador ainda está com o app antigo em cache.
+2. Abra o console do navegador (F12 → Console, ou no Chrome Android via
+   chrome://inspect num computador) antes de tentar entrar de novo.
+3. Quando a tela travar em "Confirme o login do Google", procure no console
+   uma linha começando com [BORION][STRICT_LOCK] — ela mostra a origem exata.
+   Me manda essa linha (e o print da tela) que eu sigo o rastro a partir dela.

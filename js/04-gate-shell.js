@@ -68,6 +68,7 @@ function redirectUnresolvedRemoteGate64618(){
 
 /* ---------------- RENDER: GATE ---------------- */
 function renderGate(){
+  ensureBorionVersionBadge();
   if(redirectUnresolvedRemoteGate64618())return;
   const root = $('#root');
   const profiles = S.profiles;

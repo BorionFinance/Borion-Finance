@@ -8,6 +8,23 @@
 /* ---------------- Utilities ---------------- */
 function $(sel,root){return (root||document).querySelector(sel);}
 function el(html){const t=document.createElement('template');t.innerHTML=html.trim();return t.content.firstElementChild;}
+/* V6.46.23 — selo fixo com a versão rodando, no canto inferior direito das telas
+   de entrada (login, escolha de pasta, reconexão, bloqueio estrito). Pedido
+   depois do loop de "sessão expirada": sem isso não dava pra saber, olhando
+   só a tela, se um deploy novo realmente tinha chegado ao navegador ou se
+   ainda era cache antigo do GitHub Pages/service worker. Fica fora de #root
+   (anexado direto no body) pra sobreviver a qualquer renderGate()/render()
+   que troque o conteúdo de #root por baixo dele. */
+function ensureBorionVersionBadge(){
+  if(typeof document==='undefined')return;
+  if(document.getElementById('borion_version_badge'))return;
+  const badge=document.createElement('div');
+  badge.id='borion_version_badge';
+  const v=(typeof BORION_APP_VERSION!=='undefined'&&BORION_APP_VERSION)?BORION_APP_VERSION:'?';
+  badge.textContent='v'+v;
+  badge.style.cssText='position:fixed;right:10px;bottom:8px;font-size:11px;line-height:1;color:rgba(255,255,255,.32);font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.02em;z-index:99999;pointer-events:none;user-select:none;';
+  (document.body||document.documentElement).appendChild(badge);
+}
 /* V6.46.2 — clone rápido pra snapshots de "desfazer"/rollback (excluir lançamento,
    excluir categoria, excluir despesa fixa etc.). Antes cada um desses pontos fazia
    JSON.parse(JSON.stringify(S.data)) na hora do clique — uma volta completa de

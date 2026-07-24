@@ -1263,7 +1263,7 @@ function saveCurrentData(options={}){
     if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){
       GoogleDriveProvider.queueSave({source:options.finalConfirmation?'final_confirmation':'data_change'});
     }else if(window.BorionStrictDrive&&BorionStrictDrive.isGoogleMode()&&window.GoogleDriveProvider){
-      GoogleDriveProvider.lockStrictCloud('O Google Drive não está conectado. Entre novamente antes de continuar.');
+      GoogleDriveProvider.lockStrictCloud('O Google Drive não está conectado. Entre novamente antes de continuar.',null,'save_not_connected');
       return false;
     }
     if(!(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory())&&!options.finalConfirmation) markExitSavePending(S.currentProfile.id);

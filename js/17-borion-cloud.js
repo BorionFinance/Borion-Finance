@@ -1030,6 +1030,7 @@ const CloudAuth={
 
   render(){
     applyFont(); applyTheme();
+    ensureBorionVersionBadge();
     const root=document.getElementById('root');
     if(this.mode==='login' && !this.emailExpanded){ this.renderCleanLogin(root); return; }
     this.renderEmailForm(root);

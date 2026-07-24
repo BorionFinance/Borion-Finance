@@ -1,4 +1,4 @@
-/* Borion Finance — Google Drive Provider (V6.46.28 — Corrige corrida ao salvar data de corte da integração)
+/* Borion Finance — Google Drive Provider (V6.46.31 — Transação exclusiva ao salvar data de corte da integração)
 
    Arquitetura 6.40.2: current.json é apenas o snapshot consolidado. Toda alteração
    é protegida primeiro como operação imutável, identificada por operationId, e só
@@ -761,6 +761,10 @@ const GoogleDriveProvider = {
   _strictReconnectPromise:null,_strictReconnectInProgress:false,
   _connecting:false,
   _onboarding:false,
+  // V6.46.31 — transações críticas de configuração (ex.: salvar a data de
+  // corte) suspendem SOMENTE gatilhos de fundo/foco. Erros reais do commit
+  // continuam podendo chamar lockStrictCloud normalmente.
+  _criticalSaveDepth:0,_criticalSaveReason:'',
   _pendingProfileMetadata:new Map(),
 
   markProfileMetadataChanged(profile){
@@ -837,6 +841,34 @@ const GoogleDriveProvider = {
 
   isAuthFlowInProgress(){
     return !!(this._connecting||this._onboarding||this._strictReconnectInProgress||(GoogleDriveAuth&&typeof GoogleDriveAuth.isLoginInProgress==='function'&&GoogleDriveAuth.isLoginInProgress()));
+  },
+
+  beginCriticalSave(reason='critical_setting'){
+    this._criticalSaveDepth=Math.max(0,Number(this._criticalSaveDepth)||0)+1;
+    this._criticalSaveReason=String(reason||'critical_setting');
+    return {reason:this._criticalSaveReason,released:false};
+  },
+
+  endCriticalSave(token){
+    if(token&&token.released)return;
+    if(token)token.released=true;
+    this._criticalSaveDepth=Math.max(0,(Number(this._criticalSaveDepth)||0)-1);
+    if(!this._criticalSaveDepth){
+      this._criticalSaveReason='';
+      if(this.isConnected()&&(this.dirty||this.hasPersistedPending()||this.hasPersistedConsolidation()))this._scheduleRetry(250);
+      else if(this.isConnected())this._scheduleNextLivePoll(250);
+    }
+  },
+
+  isCriticalSaveInProgress(){return (Number(this._criticalSaveDepth)||0)>0;},
+
+  async waitForCriticalSaveReady(timeoutMs=30000){
+    const started=Date.now();
+    while(this._syncInFlight||this._forceSavePromise||this._strictCommitPromise||this._liveCheckInFlight||this._autosaveInFlight){
+      if(Date.now()-started>=timeoutMs)return false;
+      await new Promise(resolve=>setTimeout(resolve,40));
+    }
+    return true;
   },
 
   isStrictCloudReady(){return !!(this._isStrictMode()&&this.isConnected()&&this.currentFileId&&navigator.onLine&&!this.authRequired&&this.hasUsableToken());},
@@ -1003,11 +1035,101 @@ const GoogleDriveProvider = {
     if(!this._isStrictMode())return;
     if(this._strictAuthTimer)clearInterval(this._strictAuthTimer);
     this._strictAuthTimer=setInterval(()=>{
-      if(!this._isStrictMode()||document.visibilityState==='hidden'||this.isAuthFlowInProgress())return;
+      if(!this._isStrictMode()||document.visibilityState==='hidden'||this.isAuthFlowInProgress()||this.isCriticalSaveInProgress())return;
       if(!this.isStrictCloudReady()&&!this._syncInFlight&&!this._strictCommitPromise){
         this.lockStrictCloud(!navigator.onLine?'Sem internet. O Borion foi bloqueado porque este modo depende 100% do Google Drive.':'A sessão do Google expirou. Confirme o login para continuar.',null,'watchdog_interval');
       }
     },10000);
+  },
+
+  // V6.46.31 — o clique em configurações críticas (especialmente a data de corte)
+  // pode acontecer enquanto uma sincronização automática ou uma consolidação antiga
+  // ainda está em trânsito. Antes, forceSyncNow() devolvia false nesse caso e o fluxo
+  // estrito interpretava a corrida como falha real do Drive, bloqueando a tela
+  // imediatamente. Estes helpers serializam a tubulação e só tratam como erro aquilo
+  // que continua falhando depois de a operação concorrente terminar.
+  async _waitForStrictPipelineIdle(timeoutMs=30000){
+    const started=Date.now();
+    while(this._syncInFlight||this._forceSavePromise||this._liveCheckInFlight||this._autosaveInFlight){
+      if(Date.now()-started>=timeoutMs)return false;
+      await new Promise(resolve=>setTimeout(resolve,40));
+    }
+    return true;
+  },
+
+  _strictCommitIsFullyConfirmed(){
+    return !!(!this.dirty&&!this.hasPersistedPending()&&!this.hasPersistedConsolidation()&&!this._syncInFlight&&!this._forceSavePromise&&!this.authRequired);
+  },
+
+  async _confirmStrictPayload(payload,source='change'){
+    const deadline=Date.now()+30000;
+    let transientRetries=0;
+    let benignRaceRetries=0;
+    let latestPayload=payload;
+    while(Date.now()<deadline){
+      if(!this.isStrictCloudReady())return false;
+      const idle=await this._waitForStrictPipelineIdle(Math.max(1000,deadline-Date.now()));
+      if(!idle){
+        this.lastSyncError='Outra sincronização ainda está em andamento e não terminou dentro do prazo de segurança.';
+        return false;
+      }
+
+      // Se uma operação anterior já chegou ao journal, finalize primeiro esse
+      // current.json. Fazer uma nova operação por cima de uma consolidação pendente
+      // era uma das formas de reproduzir o bloqueio mostrado ao salvar a data.
+      if(this.hasPersistedConsolidation()){
+        const consolidated=await this.syncNow({source:'strict_'+source+'_consolidation',consolidationOnly:true});
+        if(consolidated!==true){
+          if(this.authRequired||!navigator.onLine)return false;
+          const transient=this._looksLikeTransientNetworkError(this.lastSyncError);
+          if(transient&&transientRetries<2){
+            transientRetries++;
+            await new Promise(resolve=>setTimeout(resolve,1000*transientRetries));
+            continue;
+          }
+          if((this._syncInFlight||this._syncAgain||this.hasPersistedConsolidation())&&benignRaceRetries<40){
+            benignRaceRetries++;
+            await new Promise(resolve=>setTimeout(resolve,75));
+            continue;
+          }
+          return false;
+        }
+        // A consolidação antiga pode ter deixado uma edição mais nova marcada como
+        // dirty. Nesse caso o laço segue e grava o estado atual, sem bloquear.
+        if(this._strictCommitIsFullyConfirmed())return true;
+      }
+
+      if(!this.dirty&&!this.hasPersistedPending()&&!this.hasPersistedConsolidation())return true;
+
+      // Reconstrói o snapshot após qualquer espera: se outra alteração legítima
+      // entrou enquanto a fila estava ocupada, ela viaja junto no commit atual.
+      try{latestPayload=await buildFullBackupPayload();}
+      catch(e){this.lastSyncError='Não foi possível preparar os dados para o Google Drive: '+String(e&&e.message||e);return false;}
+
+      const ok=await this.forceSyncNow({payload:latestPayload,reason:'strict_'+source});
+      if(ok===true&&this.hasPersistedConsolidation())continue;
+      if(ok===true&&this._strictCommitIsFullyConfirmed())return true;
+      if(this.authRequired||!navigator.onLine)return false;
+
+      const transient=this._looksLikeTransientNetworkError(this.lastSyncError);
+      if(transient&&transientRetries<2){
+        transientRetries++;
+        await new Promise(resolve=>setTimeout(resolve,1000*transientRetries));
+        continue;
+      }
+
+      // false sem erro concreto significa quase sempre que syncNow encontrou outra
+      // operação em andamento ou uma revisão mais nova. Isso é fila, não falha.
+      const benignRace=!!(this._syncInFlight||this._syncAgain||this._forceSavePromise||this.dirty||this.hasPersistedPending()||this.hasPersistedConsolidation()||!this.lastSyncError);
+      if(benignRace&&benignRaceRetries<40){
+        benignRaceRetries++;
+        await new Promise(resolve=>setTimeout(resolve,75));
+        continue;
+      }
+      return false;
+    }
+    this.lastSyncError=this.lastSyncError||'O Google Drive não concluiu a confirmação dentro do prazo de segurança.';
+    return false;
   },
 
   requestStrictCommit(source='change'){
@@ -1020,44 +1142,26 @@ const GoogleDriveProvider = {
         do{
           this._strictCommitAgain=false;
           let payload=null;
-          try{payload=await buildFullBackupPayload();}catch(e){this.lockStrictCloud('Não foi possível preparar os dados para o Google Drive: '+String(e&&e.message||e),null,'commit_payload_build_fail');return false;}
+          try{payload=await buildFullBackupPayload();}
+          catch(e){this.lockStrictCloud('Não foi possível preparar os dados para o Google Drive: '+String(e&&e.message||e),null,'commit_payload_build_fail');return false;}
           this._strictPendingPayload=payload;
           if(!this.isStrictCloudReady()){
-            this.lockStrictCloud(!navigator.onLine?'Sem internet. A alteração não foi aceita e o app foi bloqueado.': 'A sessão do Google expirou antes do salvamento. Entre novamente para confirmar a alteração.',payload,'commit_not_ready');
+            this.lockStrictCloud(!navigator.onLine?'Sem internet. A alteração não foi aceita e o app foi bloqueado.':'A sessão do Google expirou antes do salvamento. Entre novamente para confirmar a alteração.',payload,'commit_not_ready');
             return false;
           }
           this._showStrictSaving();
-          // V6.46.26 — mesma lógica do retryStrictCloud: um "Failed to fetch" passageiro
-          // não trava mais o app na primeira tentativa, ganha até 2 novas tentativas
-          // silenciosas primeiro.
-          let ok=false;
-          for(let attempt=0;;attempt++){
-            ok=await this.forceSyncNow({payload,reason:'strict_'+source});
-            // V6.46.28 — syncNow() considera a alteração segura assim que a operação
-            // imutável existe no Drive, mesmo que o current.json ainda esteja aguardando
-            // consolidação. Para o commit ESTRITO isso ainda não é confirmação final.
-            // Conclui a consolidação pendente na mesma fila antes de liberar a tela.
-            if(ok===true&&this.hasPersistedConsolidation()){
-              ok=await this.resumePendingSync('strict_'+source+'_consolidation');
-            }
-            if(ok===true&&!this.hasPersistedConsolidation())break;
-            if(navigator.onLine&&attempt<2&&!this.authRequired&&this._looksLikeTransientNetworkError(this.lastSyncError)){
-              await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)));
-              continue;
-            }
-            break;
-          }
+          const ok=await this._confirmStrictPayload(payload,source);
           if(ok!==true){
-            // Uma nova alteração durante a gravação faz syncNow() devolver false mesmo
-            // quando o snapshot anterior foi confirmado corretamente. Nesse caso não
-            // bloqueia o app: o laço abaixo prepara e confirma imediatamente o estado
-            // mais recente. Falhas reais de rede/autenticação continuam bloqueando.
+            // Uma alteração adicional que chegou pelo mesmo queueSave não é erro:
+            // volta ao início e confirma o snapshot mais recente na mesma Promise.
             const newerChangeWaiting=!!this._strictCommitAgain&&this.isStrictCloudReady()&&!this.authRequired&&!this.lastSyncError;
             if(newerChangeWaiting){lastResult=true;continue;}
             this.lockStrictCloud(this.authRequired?'A sessão do Google expirou durante o salvamento. Entre novamente para concluir.':'O Google Drive não confirmou o salvamento. O app foi bloqueado para impedir novos lançamentos.',payload,'commit_sync_fail');
             return false;
           }
-          this._strictPendingPayload=null;this._hideStrictSaving();lastResult=true;
+          this._strictPendingPayload=null;
+          this._hideStrictSaving();
+          lastResult=true;
         }while(this._strictCommitAgain);
         return lastResult;
       }catch(e){
@@ -1068,7 +1172,7 @@ const GoogleDriveProvider = {
     return this._strictCommitPromise;
   },
 
-  // V6.46.28 — configurações críticas da integração já passam primeiro por
+  // V6.46.31 — configurações críticas da integração já passam primeiro por
   // saveProfileData(), que chama queueSave() e inicia o commit estrito. O código
   // antigo chamava forceSyncNow() logo em seguida, criando uma segunda revisão no
   // meio da consolidação da primeira. Isso fazia um salvamento válido parecer uma
@@ -1153,6 +1257,10 @@ const GoogleDriveProvider = {
 
   async resumePendingSync(source='resume'){
     if(!this.isConnected()) return false;
+    if(this.isCriticalSaveInProgress()&&/^(focus|visibility|online|multitab_|live_|autosave)/.test(String(source||''))){
+      this._scheduleRetry(300);
+      return {deferred:true,synced:false};
+    }
     if(window.BorionMultiTab640&&!BorionMultiTab640.isLeader()){BorionMultiTab640.requestSync({folderId:this.folderId,source});return {delegated:true,synced:false};}
     if(this.hasPersistedPending()) this.dirty=true;
     if(!this.dirty&&this.hasPersistedConsolidation()) return await this.syncNow({source,consolidationOnly:true});
@@ -1629,7 +1737,7 @@ const GoogleDriveProvider = {
 
   startLivePollLoop(){
     this.stopLivePollLoop();this._livePollStartedAt=Date.now();this._liveActiveUntil=Date.now()+GOOGLE_DRIVE_LIVE_ACTIVE_WINDOW_MS;
-    if(window.RemoteUpdateQueue){RemoteUpdateQueue.setApplyHandler((snapshot,meta)=>this._applyRemoteSnapshot642(snapshot,meta,'queued_remote'));RemoteUpdateQueue.setCanApplyHandler(()=>!this.dirty&&!this._syncInFlight&&!this._autosaveInFlight&&!this.hasPersistedPending()&&!this.hasPersistedConsolidation());}
+    if(window.RemoteUpdateQueue){RemoteUpdateQueue.setApplyHandler((snapshot,meta)=>this._applyRemoteSnapshot642(snapshot,meta,'queued_remote'));RemoteUpdateQueue.setCanApplyHandler(()=>!this.isCriticalSaveInProgress()&&!this.dirty&&!this._syncInFlight&&!this._autosaveInFlight&&!this.hasPersistedPending()&&!this.hasPersistedConsolidation());}
     if(!this._livePollBound&&typeof document!=='undefined'){
       this._livePollBound=true;
       const activity=()=>{this._lastUserActivityAt=Date.now();};
@@ -1661,6 +1769,7 @@ const GoogleDriveProvider = {
   },
 
   async checkForRemoteUpdate(){
+    if(this.isCriticalSaveInProgress()){this._scheduleNextLivePoll(500);return false;}
     if(window.BorionMultiTab640&&!BorionMultiTab640.isLeader()){this._scheduleNextLivePoll();return false;}
     if(window.RemoteUpdateQueue&&RemoteUpdateQueue.hasPending()){
       const applied=await RemoteUpdateQueue.applyIfSafe();
@@ -1731,6 +1840,7 @@ const GoogleDriveProvider = {
   },
 
   async runAutosaveTick(){
+    if(this.isCriticalSaveInProgress()) return false;
     if(!this.isConnected() || !this.autosaveDirtySinceLast) return false;
     if(this._autosaveInFlight) return false;
     this._autosaveInFlight = true;
@@ -1890,7 +2000,7 @@ const GoogleDriveProvider = {
       if(window.BorionSyncState)BorionSyncState.set('MERGING',{operationId});
       const remoteRaw=await GoogleDriveFS.readFile(this.currentFileId);
       const remoteCheck=validateBorionJson(remoteRaw);if(!remoteCheck.valid)throw new Error('Snapshot remoto inválido: '+remoteCheck.errors.join(' '));
-      const result=await BorionDriveJournal640.consolidate(this.folderId,remoteRaw);
+      const result=await BorionDriveJournal640.consolidate(this.folderId,remoteRaw,{requiredOperation:{file:operationFile,op:operation}});
       const precheck=await BorionDriveJournal640.validateSnapshot(result.consolidated,operationId);
       if(!precheck.valid)throw new Error('Consolidação não incorporou a operação '+operationId+': '+precheck.reason);
       if(window.BorionDurableQueue)await BorionDurableQueue.setState(operationId,'SNAPSHOT_WRITING').catch(()=>{});
@@ -2190,14 +2300,14 @@ window.GoogleDriveProvider = GoogleDriveProvider;
 if(typeof document!=='undefined'){
   document.addEventListener('visibilitychange', ()=>{
     if(document.visibilityState==='visible' && window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){
-      if(GoogleDriveProvider.isAuthFlowInProgress())return;
+      if(GoogleDriveProvider.isAuthFlowInProgress()||GoogleDriveProvider.isCriticalSaveInProgress())return;
       if(GoogleDriveProvider._isStrictMode()&&!GoogleDriveProvider.isStrictCloudReady()){GoogleDriveProvider.lockStrictCloud(!navigator.onLine?'Sem internet. O Borion foi bloqueado porque este modo depende 100% do Google Drive.':'A sessão do Google expirou. Confirme o login para continuar.',null,'visibilitychange');return;}
       if(GoogleDriveProvider.dirty || GoogleDriveProvider.hasPersistedPending() || GoogleDriveProvider.hasPersistedConsolidation()) GoogleDriveProvider.resumePendingSync('visibility');
       else GoogleDriveProvider.checkForRemoteUpdate();
     }
   });
   document.addEventListener('pointerdown',event=>{
-    if(!window.GoogleDriveProvider||!GoogleDriveProvider._isStrictMode()||GoogleDriveProvider.isAuthFlowInProgress())return;
+    if(!window.GoogleDriveProvider||!GoogleDriveProvider._isStrictMode()||GoogleDriveProvider.isAuthFlowInProgress()||GoogleDriveProvider.isCriticalSaveInProgress())return;
     const target=event.target&&event.target.closest?event.target.closest('#gdrive_strict_reconnect'):null;
     if(target)return;
     if(!GoogleDriveProvider.isStrictCloudReady()){
@@ -2206,7 +2316,7 @@ if(typeof document!=='undefined'){
     }
   },true);
   const strictGuardEvent=event=>{
-    if(!window.GoogleDriveProvider||!GoogleDriveProvider._isStrictMode()||GoogleDriveProvider.isAuthFlowInProgress())return;
+    if(!window.GoogleDriveProvider||!GoogleDriveProvider._isStrictMode()||GoogleDriveProvider.isAuthFlowInProgress()||GoogleDriveProvider.isCriticalSaveInProgress())return;
     const target=event.target&&event.target.closest?event.target.closest('#gdrive_strict_reconnect'):null;
     if(target)return;
     if(!GoogleDriveProvider.isStrictCloudReady()){
@@ -2219,7 +2329,7 @@ if(typeof document!=='undefined'){
 }
 if(typeof window!=='undefined'){
   window.addEventListener('focus', ()=>{
-    if(!window.GoogleDriveProvider || !GoogleDriveProvider.isConnected() || GoogleDriveProvider.isAuthFlowInProgress()) return;
+    if(!window.GoogleDriveProvider || !GoogleDriveProvider.isConnected() || GoogleDriveProvider.isAuthFlowInProgress() || GoogleDriveProvider.isCriticalSaveInProgress()) return;
     if(GoogleDriveProvider._isStrictMode()&&!GoogleDriveProvider.isStrictCloudReady()){GoogleDriveProvider.lockStrictCloud(!navigator.onLine?'Sem internet. O Borion foi bloqueado porque este modo depende 100% do Google Drive.':'A sessão do Google expirou. Confirme o login para continuar.',null,'window_focus');return;}
     if(GoogleDriveProvider.dirty || GoogleDriveProvider.hasPersistedPending() || GoogleDriveProvider.hasPersistedConsolidation()) GoogleDriveProvider.resumePendingSync('focus');
     else GoogleDriveProvider.checkForRemoteUpdate();

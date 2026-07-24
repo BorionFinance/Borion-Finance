@@ -1,0 +1,15 @@
+BORION FINANCE V6.46.31 — CORREÇÃO REAL DO BOTÃO SALVAR DATA
+
+Causa confirmada no fluxo:
+- A confirmação usava window.confirm().
+- Ao clicar em OK, Chrome/Opera dispara eventos de foco/visibilidade.
+- Esses eventos podiam iniciar leitura/sincronização de fundo entre a confirmação e o commit da data de corte.
+- O modo estrito interpretava a corrida como falha de confirmação e bloqueava o app.
+
+Correções:
+1. A confirmação da data passou a usar modal interno do Borion, sem window.confirm().
+2. O salvamento da data roda em transação exclusiva.
+3. Foco, visibilidade, autosave, atualização ao vivo e sincronização automática da integração aguardam a transação terminar.
+4. O commit continua usando o journal e a confirmação real do current.json.
+5. Em falha real, a data visível volta ao valor anterior; nenhuma configuração local não confirmada é apresentada como salva.
+6. Versão v6.46.31 visível no canto inferior direito da tela inicial.

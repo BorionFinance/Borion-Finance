@@ -494,10 +494,15 @@
     if(S.currentProfile && String(S.currentProfile.id) === String(profileId) && S.data) return S.data;
     return migrateData(getProfileData(profileId) || emptyData(), {profileId});
   }
-  function saveProfileData(profileId, data){
+  function saveProfileData(profileId, data, options={}){
     setProfileData(profileId, data);
     if(S.currentProfile && String(S.currentProfile.id) === String(profileId)) S.data = data;
-    if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()) GoogleDriveProvider.queueSave();
+    // V6.46.31 — configurações críticas usam deferGoogleCommit para que exista
+    // exatamente UMA entrada na fila do Drive. Antes, saveProfileData iniciava um
+    // commit e o fluxo crítico tentava entrar por cima dele logo em seguida.
+    if(!options.deferGoogleCommit && window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){
+      GoogleDriveProvider.queueSave({source:options.source||'interop_change'});
+    }
     if(window.CloudStorage && CloudStorage.user) CloudStorage.queueSave(profileId, data);
     try{ BackupFS.markDirty(); }catch(_){ }
   }
@@ -1794,26 +1799,52 @@
   // origem não virarem lançamento no Borion sozinhos. Nada do que já foi
   // importado antes é afetado — só passa a valer para os próximos lançamentos.
   function confirmCutoffChange(message){
-    return typeof confirm!=='function' || confirm(message);
+    // V6.46.31 — não usa mais window.confirm(). Ao fechar a caixa nativa, o
+    // navegador dispara focus/visibilitychange e o sincronizador de fundo podia
+    // começar outra leitura exatamente entre a confirmação e o commit.
+    if(typeof document==='undefined'||!document.getElementById('modal-root')){
+      return Promise.resolve(typeof confirm!=='function'||confirm(message));
+    }
+    return new Promise(resolve=>{
+      const root=document.getElementById('modal-root');
+      const overlay=document.createElement('div');
+      overlay.className='modal-overlay';
+      overlay.innerHTML=`<div class="modal-box confirm-box confirm-gold" role="dialog" aria-modal="true" aria-labelledby="interop_cutoff_confirm_title"><div class="modal-head"><h2 id="interop_cutoff_confirm_title">Confirmar corte de importação</h2><button type="button" data-cutoff-cancel aria-label="Fechar">&times;</button></div><p class="confirm-text">${escHtml(message||'Confirmar alteração?')}</p><div class="confirm-actions"><button type="button" class="btn btn-secondary btn-block" data-cutoff-cancel>Cancelar</button><button type="button" class="btn btn-primary btn-block" data-cutoff-confirm>Confirmar</button></div></div>`;
+      let settled=false;
+      const onKey=event=>{if(event.key==='Escape'){event.preventDefault();finish(false);}};
+      const finish=value=>{
+        if(settled)return;settled=true;
+        document.removeEventListener('keydown',onKey,true);
+        if(root.contains(overlay))overlay.remove();
+        resolve(!!value);
+      };
+      overlay.querySelectorAll('[data-cutoff-cancel]').forEach(button=>button.onclick=()=>finish(false));
+      const confirmButton=overlay.querySelector('[data-cutoff-confirm]');
+      if(confirmButton)confirmButton.onclick=()=>finish(true);
+      overlay.addEventListener('pointerdown',event=>{if(event.target===overlay)finish(false);});
+      document.addEventListener('keydown',onKey,true);
+      root.replaceChildren(overlay);
+      setTimeout(()=>confirmButton&&confirmButton.focus(),0);
+    });
   }
-  // V6.46.28 — saveProfileData() já inicia o commit no modo Drive estrito.
-  // Não pode chamar queueSave()+forceSyncNow() de novo por cima: isso aumentava a
-  // revisão enquanto o primeiro snapshot ainda estava consolidando e disparava o
-  // bloqueio ao salvar a data de corte. No modo estrito, apenas entra na mesma
-  // Promise já em andamento. Fora dele, preserva o salvamento imediato anterior.
+  // V6.46.31 — o ajuste crítico é colocado UMA vez na fila. O próprio provider
+  // serializa qualquer sincronização automática/consolidação que já esteja em curso
+  // e só devolve sucesso depois que o current.json foi realmente confirmado.
   function forceImmediateSync(reason='interop_critical_setting'){
     return Promise.resolve().then(async()=>{
       try{
         const provider=window.GoogleDriveProvider||null;
-        if(!(provider&&provider.isConnected()))return {localOnly:true,synced:false};
+        if(!(provider&&provider.isConnected())){
+          if(provider&&typeof provider.lockStrictCloud==='function'&&provider._isStrictMode?.()){
+            provider.lockStrictCloud('O Google Drive não está conectado. Entre novamente antes de salvar esta configuração.',null,'interop_critical_not_connected');
+          }
+          return {localOnly:true,synced:false};
+        }
         let result;
         const strict=typeof provider._isStrictMode==='function'&&provider._isStrictMode();
         if(strict){
-          result=typeof provider.joinOrRequestStrictCommit==='function'
-            ?await provider.joinOrRequestStrictCommit(reason)
-            :(provider._strictCommitPromise
-              ?await provider._strictCommitPromise
-              :await provider.queueSave({source:reason}));
+          // Não houve queueSave antes: esta é a única criação de commit.
+          result=await provider.queueSave({source:reason});
         }else{
           provider.queueSave({source:reason});
           result=typeof provider.forceSyncNow==='function'
@@ -1821,7 +1852,8 @@
             :await provider.syncNow({source:reason});
         }
         const consolidationPending=typeof provider.hasPersistedConsolidation==='function'&&provider.hasPersistedConsolidation();
-        const pending=result!==true||!!provider.dirty||!!consolidationPending;
+        const persistedPending=typeof provider.hasPersistedPending==='function'&&provider.hasPersistedPending();
+        const pending=result!==true||!!provider.dirty||!!consolidationPending||!!persistedPending;
         return {synced:!pending,pending,result};
       }catch(error){
         console.warn('[BORION_INTEROP][IMMEDIATE_SYNC_PENDING]',error);
@@ -1830,46 +1862,77 @@
     });
   }
   function persistCriticalChange(reason='interop_critical_change'){return forceImmediateSync(reason);}
-  async function setImportCutoff(sourceAppId, dateValue){
-    const row = findSourceConfig(sourceAppId);
-    if(!row) return false;
-    const trimmed = String(dateValue || '').trim();
-    if(!trimmed){ return clearImportCutoff(sourceAppId); }
-    const parsed = new Date(trimmed.length <= 10 ? trimmed + 'T00:00:00' : trimmed);
-    if(isNaN(parsed.getTime())){ if(typeof alert === 'function') alert('Data inválida.'); return false; }
+  async function withCutoffCriticalSave(sourceAppId,reason,confirmationMessage,applyChange,successMessage){
+    const provider=window.GoogleDriveProvider||null;
+    const token=provider&&typeof provider.beginCriticalSave==='function'?provider.beginCriticalSave(reason):null;
+    try{
+      if(provider&&typeof provider.waitForCriticalSaveReady==='function'){
+        const ready=await provider.waitForCriticalSaveReady();
+        if(!ready){
+          if(typeof alert==='function')alert('Ainda existe uma sincronização anterior em andamento. Aguarde alguns segundos e tente novamente.');
+          return false;
+        }
+      }
+      if(!(await confirmCutoffChange(confirmationMessage)))return false;
+      // Busca novamente depois da confirmação para nunca salvar sobre uma referência
+      // antiga caso outra atualização tenha terminado antes da transação exclusiva.
+      const row=findSourceConfig(sourceAppId);
+      if(!row)return false;
+      const previous=String(row.config.importCutoffAt||'');
+      applyChange(row);
+      saveProfileData(row.profile.id,row.data,{deferGoogleCommit:true,source:reason});
+      const syncResult=await persistCriticalChange(reason);
+      const strict=provider&&typeof provider._isStrictMode==='function'&&provider._isStrictMode();
+      if(strict&&!syncResult.synced){
+        // O provider conserva o journal para recuperação; localmente voltamos ao
+        // valor anterior para a tela não fingir que uma configuração não confirmada
+        // foi concluída.
+        row.config.importCutoffAt=previous;
+        setProfileData(row.profile.id,row.data);
+        if(S.currentProfile&&String(S.currentProfile.id)===String(row.profile.id))S.data=row.data;
+        return false;
+      }
+      if(typeof toast==='function')toast(successMessage(row));
+      if(typeof renderView==='function')renderView();
+      return true;
+    }finally{
+      if(provider&&typeof provider.endCriticalSave==='function')provider.endCriticalSave(token);
+    }
+  }
+
+  async function setImportCutoff(sourceAppId,dateValue){
+    const trimmed=String(dateValue||'').trim();
+    if(!trimmed)return clearImportCutoff(sourceAppId);
+    const parsed=new Date(trimmed.length<=10?trimmed+'T00:00:00':trimmed);
+    if(isNaN(parsed.getTime())){if(typeof alert==='function')alert('Data inválida.');return false;}
     const displayDate=parsed.toLocaleDateString('pt-BR');
-    if(!confirmCutoffChange('Confirmar o corte de importação? Somente registros a partir de '+displayDate+' serão considerados.')) return false;
-    row.config.importCutoffAt = parsed.toISOString();
-    saveProfileData(row.profile.id, row.data);
-    const syncResult=await persistCriticalChange('interop_import_cutoff_date');
-    if(window.GoogleDriveProvider&&GoogleDriveProvider._isStrictMode?.()&&!syncResult.synced)return false;
-    if(typeof toast === 'function') toast('A partir de agora, só entram sozinhos lançamentos de ' + sourceName(sourceAppId) + ' a partir de ' + dateText(row.config.importCutoffAt) + '. O que já foi importado antes continua como está.');
-    if(typeof renderView === 'function') renderView();
-    return true;
+    return withCutoffCriticalSave(
+      sourceAppId,
+      'interop_import_cutoff_date',
+      'Confirmar o corte de importação? Somente registros a partir de '+displayDate+' serão considerados.',
+      row=>{row.config.importCutoffAt=parsed.toISOString();},
+      row=>'A partir de agora, só entram sozinhos lançamentos de '+sourceName(sourceAppId)+' a partir de '+dateText(row.config.importCutoffAt)+'. O que já foi importado antes continua como está.'
+    );
   }
+
   async function setImportCutoffNow(sourceAppId){
-    const row = findSourceConfig(sourceAppId);
-    if(!row) return false;
-    if(!confirmCutoffChange('Confirmar o corte a partir de agora? Registros anteriores não serão importados automaticamente.')) return false;
-    row.config.importCutoffAt = nowIso();
-    saveProfileData(row.profile.id, row.data);
-    const syncResult=await persistCriticalChange('interop_import_cutoff_now');
-    if(window.GoogleDriveProvider&&GoogleDriveProvider._isStrictMode?.()&&!syncResult.synced)return false;
-    if(typeof toast === 'function') toast('Definido: a partir de agora, só entram sozinhos lançamentos novos de ' + sourceName(sourceAppId) + '. Testes e histórico anteriores a agora não serão importados automaticamente.');
-    if(typeof renderView === 'function') renderView();
-    return true;
+    return withCutoffCriticalSave(
+      sourceAppId,
+      'interop_import_cutoff_now',
+      'Confirmar o corte a partir de agora? Registros anteriores não serão importados automaticamente.',
+      row=>{row.config.importCutoffAt=nowIso();},
+      ()=>'Definido: a partir de agora, só entram sozinhos lançamentos novos de '+sourceName(sourceAppId)+'. Testes e histórico anteriores a agora não serão importados automaticamente.'
+    );
   }
+
   async function clearImportCutoff(sourceAppId){
-    const row = findSourceConfig(sourceAppId);
-    if(!row) return false;
-    if(!confirmCutoffChange('Remover o corte e permitir que todo o histórico volte a ser considerado?')) return false;
-    row.config.importCutoffAt = '';
-    saveProfileData(row.profile.id, row.data);
-    const syncResult=await persistCriticalChange('interop_import_cutoff_clear');
-    if(window.GoogleDriveProvider&&GoogleDriveProvider._isStrictMode?.()&&!syncResult.synced)return false;
-    if(typeof toast === 'function') toast('Corte removido: todo o histórico de ' + sourceName(sourceAppId) + ' volta a valer para importação automática.');
-    if(typeof renderView === 'function') renderView();
-    return true;
+    return withCutoffCriticalSave(
+      sourceAppId,
+      'interop_import_cutoff_clear',
+      'Remover o corte e permitir que todo o histórico volte a ser considerado?',
+      row=>{row.config.importCutoffAt='';},
+      ()=>'Corte removido: todo o histórico de '+sourceName(sourceAppId)+' volta a valer para importação automática.'
+    );
   }
 
   // V6.45.4 — modo de aprovação de importação (item pedido junto com a data de
@@ -1883,7 +1946,7 @@
     if(!S.currentProfile || !S.data) return false;
     const interop = ensureInterop(S.data);
     interop.importApprovalMode = normalized;
-    saveProfileData(S.currentProfile.id, S.data);
+    saveProfileData(S.currentProfile.id, S.data, {deferGoogleCommit:true,source:'interop_import_approval_mode'});
     const syncResult=await persistCriticalChange('interop_import_approval_mode');
     if(window.GoogleDriveProvider&&GoogleDriveProvider._isStrictMode?.()&&!syncResult.synced)return false;
     if(!silent && typeof toast === 'function'){
@@ -2625,6 +2688,7 @@
     }
   }
   async function syncAll({silent=true}={}){
+    if(window.GoogleDriveProvider&&typeof GoogleDriveProvider.isCriticalSaveInProgress==='function'&&GoogleDriveProvider.isCriticalSaveInProgress())return [];
     const rows = allSourceConfigs();
     const out = [];
     for(const row of rows){

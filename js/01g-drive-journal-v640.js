@@ -177,7 +177,7 @@ const BorionDriveJournal640={
     return true;
   },
 
-  async consolidate(mainFolderId,remoteCurrentPayload){
+  async consolidate(mainFolderId,remoteCurrentPayload,options={}){
     const consolidateStarted=Date.now();
     if(window.BorionPerf)BorionPerf.startStage('journal_consolidate');
     const topology=await this.discoverTopology(mainFolderId);
@@ -196,8 +196,35 @@ const BorionDriveJournal640={
       if(applied.has(nameId)){skippedByName++;continue;}
       operations.push({file:f,op});
     }
+    // V6.46.31 — o Google Drive pode demorar alguns instantes para devolver numa
+    // listagem um arquivo que acabou de ser criado. A operação já foi criada e possui
+    // ID real, então o commit imediato não deve depender exclusivamente de listChildren.
+    // Quando o chamador fornece a operação recém-gravada, ela é relida diretamente
+    // pelo ID, validada por checksum e inserida uma única vez na consolidação caso a
+    // listagem ainda não a tenha enxergado. Isso elimina o falso bloqueio ao clicar em
+    // "Salvar data" sem enfraquecer o journal nem aceitar dados somente locais.
+    let requiredOperationInjected=false;
+    const required=options&&options.requiredOperation;
+    if(required&&required.op&&required.op.operationId){
+      const requiredId=String(required.op.operationId);
+      const alreadyQueued=operations.some(item=>String(item&&item.op&&item.op.operationId||'')===requiredId);
+      if(!applied.has(requiredId)&&!alreadyQueued){
+        const fallbackName=this.operationFileName(required.op);
+        const file=Object.assign({id:null,name:fallbackName,journalFolderId:topology.canonicalOpsFolder.id},required.file||{});
+        file.name=file.name||fallbackName;
+        file.journalFolderId=file.journalFolderId||topology.canonicalOpsFolder.id;
+        const nameId=this.operationIdFromFileName(file.name);
+        if(!nameId||nameId!==requiredId)throw Object.assign(new Error('A operação recém-gravada não corresponde ao nome '+file.name+'.'),{code:'JOURNAL_REQUIRED_OPERATION_NAME_MISMATCH',operationId:requiredId,fileId:file.id||null});
+        let storedOp=required.op;
+        if(file.id)storedOp=await this._validateStoredOperationFile(file,required.op);
+        else await this._validateOperation(storedOp,file);
+        operations.push({file,op:storedOp,directRequired:true});
+        requiredOperationInjected=true;
+      }
+    }
     if(window.BorionPerf)BorionPerf.count('operationsSkippedByName',skippedByName);
-    operations.sort((a,b)=>String(a.op.createdAt||'').localeCompare(String(b.op.createdAt||''))||String(a.op.operationId).localeCompare(String(b.op.operationId))||String(a.file.id).localeCompare(String(b.file.id)));
+    if(requiredOperationInjected&&window.BorionPerf)BorionPerf.count('requiredOperationsInjected',1);
+    operations.sort((a,b)=>String(a.op.createdAt||'').localeCompare(String(b.op.createdAt||''))||String(a.op.operationId).localeCompare(String(b.op.operationId))||String(a.file.id||'').localeCompare(String(b.file.id||'')));
     let acc=remoteCurrentPayload||{profiles:[],dataByProfile:{},config:{}};const newlyApplied=[];
     const mergeStarted=Date.now();
     for(const item of operations){const op=item.op,id=String(op.operationId);if(applied.has(id))continue;acc=op.format==='account-delta-v2'?BorionSyncCore.mergeAccountDelta(op.delta,acc):BorionSyncCore.mergeAccountPayload(op.basePayload||null,op.payload,acc);applied.add(id);newlyApplied.push({fileId:item.file.id,name:item.file.name,operationId:id,createdAt:op.createdAt||null,journalFolderId:item.file.journalFolderId});}
@@ -207,7 +234,7 @@ const BorionDriveJournal640={
     const canonical=JSON.parse(JSON.stringify(acc));delete canonical.integrity;const checksumStarted=Date.now();
     acc.integrity=Object.assign({},acc.integrity||{},{algorithm:'SHA-256',checksum:await BorionSyncCore.checksumOf(canonical),schemaVersion:BorionSyncCore.BORION_DATA_SCHEMA_VERSION,generatedAt:new Date().toISOString(),recordCount:(window.BorionDataGuard?BorionDataGuard.countAccountRecords(acc).__total:undefined),profileCount:(acc.profiles||[]).length});
     if(window.BorionPerf){BorionPerf.count('checksumMs',Date.now()-checksumStarted);BorionPerf.endStage('journal_consolidate',{listed:pendingFiles.length,skippedByName,downloaded,totalMs:Date.now()-consolidateStarted});}
-    return {consolidated:acc,newlyApplied,topology,stats:{listed:pendingFiles.length,skippedByName,downloaded}};
+    return {consolidated:acc,newlyApplied,topology,stats:{listed:pendingFiles.length,skippedByName,downloaded,requiredOperationInjected}};
   },
 
   async validateSnapshot(snapshot,requiredOperationId){

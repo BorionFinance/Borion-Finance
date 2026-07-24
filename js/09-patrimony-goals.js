@@ -465,7 +465,7 @@ function renderReservasPanel(){
     const mt = r.metaId ? (S.data.metas||[]).find(x=>x.id===r.metaId) : null;
     const metaPct = mt && Number(mt.valorMeta)>0 ? Math.min(100, Math.round(Number(mt.valorAtual||0)/Number(mt.valorMeta||0)*100)) : 0;
     const metaHTML = mt ? `<div class="reserva-foot" style="margin-top:4px;"><span>${esc(mt.emoji||'◇')} Meta de patrimônio: ${brl(mt.valorAtual||0)} de ${brl(mt.valorMeta||0)}</span><span style="font-weight:800;color:${metaPct>=100?'#22c55e':'var(--gold-bright)'}">${metaPct}%</span></div>` : '';
-    const card=`<div class="reserva-card${reservaGridOrganizer?' reserva-card-organizer':''}">
+    const card=`<div class="reserva-card${(r.status||'Ativa')==='Ativa'?' reserva-card-active':''}${reservaGridOrganizer?' reserva-card-organizer':''}">
       <div class="reserva-head"><div><div class="reserva-title"><span class="dot" style="background:${esc(r.cor||'var(--gold)')}"></span>${esc(r.nome)}</div><div class="reserva-meta">${esc(r.banco||'Sem banco')} ${r.categoria?'· '+esc(r.categoria):''}</div></div>${reservaStatusPill(r.status)}</div>
       <div class="reserva-value" style="color:${esc(r.corValor||'var(--gold-bright)')};">${brl(Number(r.valorAtual)||0)}</div>
       ${temMeta?`

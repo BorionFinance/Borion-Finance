@@ -21,7 +21,7 @@ const HelpCenterLoader = {
     this.promise = new Promise((resolve,reject)=>{
       if(!document.querySelector('link[data-borion-help-css]')){
         const link=document.createElement('link');
-        link.rel='stylesheet'; link.href='css/help-center.css?v=6.46.43'; link.dataset.borionHelpCss='1';
+        link.rel='stylesheet'; link.href='css/help-center.css?v=6.46.44'; link.dataset.borionHelpCss='1';
         document.head.appendChild(link);
       }
       const existing=document.querySelector('script[data-borion-help-script]');
@@ -31,7 +31,7 @@ const HelpCenterLoader = {
         return;
       }
       const script=document.createElement('script');
-      script.src='js/26-help-center.js?v=6.46.43'; script.async=true; script.dataset.borionHelpScript='1';
+      script.src='js/26-help-center.js?v=6.46.44'; script.async=true; script.dataset.borionHelpScript='1';
       script.onload=()=>window.BorionHelp?resolve(window.BorionHelp):reject(new Error('A Central do Borion não iniciou.'));
       script.onerror=()=>{ script.remove(); reject(new Error('Falha ao carregar a Central do Borion.')); };
       document.head.appendChild(script);
@@ -79,12 +79,12 @@ function renderSettingsModules(){
     <div class="settings-module-grid">
       ${moduleToggleHTML({key:'investments',title:'Investimentos',desc:'Exibe ou oculta Investimentos e os blocos relacionados. Os dados não são apagados.',enabled:investmentsEnabledNow,onClick:'Settings.toggleInvestments()',helpQuery:'ativar investimentos módulo'})}
       ${moduleToggleHTML({key:'agenda',title:'Agenda Financeira',desc:'Exibe ou oculta compromissos e lembretes financeiros. Os dados não são apagados.',enabled:agendaEnabledNow,onClick:'Settings.toggleAgenda()',helpQuery:'ativar agenda financeira'})}
-      ${moduleToggleHTML({key:'cheques',title:'Cheques',desc:'Exibe ou oculta o controle de cheques. Os registros existentes continuam salvos.',enabled:chequesEnabled,onClick:'Settings.toggleCheques()',helpQuery:'ativar módulo cheques'})}
       ${moduleToggleHTML({key:'reserves',title:'Reserva',desc:'Exibe ou oculta reservas e cofrinhos. Saldos e históricos continuam preservados.',enabled:reservasEnabledNow,onClick:'Settings.toggleReservas()',helpQuery:'ativar reserva cofrinho'})}
+      ${moduleToggleHTML({key:'cheques',title:'Cheques',desc:'Exibe ou oculta o controle de cheques. Os registros existentes continuam salvos.',enabled:chequesEnabled,onClick:'Settings.toggleCheques()',helpQuery:'ativar módulo cheques'})}
       ${moduleToggleHTML({key:'imports',title:'Importar extratos',desc:'Exibe ou oculta a área de importação de CSV, OFX, TXT e PDF textual.',enabled:importsEnabled,onClick:'Settings.toggleImports()',helpQuery:'importar extrato csv ofx'})}
       <div class="module-toggle-card ${popupEnabled?'enabled':''}">
         <div class="module-toggle-head compact">
-          <div class="module-toggle-title-row"><h3>Popups de notificação</h3>${settingsHelpButton('Popups de notificação','Controla somente os avisos flutuantes. Os lembretes continuam disponíveis no sino.','popups notificações sino')}</div>
+          <div class="module-toggle-title-row"><h3>Pop-ups e notificações</h3>${settingsHelpButton('Pop-ups e notificações','Controla somente os avisos flutuantes. Os lembretes continuam disponíveis no sino.','popups notificações sino')}</div>
           <button class="toggle-switch ${popupEnabled?'on':''}" onclick="Settings.togglePopupNotifs()" aria-label="${popupEnabled?'Desativar':'Ativar'} popups"><span></span></button>
         </div>
         <div class="field settings-compact-field"><label>Tempo</label><select id="cfg_popup_duration"><option value="30000" ${dur===30000?'selected':''}>30 segundos</option><option value="40000" ${dur===40000?'selected':''}>40 segundos</option><option value="50000" ${dur===50000?'selected':''}>50 segundos</option></select></div>
@@ -1223,7 +1223,7 @@ Settings.openContextHelp = function(title,summary,query){
 /* ================= V6.33.1 — refinamento extra de Configurações, padronização de ordenação
    e bloco flutuante de Anotações persistente entre abas ================= */
 (function(){
-  const SETTINGS_VERSION = '6.46.43';
+  const SETTINGS_VERSION = '6.46.44';
 
   function floatingNotesPrefs(create=false){
     const fallback={enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};
@@ -1460,11 +1460,11 @@ Settings.openContextHelp = function(title,summary,query){
     return `
       <div class="settings-section settings-hero-section settings-clean-hero">${settingsTitleWithHelp('Personalização','Ajuste aparência, interface, resumo e organização. As explicações completas ficam na Central do Borion.','personalização tema fonte interface')}</div>
       <div class="settings-section settings-feature-card">
-        <div class="settings-card-head"><div class="settings-title-help"><h3>ANOTAÇÕES</h3>${settingsHelpButton('Anotações','Ativa um bloco de notas flutuante disponível nas principais telas do Borion.','anotações bloco flutuante')}</div><button class="toggle-switch ${notes.enabled?'on':''}" onclick="Settings.toggleFloatingNotes()" aria-label="${notes.enabled?'Desativar':'Ativar'} anotações"><span></span></button></div>
-        <div class="settings-mini-status ${notes.enabled?'on':'off'}">${notes.enabled?'Ativado':'Desativado'}</div>
+        <div class="settings-title-help"><h3>ANOTAÇÕES</h3>${settingsHelpButton('Anotações','Ativa um bloco de notas flutuante disponível nas principais telas do Borion.','anotações bloco flutuante')}</div>
+        <div class="settings-notes-toggle-row"><button class="toggle-switch ${notes.enabled?'on':''}" onclick="Settings.toggleFloatingNotes()" aria-label="${notes.enabled?'Desativar':'Ativar'} anotações"><span></span></button><div class="settings-mini-status ${notes.enabled?'on':'off'}">${notes.enabled?'Ativado':'Desativado'}</div></div>
       </div>
       <div class="settings-section interface-mode-card">
-        <div class="settings-title-help"><h3>Modo de interface</h3>${settingsHelpButton('Modo de interface','Escolha Smartphone, Pro ou Auto. No Auto, o Borion adapta a interface ao dispositivo.','modo de interface smartphone pro auto')}</div>
+        <div class="settings-title-help"><h3>Modo de interface</h3></div>
         <div class="interface-mode-row">
           <div class="interface-segmented" role="group" aria-label="Modo de interface">
             <button class="interface-segment ${uiMode==='smartphone'?'active':''}" onclick="Settings.setInterfaceMode('smartphone')">${phoneIconSVG()}<span>Smartphone</span></button>
@@ -1473,8 +1473,8 @@ Settings.openContextHelp = function(title,summary,query){
           <button class="interface-auto-button ${uiMode==='auto'?'active':''}" onclick="Settings.setInterfaceMode('auto')">${sparklesIconSVG()}<span>Auto</span></button>
         </div>
       </div>
-      <div class="settings-section settings-compact-option"><div class="settings-title-help"><h3>Tema</h3>${settingsHelpButton('Tema','Escolha o tema escuro, claro ou o tema do sistema.','tema claro escuro sistema')}</div><div class="field" style="max-width:320px;"><select id="cfg_theme"><option value="dark" ${theme==='dark'?'selected':''}>Escuro / Private banking</option><option value="light" ${theme==='light'?'selected':''}>Claro / Branco</option><option value="system" ${theme==='system'?'selected':''}>Tema do sistema</option></select></div></div>
-      <div class="settings-section settings-compact-option"><div class="settings-title-help"><h3>Fonte do app</h3>${settingsHelpButton('Fonte do app','Altera a fonte usada em toda a interface do Borion.','fonte do aplicativo')}</div><div class="field" style="max-width:320px;"><select id="cfg_font">${fontOptions}</select></div></div>
+      <div class="settings-section settings-compact-option"><div class="settings-title-help"><h3>Tema</h3></div><div class="field" style="max-width:320px;"><select id="cfg_theme"><option value="dark" ${theme==='dark'?'selected':''}>Escuro / Private banking</option><option value="light" ${theme==='light'?'selected':''}>Claro / Branco</option><option value="system" ${theme==='system'?'selected':''}>Tema do sistema</option></select></div></div>
+      <div class="settings-section settings-compact-option"><div class="settings-title-help"><h3>Fonte do app</h3></div><div class="field" style="max-width:320px;"><select id="cfg_font">${fontOptions}</select></div></div>
       ${renderBudgetSummaryPersonalization()}
       ${window.OrderPreferences ? OrderPreferences.renderModulesOrganizePanel() : ''}`;
   };

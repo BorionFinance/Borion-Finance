@@ -1,0 +1,86 @@
+{
+  "passed": 20,
+  "total": 20,
+  "results": [
+    {
+      "name": "01. App carrega sem page errors",
+      "passed": true
+    },
+    {
+      "name": "02. App carrega sem console errors",
+      "passed": true
+    },
+    {
+      "name": "03. Badge mostra v6.46.44",
+      "passed": true
+    },
+    {
+      "name": "04. Modo de interface não possui interrogação",
+      "passed": true
+    },
+    {
+      "name": "05. Tema e Fonte do app não possuem interrogação",
+      "passed": true
+    },
+    {
+      "name": "06. Anotações mantém ajuda contextual",
+      "passed": true
+    },
+    {
+      "name": "07. Botão de Anotações fica logo abaixo do título",
+      "passed": true
+    },
+    {
+      "name": "08. Menu usa a nova ordem em duas colunas",
+      "passed": true
+    },
+    {
+      "name": "09. Menu possui exatamente duas colunas no desktop",
+      "passed": true
+    },
+    {
+      "name": "10. Coluna esquerda e direita seguem o agrupamento solicitado",
+      "passed": true
+    },
+    {
+      "name": "11. Card de Pop-ups comporta o conteúdo extra",
+      "passed": true
+    },
+    {
+      "name": "12. Importar e exportar usam o mesmo peso de fonte de Sincronizar agora",
+      "passed": true
+    },
+    {
+      "name": "13. Cores dos botões de backup foram preservadas",
+      "passed": true
+    },
+    {
+      "name": "14. Campo do nome do perfil foi reduzido no desktop",
+      "passed": true
+    },
+    {
+      "name": "15. Reserva ativa recebe classe visual específica",
+      "passed": true
+    },
+    {
+      "name": "16. Reserva ativa recebe verde claro e discreto",
+      "passed": true
+    },
+    {
+      "name": "17. Caixa Marcar como paga da Agenda usa o padrão Borion",
+      "passed": true
+    },
+    {
+      "name": "18. Manter conectado segue a estética do Borion",
+      "passed": true
+    },
+    {
+      "name": "19. Filtro por banco usa caixas padronizadas",
+      "passed": true
+    },
+    {
+      "name": "20. No mobile o Menu volta para uma coluna sem quebrar",
+      "passed": true
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+BORION FINANCE — V6.46.44
+
+Ajustes realizados:
+- Removidos os botões de ajuda de Modo de interface, Tema e Fonte do app.
+- Botão de Anotações reposicionado logo abaixo do título.
+- Botões de Backups / Dados padronizados com a tipografia de Sincronizar agora, mantendo as cores.
+- Menu reorganizado em duas colunas: Investimentos/Reserva/Importar extratos e Agenda/Cheques/Popups.
+- Campo do nome do perfil reduzido no desktop.
+- Reservas ativas recebem um destaque verde muito discreto.
+- Caixas de seleção padronizadas em Agenda, login, filtro por banco e demais áreas do Borion.
+- Compatibilidade preservada para temas escuro e claro, desktop e mobile.

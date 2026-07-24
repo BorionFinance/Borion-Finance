@@ -356,18 +356,38 @@ const Notifs = {
   },
   togglePanel(evt){
     if(evt) evt.stopPropagation();
-    this.panelOpen = !this.panelOpen;
-    this.renderPanel();
+    if(this.panelOpen) this.closePanel();
+    else{ this.panelOpen=true; this.renderPanel(); }
     this.haptic(5);
   },
-  closePanel(){
+  finishPanelClose(){
+    if(this._panelCloseTimer){ clearTimeout(this._panelCloseTimer); this._panelCloseTimer=null; }
+    const panel=document.getElementById('notif-panel');
+    if(panel) panel.remove();
+    document.body.classList.remove('notif-panel-open','notif-panel-closing');
+    if(typeof syncGlobalScrollLockState==='function') syncGlobalScrollLockState({source:'Notifs.close'});
+  },
+  closePanel(options={}){
     this.panelOpen=false;
-    this.renderPanel();
+    const panel=document.getElementById('notif-panel');
+    const smart=typeof isSmartphoneMode==='function' && isSmartphoneMode();
+    if(!panel || options.immediate===true || !smart){ this.finishPanelClose(); return; }
+    if(panel.dataset.notifClosing==='1') return;
+    panel.dataset.notifClosing='1';
+    panel.classList.add('is-panel-closing');
+    panel.style.setProperty('--notif-sheet-y','106%');
+    document.body.classList.add('notif-panel-closing');
+    this._panelCloseTimer=setTimeout(()=>this.finishPanelClose(),300);
   },
   renderPanel(){
     let panel = document.getElementById('notif-panel');
-    if(!this.panelOpen){ if(panel) panel.remove(); document.body.classList.remove('notif-panel-open'); if(typeof syncGlobalScrollLockState==='function') syncGlobalScrollLockState({source:'Notifs.close'}); return; }
+    if(!this.panelOpen){ this.finishPanelClose(); return; }
+    if(this._panelCloseTimer){ clearTimeout(this._panelCloseTimer); this._panelCloseTimer=null; }
     if(!panel){ panel = document.createElement('section'); panel.id='notif-panel'; panel.className='notif-panel'; document.body.appendChild(panel); }
+    panel.classList.remove('is-panel-closing');
+    panel.style.removeProperty('--notif-sheet-y');
+    delete panel.dataset.notifClosing;
+    document.body.classList.remove('notif-panel-closing');
     panel.classList.toggle('notif-panel-mobile',typeof isSmartphoneMode==='function' && isSmartphoneMode());
     const list = (S.data.notificacoes||[]).slice().sort((a,b)=>(b.criadaEm||0)-(a.criadaEm||0));
     const unread=list.filter(n=>!n.lida).length;

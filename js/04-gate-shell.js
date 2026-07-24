@@ -48,7 +48,7 @@ function gateCloudLinkHTML(){
   return `<div style="text-align:center;margin-top:6px;"><button class="link-btn" id="gate_use_cloud">Entrar com uma conta na nuvem</button></div>`;
 }
 
-/* V6.46.19 — o seletor local só pode aparecer quando o modo escolhido realmente
+/* V6.46.20 — o seletor local só pode aparecer quando o modo escolhido realmente
    terminou de abrir. Se o Google/Supabase falhar ou perder a sessão, voltar para
    "Bem-vindo / Criar meu perfil" confundia o usuário e podia iniciar um perfil
    local por engano. Agora o Gate devolve para a tela correta de reconexão. */
@@ -437,6 +437,51 @@ window.MobileMenu = MobileMenu;
 
 const Nav = { go(key){ if(key!=='settings'&&window.BorionIntegrationsAccess){ BorionIntegrationsAccess.clearTemporary(); if(S.settingsTab==='integrations'&&!BorionIntegrationsAccess.remembered()) S.settingsTab='modules'; } if(key==='budget'&&typeof isSmartphoneMode==='function'&&isSmartphoneMode()) S.budgetTab='receita'; S.view=key; MobileMenu.close(); renderApp(); } };
 
+function wireMobileMonthSwipe(){
+  if(!(typeof isSmartphoneMode==='function' && isSmartphoneMode())) return;
+  const nav=document.querySelector('.topbar .month-nav');
+  if(!nav || nav.dataset.monthSwipeWired==='1') return;
+  nav.dataset.monthSwipeWired='1';
+  nav.setAttribute('aria-label','Mês selecionado. Deslize para os lados para trocar de mês.');
+
+  let pointerId=null,startX=0,startY=0,dx=0,dy=0;
+  const reset=()=>{
+    nav.classList.remove('is-month-swiping');
+    nav.style.setProperty('--month-swipe-x','0px');
+    pointerId=null;dx=0;dy=0;
+  };
+  nav.addEventListener('pointerdown',event=>{
+    if(event.pointerType==='mouse' && event.button!==0) return;
+    if(event.target.closest('button')) return;
+    pointerId=event.pointerId;startX=event.clientX;startY=event.clientY;dx=0;dy=0;
+    nav.classList.add('is-month-swiping');
+    try{nav.setPointerCapture(pointerId);}catch(_){ }
+  },{passive:true});
+  nav.addEventListener('pointermove',event=>{
+    if(pointerId!==event.pointerId) return;
+    dx=event.clientX-startX;dy=event.clientY-startY;
+    if(Math.abs(dx)>Math.abs(dy) && Math.abs(dx)>4){
+      if(event.cancelable) event.preventDefault();
+      const resisted=Math.max(-34,Math.min(34,dx*.42));
+      nav.style.setProperty('--month-swipe-x',`${resisted}px`);
+    }
+  },{passive:false});
+  const finish=event=>{
+    if(pointerId!==event.pointerId) return;
+    const committed=Math.abs(dx)>=42 && Math.abs(dx)>Math.abs(dy)*1.15;
+    try{nav.releasePointerCapture(pointerId);}catch(_){ }
+    nav.classList.remove('is-month-swiping');
+    nav.style.setProperty('--month-swipe-x','0px');
+    const goPrevious=dx>0;
+    pointerId=null;
+    if(!committed) return;
+    if(window.MobileExperience && typeof MobileExperience.haptic==='function') MobileExperience.haptic(5);
+    if(goPrevious) Months.prev(); else Months.next();
+  };
+  nav.addEventListener('pointerup',finish,{passive:true});
+  nav.addEventListener('pointercancel',reset,{passive:true});
+}
+
 function renderView(){
   if(S.view==='cheques' && !(S.data && S.data.cheques && S.data.cheques.enabled)) S.view='overview';
   if(S.view==='imports' && !(S.data && S.data.modules && S.data.modules.imports !== false)) S.view='overview';
@@ -467,6 +512,7 @@ function renderView(){
         <div class="topbar-title">
           <p class="hello">${greeting()}, ${esc(S.currentProfile.name)}</p>
           <h1>${titles[S.view]} <span class="eye" onclick="toggleValuesHidden()" title="${S.valuesHidden?'Mostrar valores':'Ocultar valores'}">${eyeIconSVG(S.valuesHidden)}</span></h1>
+          ${reserveLastMovement?`<div class="mobile-reserve-last">${reserveLastMovement}</div>`:''}
         </div>
       </div>
       <div class="global-search-wrap">
@@ -486,7 +532,7 @@ function renderView(){
           ? `<button id="cloud_status_badge" class="cloud-status ${GoogleDriveProvider.dirty?'syncing':'local'}" onclick="GoogleDriveProvider.handleStatusClick()" title="Conectado ao Google Drive — ${esc(GoogleDriveAuth.user?GoogleDriveAuth.user.email:'')} — pasta: ${esc(GoogleDriveProvider.folderName||'?')}">Google Drive${GoogleDriveProvider.dirty?' — salvando...':' — salvo'}</button>`
           : `<button id="cloud_status_badge" class="cloud-status local" onclick="Nav.go('settings')" title="Sem conexão confirmada com o Google Drive">Sem conexão</button>`}
         ${bankBtn}
-        ${reserveLastMovement}
+        ${reserveLastMovement?`<div class="desktop-reserve-last">${reserveLastMovement}</div>`:''}
         ${monthNav}
         <button class="bell-btn" onclick="Notifs.togglePanel(event)">${bellIconSVG()}${unread?`<span class="bell-badge">${unread>9?'9+':unread}</span>`:''}</button>
       </div>
@@ -505,6 +551,7 @@ function renderView(){
   else if(S.view==='imports') body.innerHTML = renderImportStatement();
   else if(S.view==='settings') body.innerHTML = renderSettings();
   wireViewEvents();
+  wireMobileMonthSwipe();
   if(window.OrderPreferences) OrderPreferences.ensureBanner();
   Clock.start(); // V6.22 — relógio "Atualizado em dd/mm/aaaa hh:mm" abaixo do filtro de mês, em toda página
   if(typeof applyBorionValuePrivacyDOM==='function') requestAnimationFrame(applyBorionValuePrivacyDOM);

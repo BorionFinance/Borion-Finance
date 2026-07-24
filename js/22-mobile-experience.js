@@ -241,7 +241,7 @@ const MobileExperience = {
         this.haptic(7);
         panel.classList.add('is-panel-closing');
         panel.style.setProperty('--notif-sheet-y','110%');
-        setTimeout(()=>{if(window.Notifs||typeof Notifs!=='undefined')Notifs.closePanel();},155);
+        setTimeout(()=>{if(window.Notifs||typeof Notifs!=='undefined')Notifs.closePanel({immediate:true});},280);
       }else reset();
       pointerId=null;
     };

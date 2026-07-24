@@ -3161,7 +3161,7 @@ html[data-theme="light"] .interop-source-value{background:rgba(122,85,29,.025)}
 .mit-expense-modal .quickcat-box{margin-top:8px;}
 html[data-theme="light"] .mit-expense-modal .field input[type="text"],html[data-theme="light"] .mit-expense-modal .field input[type="date"],html[data-theme="light"] .mit-expense-modal .field select{background:rgba(255,255,255,.92);border-color:rgba(122,85,29,.18);color:var(--text);}
 
-/* V6.46.19 — Dashboard estilo área de trabalho: posição e tamanho livres, sobreposição e camadas */
+/* V6.46.20 — Dashboard estilo área de trabalho: posição e tamanho livres, sobreposição e camadas */
 .overview-dashboard-grid{gap:12px;margin-bottom:18px;align-items:start;grid-auto-flow:dense;}
 .overview-dashboard-grid.module-free-placement{display:block;position:relative;min-height:180px;overflow:visible;}
 .overview-dashboard-grid.module-free-placement.module-free-bootstrap{display:grid;grid-auto-flow:row;height:auto!important;}
@@ -3231,7 +3231,7 @@ html[data-theme="light"] .module-widget-menu{background:rgba(252,249,242,.99);bo
 }
 
 
-/* ---------- V6.46.19 — acabamento solicitado: avatar, privacidade, lápis e reservas ---------- */
+/* ---------- V6.46.20 — acabamento solicitado: avatar, privacidade, lápis e reservas ---------- */
 .borion-money{display:inline;white-space:nowrap;}
 .value-mask{letter-spacing:0!important;color:var(--muted-2);font-weight:800;}
 .profile-avatar-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;}
@@ -3283,7 +3283,7 @@ html[data-interface-mode="smartphone"] #view-body .line-chart-svg polyline{
 ::view-transition-old(borion-content),
 ::view-transition-new(borion-content){animation:none!important;}
 
-/* ---------- V6.46.19 — cabeçalho mobile limpo e lançamentos compactos ---------- */
+/* ---------- V6.46.20 — cabeçalho mobile limpo e lançamentos compactos ---------- */
 html[data-interface-mode="smartphone"] .topbar{
   display:grid!important;
   grid-template-columns:minmax(0,1fr)!important;
@@ -3528,7 +3528,7 @@ html[data-interface-mode="smartphone"] #view-body>.dash-grid>.panel-box:first-ch
 }
 
 
-/* ---------- V6.46.19 — mobile linear, compacto e cabeçalho realmente fechado ---------- */
+/* ---------- V6.46.20 — mobile linear, compacto e cabeçalho realmente fechado ---------- */
 /* O scroller principal começa no topo real. O cabeçalho continua no fluxo (sticky),
    porém agora é sólido: nenhum lançamento antigo aparece por trás dele durante o scroll. */
 html[data-interface-mode="smartphone"] #view-root.main{
@@ -3793,7 +3793,7 @@ html[data-interface-mode="smartphone"] .reserva-card{padding:13px!important;}
   html[data-interface-mode="smartphone"] .reserva-toolbar-actions>.btn-outline{font-size:8.6px!important;padding-inline:3px!important;}
 }
 
-/* ---------- V6.46.19 — editor da dashboard sempre acima e posicionamento assistido ---------- */
+/* ---------- V6.46.20 — editor da dashboard sempre acima e posicionamento assistido ---------- */
 .module-layout-toolbar,
 .module-layout-toolbar.active{
   z-index:1000000!important;
@@ -3905,3 +3905,207 @@ html[data-theme="light"] .module-placement-ghost{
   background:rgba(252,249,242,.98)!important;
 }
 
+
+
+/* ---------- V6.46.20 — desempenho do editor, cabeçalho mobile em uma linha e gestos ---------- */
+.mobile-reserve-last{display:none;}
+.desktop-reserve-last{display:contents;}
+
+/* No modo de edição, o conteúdo financeiro continua visível, mas deixa de participar de
+   hover/click e perde efeitos caros. Isso reduz pintura e hit-testing durante o scroll. */
+.overview-dashboard-grid.module-grid-organizer{
+  isolation:isolate;
+  scroll-behavior:auto!important;
+}
+.overview-dashboard-grid.module-grid-organizer>.overview-dashboard-slot{
+  contain:paint style;
+  transition:none!important;
+}
+.overview-dashboard-grid.module-grid-organizer .module-layout-content,
+.overview-dashboard-grid.module-grid-organizer .module-layout-content *{
+  pointer-events:none!important;
+  animation:none!important;
+  transition:none!important;
+}
+.overview-dashboard-grid.module-grid-organizer .module-layout-content>.card,
+.overview-dashboard-grid.module-grid-organizer .module-layout-content>.panel-box,
+.overview-dashboard-grid.module-grid-organizer .module-layout-content .card,
+.overview-dashboard-grid.module-grid-organizer .module-layout-content .panel-box{
+  box-shadow:none!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+  filter:none!important;
+}
+.overview-dashboard-grid.module-grid-organizer svg,
+.overview-dashboard-grid.module-grid-organizer svg *{
+  filter:none!important;
+}
+.overview-dashboard-grid.module-grid-organizer .module-slot-toolbar,
+.overview-dashboard-grid.module-grid-organizer .module-resize-handle{
+  pointer-events:auto!important;
+}
+.module-layout-toolbar.active{
+  background:rgba(7,11,17,.985)!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+.module-free-placement .module-slot-toolbar{
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+html[data-theme="light"] .module-layout-toolbar.active{background:rgba(248,243,233,.99)!important;}
+
+html[data-interface-mode="smartphone"] .topbar{
+  grid-template-columns:minmax(0,1fr) minmax(142px,44vw) 38px!important;
+  grid-template-rows:auto!important;
+  align-items:center!important;
+  column-gap:7px!important;
+  row-gap:0!important;
+}
+html[data-interface-mode="smartphone"] .topbar-title-row{
+  grid-column:1!important;
+  grid-row:1!important;
+  align-self:center!important;
+  width:100%!important;
+  min-width:0!important;
+}
+html[data-interface-mode="smartphone"] .topbar-title{
+  min-width:0!important;
+}
+html[data-interface-mode="smartphone"] .topbar .hello{
+  font-size:9.5px!important;
+  line-height:1.15!important;
+  margin:0 0 2px!important;
+}
+html[data-interface-mode="smartphone"] .topbar h1{
+  font-size:17px!important;
+  line-height:1.08!important;
+  gap:5px!important;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+html[data-interface-mode="smartphone"] .topbar h1 .eye{
+  flex:0 0 auto;
+  font-size:14px!important;
+}
+html[data-interface-mode="smartphone"] .topbar-controls{
+  grid-column:2/4!important;
+  grid-row:1!important;
+  width:100%!important;
+  min-width:0!important;
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) 38px!important;
+  align-items:center!important;
+  gap:7px!important;
+  margin:0!important;
+}
+html[data-interface-mode="smartphone"] .desktop-reserve-last{display:none!important;}
+html[data-interface-mode="smartphone"] .mobile-reserve-last{
+  display:block!important;
+  min-width:0;
+  margin-top:2px;
+}
+html[data-interface-mode="smartphone"] .mobile-reserve-last .reserve-last-movement-top{
+  display:flex!important;
+  flex-direction:row!important;
+  align-items:center!important;
+  gap:4px!important;
+  margin:0!important;
+  padding:0!important;
+  border:0!important;
+  white-space:nowrap;
+  overflow:hidden;
+}
+html[data-interface-mode="smartphone"] .mobile-reserve-last .reserve-last-movement-top span{
+  font-size:6.8px!important;
+  letter-spacing:.35px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+html[data-interface-mode="smartphone"] .mobile-reserve-last .reserve-last-movement-top strong{
+  font-size:8.5px!important;
+  line-height:1!important;
+  flex:0 0 auto;
+}
+html[data-interface-mode="smartphone"] .topbar-controls .month-nav-wrap{
+  grid-column:1!important;
+  grid-row:1!important;
+  order:initial!important;
+  width:100%!important;
+  min-width:0!important;
+  max-width:none!important;
+  flex:none!important;
+  margin:0!important;
+}
+html[data-interface-mode="smartphone"] .topbar-controls .month-nav{
+  --month-swipe-x:0px;
+  width:100%!important;
+  min-width:0!important;
+  padding:5px 6px!important;
+  gap:2px!important;
+  overflow:hidden;
+  touch-action:pan-y;
+  user-select:none;
+}
+html[data-interface-mode="smartphone"] .topbar-controls .month-nav .mlabel{
+  min-width:0!important;
+  font-size:10.5px!important;
+  transform:translate3d(var(--month-swipe-x),0,0);
+  transition:transform .18s cubic-bezier(.2,.8,.2,1);
+  will-change:transform;
+}
+html[data-interface-mode="smartphone"] .topbar-controls .month-nav.is-month-swiping .mlabel{
+  transition:none!important;
+}
+html[data-interface-mode="smartphone"] .topbar-controls .month-nav button{
+  flex:0 0 27px;
+  width:27px!important;
+  height:27px!important;
+  padding:0!important;
+}
+html[data-interface-mode="smartphone"] .topbar-controls .bell-btn{
+  grid-column:2!important;
+  grid-row:1!important;
+  order:initial!important;
+  width:38px!important;
+  min-width:38px!important;
+  height:38px!important;
+  margin:0!important;
+}
+
+/* Fechamento do painel de notificações com desaceleração natural e fundo acompanhando. */
+html[data-interface-mode="smartphone"] .notif-panel{
+  transition:transform .30s cubic-bezier(.4,0,.2,1),opacity .24s ease!important;
+}
+html[data-interface-mode="smartphone"] .notif-panel.is-panel-dragging{
+  transition:none!important;
+}
+html[data-interface-mode="smartphone"] .notif-panel.is-panel-closing{
+  transform:translate3d(0,var(--notif-sheet-y,106%),0)!important;
+  opacity:.12;
+  transition:transform .30s cubic-bezier(.4,0,.2,1),opacity .22s ease!important;
+}
+html[data-interface-mode="smartphone"] body.notif-panel-open::after{
+  opacity:1;
+  transition:opacity .28s ease!important;
+}
+html[data-interface-mode="smartphone"] body.notif-panel-closing::after{
+  opacity:0!important;
+}
+
+@media(max-width:380px){
+  html[data-interface-mode="smartphone"] .topbar{
+    grid-template-columns:minmax(88px,1fr) minmax(130px,43vw) 36px!important;
+    column-gap:5px!important;
+  }
+  html[data-interface-mode="smartphone"] .topbar-controls{
+    grid-template-columns:minmax(0,1fr) 36px!important;
+    gap:5px!important;
+  }
+  html[data-interface-mode="smartphone"] .topbar h1{font-size:15.5px!important;}
+  html[data-interface-mode="smartphone"] .topbar .hello{font-size:8.7px!important;}
+  html[data-interface-mode="smartphone"] .topbar-controls .month-nav .mlabel{font-size:9.5px!important;}
+  html[data-interface-mode="smartphone"] .topbar-controls .month-nav button{flex-basis:24px;width:24px!important;height:25px!important;}
+  html[data-interface-mode="smartphone"] .topbar-controls .bell-btn{width:36px!important;min-width:36px!important;height:36px!important;}
+}

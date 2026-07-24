@@ -1,0 +1,11 @@
+BORION FINANCE v6.46.33
+
+CORREÇÕES PRINCIPAIS
+- Falhas transitórias de confirmação do Google Drive não desmontam, não desconectam e não cobrem o aplicativo.
+- Despesas, lembretes, configurações e sincronizações permanecem pendentes e recebem retry automático.
+- Somente autenticação expirada ou ausência real de internet exige intervenção.
+- Ações manuais continuam mostrando Salvando/Sincronizando e aguardam confirmação real.
+- Agenda mobile usa um único seletor compacto com nome do mês e ícone de calendário.
+- Ao tocar, é possível escolher mês e ano.
+- O seletor mensal duplicado dentro da Agenda fica oculto no smartphone.
+- Versão v6.46.33 visível no canto inferior direito do login.

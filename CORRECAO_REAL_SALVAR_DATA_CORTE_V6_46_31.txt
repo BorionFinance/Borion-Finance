@@ -1,4 +1,4 @@
-BORION FINANCE V6.46.32 — CORREÇÃO REAL DO BOTÃO SALVAR DATA
+BORION FINANCE V6.46.33 — CORREÇÃO REAL DO BOTÃO SALVAR DATA
 
 Causa confirmada no fluxo:
 - A confirmação usava window.confirm().
@@ -12,4 +12,4 @@ Correções:
 3. Foco, visibilidade, autosave, atualização ao vivo e sincronização automática da integração aguardam a transação terminar.
 4. O commit continua usando o journal e a confirmação real do current.json.
 5. Em falha real, a data visível volta ao valor anterior; nenhuma configuração local não confirmada é apresentada como salva.
-6. Versão v6.46.32 visível no canto inferior direito da tela inicial.
+6. Versão v6.46.33 visível no canto inferior direito da tela inicial.

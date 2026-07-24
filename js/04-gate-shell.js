@@ -367,6 +367,10 @@ function renderApp(){
     renderGate();
     return;
   }
+  // V6.46.33 — marca que o shell real do aplicativo já foi aberto. Uma falha de
+  // rede/salvamento depois deste ponto nunca pode substituir toda a tela por um
+  // gate que parece desconexão; o provider mantém a página e trabalha a pendência.
+  if(window.GoogleDriveProvider) GoogleDriveProvider._appHasOpened=true;
   if(window.Assinaturas && Assinaturas.sync) Assinaturas.sync(); // V6.22 — cobra períodos pendentes até hoje, nunca duplicando
   const p=S.currentProfile;
   /* Organização visual (opcional): quando o usuário personaliza a ordem dos módulos em
@@ -441,7 +445,7 @@ const Nav = { go(key){ if(key!=='settings'&&window.BorionIntegrationsAccess){ Bo
 function wireMobileMonthSwipe(){
   if(!(typeof isSmartphoneMode==='function' && isSmartphoneMode())) return;
   const nav=document.querySelector('.topbar .month-nav');
-  if(!nav || nav.dataset.monthSwipeWired==='1') return;
+  if(!nav || nav.classList.contains('mobile-month-picker') || nav.dataset.monthSwipeWired==='1') return;
   nav.dataset.monthSwipeWired='1';
   nav.setAttribute('aria-label','Mês selecionado. Deslize para os lados para trocar de mês.');
 
@@ -483,6 +487,34 @@ function wireMobileMonthSwipe(){
   nav.addEventListener('pointercancel',reset,{passive:true});
 }
 
+// V6.46.33 — seletor compacto de mês/ano no smartphone. Usa o seletor
+// nativo do navegador (rápido e leve) e mantém a Agenda no mesmo mês do topo.
+const MobileMonthPicker = {
+  open(event){
+    if(event){event.preventDefault();event.stopPropagation();}
+    const input=document.getElementById('borion_mobile_month_input');
+    if(!input)return;
+    input.value=String(S.month.y)+'-'+pad2(S.month.m+1);
+    try{
+      if(typeof input.showPicker==='function') input.showPicker();
+      else input.click();
+    }catch(_){ input.click(); }
+  },
+  change(value){
+    const match=/^(\d{4})-(\d{2})$/.exec(String(value||''));
+    if(!match)return;
+    const y=Number(match[1]),m=Number(match[2])-1;
+    if(!Number.isInteger(y)||m<0||m>11)return;
+    S.month={y,m};
+    if(S.view==='agenda'){
+      if(typeof ensureAgendaViewState==='function')ensureAgendaViewState();
+      if(S.agendaView){S.agendaView.y=y;S.agendaView.m=m;}
+    }
+    renderView();
+  }
+};
+window.MobileMonthPicker=MobileMonthPicker;
+
 function renderView(){
   if(S.view==='cheques' && !(S.data && S.data.cheques && S.data.cheques.enabled)) S.view='overview';
   if(S.view==='imports' && !(S.data && S.data.modules && S.data.modules.imports !== false)) S.view='overview';
@@ -491,7 +523,17 @@ function renderView(){
   if(S.view==='agenda' && !agendaEnabled()) S.view='overview';
   const container = $('#view-root');
   const titles = {overview:'Visão geral',budget:'Lançamentos',investments:'Investimentos',patrimony:'Patrimônio',reservas:'Reserva',cards:'Cartões e Contas',agenda:'Agenda Financeira',cheques:'Cheques',imports:'Importar Extrato',settings:'Configurações'};
-  const monthNav = `
+  // No smartphone existe somente um rótulo curto (ex.: "Julho") e um
+  // ícone de calendário. O toque abre mês + ano; setas continuam no modo Pro.
+  const monthNav = (typeof isSmartphoneMode==='function'&&isSmartphoneMode()) ? `
+    <div class="month-nav-wrap mobile-month-picker-wrap">
+      <input id="borion_mobile_month_input" class="mobile-month-native-input" type="month" value="${S.month.y}-${pad2(S.month.m+1)}" onchange="MobileMonthPicker.change(this.value)" aria-label="Selecionar mês e ano"/>
+      <button type="button" class="month-nav mobile-month-picker" onclick="MobileMonthPicker.open(event)" aria-label="Selecionar mês e ano" title="Selecionar mês e ano">
+        <span class="mlabel">${MONTHS[S.month.m]}</span>
+        <span class="mobile-month-calendar-icon" aria-hidden="true">${navIconSVG('agenda')}</span>
+      </button>
+      <div class="clock-label" id="borion_clock"></div>
+    </div>` : `
     <div class="month-nav-wrap">
       <div class="month-nav">
         <button onclick="Months.prev()">‹</button>
@@ -581,6 +623,14 @@ const Clock = {
 window.Clock = Clock;
 
 const Months = {
-  prev(){ let {y,m}=S.month; m--; if(m<0){m=11;y--;} S.month={y,m}; renderView(); },
-  next(){ let {y,m}=S.month; m++; if(m>11){m=0;y++;} S.month={y,m}; renderView(); }
+  _apply(y,m){
+    S.month={y,m};
+    if(S.view==='agenda'){
+      if(typeof ensureAgendaViewState==='function')ensureAgendaViewState();
+      if(S.agendaView){S.agendaView.y=y;S.agendaView.m=m;}
+    }
+    renderView();
+  },
+  prev(){ let {y,m}=S.month; m--; if(m<0){m=11;y--;} this._apply(y,m); },
+  next(){ let {y,m}=S.month; m++; if(m>11){m=0;y++;} this._apply(y,m); }
 };

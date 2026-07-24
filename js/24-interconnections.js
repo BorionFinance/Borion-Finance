@@ -497,7 +497,7 @@
   function saveProfileData(profileId, data, options={}){
     setProfileData(profileId, data);
     if(S.currentProfile && String(S.currentProfile.id) === String(profileId)) S.data = data;
-    // V6.46.32 — configurações críticas usam deferGoogleCommit para que exista
+    // V6.46.33 — configurações críticas usam deferGoogleCommit para que exista
     // exatamente UMA entrada na fila do Drive. Antes, saveProfileData iniciava um
     // commit e o fluxo crítico tentava entrar por cima dele logo em seguida.
     if(!options.deferGoogleCommit && window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){
@@ -1569,7 +1569,7 @@
       result=reconcileSnapshot(commitData,commitConfig,snapshot,{mode:silent?'automatic':'manual'});
       if(result.changed!==false){
         replaceObjectContents(commitRow.data,commitData);
-        // V6.46.32 — uma sincronização do Marco gera exatamente UM commit do
+        // V6.46.33 — uma sincronização do Marco gera exatamente UM commit do
         // perfil. Não chama saveCurrentData logo depois de saveProfileData, pois
         // isso criava duas revisões concorrentes no mesmo clique.
         saveProfileData(commitRow.profile.id,commitRow.data,{deferGoogleCommit:true,source:'interop_sync_'+sourceAppId});
@@ -1818,7 +1818,7 @@
   // origem não virarem lançamento no Borion sozinhos. Nada do que já foi
   // importado antes é afetado — só passa a valer para os próximos lançamentos.
   function confirmCutoffChange(message){
-    // V6.46.32 — não usa mais window.confirm(). Ao fechar a caixa nativa, o
+    // V6.46.33 — não usa mais window.confirm(). Ao fechar a caixa nativa, o
     // navegador dispara focus/visibilitychange e o sincronizador de fundo podia
     // começar outra leitura exatamente entre a confirmação e o commit.
     if(typeof document==='undefined'||!document.getElementById('modal-root')){
@@ -1846,7 +1846,7 @@
       setTimeout(()=>confirmButton&&confirmButton.focus(),0);
     });
   }
-  // V6.46.32 — o ajuste crítico é colocado UMA vez na fila. O próprio provider
+  // V6.46.33 — o ajuste crítico é colocado UMA vez na fila. O próprio provider
   // serializa qualquer sincronização automática/consolidação que já esteja em curso
   // e só devolve sucesso depois que o current.json foi realmente confirmado.
   function forceImmediateSync(reason='interop_critical_setting'){
@@ -1862,7 +1862,7 @@
         let result;
         const strict=typeof provider._isStrictMode==='function'&&provider._isStrictMode();
         if(strict){
-          // V6.46.32 — toda ação explícita usa a mesma confirmação em primeiro
+          // V6.46.33 — toda ação explícita usa a mesma confirmação em primeiro
           // plano. A tela permanece aberta, mostra progresso e só libera depois
           // de o current.json ser relido e validado.
           result=typeof provider.runForegroundConfirmedSave==='function'

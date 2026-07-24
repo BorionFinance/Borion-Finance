@@ -1,4 +1,4 @@
-BORION FINANCE v6.46.32
+BORION FINANCE v6.46.33
 CORREÇÃO — SALVAR/SINCRONIZAR SEM DESCONECTAR OU SUBSTITUIR A TELA
 Data: 24/07/2026
 
@@ -26,7 +26,7 @@ CORREÇÕES
    tentar novamente ou renovar o Google.
 9. Gatilhos de foco, visibilidade, autosave e sincronização automática são suspensos
    durante a transação explícita, evitando concorrência no meio do commit.
-10. A versão v6.46.32 permanece visível no canto inferior direito do login.
+10. A versão v6.46.33 permanece visível no canto inferior direito do login.
 
 VALIDAÇÃO LOCAL AUTOMATIZADA
 - 20 salvamentos consecutivos da data de corte: aprovados.
@@ -43,5 +43,5 @@ VALIDAÇÃO LOCAL AUTOMATIZADA
 OBSERVAÇÃO
 Os testes automatizados simulam o protocolo e as respostas do Google Drive. A conta
 Google real do Marco não fica disponível no ambiente de desenvolvimento; por isso,
-o teste final de produção deve ser feito após publicar, conferindo a versão v6.46.32
+o teste final de produção deve ser feito após publicar, conferindo a versão v6.46.33
 no login e executando Salvar data e Sincronizar agora.

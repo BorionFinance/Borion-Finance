@@ -4109,3 +4109,78 @@ html[data-interface-mode="smartphone"] body.notif-panel-closing::after{
   html[data-interface-mode="smartphone"] .topbar-controls .month-nav button{flex-basis:24px;width:24px!important;height:25px!important;}
   html[data-interface-mode="smartphone"] .topbar-controls .bell-btn{width:36px!important;min-width:36px!important;height:36px!important;}
 }
+
+/* ---------- V6.46.33 — seletor de mês/ano compacto no smartphone ---------- */
+html[data-interface-mode="smartphone"] .mobile-month-picker-wrap{
+  position:relative!important;
+  display:block!important;
+  min-width:0!important;
+}
+html[data-interface-mode="smartphone"] .mobile-month-native-input{
+  position:absolute!important;
+  width:1px!important;
+  height:1px!important;
+  opacity:0!important;
+  pointer-events:none!important;
+  inset:auto auto 0 50%!important;
+}
+html[data-interface-mode="smartphone"] .topbar-controls .month-nav.mobile-month-picker{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:7px!important;
+  width:100%!important;
+  min-width:0!important;
+  height:38px!important;
+  padding:5px 10px!important;
+  border:1px solid var(--border)!important;
+  border-radius:13px!important;
+  background:rgba(12,19,26,.72)!important;
+  color:var(--text)!important;
+  cursor:pointer!important;
+  touch-action:manipulation!important;
+  overflow:hidden!important;
+}
+html[data-interface-mode="smartphone"] .topbar-controls .month-nav.mobile-month-picker .mlabel{
+  min-width:0!important;
+  max-width:calc(100% - 27px)!important;
+  font-size:12px!important;
+  font-weight:800!important;
+  line-height:1!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  transform:none!important;
+}
+html[data-interface-mode="smartphone"] .mobile-month-calendar-icon{
+  width:18px!important;
+  height:18px!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  flex:0 0 18px!important;
+  color:var(--gold-bright)!important;
+}
+html[data-interface-mode="smartphone"] .mobile-month-calendar-icon svg{
+  width:18px!important;
+  height:18px!important;
+  display:block!important;
+}
+/* Na Agenda mobile, o seletor do topo passa a controlar o calendário. Isso remove
+   a repetição de "Julho de 2026" e elimina a sobreposição mostrada no cabeçalho. */
+html[data-interface-mode="smartphone"] .agenda-layout .agenda-month-nav{
+  display:none!important;
+}
+html[data-interface-mode="smartphone"] .topbar h1{
+  white-space:nowrap!important;
+}
+@media(max-width:380px){
+  html[data-interface-mode="smartphone"] .topbar-controls .month-nav.mobile-month-picker{
+    height:36px!important;
+    padding-inline:7px!important;
+    gap:5px!important;
+  }
+  html[data-interface-mode="smartphone"] .topbar-controls .month-nav.mobile-month-picker .mlabel{
+    font-size:11px!important;
+  }
+}

@@ -1,4 +1,4 @@
-/* Borion Finance — Google Drive Provider (V6.46.31 — Transação exclusiva ao salvar data de corte da integração)
+/* Borion Finance — Google Drive Provider (V6.46.32 — Transação exclusiva ao salvar data de corte da integração)
 
    Arquitetura 6.40.2: current.json é apenas o snapshot consolidado. Toda alteração
    é protegida primeiro como operação imutável, identificada por operationId, e só
@@ -761,10 +761,14 @@ const GoogleDriveProvider = {
   _strictReconnectPromise:null,_strictReconnectInProgress:false,
   _connecting:false,
   _onboarding:false,
-  // V6.46.31 — transações críticas de configuração (ex.: salvar a data de
+  // V6.46.32 — transações críticas de configuração (ex.: salvar a data de
   // corte) suspendem SOMENTE gatilhos de fundo/foco. Erros reais do commit
   // continuam podendo chamar lockStrictCloud normalmente.
   _criticalSaveDepth:0,_criticalSaveReason:'',
+  // V6.46.32 — ações iniciadas pelo usuário (Salvar/Sincronizar) mantêm a tela
+  // atual viva. Em vez de substituir todo o app por um gate, o Borion mostra uma
+  // camada de progresso, força a confirmação e preserva o estado da página.
+  _foregroundSaveDepth:0,_foregroundSaveLabel:'',_foregroundSaveSource:'',_foregroundSaveOverlay:null,
   _pendingProfileMetadata:new Map(),
 
   markProfileMetadataChanged(profile){
@@ -862,6 +866,122 @@ const GoogleDriveProvider = {
 
   isCriticalSaveInProgress(){return (Number(this._criticalSaveDepth)||0)>0;},
 
+  beginForegroundSave(label='Salvando no Google Drive…',source='user_save'){
+    this._foregroundSaveDepth=Math.max(0,Number(this._foregroundSaveDepth)||0)+1;
+    this._foregroundSaveLabel=String(label||'Salvando no Google Drive…');
+    this._foregroundSaveSource=String(source||'user_save');
+    this._renderForegroundSaveOverlay(this._foregroundSaveLabel,'Aguarde a confirmação real do Google Drive.','busy');
+    return {released:false,source:this._foregroundSaveSource};
+  },
+
+  updateForegroundSave(title,detail,state='busy'){
+    if(!this.isForegroundSaveInProgress())return;
+    this._renderForegroundSaveOverlay(title||this._foregroundSaveLabel,detail||'',state);
+  },
+
+  endForegroundSave(token,{keepError=false}={}){
+    if(token&&token.released)return;
+    if(token)token.released=true;
+    this._foregroundSaveDepth=Math.max(0,(Number(this._foregroundSaveDepth)||0)-1);
+    if(!this._foregroundSaveDepth){
+      this._foregroundSaveLabel='';this._foregroundSaveSource='';
+      if(!keepError)this._hideForegroundSaveOverlay();
+    }
+  },
+
+  isForegroundSaveInProgress(){return (Number(this._foregroundSaveDepth)||0)>0;},
+
+  _renderForegroundSaveOverlay(title,detail,state='busy'){
+    if(typeof document==='undefined'||!document.body)return;
+    let overlay=document.getElementById('borion_foreground_save_overlay');
+    if(!overlay){
+      overlay=document.createElement('div');
+      overlay.id='borion_foreground_save_overlay';
+      overlay.setAttribute('role','status');
+      overlay.setAttribute('aria-live','polite');
+      overlay.style.cssText='position:fixed;inset:0;z-index:2147483200;background:rgba(3,10,17,.72);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;';
+      overlay.innerHTML='<div style="width:min(430px,100%);background:#0d1722;border:1px solid rgba(222,179,92,.35);border-radius:18px;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.48);color:#f5f7fa;text-align:center"><div data-save-spinner style="width:34px;height:34px;border:3px solid rgba(222,179,92,.25);border-top-color:#deb35c;border-radius:50%;margin:0 auto 16px;animation:borionForegroundSpin .8s linear infinite"></div><h2 data-save-title style="margin:0 0 10px;font-size:22px"></h2><p data-save-detail style="margin:0;color:#aebaca;line-height:1.45"></p></div>';
+      if(!document.getElementById('borion_foreground_save_style')){
+        const style=document.createElement('style');style.id='borion_foreground_save_style';style.textContent='@keyframes borionForegroundSpin{to{transform:rotate(360deg)}}';document.head.appendChild(style);
+      }
+      document.body.appendChild(overlay);
+    }
+    const spinner=overlay.querySelector('[data-save-spinner]');
+    const titleEl=overlay.querySelector('[data-save-title]');
+    const detailEl=overlay.querySelector('[data-save-detail]');
+    if(titleEl)titleEl.textContent=String(title||'Salvando no Google Drive…');
+    if(detailEl)detailEl.textContent=String(detail||'');
+    if(spinner)spinner.style.display=state==='success'?'none':'block';
+    overlay.dataset.state=state;
+    this._foregroundSaveOverlay=overlay;
+  },
+
+  _hideForegroundSaveOverlay(){
+    const overlay=typeof document!=='undefined'?document.getElementById('borion_foreground_save_overlay'):null;
+    if(overlay)overlay.remove();this._foregroundSaveOverlay=null;
+  },
+
+  _showStrictRecoveryOverlay(message){
+    if(typeof document==='undefined'||!document.body)return false;
+    this._hideForegroundSaveOverlay();
+    let overlay=document.getElementById('borion_strict_recovery_overlay');
+    if(!overlay){
+      overlay=document.createElement('div');overlay.id='borion_strict_recovery_overlay';
+      overlay.style.cssText='position:fixed;inset:0;z-index:2147483300;background:rgba(3,10,17,.82);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:20px;';
+      overlay.innerHTML='<div style="width:min(480px,100%);background:#0d1722;border:1px solid rgba(222,179,92,.35);border-radius:18px;padding:26px;box-shadow:0 24px 70px rgba(0,0,0,.5);color:#f5f7fa"><h2 style="margin:0 0 12px">Salvamento ainda não confirmado</h2><p id="gdrive_strict_status" style="margin:0 0 18px;color:#aebaca;line-height:1.5"></p><button class="btn btn-primary btn-block" id="gdrive_strict_reconnect">Tentar salvar novamente</button><p style="margin:14px 0 0;color:#8f9aaa;font-size:13px;line-height:1.45">A tela e os dados continuam abertos. O Borion não descartou a alteração e não desconectou sua conta.</p></div>';
+      document.body.appendChild(overlay);
+    }
+    const status=overlay.querySelector('#gdrive_strict_status');if(status)status.textContent=String(message||'O Google Drive ainda não confirmou a operação.');
+    const button=overlay.querySelector('#gdrive_strict_reconnect');if(button){button.disabled=false;button.textContent=this.authRequired?'Entrar novamente com o Google':'Tentar salvar novamente';button.onclick=()=>this.authRequired?this.reconnectStrictCloud():this.retryStrictCloud();}
+    return true;
+  },
+
+  _hideStrictRecoveryOverlay(){
+    const overlay=typeof document!=='undefined'?document.getElementById('borion_strict_recovery_overlay'):null;
+    if(overlay)overlay.remove();
+  },
+
+  async runForegroundConfirmedSave(options={}){
+    const source=String(options.source||'user_save');
+    const label=String(options.label||'Salvando no Google Drive…');
+    const foregroundToken=this.beginForegroundSave(label,source);
+    const criticalToken=this.beginCriticalSave(source);
+    let keepError=false;
+    try{
+      if(!this.isConnected()||!this.currentFileId)throw new Error('O Google Drive não está conectado ao arquivo current.json.');
+      if(!navigator.onLine)throw new Error('Sem internet. Conecte o dispositivo para confirmar o salvamento.');
+      this.updateForegroundSave(label,'Preparando e protegendo a alteração no Google Drive…','busy');
+      let ok;
+      if(this._strictCommitPromise)ok=await this._strictCommitPromise;
+      else ok=await this.queueSave({source});
+      const deadline=Date.now()+Math.max(30000,Number(options.timeoutMs)||90000);
+      let attempt=0;
+      while((ok!==true||!this._strictCommitIsFullyConfirmed())&&Date.now()<deadline){
+        if(this.authRequired)break;
+        attempt++;
+        this.updateForegroundSave(label,'Confirmando o current.json… tentativa '+attempt,'busy');
+        await new Promise(resolve=>setTimeout(resolve,Math.min(1500,250*attempt)));
+        if(this.hasPersistedConsolidation())ok=await this.syncNow({source:source+'_consolidation',consolidationOnly:true});
+        else if(this.dirty||this.hasPersistedPending())ok=await this.requestStrictCommit(source+'_retry');
+        else ok=this._strictCommitIsFullyConfirmed();
+      }
+      if(ok!==true||!this._strictCommitIsFullyConfirmed())throw new Error(this.lastSyncError||'O Google Drive ainda não confirmou o salvamento.');
+      this._hideStrictRecoveryOverlay();
+      this.updateForegroundSave('Salvo no Google Drive','Confirmação concluída com sucesso.','success');
+      await new Promise(resolve=>setTimeout(resolve,280));
+      return true;
+    }catch(error){
+      keepError=true;
+      this.lastSyncError=String(error&&error.message||error||'Falha ao confirmar no Google Drive.');
+      this.authRequired=this._isAuthError(error);
+      this._showStrictRecoveryOverlay(this.lastSyncError);
+      return false;
+    }finally{
+      this.endCriticalSave(criticalToken);
+      this.endForegroundSave(foregroundToken,{keepError});
+    }
+  },
+
   async waitForCriticalSaveReady(timeoutMs=30000){
     const started=Date.now();
     while(this._syncInFlight||this._forceSavePromise||this._strictCommitPromise||this._liveCheckInFlight||this._autosaveInFlight){
@@ -911,6 +1031,19 @@ const GoogleDriveProvider = {
     this.lastSyncError=String(message||(!navigator.onLine?'Sem internet. O Borion foi bloqueado porque este modo usa somente o Google Drive.':'O Google Drive não confirmou a operação.'));
     this._hideStrictSaving();
     if(typeof document==='undefined')return false;
+    // V6.46.32 — com um perfil já aberto, falhas de salvar/sincronizar não
+    // destroem mais o DOM do aplicativo nem devolvem a pessoa para a tela de
+    // entrada. A alteração continua pendente e uma camada recuperável oferece
+    // retry/relogin mantendo exatamente a tela em que o usuário estava.
+    const hasOpenProfile=!!(typeof S!=='undefined'&&S&&S.currentProfile&&S.data);
+    // V6.46.32 — depois que um perfil foi aberto, NENHUMA falha de Drive pode
+    // destruir a tela atual e parecer uma desconexão. A camada de recuperação
+    // bloqueia novas alterações, preserva o estado em memória e permite tentar
+    // novamente ou renovar o Google sem remontar o aplicativo inteiro.
+    if(hasOpenProfile){
+      this._showStrictRecoveryOverlay(this.lastSyncError);
+      return false;
+    }
     const root=document.getElementById('root');if(!root)return false;
     ensureBorionVersionBadge();
     const online=!!navigator.onLine;
@@ -939,7 +1072,8 @@ const GoogleDriveProvider = {
         const ok=await this.resumePendingSync('strict_manual_retry');
         if(ok!==true&&(this.dirty||this.hasPersistedConsolidation()))throw new Error(this.lastSyncError||'O Google Drive ainda não confirmou a operação.');
         this.authRequired=false;this.lastSyncError='';this._strictPendingPayload=null;
-        if(S&&S.currentProfile&&S.data)renderApp();else{S.gate={mode:'list',error:''};renderGate();}
+        this._hideStrictRecoveryOverlay();this._hideForegroundSaveOverlay();
+        if(!(S&&S.currentProfile&&S.data)){S.gate={mode:'list',error:''};renderGate();}
         this._refreshStatusUI();return true;
       }catch(e){
         const isAuth=this._isAuthError(e);
@@ -999,7 +1133,8 @@ const GoogleDriveProvider = {
           this._strictPendingPayload=null;
         }
         this.startStrictAuthWatchdog();
-        if(S&&S.currentProfile&&S.data)renderApp();else{S.gate={mode:'list',error:''};renderGate();}
+        this._hideStrictRecoveryOverlay();this._hideForegroundSaveOverlay();
+        if(!(S&&S.currentProfile&&S.data)){S.gate={mode:'list',error:''};renderGate();}
         this._refreshStatusUI();
         return true;
       }catch(e){
@@ -1042,7 +1177,7 @@ const GoogleDriveProvider = {
     },10000);
   },
 
-  // V6.46.31 — o clique em configurações críticas (especialmente a data de corte)
+  // V6.46.32 — o clique em configurações críticas (especialmente a data de corte)
   // pode acontecer enquanto uma sincronização automática ou uma consolidação antiga
   // ainda está em trânsito. Antes, forceSyncNow() devolvia false nesse caso e o fluxo
   // estrito interpretava a corrida como falha real do Drive, bloqueando a tela
@@ -1106,7 +1241,12 @@ const GoogleDriveProvider = {
       try{latestPayload=await buildFullBackupPayload();}
       catch(e){this.lastSyncError='Não foi possível preparar os dados para o Google Drive: '+String(e&&e.message||e);return false;}
 
-      const ok=await this.forceSyncNow({payload:latestPayload,reason:'strict_'+source});
+      // V6.46.32 — commit estrito normal não é Ctrl+S. Usar forceSyncNow aqui
+      // criava também um backup rotativo; se ESSE backup auxiliar falhasse, o app
+      // interpretava como se o current.json não tivesse sido confirmado e abria a
+      // tela de falha. O commit usa syncNow direto; backups manuais continuam em
+      // forceSyncNow, mas nunca invalidam um current.json já confirmado.
+      const ok=await this.syncNow({source:'strict_'+source,payloadOverride:latestPayload,force:false});
       if(ok===true&&this.hasPersistedConsolidation())continue;
       if(ok===true&&this._strictCommitIsFullyConfirmed())return true;
       if(this.authRequired||!navigator.onLine)return false;
@@ -1172,7 +1312,7 @@ const GoogleDriveProvider = {
     return this._strictCommitPromise;
   },
 
-  // V6.46.31 — configurações críticas da integração já passam primeiro por
+  // V6.46.32 — configurações críticas da integração já passam primeiro por
   // saveProfileData(), que chama queueSave() e inicia o commit estrito. O código
   // antigo chamava forceSyncNow() logo em seguida, criando uma segunda revisão no
   // meio da consolidação da primeira. Isso fazia um salvamento válido parecer uma
@@ -1250,6 +1390,7 @@ const GoogleDriveProvider = {
     if(typeof this.boostLivePolling==='function')this.boostLivePolling();
     this.lastSyncError='';
     this.authRequired=false;
+    this._hideStrictRecoveryOverlay();
     this._clearRetry();
     if(S && S.currentProfile && typeof clearExitSavePending==='function') clearExitSavePending(S.currentProfile.id);
     this._refreshStatusUI();
@@ -1280,6 +1421,10 @@ const GoogleDriveProvider = {
 
   async handleStatusClick(){
     if(this.blockedSuspicious){ await this.reload(); return false; }
+    const foregroundToken=this.beginForegroundSave('Sincronizando com o Google Drive…','status_sync');
+    const criticalToken=this.beginCriticalSave('status_sync');
+    let keepError=false;
+    try{
     if(this.pendingMergeConflicts && this.pendingMergeConflicts.length && !this.dirty){
       // V6.40 — item 24: nenhum dado é apagado por clicar aqui. Isto só
       // mostra um resumo dos campos em conflito (as duas versões já foram
@@ -1296,7 +1441,6 @@ const GoogleDriveProvider = {
       this._refreshStatusUI();
       return true;
     }
-    try{
       if(this.authRequired){
         const previousSub=GoogleDriveAuth.user && GoogleDriveAuth.user.sub;
         await GoogleDriveAuth.login(true);
@@ -1309,8 +1453,12 @@ const GoogleDriveProvider = {
       if(ok || !this.dirty) toast('Google Drive sincronizado e confirmado.');
       return !!ok;
     }catch(e){
+      keepError=true;
       this._recordSyncFailure(e);
       return false;
+    }finally{
+      this.endCriticalSave(criticalToken);
+      this.endForegroundSave(foregroundToken,{keepError});
     }
   },
 
@@ -2118,7 +2266,14 @@ const GoogleDriveProvider = {
       this._assertSafeToForceWrite(payload,options);
       this.dirty=true;this._syncRevision++;
       const ok=await this.syncNow({source:'force',payloadOverride:payload,force:true,acknowledgeSuspicious:options.acknowledgeSuspicious});
-      if(ok===true)await this.writeRotatingSnapshot('forcesave',GOOGLE_DRIVE_FORCESAVE_SLOTS,payload);
+      if(ok===true){
+        try{await this.writeRotatingSnapshot('forcesave',GOOGLE_DRIVE_FORCESAVE_SLOTS,payload);}
+        catch(backupError){
+          // O current.json já foi consolidado, relido e validado. Falha do histórico
+          // auxiliar não pode transformar um salvamento confirmado em falha fatal.
+          console.warn('[GoogleDriveProvider] current.json confirmado; backup forcesave adiado:',backupError);
+        }
+      }
       return ok;
     })();
     try{return await this._forceSavePromise;}

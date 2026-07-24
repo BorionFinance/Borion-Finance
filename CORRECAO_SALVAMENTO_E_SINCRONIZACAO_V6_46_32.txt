@@ -1,0 +1,47 @@
+BORION FINANCE v6.46.32
+CORREÇÃO — SALVAR/SINCRONIZAR SEM DESCONECTAR OU SUBSTITUIR A TELA
+Data: 24/07/2026
+
+CAUSA PRINCIPAL CONFIRMADA
+O commit estrito normal estava passando pelo mesmo fluxo do salvamento manual
+(Ctrl+S/forceSyncNow). Depois de confirmar o current.json, esse fluxo também cria
+um backup rotativo forcesave. Se somente esse backup auxiliar falhasse, o retorno
+era tratado como se o current.json não tivesse sido confirmado, abrindo a tela
+"Falha ao confirmar no Google Drive".
+
+A sincronização da integração também podia gerar mais de um commit para o mesmo
+clique, porque salvava o perfil e em seguida iniciava outra confirmação.
+
+CORREÇÕES
+1. Commit estrito normal agora confirma somente o current.json pelo syncNow.
+2. Falha do backup forcesave auxiliar não invalida um current.json já confirmado.
+3. Salvar data de corte gera exatamente um commit confirmado.
+4. Sincronizar Marco Iris gera exatamente um commit confirmado por clique.
+5. Salvar opções de receitas, despesas e vínculos aguarda confirmação real do Drive.
+6. Atualizar/Ler dados da origem também aguarda a confirmação do Drive.
+7. Botões exibem Salvando…, Sincronizando… ou Atualizando… e ficam desabilitados
+   somente enquanto a operação está em andamento.
+8. Com um perfil aberto, nenhuma falha do Drive substitui mais a tela do aplicativo.
+   A tela e os dados permanecem abertos sob uma camada de recuperação, com opção de
+   tentar novamente ou renovar o Google.
+9. Gatilhos de foco, visibilidade, autosave e sincronização automática são suspensos
+   durante a transação explícita, evitando concorrência no meio do commit.
+10. A versão v6.46.32 permanece visível no canto inferior direito do login.
+
+VALIDAÇÃO LOCAL AUTOMATIZADA
+- 20 salvamentos consecutivos da data de corte: aprovados.
+- 20 sincronizações consecutivas da integração Marco Iris: aprovadas.
+- 20 commits estritos consecutivos: aprovados, sem forceSyncNow e sem bloqueio.
+- 20 salvamentos manuais com falha forçada apenas no backup auxiliar: current.json
+  continuou aprovado em todos os testes.
+- 80 eventos de foco e 80 eventos de visibilidade durante os testes de data de corte:
+  todos suprimidos durante a transação, sem vazamento para sincronização concorrente.
+- Tela aberta preservada na simulação de falha de confirmação: aprovada.
+- Inicialização completa do aplicativo em Chromium headless: aprovada.
+- Sintaxe de todos os JavaScripts e service worker: aprovada.
+
+OBSERVAÇÃO
+Os testes automatizados simulam o protocolo e as respostas do Google Drive. A conta
+Google real do Marco não fica disponível no ambiente de desenvolvimento; por isso,
+o teste final de produção deve ser feito após publicar, conferindo a versão v6.46.32
+no login e executando Salvar data e Sincronizar agora.

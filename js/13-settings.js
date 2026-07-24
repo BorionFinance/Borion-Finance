@@ -14,7 +14,7 @@ const HelpCenterLoader = {
     this.promise = new Promise((resolve,reject)=>{
       if(!document.querySelector('link[data-borion-help-css]')){
         const link=document.createElement('link');
-        link.rel='stylesheet'; link.href='css/help-center.css?v=6.46.31'; link.dataset.borionHelpCss='1';
+        link.rel='stylesheet'; link.href='css/help-center.css?v=6.46.32'; link.dataset.borionHelpCss='1';
         document.head.appendChild(link);
       }
       const existing=document.querySelector('script[data-borion-help-script]');
@@ -24,7 +24,7 @@ const HelpCenterLoader = {
         return;
       }
       const script=document.createElement('script');
-      script.src='js/26-help-center.js?v=6.46.31'; script.async=true; script.dataset.borionHelpScript='1';
+      script.src='js/26-help-center.js?v=6.46.32'; script.async=true; script.dataset.borionHelpScript='1';
       script.onload=()=>window.BorionHelp?resolve(window.BorionHelp):reject(new Error('A Central do Borion não iniciou.'));
       script.onerror=()=>{ script.remove(); reject(new Error('Falha ao carregar a Central do Borion.')); };
       document.head.appendChild(script);
@@ -221,7 +221,7 @@ const Settings = {
     const wantDrive=strictDrive?true:(targets==='both'||targets==='drive');
     const wantLocal=strictDrive?false:(targets==='both'||targets==='local');
     const reason=options.reason||'manual_drive_local';
-    saveCurrentData({finalConfirmation:true});
+    saveCurrentData({finalConfirmation:true,deferGoogleCommit:true});
     if(typeof clearExitSavePending==='function') clearExitSavePending(S.currentProfile.id);
 
     const sharedSnapshot=await buildSharedBackupSnapshot(reason,'backup manual do usuário');
@@ -233,10 +233,21 @@ const Settings = {
         if(!(window.GoogleDriveProvider&&GoogleDriveProvider.isConnected())) throw new Error('nenhuma conta do Google Drive conectada');
         /* Atualiza current.json, cria forcesave e também registra o backup manual.
            Todos recebem exatamente o mesmo snapshot. */
-        const forced=await GoogleDriveProvider.forceSyncNow({payload:sharedSnapshot});
-        if(!forced) throw new Error('o Google Drive não confirmou o salvamento');
-        await GoogleDriveProvider.createBackup(reason,{payload:sharedSnapshot});
-        result.driveOk=true;
+        const foregroundToken=typeof GoogleDriveProvider.beginForegroundSave==='function'
+          ?GoogleDriveProvider.beginForegroundSave('Salvando no Google Drive…','manual_drive_save'):null;
+        const criticalToken=typeof GoogleDriveProvider.beginCriticalSave==='function'
+          ?GoogleDriveProvider.beginCriticalSave('manual_drive_save'):null;
+        try{
+          const forced=await GoogleDriveProvider.forceSyncNow({payload:sharedSnapshot,reason:'manual_drive_save'});
+          if(!forced) throw new Error(GoogleDriveProvider.lastSyncError||'o Google Drive não confirmou o salvamento');
+          if(typeof GoogleDriveProvider.updateForegroundSave==='function')GoogleDriveProvider.updateForegroundSave('Salvo no Google Drive','Criando o backup manual…','busy');
+          await GoogleDriveProvider.createBackup(reason,{payload:sharedSnapshot});
+          result.driveOk=true;
+          if(typeof GoogleDriveProvider.updateForegroundSave==='function')GoogleDriveProvider.updateForegroundSave('Salvo no Google Drive','Confirmação concluída com sucesso.','success');
+        }finally{
+          if(typeof GoogleDriveProvider.endCriticalSave==='function')GoogleDriveProvider.endCriticalSave(criticalToken);
+          if(typeof GoogleDriveProvider.endForegroundSave==='function')GoogleDriveProvider.endForegroundSave(foregroundToken,{keepError:!result.driveOk});
+        }
       })().catch(e=>{ result.driveError=(e&&e.message)||String(e); }));
     }
     if(wantLocal){
@@ -1187,7 +1198,7 @@ window.Settings = Settings;
 /* ================= V6.33.1 — refinamento extra de Configurações, padronização de ordenação
    e bloco flutuante de Anotações persistente entre abas ================= */
 (function(){
-  const SETTINGS_VERSION = '6.46.31';
+  const SETTINGS_VERSION = '6.46.32';
 
   function floatingNotesPrefs(create=false){
     const fallback={enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};
@@ -1476,7 +1487,7 @@ window.Settings = Settings;
       ${conflictBanner}
       <div class="settings-section backup-highlight-card">
         <div class="settings-card-head"><div><h3>Sincronização com Google Drive</h3><p class="desc"><strong>Conta:</strong> ${esc(gs.email||'')}<br><strong>Pasta:</strong> ${esc(gs.folderName||'(não identificada)')} ${gs.folderLink?`<a href="${esc(gs.folderLink)}" target="_blank" rel="noopener">Abrir no Drive ↗</a>`:''}<br><strong>Status:</strong> ${gs.conflict?'Conflito — veja o aviso acima':gs.lastSyncError?(gs.authRequired?'Reconexão necessária':'Falha de sincronização'):gs.pending?'Salvando alterações...':'Tudo sincronizado'}${gs.lastSyncError?`<br><strong>Erro:</strong> ${esc(gs.lastSyncError)}`:''}${gs.lastSyncAt?`<br><strong>Última confirmação:</strong> ${esc(new Date(gs.lastSyncAt).toLocaleString('pt-BR'))}`:''}<br><strong>Perfil ativo:</strong> ${esc(S.currentProfile?S.currentProfile.name:'Nenhum')}</p></div></div>
-        <div class="backup-action-row">${syncActionButton('Sincronizar agora','GoogleDriveProvider.syncNow()')} ${exportBtn()} ${importBtn()} <button class="btn-outline btn-sm" onclick="Settings.viewDriveBackups()">Ver backups no Drive</button><button id="qb_drive" class="btn-outline btn-sm" onclick="Settings.quickBackupDrive()">Criar backup agora</button><button class="btn-outline btn-sm" onclick="GoogleDriveProvider.disconnect();S.currentProfile=null;S.data=null;CloudAuth.mode='login';CloudAuth.error='';CloudAuth.info='';CloudAuth.emailExpanded=false;CloudAuth.render();">Sair da conta Google</button></div>
+        <div class="backup-action-row">${syncActionButton('Sincronizar agora','GoogleDriveProvider.handleStatusClick()')} ${exportBtn()} ${importBtn()} <button class="btn-outline btn-sm" onclick="Settings.viewDriveBackups()">Ver backups no Drive</button><button id="qb_drive" class="btn-outline btn-sm" onclick="Settings.quickBackupDrive()">Criar backup agora</button><button class="btn-outline btn-sm" onclick="GoogleDriveProvider.disconnect();S.currentProfile=null;S.data=null;CloudAuth.mode='login';CloudAuth.error='';CloudAuth.info='';CloudAuth.emailExpanded=false;CloudAuth.render();">Sair da conta Google</button></div>
       </div>
       ${localBackupsBlock}
       ${folderSection}

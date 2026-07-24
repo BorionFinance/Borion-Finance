@@ -102,17 +102,17 @@
       <p>Lançamentos de ${escHtml(sourceName(sourceAppId))} com data anterior a este ponto nunca entram automaticamente no Borion — útil para testes e histórico antigo não baterem aqui. Nada do que já foi importado antes é afetado.</p>
       <div class="interop-cutoff-controls">
         <input type="date" id="interop_cutoff_${escHtml(sourceAppId)}" value="${escHtml(inputValue)}">
-        <button type="button" class="btn btn-primary btn-sm" onclick="BorionInterop.setImportCutoff('${escHtml(sourceAppId)}', document.getElementById('interop_cutoff_${escHtml(sourceAppId)}').value)">Salvar data</button>
-        <button type="button" class="btn-outline btn-sm" onclick="BorionInterop.setImportCutoffNow('${escHtml(sourceAppId)}')">Só a partir de agora</button>
-        ${cutoffAt ? `<button type="button" class="btn-outline btn-sm" onclick="BorionInterop.clearImportCutoff('${escHtml(sourceAppId)}')">Importar todo o histórico</button>` : ''}
+        <button type="button" class="btn btn-primary btn-sm" onclick="BorionInterop.setImportCutoff('${escHtml(sourceAppId)}', document.getElementById('interop_cutoff_${escHtml(sourceAppId)}').value,{button:this})">Salvar data</button>
+        <button type="button" class="btn-outline btn-sm" onclick="BorionInterop.setImportCutoffNow('${escHtml(sourceAppId)}',{button:this})">Só a partir de agora</button>
+        ${cutoffAt ? `<button type="button" class="btn-outline btn-sm" onclick="BorionInterop.clearImportCutoff('${escHtml(sourceAppId)}',{button:this})">Importar todo o histórico</button>` : ''}
       </div>
       <small>${cutoffAt ? ('Somente registros a partir de ' + escHtml(new Date(cutoffAt).toLocaleDateString('pt-BR')) + ' serão considerados.') : 'Sem corte definido: todo o histórico pode ser importado automaticamente.'}</small>
       ${data ? `<div class="interop-approval-mode">
         <b>Como importar os lançamentos que passarem no corte</b>
         <p>${isAsk ? 'Perguntar sempre: nada é importado sozinho — o Borion avisa quando houver lançamentos novos disponíveis e só importa se você confirmar.' : 'Importar automaticamente: assim que um lançamento passa no corte acima, ele entra sozinho no Borion (comportamento de sempre).'}</p>
         <div class="interop-cutoff-controls">
-          <button type="button" class="btn ${isAsk?'btn-outline':'btn-primary'} btn-sm" onclick="BorionInterop.setImportApprovalMode('auto')">Importar automaticamente</button>
-          <button type="button" class="btn ${isAsk?'btn-primary':'btn-outline'} btn-sm" onclick="BorionInterop.setImportApprovalMode('ask')">Perguntar sempre antes de importar</button>
+          <button type="button" class="btn ${isAsk?'btn-outline':'btn-primary'} btn-sm" onclick="BorionInterop.setImportApprovalMode('auto',{button:this})">Importar automaticamente</button>
+          <button type="button" class="btn ${isAsk?'btn-primary':'btn-outline'} btn-sm" onclick="BorionInterop.setImportApprovalMode('ask',{button:this})">Perguntar sempre antes de importar</button>
         </div>
       </div>` : ''}
     </div>`;
@@ -497,7 +497,7 @@
   function saveProfileData(profileId, data, options={}){
     setProfileData(profileId, data);
     if(S.currentProfile && String(S.currentProfile.id) === String(profileId)) S.data = data;
-    // V6.46.31 — configurações críticas usam deferGoogleCommit para que exista
+    // V6.46.32 — configurações críticas usam deferGoogleCommit para que exista
     // exatamente UMA entrada na fila do Drive. Antes, saveProfileData iniciava um
     // commit e o fluxo crítico tentava entrar por cima dele logo em seguida.
     if(!options.deferGoogleCommit && window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){
@@ -1493,7 +1493,13 @@
       row.config.lastInspectedAt=nowIso();
       row.config.lastSeenRevision=Number(snapshot.revision)||0;
       row.config.lastSeenContentHash=snapshot.contentHash||hash({records:snapshot.records,tombstones:snapshot.tombstones});
-      saveProfileData(row.profile.id,row.data);
+      // Ler/atualizar a origem também altera a configuração descoberta. Confirma
+      // esse estado em um único commit antes de dizer que a atualização terminou.
+      saveProfileData(row.profile.id,row.data,{deferGoogleCommit:true,source:'interop_inspect_'+sourceAppId});
+      const inspectConfirmation=await persistCriticalChange('interop_inspect_'+sourceAppId);
+      if(window.GoogleDriveProvider&&GoogleDriveProvider._isStrictMode?.()&&!inspectConfirmation.synced){
+        throw new Error(inspectConfirmation.error||GoogleDriveProvider.lastSyncError||'O Google Drive ainda não confirmou a atualização da integração.');
+      }
       uiSourceAppId=sourceAppId;uiTab='links';
       const preserveOpenMitDraft=sourceAppId==='marco-iris'&&mitFormDirty;
       if(typeof renderView==='function'&&!preserveOpenMitDraft) renderView();
@@ -1523,6 +1529,11 @@
       throw error;
     }
     if(syncing) throw new Error('Outra integração já está sincronizando.');
+    const provider=window.GoogleDriveProvider||null;
+    const foregroundToken=!silent&&provider&&typeof provider.beginForegroundSave==='function'
+      ?provider.beginForegroundSave('Sincronizando integração…','interop_sync_'+sourceAppId):null;
+    const criticalToken=!silent&&provider&&typeof provider.beginCriticalSave==='function'
+      ?provider.beginCriticalSave('interop_sync_'+sourceAppId):null;
     syncing=true;syncingSourceAppId=sourceAppId;setAsyncButtonState(button,true,'Sincronizando…');
     try{
       const snapshot=await readSnapshot(row);
@@ -1558,8 +1569,14 @@
       result=reconcileSnapshot(commitData,commitConfig,snapshot,{mode:silent?'automatic':'manual'});
       if(result.changed!==false){
         replaceObjectContents(commitRow.data,commitData);
-        saveProfileData(commitRow.profile.id,commitRow.data);
-        if(S.currentProfile&&String(S.currentProfile.id)===String(commitRow.profile.id))saveCurrentData();
+        // V6.46.32 — uma sincronização do Marco gera exatamente UM commit do
+        // perfil. Não chama saveCurrentData logo depois de saveProfileData, pois
+        // isso criava duas revisões concorrentes no mesmo clique.
+        saveProfileData(commitRow.profile.id,commitRow.data,{deferGoogleCommit:true,source:'interop_sync_'+sourceAppId});
+        const syncConfirmation=await persistCriticalChange('interop_sync_'+sourceAppId);
+        if(window.GoogleDriveProvider&&GoogleDriveProvider._isStrictMode?.()&&!syncConfirmation.synced){
+          throw new Error(syncConfirmation.error||GoogleDriveProvider.lastSyncError||'O Google Drive ainda não confirmou a sincronização.');
+        }
       }
       if(result.changed!==false&&S.currentProfile&&String(S.currentProfile.id)===String(commitRow.profile.id)){
         const editingIntegrationSettings=silent&&S.view==='settings'&&S.settingsTab==='integrations';
@@ -1595,7 +1612,7 @@
           current.config.pendingCompanyInstanceId=String(error.receivedCompanyInstanceId||'');
           current.config.reconnectDetectedAt=nowIso();
         }
-        saveProfileData(current.profile.id,current.data);
+        saveProfileData(current.profile.id,current.data,{deferGoogleCommit:true,source:'interop_sync_error'});
       }
       if(!silent){
         if(error?.code==='INSTANCE_CONFLICT') await confirmInstanceReconnect(sourceAppId);
@@ -1604,6 +1621,8 @@
       throw error;
     }finally{
       syncing=false;syncingSourceAppId='';setAsyncButtonState(button,false);
+      if(provider&&typeof provider.endCriticalSave==='function')provider.endCriticalSave(criticalToken);
+      if(provider&&typeof provider.endForegroundSave==='function')provider.endForegroundSave(foregroundToken);
     }
   }
 
@@ -1799,7 +1818,7 @@
   // origem não virarem lançamento no Borion sozinhos. Nada do que já foi
   // importado antes é afetado — só passa a valer para os próximos lançamentos.
   function confirmCutoffChange(message){
-    // V6.46.31 — não usa mais window.confirm(). Ao fechar a caixa nativa, o
+    // V6.46.32 — não usa mais window.confirm(). Ao fechar a caixa nativa, o
     // navegador dispara focus/visibilitychange e o sincronizador de fundo podia
     // começar outra leitura exatamente entre a confirmação e o commit.
     if(typeof document==='undefined'||!document.getElementById('modal-root')){
@@ -1827,7 +1846,7 @@
       setTimeout(()=>confirmButton&&confirmButton.focus(),0);
     });
   }
-  // V6.46.31 — o ajuste crítico é colocado UMA vez na fila. O próprio provider
+  // V6.46.32 — o ajuste crítico é colocado UMA vez na fila. O próprio provider
   // serializa qualquer sincronização automática/consolidação que já esteja em curso
   // e só devolve sucesso depois que o current.json foi realmente confirmado.
   function forceImmediateSync(reason='interop_critical_setting'){
@@ -1843,8 +1862,12 @@
         let result;
         const strict=typeof provider._isStrictMode==='function'&&provider._isStrictMode();
         if(strict){
-          // Não houve queueSave antes: esta é a única criação de commit.
-          result=await provider.queueSave({source:reason});
+          // V6.46.32 — toda ação explícita usa a mesma confirmação em primeiro
+          // plano. A tela permanece aberta, mostra progresso e só libera depois
+          // de o current.json ser relido e validado.
+          result=typeof provider.runForegroundConfirmedSave==='function'
+            ?await provider.runForegroundConfirmedSave({source:reason,label:'Salvando no Google Drive…',timeoutMs:90000})
+            :await provider.queueSave({source:reason});
         }else{
           provider.queueSave({source:reason});
           result=typeof provider.forceSyncNow==='function'
@@ -1862,7 +1885,7 @@
     });
   }
   function persistCriticalChange(reason='interop_critical_change'){return forceImmediateSync(reason);}
-  async function withCutoffCriticalSave(sourceAppId,reason,confirmationMessage,applyChange,successMessage){
+  async function withCutoffCriticalSave(sourceAppId,reason,confirmationMessage,applyChange,successMessage,{button=null}={}){
     const provider=window.GoogleDriveProvider||null;
     const token=provider&&typeof provider.beginCriticalSave==='function'?provider.beginCriticalSave(reason):null;
     try{
@@ -1874,6 +1897,7 @@
         }
       }
       if(!(await confirmCutoffChange(confirmationMessage)))return false;
+      setAsyncButtonState(button,true,'Salvando…');
       // Busca novamente depois da confirmação para nunca salvar sobre uma referência
       // antiga caso outra atualização tenha terminado antes da transação exclusiva.
       const row=findSourceConfig(sourceAppId);
@@ -1896,11 +1920,12 @@
       if(typeof renderView==='function')renderView();
       return true;
     }finally{
+      setAsyncButtonState(button,false);
       if(provider&&typeof provider.endCriticalSave==='function')provider.endCriticalSave(token);
     }
   }
 
-  async function setImportCutoff(sourceAppId,dateValue){
+  async function setImportCutoff(sourceAppId,dateValue,{button=null}={}){
     const trimmed=String(dateValue||'').trim();
     if(!trimmed)return clearImportCutoff(sourceAppId);
     const parsed=new Date(trimmed.length<=10?trimmed+'T00:00:00':trimmed);
@@ -1911,27 +1936,30 @@
       'interop_import_cutoff_date',
       'Confirmar o corte de importação? Somente registros a partir de '+displayDate+' serão considerados.',
       row=>{row.config.importCutoffAt=parsed.toISOString();},
-      row=>'A partir de agora, só entram sozinhos lançamentos de '+sourceName(sourceAppId)+' a partir de '+dateText(row.config.importCutoffAt)+'. O que já foi importado antes continua como está.'
+      row=>'A partir de agora, só entram sozinhos lançamentos de '+sourceName(sourceAppId)+' a partir de '+dateText(row.config.importCutoffAt)+'. O que já foi importado antes continua como está.',
+      {button}
     );
   }
 
-  async function setImportCutoffNow(sourceAppId){
+  async function setImportCutoffNow(sourceAppId,{button=null}={}){
     return withCutoffCriticalSave(
       sourceAppId,
       'interop_import_cutoff_now',
       'Confirmar o corte a partir de agora? Registros anteriores não serão importados automaticamente.',
       row=>{row.config.importCutoffAt=nowIso();},
-      ()=>'Definido: a partir de agora, só entram sozinhos lançamentos novos de '+sourceName(sourceAppId)+'. Testes e histórico anteriores a agora não serão importados automaticamente.'
+      ()=>'Definido: a partir de agora, só entram sozinhos lançamentos novos de '+sourceName(sourceAppId)+'. Testes e histórico anteriores a agora não serão importados automaticamente.',
+      {button}
     );
   }
 
-  async function clearImportCutoff(sourceAppId){
+  async function clearImportCutoff(sourceAppId,{button=null}={}){
     return withCutoffCriticalSave(
       sourceAppId,
       'interop_import_cutoff_clear',
       'Remover o corte e permitir que todo o histórico volte a ser considerado?',
       row=>{row.config.importCutoffAt='';},
-      ()=>'Corte removido: todo o histórico de '+sourceName(sourceAppId)+' volta a valer para importação automática.'
+      ()=>'Corte removido: todo o histórico de '+sourceName(sourceAppId)+' volta a valer para importação automática.',
+      {button}
     );
   }
 
@@ -1941,21 +1969,24 @@
   // nunca importar sozinha — ela só avisa que há lançamentos novos disponíveis e
   // aguarda confirmação explícita (ver checkAskModeSource/syncAll). É por perfil,
   // não por integração: vale para todas as origens conectadas àquele perfil.
-  async function setImportApprovalMode(mode, {silent=false}={}){
-    const normalized = mode === 'ask' ? 'ask' : 'auto';
-    if(!S.currentProfile || !S.data) return false;
-    const interop = ensureInterop(S.data);
-    interop.importApprovalMode = normalized;
-    saveProfileData(S.currentProfile.id, S.data, {deferGoogleCommit:true,source:'interop_import_approval_mode'});
-    const syncResult=await persistCriticalChange('interop_import_approval_mode');
-    if(window.GoogleDriveProvider&&GoogleDriveProvider._isStrictMode?.()&&!syncResult.synced)return false;
-    if(!silent && typeof toast === 'function'){
-      toast(normalized==='ask'
-        ? 'A partir de agora, o Borion sempre pergunta antes de importar novos lançamentos automaticamente.'
-        : 'A partir de agora, novos lançamentos que passarem no corte são importados automaticamente.');
-    }
-    if(typeof renderView === 'function') renderView();
-    return true;
+  async function setImportApprovalMode(mode,{silent=false,button=null}={}){
+    const normalized=mode==='ask'?'ask':'auto';
+    if(!S.currentProfile||!S.data)return false;
+    setAsyncButtonState(button,true,'Salvando…');
+    try{
+      const interop=ensureInterop(S.data);
+      interop.importApprovalMode=normalized;
+      saveProfileData(S.currentProfile.id,S.data,{deferGoogleCommit:true,source:'interop_import_approval_mode'});
+      const syncResult=await persistCriticalChange('interop_import_approval_mode');
+      if(window.GoogleDriveProvider&&GoogleDriveProvider._isStrictMode?.()&&!syncResult.synced)return false;
+      if(!silent&&typeof toast==='function'){
+        toast(normalized==='ask'
+          ?'A partir de agora, o Borion sempre pergunta antes de importar novos lançamentos automaticamente.'
+          :'A partir de agora, novos lançamentos que passarem no corte são importados automaticamente.');
+      }
+      if(typeof renderView==='function')renderView();
+      return true;
+    }finally{setAsyncButtonState(button,false);}
   }
   // V6.45.4 — na primeira vez que o perfil tem alguma integração configurada e
   // ainda não decidiu entre "automático" e "perguntar sempre", pergunta uma única
@@ -2120,7 +2151,7 @@
     const r = c.lastResult || {};
     const mappingLabel = c.mappingReady ? '<span class="pill ok">Vínculos configurados</span>' : '<span class="pill warn">Vínculos pendentes</span>';
     const deletionOn = c.deletionPolicy !== 'preserve';
-    return `<div class="interop-pane"><div class="interop-status-grid"><div><span>Perfil de destino</span><strong>${escHtml(row.profile.name)}</strong></div><div><span>Conta padrão</span><strong>${escHtml(accountName(row.data, c.accountId) || 'Carteira')}</strong></div><div><span>Meio</span><strong>${c.transport === 'drive' ? 'Google Drive' : 'Pasta local'}</strong></div><div><span>Mapeamento</span><strong>${mappingLabel}</strong></div></div><div class="gold-box interop-sync-box"><b>Última sincronização:</b> ${escHtml(dateText(c.lastSyncAt))}<br><span>${Number(r.created || 0)} novo(s) · ${Number(r.deleted || 0)} excluído(s) · ${Number(r.unchanged || 0)} já importado(s) · ${Number(r.waiting || 0)} aguardando · ${Number(r.ignored || 0)} ignorado(s)</span>${c.lastError ? `<br><b>Erro:</b> ${escHtml(c.lastError)}` : ''}</div><label class="interop-deletion-toggle"><input type="checkbox" ${deletionOn ? 'checked' : ''} onchange="BorionInterop.setDeletionPolicy('${sourceAppId}', this.checked ? 'delete' : 'preserve')"><span><b>Excluir aqui automaticamente</b> quando o lançamento for removido na origem<br><small>Lançamentos que você já editou manualmente no Borion (categoria, valor, conta...) nunca são excluídos automaticamente, mesmo com isto ligado.</small></span></label><div class="interop-actions"><button class="btn btn-primary btn-sm" onclick="BorionInterop.syncSource('${sourceAppId}')" ${c.mappingReady ? '' : 'disabled title="Configure os Vínculos primeiro"'}>Sincronizar agora</button><button class="btn-outline btn-sm" onclick="BorionInterop.inspectSource('${sourceAppId}')">Ler campos da origem</button><button class="btn-outline btn-sm" onclick="BorionInterop.setupDialog('${sourceAppId}','${c.transport}')">Reconfigurar conexão</button><button class="btn-outline btn-sm" onclick="BorionInterop.disconnect('${sourceAppId}')">Desconectar</button></div>${!c.mappingReady ? '<div class="interop-next-step"><b>Próximo passo:</b> abra a aba <b>Vínculos</b>, confira as conversões e salve. Só depois os lançamentos serão importados.</div>' : ''}</div>`;
+    return `<div class="interop-pane"><div class="interop-status-grid"><div><span>Perfil de destino</span><strong>${escHtml(row.profile.name)}</strong></div><div><span>Conta padrão</span><strong>${escHtml(accountName(row.data, c.accountId) || 'Carteira')}</strong></div><div><span>Meio</span><strong>${c.transport === 'drive' ? 'Google Drive' : 'Pasta local'}</strong></div><div><span>Mapeamento</span><strong>${mappingLabel}</strong></div></div><div class="gold-box interop-sync-box"><b>Última sincronização:</b> ${escHtml(dateText(c.lastSyncAt))}<br><span>${Number(r.created || 0)} novo(s) · ${Number(r.deleted || 0)} excluído(s) · ${Number(r.unchanged || 0)} já importado(s) · ${Number(r.waiting || 0)} aguardando · ${Number(r.ignored || 0)} ignorado(s)</span>${c.lastError ? `<br><b>Erro:</b> ${escHtml(c.lastError)}` : ''}</div><label class="interop-deletion-toggle"><input type="checkbox" ${deletionOn ? 'checked' : ''} onchange="BorionInterop.setDeletionPolicy('${sourceAppId}', this.checked ? 'delete' : 'preserve')"><span><b>Excluir aqui automaticamente</b> quando o lançamento for removido na origem<br><small>Lançamentos que você já editou manualmente no Borion (categoria, valor, conta...) nunca são excluídos automaticamente, mesmo com isto ligado.</small></span></label><div class="interop-actions"><button class="btn btn-primary btn-sm" onclick="BorionInterop.syncSource('${sourceAppId}',{button:this})" ${c.mappingReady ? '' : 'disabled title="Configure os Vínculos primeiro"'}>Sincronizar agora</button><button class="btn-outline btn-sm" onclick="BorionInterop.inspectSource('${sourceAppId}',{button:this})">Ler campos da origem</button><button class="btn-outline btn-sm" onclick="BorionInterop.setupDialog('${sourceAppId}','${c.transport}')">Reconfigurar conexão</button><button class="btn-outline btn-sm" onclick="BorionInterop.disconnect('${sourceAppId}')">Desconectar</button></div>${!c.mappingReady ? '<div class="interop-next-step"><b>Próximo passo:</b> abra a aba <b>Vínculos</b>, confira as conversões e salve. Só depois os lançamentos serão importados.</div>' : ''}</div>`;
   }
 
   function renderLinksTab(sourceAppId, row){
@@ -2129,7 +2160,7 @@
     }
     const c=row.config,d=normalizeDiscovered(c.discovered),m=normalizeMappings(c.mappings);
     const hasFields=d.categories.length||d.paymentMethods.length||d.statuses.length||d.transactionKinds.length||d.directions.length||d.fields.length;
-    if(!hasFields) return `<div class="interop-pane"><div class="interop-empty"><h4>Nenhum dado da origem foi lido</h4><p>Use o botão abaixo para analisar o arquivo atual sem importar lançamentos.</p><button class="btn btn-primary btn-sm" onclick="BorionInterop.inspectSource('${sourceAppId}')">Ler dados da origem</button></div></div>`;
+    if(!hasFields) return `<div class="interop-pane"><div class="interop-empty"><h4>Nenhum dado da origem foi lido</h4><p>Use o botão abaixo para analisar o arquivo atual sem importar lançamentos.</p><button class="btn btn-primary btn-sm" onclick="BorionInterop.inspectSource('${sourceAppId}',{button:this})">Ler dados da origem</button></div></div>`;
     const sourceDisplay=item=>`<strong>${escHtml(friendlySourceValue(item.label||item.value,item.field))}</strong>`;
     const directionRows=(d.directions.length?d.directions:['income','expense']).map(direction=>{
       const target=m.directions[direction]||(direction==='income'?'receita':'variavel');
@@ -2152,7 +2183,7 @@
       return `<div class="interop-map-row"><div class="interop-source-value"><small>${escHtml(sourceContextLabel(item.field||'status',item.direction))}</small>${sourceDisplay(item)}</div><div class="interop-arrow" aria-hidden="true">→</div><label><small>Regra de status no Borion</small><select data-interop-status data-key="${escHtml(mapId)}">${statusOptions(target)}</select></label></div>`;
     }).join('');
     const fieldRows=d.fields.map(item=>`<div class="interop-field-preview"><div><small>Informação</small><strong>${escHtml(friendlyFieldName(item.sourceName))}</strong></div><div><small>Exemplo recebido</small><span>${escHtml(friendlySourceValue(item.sample,item.sourceName))}</span></div></div>`).join('');
-    return `<div class="interop-pane interop-links-pane"><div class="interop-links-intro"><div><h4>Configuração da integração com ${escHtml(sourceName(sourceAppId))}</h4><p>Confira o que chega do aplicativo e escolha, à direita, como cada informação será registrada no Borion Finance. As regras são usadas na primeira importação de cada lançamento.</p></div><span class="pill ${c.mappingReady?'ok':'warn'}">${c.mappingReady?'Configurado':'Revisão necessária'}</span></div><div class="interop-map-legend"><div class="origin"><small>ORIGEM</small><b>${escHtml(sourceName(sourceAppId))}</b><span>Dados enviados pelo aplicativo, exibidos em linguagem simples.</span></div><div class="destination"><small>DESTINO</small><b>Borion Finance</b><span>Como o lançamento será salvo: tipo, categoria, status, forma e destino financeiro.</span></div></div>${importCutoffControlHTML(sourceAppId,c,row.data)}<datalist id="interop-cat-income">${categoryDatalist(row.data,'income')}</datalist><datalist id="interop-cat-expense">${categoryDatalist(row.data,'expense')}</datalist><section class="interop-map-section">${interopSectionHeading('Dados recebidos do aplicativo','fields')}<p>Somente leitura. Use esta amostra para confirmar que a conexão está trazendo as informações corretas.</p><div class="interop-field-grid">${fieldRows||'<div class="interop-map-empty">Nenhuma informação adicional identificada.</div>'}</div></section><section class="interop-map-section">${interopSectionHeading('Tipos de lançamento','types')}<p>Escolha se cada entrada ou saída será uma receita, uma despesa variável ou não será importada.</p>${directionRows}${kindRows}</section><section class="interop-map-section">${interopSectionHeading('Categorias e origem da receita','categories')}<p>Associe cada categoria recebida à categoria correspondente do Borion e defina a origem das receitas.</p>${categoryRows||'<div class="interop-map-empty">Nenhuma categoria encontrada.</div>'}</section><section class="interop-map-section">${interopSectionHeading('Formas de pagamento e destino financeiro','payments')}<p>Defina a forma usada no Borion e em qual conta, carteira ou reserva o valor será registrado.</p>${paymentRows||'<div class="interop-map-empty">Nenhuma forma de pagamento encontrada.</div>'}</section><section class="interop-map-section">${interopSectionHeading('Status','status')}<p>Escolha se o Borion deve manter o status recebido, forçar um status ou ignorar o lançamento.</p>${statusRows||'<div class="interop-map-empty">Nenhum status encontrado.</div>'}</section><div class="interop-save-bar"><button class="btn-outline btn-sm" onclick="BorionInterop.inspectSource('${sourceAppId}')">Atualizar dados da origem</button><button class="btn btn-primary" onclick="BorionInterop.saveMappings('${sourceAppId}')">Salvar opções</button><button class="btn-outline" onclick="BorionInterop.syncSource('${sourceAppId}')" ${c.mappingReady?'':'disabled title="Salve as opções antes de sincronizar"'}>Sincronizar agora</button></div></div>`;
+    return `<div class="interop-pane interop-links-pane"><div class="interop-links-intro"><div><h4>Configuração da integração com ${escHtml(sourceName(sourceAppId))}</h4><p>Confira o que chega do aplicativo e escolha, à direita, como cada informação será registrada no Borion Finance. As regras são usadas na primeira importação de cada lançamento.</p></div><span class="pill ${c.mappingReady?'ok':'warn'}">${c.mappingReady?'Configurado':'Revisão necessária'}</span></div><div class="interop-map-legend"><div class="origin"><small>ORIGEM</small><b>${escHtml(sourceName(sourceAppId))}</b><span>Dados enviados pelo aplicativo, exibidos em linguagem simples.</span></div><div class="destination"><small>DESTINO</small><b>Borion Finance</b><span>Como o lançamento será salvo: tipo, categoria, status, forma e destino financeiro.</span></div></div>${importCutoffControlHTML(sourceAppId,c,row.data)}<datalist id="interop-cat-income">${categoryDatalist(row.data,'income')}</datalist><datalist id="interop-cat-expense">${categoryDatalist(row.data,'expense')}</datalist><section class="interop-map-section">${interopSectionHeading('Dados recebidos do aplicativo','fields')}<p>Somente leitura. Use esta amostra para confirmar que a conexão está trazendo as informações corretas.</p><div class="interop-field-grid">${fieldRows||'<div class="interop-map-empty">Nenhuma informação adicional identificada.</div>'}</div></section><section class="interop-map-section">${interopSectionHeading('Tipos de lançamento','types')}<p>Escolha se cada entrada ou saída será uma receita, uma despesa variável ou não será importada.</p>${directionRows}${kindRows}</section><section class="interop-map-section">${interopSectionHeading('Categorias e origem da receita','categories')}<p>Associe cada categoria recebida à categoria correspondente do Borion e defina a origem das receitas.</p>${categoryRows||'<div class="interop-map-empty">Nenhuma categoria encontrada.</div>'}</section><section class="interop-map-section">${interopSectionHeading('Formas de pagamento e destino financeiro','payments')}<p>Defina a forma usada no Borion e em qual conta, carteira ou reserva o valor será registrado.</p>${paymentRows||'<div class="interop-map-empty">Nenhuma forma de pagamento encontrada.</div>'}</section><section class="interop-map-section">${interopSectionHeading('Status','status')}<p>Escolha se o Borion deve manter o status recebido, forçar um status ou ignorar o lançamento.</p>${statusRows||'<div class="interop-map-empty">Nenhum status encontrado.</div>'}</section><div class="interop-save-bar"><button class="btn-outline btn-sm" onclick="BorionInterop.inspectSource('${sourceAppId}',{button:this})">Atualizar dados da origem</button><button class="btn btn-primary" onclick="BorionInterop.saveMappings('${sourceAppId}',{button:this})">Salvar opções</button><button class="btn-outline" onclick="BorionInterop.syncSource('${sourceAppId}',{button:this})" ${c.mappingReady?'':'disabled title="Salve as opções antes de sincronizar"'}>Sincronizar agora</button></div></div>`;
   }
 
   function mitCategoryOptions(data,selected){
@@ -2257,8 +2288,11 @@
         return false;
       }
       row.config.mitRevenueRules=validated;row.config.mappingReady=true;row.config.mappingVersion=SPEC.mappingVersion;row.config.mappingSavedAt=nowIso();
-      saveProfileData(row.profile.id,row.data);mitFormDirty=false;
-      if(typeof toast==='function') toast('Opções salvas. A configuração permanece no perfil e será sincronizada pelo Google Drive. Nenhuma importação foi executada.');
+      saveProfileData(row.profile.id,row.data,{deferGoogleCommit:true,source:'interop_save_mit_revenue_settings'});
+      const confirmation=await persistCriticalChange('interop_save_mit_revenue_settings');
+      if(window.GoogleDriveProvider&&GoogleDriveProvider._isStrictMode?.()&&!confirmation.synced)return false;
+      mitFormDirty=false;
+      if(typeof toast==='function') toast('Opções salvas e confirmadas no Google Drive. Nenhuma importação foi executada.');
       if(typeof renderView==='function') renderView();
       return true;
     }finally{setAsyncButtonState(button,false);}
@@ -2290,8 +2324,11 @@
         return false;
       }
       row.config.mitExpenseRules=validated;row.config.mitExpenseMappingReady=true;
-      saveProfileData(row.profile.id,row.data);mitFormDirty=false;
-      if(typeof toast==='function') toast('Opções de despesa salvas. A partir de agora, despesas via Carteira, Pix, Débito e Reserva entram sozinhas na próxima sincronização.');
+      saveProfileData(row.profile.id,row.data,{deferGoogleCommit:true,source:'interop_save_mit_expense_settings'});
+      const confirmation=await persistCriticalChange('interop_save_mit_expense_settings');
+      if(window.GoogleDriveProvider&&GoogleDriveProvider._isStrictMode?.()&&!confirmation.synced)return false;
+      mitFormDirty=false;
+      if(typeof toast==='function') toast('Opções de despesa salvas e confirmadas no Google Drive.');
       if(typeof renderView==='function') renderView();
       return true;
     }finally{setAsyncButtonState(button,false);}
@@ -2534,10 +2571,12 @@
     }).join('')}</div>${renderSourceWorkspace(uiSourceAppId)}<div class="settings-section interop-rules-summary"><h3>Como a sincronização funciona</h3><div class="interop-rule-grid"><div><b>1. Identifica</b><span>Confere o ID permanente do registro externo.</span></div><div><b>2. Converte</b><span>Aplica tipos, categorias, status, formas e contas configuradas.</span></div><div><b>3. Torna nativo</b><span>O lançamento pode ser editado livremente no Borion.</span></div><div><b>4. Não duplica</b><span>O ID continua registrado mesmo após qualquer edição local.</span></div></div></div></div>`;
   }
 
-  async function saveMappings(sourceAppId, {sync=false}={}){
-    const row = findSourceConfig(sourceAppId);
-    if(!row) throw new Error('Integração não configurada.');
-    const mappings = normalizeMappings(row.config.mappings);
+  async function saveMappings(sourceAppId,{sync=false,button=null}={}){
+    const row=findSourceConfig(sourceAppId);
+    if(!row)throw new Error('Integração não configurada.');
+    setAsyncButtonState(button,true,'Salvando…');
+    try{
+    const mappings=normalizeMappings(row.config.mappings);
 
     document.querySelectorAll('[data-interop-direction]').forEach(select => {
       mappings.directions[select.dataset.interopDirection] = select.value;
@@ -2575,11 +2614,14 @@
     row.config.mappings = mappings;
     row.config.mappingReady = true;
     row.config.mappingSavedAt = nowIso();
-    saveProfileData(row.profile.id, row.data);
-    if(typeof toast === 'function') toast('Opções salvas. Esta configuração continuará igual depois de sair e entrar novamente.');
-    if(sync) return await syncSource(sourceAppId, {silent:false});
-    if(typeof renderView === 'function') renderView();
+    saveProfileData(row.profile.id,row.data,{deferGoogleCommit:true,source:'interop_save_mappings'});
+    const confirmation=await persistCriticalChange('interop_save_mappings');
+    if(window.GoogleDriveProvider&&GoogleDriveProvider._isStrictMode?.()&&!confirmation.synced)return false;
+    if(typeof toast === 'function') toast('Opções salvas e confirmadas no Google Drive.');
+    if(sync)return await syncSource(sourceAppId,{silent:false,button});
+    if(typeof renderView==='function')renderView();
     return true;
+    }finally{setAsyncButtonState(button,false);}
   }
 
   function markImportedDeletion(tx, mode='permanent', data=S.data){

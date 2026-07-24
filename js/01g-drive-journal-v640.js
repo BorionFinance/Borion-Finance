@@ -196,7 +196,7 @@ const BorionDriveJournal640={
       if(applied.has(nameId)){skippedByName++;continue;}
       operations.push({file:f,op});
     }
-    // V6.46.31 — o Google Drive pode demorar alguns instantes para devolver numa
+    // V6.46.32 — o Google Drive pode demorar alguns instantes para devolver numa
     // listagem um arquivo que acabou de ser criado. A operação já foi criada e possui
     // ID real, então o commit imediato não deve depender exclusivamente de listChildren.
     // Quando o chamador fornece a operação recém-gravada, ela é relida diretamente

@@ -1260,7 +1260,7 @@ function saveCurrentData(options={}){
     catch(e){ console.warn('[BORION][DELETE_CAPTURE_WARN]',e); }
     setProfileData(S.currentProfile.id, S.data);
     if(window.CloudStorage && CloudStorage.user){ CloudStorage.queueSave(S.currentProfile.id, S.data); }
-    if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){
+    if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected() && !options.deferGoogleCommit){
       GoogleDriveProvider.queueSave({source:options.finalConfirmation?'final_confirmation':'data_change'});
     }else if(window.BorionStrictDrive&&BorionStrictDrive.isGoogleMode()&&window.GoogleDriveProvider){
       GoogleDriveProvider.lockStrictCloud('O Google Drive não está conectado. Entre novamente antes de continuar.',null,'save_not_connected');

@@ -1,0 +1,9 @@
+BORION FINANCE V6.46.22 — CORREÇÃO DE ABERTURA DO PERFIL E METADADOS
+
+- Corrige crescimento recursivo de __syncMeta640.accountConflicts.
+- Impede perfis/dados e metadados internos de entrarem duas vezes no merge genérico.
+- Repara automaticamente snapshots antigos com metadados inflados.
+- Evita que o auto-sync da integração grave o mesmo erro a cada 15 segundos.
+- Aplica recuo de 5 minutos após erro automático repetido da integração.
+- Diferencia sessão Google expirada de falha comum ao salvar no Drive.
+- Mantém tombstones, IDs de operações e todos os dados financeiros.

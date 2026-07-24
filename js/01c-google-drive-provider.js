@@ -1,4 +1,4 @@
-/* Borion Finance — Google Drive Provider (V6.46.21 — Reconexão OAuth estável)
+/* Borion Finance — Google Drive Provider (V6.46.22 — Reconexão OAuth estável)
 
    Arquitetura 6.40.2: current.json é apenas o snapshot consolidado. Toda alteração
    é protegida primeiro como operação imutável, identificada por operationId, e só
@@ -535,7 +535,7 @@ function cloneAccountValue6401(value){
   return value==null ? value : JSON.parse(JSON.stringify(value));
 }
 
-/* V6.46.21 — comparação restrita aos campos que formam a identidade do perfil.
+/* V6.46.22 — comparação restrita aos campos que formam a identidade do perfil.
    Dados financeiros ficam em dataByProfile e continuam usando o merge normal. */
 function profileMetadataComparable64611(profile){
   const p=profile||{};
@@ -600,6 +600,7 @@ async function buildMigratedSnapshot6401(obj){
     schemaVersion:BorionSyncCore.BORION_DATA_SCHEMA_VERSION,
     profileTombstones:prepared.profileTombstones||((out.__syncMeta640&&out.__syncMeta640.profileTombstones)||{})
   });
+  if(BorionSyncCore&&typeof BorionSyncCore.sanitizeAccountMetadata==='function')BorionSyncCore.sanitizeAccountMetadata(out);
   const canonical=cloneAccountValue6401(out);delete canonical.integrity;
   out.integrity=Object.assign({},out.integrity||{}, {
     algorithm:'SHA-256',checksum:await BorionSyncCore.checksumOf(canonical),
@@ -854,15 +855,39 @@ const GoogleDriveProvider = {
       return false;
     }
     if(payload)this._strictPendingPayload=payload;
-    this.authRequired=!navigator.onLine?false:true;
-    this.lastSyncError=String(message||(!navigator.onLine?'Sem internet. O Borion foi bloqueado porque este modo usa somente o Google Drive.':'A sessão do Google precisa ser confirmada novamente.'));
+    if(!navigator.onLine)this.authRequired=false;
+    else if(/sess[aã]o|login|autentica|token|oauth/i.test(String(message||'')))this.authRequired=true;
+    this.lastSyncError=String(message||(!navigator.onLine?'Sem internet. O Borion foi bloqueado porque este modo usa somente o Google Drive.':'O Google Drive não confirmou a operação.'));
     this._hideStrictSaving();
     if(typeof document==='undefined')return false;
     const root=document.getElementById('root');if(!root)return false;
     const online=!!navigator.onLine;
-    root.innerHTML=`<div class="gate-wrap"><div class="gate-box"><div class="gate-logo"><img src="borion-emblem.png" alt="Borion Finance"/><div class="appname">Borion Finance</div></div><div class="gate-card"><h2>${online?'Confirme o login do Google':'Internet necessária'}</h2><p class="gate-sub" id="gdrive_strict_status">${esc(this.lastSyncError)}</p><button class="btn btn-primary btn-block" id="gdrive_strict_reconnect">${online?'Entrar novamente com o Google':'Tentar novamente'}</button><p class="gate-sub" style="margin-top:14px">Nenhum lançamento novo será aceito sem confirmação real do Google Drive. O Borion não usa dados financeiros locais neste modo.</p></div></div></div>`;
-    const button=document.getElementById('gdrive_strict_reconnect');if(button)button.onclick=()=>this.reconnectStrictCloud();
+    const authTitle=this.authRequired?'Confirme o login do Google':'Falha ao confirmar no Google Drive';
+    const actionLabel=this.authRequired?'Entrar novamente com o Google':'Tentar salvar novamente';
+    root.innerHTML=`<div class="gate-wrap"><div class="gate-box"><div class="gate-logo"><img src="borion-emblem.png" alt="Borion Finance"/><div class="appname">Borion Finance</div></div><div class="gate-card"><h2>${online?authTitle:'Internet necessária'}</h2><p class="gate-sub" id="gdrive_strict_status">${esc(this.lastSyncError)}</p><button class="btn btn-primary btn-block" id="gdrive_strict_reconnect">${online?actionLabel:'Tentar novamente'}</button><p class="gate-sub" style="margin-top:14px">Nenhum lançamento novo será aceito sem confirmação real do Google Drive. O Borion não usa dados financeiros locais neste modo.</p></div></div></div>`;
+    const button=document.getElementById('gdrive_strict_reconnect');if(button)button.onclick=()=>this.authRequired?this.reconnectStrictCloud():this.retryStrictCloud();
     return false;
+  },
+
+  async retryStrictCloud(){
+    const button=typeof document!=='undefined'?document.getElementById('gdrive_strict_reconnect'):null;
+    const status=this._strictStatusElement();
+    if(!navigator.onLine){if(status)status.textContent='Ainda sem internet. Conecte o dispositivo e tente novamente.';return false;}
+    if(!this.hasUsableToken()){this.authRequired=true;return this.reconnectStrictCloud();}
+    if(button){button.disabled=true;button.textContent='Confirmando no Drive...';}
+    try{
+      const ok=await this.resumePendingSync('strict_manual_retry');
+      if(ok!==true&&(this.dirty||this.hasPersistedConsolidation()))throw new Error(this.lastSyncError||'O Google Drive ainda não confirmou a operação.');
+      this.authRequired=false;this.lastSyncError='';this._strictPendingPayload=null;
+      if(S&&S.currentProfile&&S.data)renderApp();else{S.gate={mode:'list',error:''};renderGate();}
+      this._refreshStatusUI();return true;
+    }catch(e){
+      this.authRequired=this._isAuthError(e);this.lastSyncError=String(e&&e.message||e);
+      if(this.authRequired)return this.reconnectStrictCloud();
+      if(status)status.textContent=this.lastSyncError;
+      if(button){button.disabled=false;button.textContent='Tentar salvar novamente';}
+      return false;
+    }
   },
 
   async reconnectStrictCloud(){
@@ -1265,7 +1290,9 @@ const GoogleDriveProvider = {
       if(window.BorionSyncState) BorionSyncState.set('MERGING',{source:'boot'});
       const result=await BorionDriveJournal640.consolidate(this.folderId,remoteSnapshot);
       const migrationRequired=!(migrationBackupResult&&migrationBackupResult.notRequired);
-      if(result.newlyApplied.length||migrationRequired){
+      const metadataRepairRequired=!!(BorionSyncCore&&typeof BorionSyncCore.accountMetaNeedsRepair==='function'&&
+        (BorionSyncCore.accountMetaNeedsRepair(remoteSnapshot)||BorionSyncCore.accountMetaNeedsRepair(result.consolidated)));
+      if(result.newlyApplied.length||migrationRequired||metadataRepairRequired){
         // A migração ocorre integralmente em memória, depois do backup bruto e antes
         // de qualquer PATCH. Mesmo sem operação nova, o schema 6401 é persistido uma
         // única vez; assim a base não é remigrada a cada inicialização.

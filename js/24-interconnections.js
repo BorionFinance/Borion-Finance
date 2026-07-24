@@ -32,6 +32,10 @@
   const EMPTY_KEY = '__empty__';
   let syncing = false;
   let syncingSourceAppId = '';
+  const AUTO_ERROR_RETRY_MS_64622 = 5*60*1000;
+  const IDENTICAL_ERROR_PERSIST_MS_64622 = 15*60*1000;
+  const autoRetryAfter64622 = new Map();
+  function autoRetryKey64622(row){return String(row?.profile?.id||'')+'|'+String(row?.sourceAppId||'');}
   let mitFormDirty = false;
   let uiSourceAppId = 'amanda-estetica';
   let uiTab = 'connection';
@@ -1556,6 +1560,7 @@
         const editingIntegrationSettings=silent&&S.view==='settings'&&S.settingsTab==='integrations';
         if(typeof renderView==='function'&&!editingIntegrationSettings) renderView();
       }
+      autoRetryAfter64622.delete(autoRetryKey64622(commitRow));
       if(!silent&&typeof toast==='function'){
         const summary=result.summary||{};
         const expenseCreatedText=summary.createdExpenses?`, ${Number(summary.createdExpenses)} despesa(s) nova(s)`:'';
@@ -1571,15 +1576,22 @@
         }catch(_ackError){}
       }
       const current=findSourceConfig(sourceAppId)||row;
-      current.config.lastError=error.message||String(error);
-      current.config.lastAttemptAt=nowIso();
-      if(error?.code==='INSTANCE_CONFLICT'){
-        current.config.reconnectRequired=true;
-        current.config.previousCompanyInstanceId=String(error.expectedCompanyInstanceId||'');
-        current.config.pendingCompanyInstanceId=String(error.receivedCompanyInstanceId||'');
-        current.config.reconnectDetectedAt=nowIso();
+      const errorMessage=error.message||String(error);
+      const previousError=String(current.config.lastError||'');
+      const previousAttempt=Date.parse(current.config.lastAttemptAt||'')||0;
+      const shouldPersist=!silent||previousError!==errorMessage||Date.now()-previousAttempt>=IDENTICAL_ERROR_PERSIST_MS_64622||error?.code==='INSTANCE_CONFLICT';
+      if(silent)autoRetryAfter64622.set(autoRetryKey64622(current),Date.now()+AUTO_ERROR_RETRY_MS_64622);
+      if(shouldPersist){
+        current.config.lastError=errorMessage;
+        current.config.lastAttemptAt=nowIso();
+        if(error?.code==='INSTANCE_CONFLICT'){
+          current.config.reconnectRequired=true;
+          current.config.previousCompanyInstanceId=String(error.expectedCompanyInstanceId||'');
+          current.config.pendingCompanyInstanceId=String(error.receivedCompanyInstanceId||'');
+          current.config.reconnectDetectedAt=nowIso();
+        }
+        saveProfileData(current.profile.id,current.data);
       }
-      saveProfileData(current.profile.id,current.data);
       if(!silent){
         if(error?.code==='INSTANCE_CONFLICT') await confirmInstanceReconnect(sourceAppId);
         else if(typeof alert==='function') alert(current.config.lastError);
@@ -2602,6 +2614,7 @@
     for(const row of rows){
       if(!row.config.mappingReady) continue;
       if(row.sourceAppId==='marco-iris'&&row.config.reconnectRequired) continue;
+      if(silent&&Date.now()<(autoRetryAfter64622.get(autoRetryKey64622(row))||0))continue;
       if(silent && ensureInterop(row.data).importApprovalMode==='ask'){ await checkAskModeSource(row); continue; }
       try{ out.push(await syncSource(row.sourceAppId, {silent})); }
       catch(error){ console.warn('[BORION_INTEROP] Auto sync:', error); }

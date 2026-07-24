@@ -435,11 +435,105 @@ function mergeProfileData(baseData,localData,remoteData){
   return result;
 }
 
+/* V6.46.22 — metadados do mecanismo de sincronização não são dados financeiros e
+   não podem participar do merge genérico da conta. A versão anterior registrava um
+   conflito contendo o accountConflicts anterior inteiro; a cada consolidação o JSON
+   crescia de forma recursiva (KB -> MB) e podia derrubar a abertura do perfil. */
+const BORION_ACCOUNT_CONFLICT_LIMIT_64622 = 50;
+const BORION_ACCOUNT_CONFLICT_STRING_LIMIT_64622 = 700;
+function compactConflictValue64622(value,depth=0){
+  if(value==null||typeof value==='number'||typeof value==='boolean') return value;
+  if(typeof value==='string') return value.length>BORION_ACCOUNT_CONFLICT_STRING_LIMIT_64622
+    ?value.slice(0,BORION_ACCOUNT_CONFLICT_STRING_LIMIT_64622)+'… [resumido]':value;
+  if(depth>=3){
+    if(Array.isArray(value)) return {summary:'array',length:value.length};
+    return {summary:'object',keys:ownKeysSafe(value).slice(0,20)};
+  }
+  if(Array.isArray(value)){
+    if(value.length>12) return {summary:'array',length:value.length,sample:value.slice(0,3).map(v=>compactConflictValue64622(v,depth+1))};
+    return value.map(v=>compactConflictValue64622(v,depth+1));
+  }
+  if(value&&typeof value==='object'){
+    const out={},keys=ownKeysSafe(value);
+    for(const k of keys.slice(0,25)){
+      if(k==='accountConflicts') out[k]={summary:'omitted_recursive_conflicts',length:Array.isArray(value[k])?value[k].length:0};
+      else out[k]=compactConflictValue64622(value[k],depth+1);
+    }
+    if(keys.length>25)out.__omittedKeys=keys.length-25;
+    return out;
+  }
+  return String(value);
+}
+function sanitizeAccountConflicts64622(conflicts){
+  if(!Array.isArray(conflicts))return [];
+  return conflicts.slice(-BORION_ACCOUNT_CONFLICT_LIMIT_64622).map(c=>compactConflictValue64622(c,0));
+}
 function normalizeAccountMeta(payload){
-  const meta=(payload&&payload.__syncMeta640&&typeof payload.__syncMeta640==='object')?safeClone(payload.__syncMeta640):{};
+  const raw=(payload&&payload.__syncMeta640&&typeof payload.__syncMeta640==='object')?payload.__syncMeta640:{};
+  const meta={};
+  for(const k of ownKeysSafe(raw)){
+    if(k==='accountConflicts')continue; // histórico diagnóstico nunca entra no próximo merge
+    meta[k]=safeClone(raw[k]);
+  }
   if(!meta.profileTombstones||typeof meta.profileTombstones!=='object') meta.profileTombstones={};
-  if(!Array.isArray(meta.accountConflicts)) meta.accountConflicts=[];
+  meta.accountConflicts=[];
   return meta;
+}
+function accountEnvelopeForMerge64622(payload){
+  const src=payload&&typeof payload==='object'?payload:{};
+  const managed=new Set(['profiles','dataByProfile','config','profileCount','__syncMeta640','integrity']);
+  const out={};
+  for(const k of ownKeysSafe(src))if(!managed.has(k))out[k]=safeClone(src[k]);
+  return out;
+}
+function stableUnion64622(...lists){
+  const out=[],seen=new Set();
+  for(const list of lists)for(const value of (Array.isArray(list)?list:[])){
+    const key=typeof value==='string'?value:canonicalStringify(value);
+    if(seen.has(key))continue;seen.add(key);out.push(safeClone(value));
+  }
+  return out;
+}
+function mergeJournalDuplicates64622(...metas){
+  const out={sync:[],operations:[],applied:[],snapshots:[],conflicts:[]};
+  for(const key of Object.keys(out)) out[key]=stableUnion64622(...metas.map(m=>m&&m.journalFolderDuplicates&&m.journalFolderDuplicates[key]));
+  return out;
+}
+function mergeAccountRuntimeMeta64622(bm,lm,rm){
+  const out=Object.assign({},bm||{},rm||{},lm||{});
+  delete out.profileTombstones;delete out.accountConflicts;
+  out.appliedOperationIds=stableUnion64622(bm&&bm.appliedOperationIds,lm&&lm.appliedOperationIds,rm&&rm.appliedOperationIds);
+  const through=[bm&&bm.consolidatedThrough,lm&&lm.consolidatedThrough,rm&&rm.consolidatedThrough].filter(Boolean).sort().pop();
+  const consolidated=[bm&&bm.lastConsolidatedAt,lm&&lm.lastConsolidatedAt,rm&&rm.lastConsolidatedAt].filter(Boolean).sort().pop();
+  if(through)out.consolidatedThrough=through;
+  if(consolidated)out.lastConsolidatedAt=consolidated;
+  out.journalFolderDuplicates=mergeJournalDuplicates64622(bm,lm,rm);
+  return out;
+}
+function accountMetaNeedsRepair64622(payload){
+  try{
+    const meta=payload&&payload.__syncMeta640;
+    if(!meta||typeof meta!=='object')return false;
+    const conflicts=meta.accountConflicts;
+    if(!Array.isArray(conflicts))return true;
+    const size=JSON.stringify(conflicts).length;
+    if(size>256000||conflicts.length>BORION_ACCOUNT_CONFLICT_LIMIT_64622)return true;
+    return /accountConflicts/.test(JSON.stringify(conflicts));
+  }catch(_){return true;}
+}
+function sanitizeAccountMetadata64622(payload){
+  if(!payload||typeof payload!=='object')return payload;
+  const meta=(payload.__syncMeta640&&typeof payload.__syncMeta640==='object')?payload.__syncMeta640:{};
+  const rawConflicts=Array.isArray(meta.accountConflicts)?meta.accountConflicts:[];
+  let rawText='';
+  try{rawText=JSON.stringify(rawConflicts);}catch(_){rawText='accountConflicts';}
+  // Qualquer referência ao próprio accountConflicts é histórico recursivo da falha.
+  // Esse conteúdo é apenas diagnóstico; removê-lo não toca em dados financeiros.
+  meta.accountConflicts=(rawText.length>256000||/accountConflicts/.test(rawText))
+    ?[]:sanitizeAccountConflicts64622(rawConflicts);
+  if(Array.isArray(meta.appliedOperationIds))meta.appliedOperationIds=stableUnion64622(meta.appliedOperationIds);
+  payload.__syncMeta640=meta;
+  return payload;
 }
 function mergeProfileTombstones6402(...sets){
   const out={};
@@ -463,7 +557,9 @@ function mergeProfileMetadata(base,local,remote,id,conflicts){
 function mergeAccountPayload(basePayload,localPayload,remotePayload){
   const base=basePayload||{profiles:[],dataByProfile:{}},local=localPayload||{profiles:[],dataByProfile:{}},remote=remotePayload||{profiles:[],dataByProfile:{}};
   const accountConflicts=[];
-  const root=deepThreeWayMerge(base,local,remote,'account',accountConflicts)||{};
+  // Perfis, dados, configuração, integridade e __syncMeta640 são mesclados abaixo
+  // por regras próprias. Excluí-los daqui impede conflitos duplicados e recursivos.
+  const root=deepThreeWayMerge(accountEnvelopeForMerge64622(base),accountEnvelopeForMerge64622(local),accountEnvelopeForMerge64622(remote),'account',accountConflicts)||{};
   const bp=new Map((base.profiles||[]).filter(p=>p&&p.id).map(p=>[String(p.id),p]));
   const lp=new Map((local.profiles||[]).filter(p=>p&&p.id).map(p=>[String(p.id),p]));
   const rp=new Map((remote.profiles||[]).filter(p=>p&&p.id).map(p=>[String(p.id),p]));
@@ -495,11 +591,12 @@ function mergeAccountPayload(basePayload,localPayload,remotePayload){
   root.dataByProfile=dataByProfile;
   root.profileCount=profiles.length;
   root.config=deepThreeWayMerge(base.config||{},local.config||{},remote.config||{},'config',accountConflicts)||{};
-  root.__syncMeta640=Object.assign({},normalizeAccountMeta(root),{
+  root.__syncMeta640=Object.assign({},mergeAccountRuntimeMeta64622(bm,lm,rm),{
     schemaVersion:BORION_DATA_SCHEMA_VERSION,
     profileTombstones,
-    accountConflicts
+    accountConflicts:sanitizeAccountConflicts64622(accountConflicts)
   });
+  sanitizeAccountMetadata64622(root);
   return root;
 }
 
@@ -567,8 +664,19 @@ function applyEntityPacked640(target,path,id,packed){
     if(index>=0) list[index]=value; else list.push(value);
   }else if(index>=0) list.splice(index,1);
 }
+function deltaAccountView64622(payload){
+  const src=payload&&typeof payload==='object'?payload:{profiles:[],dataByProfile:{},config:{}};
+  const out={};
+  for(const k of ownKeysSafe(src))if(k!=='__syncMeta640')out[k]=safeClone(src[k]);
+  const raw=src.__syncMeta640&&typeof src.__syncMeta640==='object'?src.__syncMeta640:{};
+  out.__syncMeta640={
+    schemaVersion:raw.schemaVersion||BORION_DATA_SCHEMA_VERSION,
+    profileTombstones:safeClone(raw.profileTombstones||{})
+  };
+  return out;
+}
 function createAccountDelta(basePayload,localPayload){
-  const base=basePayload||{profiles:[],dataByProfile:{},config:{}},local=localPayload||{profiles:[],dataByProfile:{},config:{}};
+  const base=deltaAccountView64622(basePayload),local=deltaAccountView64622(localPayload);
   const volatile=new Set(['integrity','exportedAt','snapshotId','snapshotBaseDate','snapshotChecksum']);
   const changes=[];
   collectCompactDelta640(base,local,[],changes,volatile);
@@ -623,5 +731,6 @@ window.BorionSyncCore={
   normalizeAuthoritativeImportMarker,getAuthoritativeImportMarker,compareAuthoritativeImportMarkers,sameAuthoritativeImportMarker,markAuthoritativeImport,
   deterministicLegacyId,migrateRecordIdentity,migrateDataToSchema640,
   mergeCollection,deepThreeWayMerge,mergeProfileData,mergeAccountPayload,createAccountDelta,accountDeltaHasChanges,mergeAccountDelta,
+  accountMetaNeedsRepair:accountMetaNeedsRepair64622,sanitizeAccountMetadata:sanitizeAccountMetadata64622,
   pathGet:bcorePathGet,pathSet:bcorePathSet,pathKey:bcorePathKey
 };

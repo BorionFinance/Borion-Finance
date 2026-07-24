@@ -17,7 +17,7 @@ function el(html){const t=document.createElement('template');t.innerHTML=html.tr
    que troque o conteúdo de #root por baixo dele. */
 function ensureBorionVersionBadge(){
   if(typeof document==='undefined')return;
-  const v=(typeof BORION_APP_VERSION!=='undefined'&&BORION_APP_VERSION)?BORION_APP_VERSION:'6.46.33';
+  const v=(typeof BORION_APP_VERSION!=='undefined'&&BORION_APP_VERSION)?BORION_APP_VERSION:'6.46.34';
   let badge=document.getElementById('borion_version_badge');
   if(!badge){
     badge=document.createElement('div');
@@ -25,8 +25,17 @@ function ensureBorionVersionBadge(){
     badge.setAttribute('aria-label','Versão do Borion');
     (document.body||document.documentElement).appendChild(badge);
   }
-  // Mantém o número correto mesmo quando a tela de login/perfis é renderizada novamente.
+  // A versão fica visível somente em carregamento, login, escolha de perfil e erro.
   badge.textContent='v'+v;
+  badge.hidden=false;
+  badge.style.display='block';
+}
+function hideBorionVersionBadge(){
+  if(typeof document==='undefined')return;
+  const badge=document.getElementById('borion_version_badge');
+  if(!badge)return;
+  badge.hidden=true;
+  badge.style.display='none';
 }
 /* V6.46.2 — clone rápido pra snapshots de "desfazer"/rollback (excluir lançamento,
    excluir categoria, excluir despesa fixa etc.). Antes cada um desses pontos fazia

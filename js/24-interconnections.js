@@ -1890,11 +1890,10 @@
     const token=provider&&typeof provider.beginCriticalSave==='function'?provider.beginCriticalSave(reason):null;
     try{
       if(provider&&typeof provider.waitForCriticalSaveReady==='function'){
-        const ready=await provider.waitForCriticalSaveReady();
-        if(!ready){
-          if(typeof alert==='function')alert('Ainda existe uma sincronização anterior em andamento. Aguarde alguns segundos e tente novamente.');
-          return false;
-        }
+        // Uma sincronização anterior não invalida o clique. Esperamos um pouco e,
+        // mesmo se ela ainda estiver terminando, a nova alteração entra na MESMA
+        // fila serializada do provider em vez de desistir ou pedir outro clique.
+        await provider.waitForCriticalSaveReady(90000);
       }
       if(!(await confirmCutoffChange(confirmationMessage)))return false;
       setAsyncButtonState(button,true,'Salvando…');

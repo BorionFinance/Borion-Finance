@@ -1,11 +1,44 @@
 BORION FINANCE v6.46.33
+Data: 24/07/2026
 
 CORREÇÕES PRINCIPAIS
-- Falhas transitórias de confirmação do Google Drive não desmontam, não desconectam e não cobrem o aplicativo.
-- Despesas, lembretes, configurações e sincronizações permanecem pendentes e recebem retry automático.
-- Somente autenticação expirada ou ausência real de internet exige intervenção.
-- Ações manuais continuam mostrando Salvando/Sincronizando e aguardam confirmação real.
-- Agenda mobile usa um único seletor compacto com nome do mês e ícone de calendário.
-- Ao tocar, é possível escolher mês e ano.
-- O seletor mensal duplicado dentro da Agenda fica oculto no smartphone.
-- Versão v6.46.33 visível no canto inferior direito do login.
+
+1. GOOGLE DRIVE — SALVAR E SINCRONIZAR SEM DERRUBAR A TELA
+- Despesas, comentários/lembretes da Agenda, configurações e integrações entram em uma única fila serializada.
+- Toda alteração nova é marcada na fila mesmo quando já existe outro commit terminando.
+- Uma Promise de salvamento antiga não pode mais fazer uma alteração nova parecer confirmada.
+- Falhas transitórias, atraso de consistência do Drive, HTTP 408/409/425/429 e erros 5xx recebem novas tentativas automáticas.
+- O aplicativo continua aberto durante falhas transitórias; não volta para o login nem substitui a tela por “Falha ao confirmar”.
+- O usuário vê “Salvando no Google Drive”, “Confirmando” e “Salvo no Google Drive”.
+- Somente falta real de internet, autenticação realmente expirada ou falha de integridade exige intervenção.
+- Eventos de foco, retorno da aba e visibilidade tentam renovar o token silenciosamente antes de considerar a sessão expirada.
+- O watchdog também tenta renovação silenciosa antes de pedir novo login.
+
+2. INTEGRAÇÃO MARCO IRIS
+- “Salvar data”, “Só a partir de agora”, “Importar todo o histórico” e “Sincronizar agora” usam a mesma fila confirmada.
+- Uma sincronização anterior não cancela o clique seguinte: a nova ação aguarda/entra na fila.
+- O botão mostra “Salvando…” ou “Sincronizando…” e só é liberado depois da transação.
+- Não existe segundo forceSyncNow concorrendo com o commit principal.
+
+3. AGENDA NO SMARTPHONE
+- O cabeçalho mostra apenas o nome curto do mês, por exemplo “Julho”, com um ícone de calendário.
+- Ao tocar, abre o seletor nativo para escolher mês e ano.
+- O seletor interno duplicado “Julho de 2026” fica oculto no modo smartphone.
+- Título, seletor mensal e sino ficam na mesma linha sem sobreposição.
+
+4. VERSÃO VISÍVEL
+- v6.46.33 permanece visível no canto inferior direito desde a tela inicial de login/Entrar com Google.
+
+VALIDAÇÃO AUTOMATIZADA
+- 20 confirmações com duas falhas transitórias simuladas em cada uma: aprovadas.
+- 20 alterações críticas durante commit anterior: aprovadas e enfileiradas.
+- 20 despesas + 20 comentários da Agenda: aprovados sem desmontar a tela.
+- 20 salvamentos de data de corte: aprovados.
+- 20 sincronizações da integração Marco Iris: aprovadas.
+- 20 trocas de mês/ano no smartphone: aprovadas.
+- Inicialização completa em navegador: aprovada.
+- 37 arquivos JavaScript + service worker: sintaxe aprovada.
+- manifest.json e referências locais: válidos.
+
+OBSERVAÇÃO
+Os testes automatizados reproduzem o protocolo e as falhas no navegador. A confirmação final com a conta real do Google Drive ocorre após a publicação.

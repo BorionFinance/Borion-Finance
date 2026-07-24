@@ -66,6 +66,54 @@ function redirectUnresolvedRemoteGate64618(){
   return false;
 }
 
+/* V6.46.34 — perfis com senha entram automaticamente assim que a senha completa
+   estiver correta. A comparação é silenciosa enquanto a pessoa digita: senha parcial
+   ou incorreta não mostra erro; o botão Entrar e a tecla Enter continuam disponíveis. */
+function wireAutomaticProfilePasswordEntry(profileId){
+  const input=$('#gate_pw');
+  if(!input||!profileId)return;
+  let timer=null;
+  let checking=false;
+  let sequence=0;
+  const button=$('#gate_enter_single')||$('#gate_enter');
+  const attempt=async()=>{
+    const p=S.profiles.find(item=>item.id===profileId);
+    const typed=String(input.value||'');
+    if(!p||!p.passwordHash||typed.length<4||checking)return;
+    const current=++sequence;
+    const hash=await hashPassword(typed,p.salt||'');
+    if(current!==sequence||String(input.value||'')!==typed||hash!==p.passwordHash)return;
+    checking=true;
+    input.disabled=true;
+    if(button){button.disabled=true;button.textContent='Entrando…';}
+    try{ await Gate.tryEnter(profileId); }
+    catch(error){
+      checking=false;
+      input.disabled=false;
+      if(button){button.disabled=false;button.textContent='Entrar';}
+      S.gate.error=error&&error.message?error.message:String(error||'Não foi possível entrar.');
+      renderGate();
+    }
+  };
+  const schedule=()=>{
+    sequence++;
+    if(timer)clearTimeout(timer);
+    if(String(input.value||'').length<4)return;
+    timer=setTimeout(()=>{attempt();},140);
+  };
+  input.addEventListener('input',schedule);
+  input.addEventListener('change',schedule);
+  input.addEventListener('keydown',event=>{
+    if(event.key!=='Enter')return;
+    event.preventDefault();
+    if(timer)clearTimeout(timer);
+    Gate.tryEnter(profileId);
+  });
+  // Cobre senhas preenchidas automaticamente pelo navegador/gerenciador de senhas.
+  setTimeout(schedule,80);
+  try{input.focus({preventScroll:true});}catch(_){try{input.focus();}catch(__){}}
+}
+
 /* ---------------- RENDER: GATE ---------------- */
 function renderGate(){
   ensureBorionVersionBadge();
@@ -143,6 +191,8 @@ function renderGate(){
   if(enterSingle) enterSingle.onclick = async ()=>{ await Gate.tryEnter(enterSingle.dataset.id); };
   const enterBtn = $('#gate_enter');
   if(enterBtn) enterBtn.onclick = async ()=>{ await Gate.tryEnter(S.gate.selectedProfileId); };
+  const passwordProfileId=enterSingle?enterSingle.dataset.id:(S.gate.mode==='password'?S.gate.selectedProfileId:null);
+  if(passwordProfileId)wireAutomaticProfilePasswordEntry(passwordProfileId);
   const signOutBtn = $('#gate_signout');
   if(signOutBtn) signOutBtn.onclick = async ()=>{ if(window.cloudLogout) await cloudLogout(); };
   const signOutGdriveBtn = $('#gate_signout_gdrive');
@@ -367,6 +417,9 @@ function renderApp(){
     renderGate();
     return;
   }
+  // A versão serve para confirmar o deploy nas telas de acesso. Dentro do app ela
+  // sai completamente para não cobrir a navegação inferior nem outros controles.
+  if(typeof hideBorionVersionBadge==='function')hideBorionVersionBadge();
   // V6.46.33 — marca que o shell real do aplicativo já foi aberto. Uma falha de
   // rede/salvamento depois deste ponto nunca pode substituir toda a tela por um
   // gate que parece desconexão; o provider mantém a página e trabalha a pendência.
@@ -523,9 +576,13 @@ function renderView(){
   if(S.view==='agenda' && !agendaEnabled()) S.view='overview';
   const container = $('#view-root');
   const titles = {overview:'Visão geral',budget:'Lançamentos',investments:'Investimentos',patrimony:'Patrimônio',reservas:'Reserva',cards:'Cartões e Contas',agenda:'Agenda Financeira',cheques:'Cheques',imports:'Importar Extrato',settings:'Configurações'};
+  const smartphoneMode=typeof isSmartphoneMode==='function'&&isSmartphoneMode();
+  // No smartphone a Agenda usa o título curto "Agenda". Isso preserva o olhinho,
+  // o seletor de mês/ano e o sino na mesma linha sem qualquer sobreposição.
+  const topbarTitle=(smartphoneMode&&S.view==='agenda')?'Agenda':titles[S.view];
   // No smartphone existe somente um rótulo curto (ex.: "Julho") e um
   // ícone de calendário. O toque abre mês + ano; setas continuam no modo Pro.
-  const monthNav = (typeof isSmartphoneMode==='function'&&isSmartphoneMode()) ? `
+  const monthNav = smartphoneMode ? `
     <div class="month-nav-wrap mobile-month-picker-wrap">
       <input id="borion_mobile_month_input" class="mobile-month-native-input" type="month" value="${S.month.y}-${pad2(S.month.m+1)}" onchange="MobileMonthPicker.change(this.value)" aria-label="Selecionar mês e ano"/>
       <button type="button" class="month-nav mobile-month-picker" onclick="MobileMonthPicker.open(event)" aria-label="Selecionar mês e ano" title="Selecionar mês e ano">
@@ -554,7 +611,7 @@ function renderView(){
         <button class="mobile-menu-btn" title="Abrir menu" aria-label="Abrir menu" onclick="MobileMenu.open()"><span></span><span></span><span></span></button>
         <div class="topbar-title">
           <p class="hello">${greeting()}, ${esc(S.currentProfile.name)}</p>
-          <h1>${titles[S.view]} <span class="eye" onclick="toggleValuesHidden()" title="${S.valuesHidden?'Mostrar valores':'Ocultar valores'}">${eyeIconSVG(S.valuesHidden)}</span></h1>
+          <h1><span class="topbar-title-text">${topbarTitle}</span><span class="eye" onclick="toggleValuesHidden()" title="${S.valuesHidden?'Mostrar valores':'Ocultar valores'}">${eyeIconSVG(S.valuesHidden)}</span></h1>
           ${reserveLastMovement?`<div class="mobile-reserve-last">${reserveLastMovement}</div>`:''}
         </div>
       </div>
@@ -562,7 +619,7 @@ function renderView(){
         <input type="text" id="global_search" placeholder="Pesquisar compras, contas, categorias..." oninput="GlobalSearch.onInput()" onfocus="GlobalSearch.onInput()"/>
         <div id="global_search_results" class="search-results hidden"></div>
       </div>
-      <div class="topbar-controls" style="display:flex;gap:12px;align-items:center;">
+      <div class="topbar-controls">
         ${(window.CloudStorage && CloudStorage.user)
           ? `<button id="cloud_status_badge" class="cloud-status syncing" onclick="CloudStorage.syncNow()">Sincronizando...</button>`
           : (window.GoogleDriveProvider && GoogleDriveProvider.isConnected() && GoogleDriveProvider.blockedSuspicious)

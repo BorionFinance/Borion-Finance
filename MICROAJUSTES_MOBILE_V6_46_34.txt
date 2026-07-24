@@ -1,0 +1,16 @@
+Borion Finance v6.46.34 — Microajustes mobile
+
+1. Versão visível somente nas telas de carregamento, login, escolha de perfil, reconexão e erro.
+   Ao entrar no aplicativo, o selo é removido para não cobrir a barra inferior ou o conteúdo.
+
+2. Cabeçalho da Agenda no smartphone:
+   - título curto “Agenda” no modo mobile;
+   - título, ícone de privacidade, mês/ano e sino permanecem dentro de suas áreas;
+   - texto recebe truncamento seguro em telas muito estreitas;
+   - seletor de mês/ano continua abrindo pelo ícone de calendário.
+
+3. Perfil protegido por senha:
+   - ao completar a senha correta, o perfil entra automaticamente;
+   - senha parcial/incorreta não exibe erro durante a digitação;
+   - botão Entrar e tecla Enter continuam funcionando;
+   - compatível com preenchimento automático do navegador.

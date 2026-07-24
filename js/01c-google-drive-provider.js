@@ -1,4 +1,4 @@
-/* Borion Finance — Google Drive Provider (V6.46.25 — Corrige loop de "sessão expirada" na reconexão)
+/* Borion Finance — Google Drive Provider (V6.46.26 — Corrige loop de "sessão expirada" na reconexão)
 
    Arquitetura 6.40.2: current.json é apenas o snapshot consolidado. Toda alteração
    é protegida primeiro como operação imutável, identificada por operationId, e só
@@ -820,6 +820,16 @@ const GoogleDriveProvider = {
     return /status\s*401|oauth|token|google recusou|login com google|renova|popup|access[_ -]?denied|interaction[_ -]?required/i.test(msg);
   },
 
+  // V6.46.26 — "Failed to fetch" e afins são o próprio navegador desistindo de uma
+  // requisição por um motivo momentâneo (sinal caindo, aba em segundo plano no
+  // celular, rede trocando de wifi pra 4G no meio do caminho) — não tem nada a ver
+  // com sessão/autenticação nem com o Drive ter recusado a operação de verdade.
+  // Usado pra decidir quando vale a pena tentar de novo sozinho antes de travar a
+  // tela inteira pro usuário.
+  _looksLikeTransientNetworkError(message){
+    return /failed to fetch|network ?error|err_network|err_connection|err_internet|timeout|load failed|fetch failed/i.test(String(message||''));
+  },
+
 
   _isStrictMode(){return !!(window.BorionStrictDrive&&BorionStrictDrive.shouldUseMemory());},
 
@@ -885,18 +895,33 @@ const GoogleDriveProvider = {
     if(!navigator.onLine){if(status)status.textContent='Ainda sem internet. Conecte o dispositivo e tente novamente.';return false;}
     if(!this.hasUsableToken()){this.authRequired=true;return this.reconnectStrictCloud();}
     if(button){button.disabled=true;button.textContent='Confirmando no Drive...';}
-    try{
-      const ok=await this.resumePendingSync('strict_manual_retry');
-      if(ok!==true&&(this.dirty||this.hasPersistedConsolidation()))throw new Error(this.lastSyncError||'O Google Drive ainda não confirmou a operação.');
-      this.authRequired=false;this.lastSyncError='';this._strictPendingPayload=null;
-      if(S&&S.currentProfile&&S.data)renderApp();else{S.gate={mode:'list',error:''};renderGate();}
-      this._refreshStatusUI();return true;
-    }catch(e){
-      this.authRequired=this._isAuthError(e);this.lastSyncError=String(e&&e.message||e);
-      if(this.authRequired)return this.reconnectStrictCloud();
-      if(status)status.textContent=this.lastSyncError;
-      if(button){button.disabled=false;button.textContent='Tentar salvar novamente';}
-      return false;
+    // V6.46.26 — antes, um "Failed to fetch" passageiro (rede instável, celular
+    // trocando de wifi pra dados) já aparecia direto como falha definitiva, exigindo
+    // a pessoa clicar em "Tentar salvar novamente" de novo manualmente. Agora esse
+    // tipo específico de erro ganha até 2 tentativas silenciosas antes de mostrar
+    // qualquer falha — erro real de sessão/Drive continua indo direto pra tela de
+    // falha, sem atraso.
+    const maxTransientRetries=2;
+    for(let attempt=0;;attempt++){
+      try{
+        const ok=await this.resumePendingSync('strict_manual_retry');
+        if(ok!==true&&(this.dirty||this.hasPersistedConsolidation()))throw new Error(this.lastSyncError||'O Google Drive ainda não confirmou a operação.');
+        this.authRequired=false;this.lastSyncError='';this._strictPendingPayload=null;
+        if(S&&S.currentProfile&&S.data)renderApp();else{S.gate={mode:'list',error:''};renderGate();}
+        this._refreshStatusUI();return true;
+      }catch(e){
+        const isAuth=this._isAuthError(e);
+        if(!isAuth&&navigator.onLine&&attempt<maxTransientRetries&&this._looksLikeTransientNetworkError(e&&e.message||e)){
+          if(status)status.textContent='Rede instável, tentando de novo...';
+          await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)));
+          continue;
+        }
+        this.authRequired=isAuth;this.lastSyncError=String(e&&e.message||e);
+        if(this.authRequired)return this.reconnectStrictCloud();
+        if(status)status.textContent=this.lastSyncError;
+        if(button){button.disabled=false;button.textContent='Tentar salvar novamente';}
+        return false;
+      }
     }
   },
 
@@ -1002,7 +1027,19 @@ const GoogleDriveProvider = {
             return false;
           }
           this._showStrictSaving();
-          const ok=await this.forceSyncNow({payload,reason:'strict_'+source});
+          // V6.46.26 — mesma lógica do retryStrictCloud: um "Failed to fetch" passageiro
+          // não trava mais o app na primeira tentativa, ganha até 2 novas tentativas
+          // silenciosas primeiro.
+          let ok=false;
+          for(let attempt=0;;attempt++){
+            ok=await this.forceSyncNow({payload,reason:'strict_'+source});
+            if(ok===true)break;
+            if(navigator.onLine&&attempt<2&&!this.authRequired&&this._looksLikeTransientNetworkError(this.lastSyncError)){
+              await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)));
+              continue;
+            }
+            break;
+          }
           if(ok!==true){
             // Uma nova alteração durante a gravação faz syncNow() devolver false mesmo
             // quando o snapshot anterior foi confirmado corretamente. Nesse caso não

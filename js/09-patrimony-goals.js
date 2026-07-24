@@ -649,7 +649,7 @@ const Reservas = {
       }else{
         const diff=differenceCents/100;
         result.classList.add(diff>0?'positive':(diff<0?'negative':'neutral'));
-        result.querySelector('strong').textContent=reservaSignedValue(diff,{wrap:false});
+        result.querySelector('strong').innerHTML=reservaSignedValue(diff,{wrap:false});
         result.querySelector('small').textContent=diff>0?'Será lançado como rendimento.':(diff<0?'A diferença negativa será preservada como perda/correção de rendimento.':'O saldo informado já é igual ao saldo registrado.');
       }
       updateBtn.disabled=!(validTotal&&validReserve&&validDate&&Number.isFinite(differenceCents));

@@ -1,0 +1,31 @@
+BORION FINANCE V6.46.26 — RENDIMENTO DA RESERVA MOSTRANDO CÓDIGO + APP
+TRAVANDO EM SOLUÇOS DE REDE
+
+1) "Atualizar rendimento" mostrando HTML cru em vez do valor
+   Achado no print: o campo de prévia do rendimento (RENDIMENTO / "Será
+   lançado como rendimento") estava escrevendo o valor formatado como TEXTO
+   em vez de renderizar o HTML dele — por isso aparecia
+   "<span class="borion-money" data-borion-money="...">R$ 34,17</span>"
+   por extenso na tela em vez de só "R$ 34,17". Um caractere: era
+   .textContent, virou .innerHTML. Só afetava essa prévia específica; o
+   resto do app (extrato, resumo de reservas etc.) sempre usou o jeito
+   certo e nunca teve esse problema.
+
+2) App travando inteiro no primeiro "Failed to fetch"
+   "Failed to fetch" é o navegador desistindo de uma requisição por um
+   motivo passageiro (sinal caindo, celular trocando de wifi pra dados, app
+   em segundo plano) — não é sessão expirada nem o Drive recusando nada.
+   Antes, qualquer erro desse tipo já travava o app inteiro com "Falha ao
+   confirmar no Google Drive" na primeira tentativa. Agora, tanto o
+   salvamento automático de uma alteração nova quanto o botão "Tentar
+   salvar novamente" tentam mais 2 vezes sozinhos (com uma pequena espera
+   entre elas) antes de mostrar qualquer tela de falha — só quando o erro
+   realmente parece de rede passageira, nunca para erro de sessão/Drive de
+   verdade, que continua bloqueando na hora como antes (sem atraso extra
+   pra proteger o dado).
+
+Se o "Alteração protegida no Drive; aguardando consolidação" que vocês
+viram hoje era mesmo rede instável (o "Failed to fetch" no print sugere
+isso fortemente), essa versão deve resolver sozinha da próxima vez que
+salvar. Nenhum dado foi perdido em nenhum momento — a operação sempre
+ficou protegida no journal do Drive, só não tinha sido consolidada ainda.

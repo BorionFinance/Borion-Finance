@@ -1,0 +1,22 @@
+BORION FINANCE V6.46.21 — CORREÇÃO DE RECONEXÃO GOOGLE
+
+Problema corrigido:
+- O Chrome devolvia o foco para o Borion antes de o callback OAuth terminar.
+- O modo Google Drive estrito interpretava esse foco como sessão ainda expirada,
+  recriava a tela de bloqueio e podia prender o usuário em um loop de login.
+
+Correções aplicadas:
+- A reconexão agora possui estado único de autenticação em andamento.
+- Eventos focus, visibilitychange, watchdog e guardas do modo estrito não
+  reabrem a tela de bloqueio enquanto o popup do Google está sendo concluído.
+- Cliques repetidos reutilizam a mesma tentativa, evitando dois popups concorrentes.
+- Após o login, o Borion confirma a conta, a pasta e o current.json no Drive
+  antes de liberar o aplicativo.
+- Se houver alteração pendente, ela é confirmada no Drive antes de continuar.
+- Mensagens de erro permanecem visíveis e o botão é reativado para nova tentativa.
+
+Validações executadas:
+- Sintaxe de todos os arquivos JavaScript.
+- Integridade do manifest.json.
+- Existência de todos os arquivos locais referenciados pelo index.html.
+- Teste automatizado da corrida de foco durante a reconexão OAuth.

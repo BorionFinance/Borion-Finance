@@ -3161,7 +3161,7 @@ html[data-theme="light"] .interop-source-value{background:rgba(122,85,29,.025)}
 .mit-expense-modal .quickcat-box{margin-top:8px;}
 html[data-theme="light"] .mit-expense-modal .field input[type="text"],html[data-theme="light"] .mit-expense-modal .field input[type="date"],html[data-theme="light"] .mit-expense-modal .field select{background:rgba(255,255,255,.92);border-color:rgba(122,85,29,.18);color:var(--text);}
 
-/* V6.46.20 — Dashboard estilo área de trabalho: posição e tamanho livres, sobreposição e camadas */
+/* V6.46.21 — Dashboard estilo área de trabalho: posição e tamanho livres, sobreposição e camadas */
 .overview-dashboard-grid{gap:12px;margin-bottom:18px;align-items:start;grid-auto-flow:dense;}
 .overview-dashboard-grid.module-free-placement{display:block;position:relative;min-height:180px;overflow:visible;}
 .overview-dashboard-grid.module-free-placement.module-free-bootstrap{display:grid;grid-auto-flow:row;height:auto!important;}
@@ -3231,7 +3231,7 @@ html[data-theme="light"] .module-widget-menu{background:rgba(252,249,242,.99);bo
 }
 
 
-/* ---------- V6.46.20 — acabamento solicitado: avatar, privacidade, lápis e reservas ---------- */
+/* ---------- V6.46.21 — acabamento solicitado: avatar, privacidade, lápis e reservas ---------- */
 .borion-money{display:inline;white-space:nowrap;}
 .value-mask{letter-spacing:0!important;color:var(--muted-2);font-weight:800;}
 .profile-avatar-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;}
@@ -3283,7 +3283,7 @@ html[data-interface-mode="smartphone"] #view-body .line-chart-svg polyline{
 ::view-transition-old(borion-content),
 ::view-transition-new(borion-content){animation:none!important;}
 
-/* ---------- V6.46.20 — cabeçalho mobile limpo e lançamentos compactos ---------- */
+/* ---------- V6.46.21 — cabeçalho mobile limpo e lançamentos compactos ---------- */
 html[data-interface-mode="smartphone"] .topbar{
   display:grid!important;
   grid-template-columns:minmax(0,1fr)!important;
@@ -3528,7 +3528,7 @@ html[data-interface-mode="smartphone"] #view-body>.dash-grid>.panel-box:first-ch
 }
 
 
-/* ---------- V6.46.20 — mobile linear, compacto e cabeçalho realmente fechado ---------- */
+/* ---------- V6.46.21 — mobile linear, compacto e cabeçalho realmente fechado ---------- */
 /* O scroller principal começa no topo real. O cabeçalho continua no fluxo (sticky),
    porém agora é sólido: nenhum lançamento antigo aparece por trás dele durante o scroll. */
 html[data-interface-mode="smartphone"] #view-root.main{
@@ -3793,7 +3793,7 @@ html[data-interface-mode="smartphone"] .reserva-card{padding:13px!important;}
   html[data-interface-mode="smartphone"] .reserva-toolbar-actions>.btn-outline{font-size:8.6px!important;padding-inline:3px!important;}
 }
 
-/* ---------- V6.46.20 — editor da dashboard sempre acima e posicionamento assistido ---------- */
+/* ---------- V6.46.21 — editor da dashboard sempre acima e posicionamento assistido ---------- */
 .module-layout-toolbar,
 .module-layout-toolbar.active{
   z-index:1000000!important;
@@ -3907,7 +3907,7 @@ html[data-theme="light"] .module-placement-ghost{
 
 
 
-/* ---------- V6.46.20 — desempenho do editor, cabeçalho mobile em uma linha e gestos ---------- */
+/* ---------- V6.46.21 — desempenho do editor, cabeçalho mobile em uma linha e gestos ---------- */
 .mobile-reserve-last{display:none;}
 .desktop-reserve-last{display:contents;}
 

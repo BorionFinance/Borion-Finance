@@ -3161,7 +3161,7 @@ html[data-theme="light"] .interop-source-value{background:rgba(122,85,29,.025)}
 .mit-expense-modal .quickcat-box{margin-top:8px;}
 html[data-theme="light"] .mit-expense-modal .field input[type="text"],html[data-theme="light"] .mit-expense-modal .field input[type="date"],html[data-theme="light"] .mit-expense-modal .field select{background:rgba(255,255,255,.92);border-color:rgba(122,85,29,.18);color:var(--text);}
 
-/* V6.46.18 — Dashboard estilo área de trabalho: posição e tamanho livres, sobreposição e camadas */
+/* V6.46.19 — Dashboard estilo área de trabalho: posição e tamanho livres, sobreposição e camadas */
 .overview-dashboard-grid{gap:12px;margin-bottom:18px;align-items:start;grid-auto-flow:dense;}
 .overview-dashboard-grid.module-free-placement{display:block;position:relative;min-height:180px;overflow:visible;}
 .overview-dashboard-grid.module-free-placement.module-free-bootstrap{display:grid;grid-auto-flow:row;height:auto!important;}
@@ -3231,7 +3231,7 @@ html[data-theme="light"] .module-widget-menu{background:rgba(252,249,242,.99);bo
 }
 
 
-/* ---------- V6.46.18 — acabamento solicitado: avatar, privacidade, lápis e reservas ---------- */
+/* ---------- V6.46.19 — acabamento solicitado: avatar, privacidade, lápis e reservas ---------- */
 .borion-money{display:inline;white-space:nowrap;}
 .value-mask{letter-spacing:0!important;color:var(--muted-2);font-weight:800;}
 .profile-avatar-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;}
@@ -3283,7 +3283,7 @@ html[data-interface-mode="smartphone"] #view-body .line-chart-svg polyline{
 ::view-transition-old(borion-content),
 ::view-transition-new(borion-content){animation:none!important;}
 
-/* ---------- V6.46.18 — cabeçalho mobile limpo e lançamentos compactos ---------- */
+/* ---------- V6.46.19 — cabeçalho mobile limpo e lançamentos compactos ---------- */
 html[data-interface-mode="smartphone"] .topbar{
   display:grid!important;
   grid-template-columns:minmax(0,1fr)!important;
@@ -3528,7 +3528,7 @@ html[data-interface-mode="smartphone"] #view-body>.dash-grid>.panel-box:first-ch
 }
 
 
-/* ---------- V6.46.18 — mobile linear, compacto e cabeçalho realmente fechado ---------- */
+/* ---------- V6.46.19 — mobile linear, compacto e cabeçalho realmente fechado ---------- */
 /* O scroller principal começa no topo real. O cabeçalho continua no fluxo (sticky),
    porém agora é sólido: nenhum lançamento antigo aparece por trás dele durante o scroll. */
 html[data-interface-mode="smartphone"] #view-root.main{
@@ -3792,3 +3792,116 @@ html[data-interface-mode="smartphone"] .reserva-card{padding:13px!important;}
   html[data-interface-mode="smartphone"] .reserva-toolbar-actions .order-sort-select,
   html[data-interface-mode="smartphone"] .reserva-toolbar-actions>.btn-outline{font-size:8.6px!important;padding-inline:3px!important;}
 }
+
+/* ---------- V6.46.19 — editor da dashboard sempre acima e posicionamento assistido ---------- */
+.module-layout-toolbar,
+.module-layout-toolbar.active{
+  z-index:1000000!important;
+  isolation:isolate;
+  overflow:visible!important;
+}
+.module-layout-toolbar.active{
+  background:rgba(8,14,21,.98)!important;
+}
+.module-layout-actions,
+.module-widget-chooser,
+.module-widget-chooser[open],
+.module-widget-chooser>summary{
+  position:relative;
+  z-index:1000002!important;
+}
+.module-widget-menu{
+  z-index:1000005!important;
+  box-shadow:0 24px 80px rgba(0,0,0,.72)!important;
+}
+.overview-dashboard-grid.module-free-placement,
+.patrimony-modules-grid{
+  z-index:1;
+  isolation:isolate;
+}
+.module-free-placement>.module-layout-slot{
+  z-index:var(--module-z,1);
+}
+body:has(.module-widget-chooser[open]) .module-layout-toolbar.active{
+  z-index:1000010!important;
+}
+body:has(.module-widget-chooser[open]) .module-layout-grid>.module-layout-slot{
+  pointer-events:none;
+}
+
+/* Toda a faixa superior do widget funciona como alça; os botões continuam clicáveis. */
+.module-slot-toolbar[data-module-drag-handle]{
+  cursor:grab!important;
+  touch-action:none;
+  user-select:none;
+}
+.module-slot-toolbar[data-module-drag-handle]:active{cursor:grabbing!important;}
+.module-drag-handle{
+  flex:1 1 auto!important;
+  max-width:none!important;
+  min-width:36px!important;
+  height:30px!important;
+  display:flex!important;
+  align-items:center;
+  gap:7px!important;
+  padding:0 6px!important;
+  pointer-events:none;
+  background:transparent!important;
+  border:0!important;
+}
+.module-size-controls{
+  flex:0 1 auto;
+  max-width:72%;
+  overflow-x:auto;
+  overflow-y:hidden;
+  flex-wrap:nowrap!important;
+  scrollbar-width:none;
+  cursor:default;
+  overscroll-behavior:contain;
+}
+.module-size-controls::-webkit-scrollbar{display:none;}
+.module-size-controls>span,
+.module-size-controls>button{flex:0 0 auto;}
+.module-size-controls button{cursor:pointer!important;}
+
+/* Widget escolhido fica preso ao cursor até o clique de posicionamento. */
+.module-placement-ghost{
+  position:fixed;
+  z-index:1000020;
+  pointer-events:none;
+  min-height:54px;
+  padding:10px 13px;
+  border:1px solid rgba(229,193,124,.78);
+  border-radius:13px;
+  background:rgba(8,14,21,.96);
+  color:var(--text);
+  box-shadow:0 18px 54px rgba(0,0,0,.58),0 0 0 2px rgba(204,161,96,.12);
+  backdrop-filter:blur(16px);
+  display:grid;
+  align-content:center;
+  gap:2px;
+  transform:translateZ(0);
+}
+.module-placement-ghost b{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:12px;
+  color:var(--gold-bright);
+}
+.module-placement-ghost span{font-size:9.5px;color:var(--muted);}
+.module-placement-active{
+  outline:1px dashed rgba(229,193,124,.46);
+  outline-offset:5px;
+  background-image:radial-gradient(circle at 1px 1px,rgba(229,193,124,.16) 1px,transparent 0);
+  background-size:22px 22px;
+}
+body.module-widget-placement-mode,
+body.module-widget-placement-mode *{cursor:crosshair!important;}
+body.module-widget-placement-mode .module-placement-ghost,
+body.module-widget-placement-mode .module-placement-ghost *{cursor:crosshair!important;}
+html[data-theme="light"] .module-layout-toolbar.active,
+html[data-theme="light"] .module-placement-ghost{
+  background:rgba(252,249,242,.98)!important;
+}
+

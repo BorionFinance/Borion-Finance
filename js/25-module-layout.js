@@ -1,6 +1,6 @@
 /* Borion Finance — editor reutilizável de módulos.
    Permite arrastar, redimensionar, ocultar/exibir e salvar layouts por perfil.
-   V6.46.18: a Visão Geral no computador funciona como uma área de trabalho livre:
+   V6.46.19: a Visão Geral no computador funciona como uma área de trabalho livre:
    posições e tamanhos em pixels, sobreposição permitida e nenhuma reorganização automática. */
 (() => {
   'use strict';
@@ -18,6 +18,8 @@
     activeScope:null,
     catalogs:{},
     _refreshing:new Set(),
+    pendingPlacement:null,
+    _placementSession:null,
 
     config(scope){ return SCOPES[scope]||{label:'Organização dos módulos',columns:4,minColumns:2,maxColumns:6}; },
     deviceMode(scope){
@@ -91,6 +93,126 @@
       return this.catalogs[scope];
     },
     catalog(scope){ return this.catalogs[scope]||[]; },
+    isPendingPlacement(scope,id){
+      const pending=this.pendingPlacement;
+      return Boolean(pending&&pending.scope===scope&&String(pending.id)===String(id));
+    },
+    freeDefaultWidth(scope,id,grid=null){
+      grid=grid||this.grid(scope);
+      const layout=this.get(scope),span=Math.max(1,Math.min(layout.columns,this.defaultWidth(scope,id)));
+      const width=grid?Math.max(180,grid.getBoundingClientRect().width):1120;
+      const gap=grid?(parseFloat(getComputedStyle(grid).columnGap)||12):12;
+      const col=Math.max(180,(width-gap*(layout.columns-1))/Math.max(1,layout.columns));
+      return Math.max(180,Math.min(width,Math.round(col*span+gap*(span-1))));
+    },
+    storedBottom(scope,layout=null){
+      layout=layout||this.get(scope);
+      const hidden=new Set((layout.hidden||[]).map(String));
+      let bottom=0;
+      Object.entries(layout.items||{}).forEach(([id,item])=>{
+        if(hidden.has(String(id))||!item||!finiteNumber(item.pxY)) return;
+        const h=finiteNumber(item.pxH)&&Number(item.pxH)>0?Number(item.pxH):220;
+        bottom=Math.max(bottom,Number(item.pxY)+h);
+      });
+      return Math.max(0,Math.round(bottom));
+    },
+    cancelPlacement({rehide=true,render=true}={}){
+      const pending=this.pendingPlacement;
+      const session=this._placementSession;
+      if(session&&typeof session.cleanup==='function') session.cleanup();
+      this._placementSession=null;
+      this.pendingPlacement=null;
+      if(!pending||!rehide) return;
+      const layout=this.get(pending.scope),key=String(pending.id),hidden=new Set(layout.hidden.map(String));
+      hidden.add(key); layout.hidden=Array.from(hidden);
+      this.save(pending.scope,layout,{quiet:true,render});
+      if(typeof toast==='function') toast('Posicionamento cancelado.');
+    },
+    preparePlacement(scope,id){
+      const key=String(id);
+      if(!this.isFreePlacement(scope)||!this.isActive(scope)){
+        const layout=this.get(scope),hidden=new Set(layout.hidden.map(String));
+        hidden.delete(key);layout.hidden=Array.from(hidden);
+        this.save(scope,layout,{quiet:true,render:true});
+        return;
+      }
+      if(this.pendingPlacement) this.cancelPlacement({rehide:true,render:false});
+      const layout=this.get(scope),hidden=new Set(layout.hidden.map(String));
+      const stagingY=this.storedBottom(scope,layout)+40;
+      hidden.delete(key);layout.hidden=Array.from(hidden);
+      const item=layout.items[key]||(layout.items[key]={});
+      const grid=this.grid(scope),width=this.freeDefaultWidth(scope,key,grid);
+      item.pxW=finiteNumber(item.pxW)&&Number(item.pxW)>=180?Number(item.pxW):width;
+      item.pxX=0;
+      item.pxY=stagingY;
+      item.z=this.maxZ(scope)+1;
+      this.pendingPlacement={scope,id:key};
+      this.save(scope,layout,{quiet:true,render:true});
+      setTimeout(()=>this.activatePlacement(scope,key),0);
+    },
+    activatePlacement(scope,id){
+      if(!this.isPendingPlacement(scope,id)||this._placementSession) return;
+      const grid=this.grid(scope),slot=grid&&Array.from(grid.querySelectorAll(':scope > [data-module-id]')).find(el=>String(el.dataset.moduleId)===String(id));
+      if(!grid||!slot){setTimeout(()=>this.activatePlacement(scope,id),40);return;}
+      const frame=this.freeFrame(scope,id,slot)||{x:0,y:0,w:this.freeDefaultWidth(scope,id,grid),h:0,z:this.maxZ(scope)+1};
+      const ghost=document.createElement('div');
+      ghost.className='module-placement-ghost';
+      ghost.innerHTML=`<b>${esc((this.catalog(scope).find(item=>item.id===String(id))||{}).label||'Widget')}</b><span>Clique para posicionar · Esc cancela</span>`;
+      ghost.style.width=`${Math.min(frame.w,Math.max(220,window.innerWidth-32))}px`;
+      document.body.appendChild(ghost);
+      grid.classList.add('module-placement-active');
+      const originalHeight=parseFloat(grid.style.height)||grid.getBoundingClientRect().height||180;
+      grid.style.height=`${Math.ceil(originalHeight+Math.max(560,window.innerHeight*.75))}px`;
+      document.body.classList.add('module-widget-placement-mode');
+      let lastX=Math.min(window.innerWidth-24,Math.max(24,window.innerWidth*.62));
+      let lastY=Math.min(window.innerHeight-80,Math.max(80,window.innerHeight*.34));
+      const paint=()=>{
+        const w=ghost.getBoundingClientRect().width||260,h=ghost.getBoundingClientRect().height||54;
+        ghost.style.left=`${clamp(lastX+14,8,Math.max(8,window.innerWidth-w-8))}px`;
+        ghost.style.top=`${clamp(lastY+14,8,Math.max(8,window.innerHeight-h-8))}px`;
+      };
+      const move=event=>{lastX=event.clientX;lastY=event.clientY;paint();};
+      const keydown=event=>{if(event.key==='Escape'){event.preventDefault();this.cancelPlacement({rehide:true,render:true});}};
+      const click=event=>{
+        if(!this.isPendingPlacement(scope,id)) return;
+        if(event.target.closest('.module-layout-toolbar,.module-placement-ghost,.modal-overlay,.toast-container')) return;
+        const rect=grid.getBoundingClientRect();
+        const insideX=event.clientX>=rect.left&&event.clientX<=rect.right;
+        const insideY=event.clientY>=rect.top&&event.clientY<=rect.bottom;
+        if(!insideX||!insideY){
+          if(typeof toast==='function') toast('Clique dentro da área da dashboard para posicionar o widget.');
+          return;
+        }
+        event.preventDefault();event.stopPropagation();
+        const x=clamp(Math.round(event.clientX-rect.left-frame.w/2),0,Math.max(0,rect.width-frame.w));
+        const y=Math.max(0,Math.round(event.clientY-rect.top-20));
+        const pending=this.pendingPlacement;
+        this.pendingPlacement=null;
+        if(this._placementSession&&typeof this._placementSession.cleanup==='function') this._placementSession.cleanup();
+        this._placementSession=null;
+        this.commitFreeFrame(scope,id,{x,y,w:frame.w,h:frame.h,z:this.maxZ(scope)+1},{grid,slot,render:true});
+        if(typeof toast==='function') toast('Widget posicionado.');
+      };
+      const orphanTimer=setInterval(()=>{
+        if(!grid.isConnected) this.cancelPlacement({rehide:true,render:false});
+      },250);
+      const cleanup=()=>{
+        clearInterval(orphanTimer);
+        document.removeEventListener('pointermove',move,true);
+        document.removeEventListener('click',click,true);
+        document.removeEventListener('keydown',keydown,true);
+        window.removeEventListener('resize',paint);
+        if(ghost.isConnected) ghost.remove();
+        if(grid.isConnected){grid.classList.remove('module-placement-active');grid.style.height=`${Math.ceil(originalHeight)}px`;}
+        document.body.classList.remove('module-widget-placement-mode');
+      };
+      this._placementSession={scope,id:String(id),cleanup};
+      document.addEventListener('pointermove',move,true);
+      document.addEventListener('click',click,true);
+      document.addEventListener('keydown',keydown,true);
+      window.addEventListener('resize',paint);
+      paint();
+    },
     reconcile(scope,ids){
       const layout=this.get(scope),valid=new Set(ids.map(String));
       const order=layout.order.filter(id=>valid.has(String(id)));
@@ -112,16 +234,40 @@
     },
     toggleHidden(scope,id){
       const layout=this.get(scope),key=String(id),set=new Set(layout.hidden.map(String));
-      if(set.has(key)) set.delete(key); else set.add(key);
-      layout.hidden=Array.from(set);
+      if(set.has(key)){
+        this.preparePlacement(scope,key);
+        return;
+      }
+      if(this.isPendingPlacement(scope,key)) this.cancelPlacement({rehide:false,render:false});
+      set.add(key);layout.hidden=Array.from(set);
       this.save(scope,layout,{quiet:true,render:true});
     },
     showAll(scope){
-      const layout=this.get(scope); layout.hidden=[];
+      const layout=this.get(scope),hidden=layout.hidden.map(String);
+      if(!hidden.length) return;
+      if(this.isFreePlacement(scope)&&this.isActive(scope)){
+        let y=this.storedBottom(scope,layout)+40;
+        let nextZ=Math.max(0,...Object.values(layout.items||{}).map(item=>finiteNumber(item&&item.z)?Number(item.z):0))+1;
+        const grid=this.grid(scope),gridWidth=grid?Math.max(180,grid.getBoundingClientRect().width):1120;
+        hidden.forEach(id=>{
+          const item=layout.items[id]||(layout.items[id]={});
+          item.pxW=Math.min(gridWidth,finiteNumber(item.pxW)&&Number(item.pxW)>=180?Number(item.pxW):this.freeDefaultWidth(scope,id,grid));
+          item.pxX=0;item.pxY=y;item.z=nextZ++;
+          y+=Math.max(160,finiteNumber(item.pxH)&&Number(item.pxH)>0?Number(item.pxH):220)+24;
+        });
+        layout.hidden=[];
+        this.save(scope,layout,{quiet:true,render:true});
+        if(typeof toast==='function') toast('Widgets reativados no final da dashboard.');
+        return;
+      }
+      layout.hidden=[];
       this.save(scope,layout,{quiet:true,render:true});
     },
     isActive(scope){ return this.activeScope===scope; },
     toggle(scope){
+      if(this.activeScope===scope&&this.pendingPlacement&&this.pendingPlacement.scope===scope){
+        this.cancelPlacement({rehide:true,render:false});
+      }
       this.activeScope=this.activeScope===scope?null:scope;
       if(typeof renderView==='function') renderView();
     },
@@ -296,7 +442,7 @@
       const canHide=this.catalog(scope).some(item=>item.id===String(id));
       const sizeLabel=free&&frame?`${Math.round(frame.w)}×${frame.h?Math.round(frame.h):'auto'}`:`L ${size.w}`;
       const layers=free?`<button type="button" onclick="ModuleLayout.sendToBack('${scope}','${esc(String(id))}')" title="Enviar este módulo para trás">↓</button><button type="button" onclick="ModuleLayout.bringToFront('${scope}','${esc(String(id))}')" title="Trazer este módulo para frente">↑</button>`:'';
-      return `<div class="module-slot-toolbar"><button type="button" class="module-drag-handle" data-module-drag-handle title="Arrastar ${esc(label||'módulo')}"><span aria-hidden="true">⠿</span><b>${esc(label||'Módulo')}</b></button><div class="module-size-controls"><span title="Tamanho atual">${sizeLabel}</span><button type="button" onclick="ModuleLayout.adjust('${scope}','${esc(String(id))}','w',-1,${defaultWidth})" title="Diminuir largura">−</button><button type="button" onclick="ModuleLayout.adjust('${scope}','${esc(String(id))}','w',1,${defaultWidth})" title="Aumentar largura">+</button><button type="button" onclick="ModuleLayout.autoHeight('${scope}','${esc(String(id))}')" title="Usar altura automática">Auto</button>${layers}${canHide?`<button type="button" onclick="ModuleLayout.toggleHidden('${scope}','${esc(String(id))}')" title="Ocultar widget">Ocultar</button>`:''}</div></div>`;
+      return `<div class="module-slot-toolbar" data-module-drag-handle title="Arraste por qualquer ponto desta barra"><div class="module-drag-handle"><span aria-hidden="true">⠿</span><b>${esc(label||'Módulo')}</b></div><div class="module-size-controls"><span title="Tamanho atual">${sizeLabel}</span><button type="button" onclick="ModuleLayout.adjust('${scope}','${esc(String(id))}','w',-1,${defaultWidth})" title="Diminuir largura">−</button><button type="button" onclick="ModuleLayout.adjust('${scope}','${esc(String(id))}','w',1,${defaultWidth})" title="Aumentar largura">+</button><button type="button" onclick="ModuleLayout.autoHeight('${scope}','${esc(String(id))}')" title="Usar altura automática">Auto</button>${layers}${canHide?`<button type="button" onclick="ModuleLayout.toggleHidden('${scope}','${esc(String(id))}')" title="Ocultar widget">Ocultar</button>`:''}</div></div>`;
     },
     resizeHandleHTML(scope,id,label){
       if(!this.isActive(scope)) return '';
@@ -306,7 +452,7 @@
       const size=this.itemSize(scope,id,{w:defaultWidth});
       if(this.isFreePlacement(scope)&&this.hasFreeFrame(scope,id)){
         const frame=this.freeFrame(scope,id);
-        return `--module-span:${size.w};left:${frame.x}px;top:${frame.y}px;width:${frame.w}px;z-index:${frame.z};${frame.h?`height:${frame.h}px;--module-fixed-height:${frame.h}px;`:''}`;
+        return `--module-span:${size.w};left:${frame.x}px;top:${frame.y}px;width:${frame.w}px;z-index:${frame.z};${frame.h?`height:${frame.h}px;--module-fixed-height:${frame.h}px;`:''}${this.isPendingPlacement(scope,id)?'visibility:hidden;pointer-events:none;':''}`;
       }
       const pos=this.itemPosition(scope,id);
       return `--module-span:${size.w};${size.h?`--module-fixed-height:${size.h}px;`:''}${pos?`grid-column-start:${pos.x+1};grid-row-start:${pos.y+1};`:''}`;
@@ -440,11 +586,12 @@
   document.addEventListener('pointerdown',event=>{
     const handle=event.target.closest('[data-module-drag-handle]');
     if(!handle) return;
+    if(event.target.closest('.module-size-controls,button,a,input,select,textarea,summary,[contenteditable="true"]')) return;
     const slot=handle.closest('[data-module-id]'),grid=slot&&slot.closest('[data-module-layout]');
     if(!slot||!grid) return;
     const scope=grid.dataset.moduleLayout;
     if(!ModuleLayout.isActive(scope)) return;
-    event.preventDefault();
+    event.preventDefault(); event.stopPropagation();
 
     if(ModuleLayout.isFreePlacement(scope)){
       if(grid.classList.contains('module-free-bootstrap')) ModuleLayout.captureFreeFrames(scope,grid);

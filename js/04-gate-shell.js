@@ -48,7 +48,7 @@ function gateCloudLinkHTML(){
   return `<div style="text-align:center;margin-top:6px;"><button class="link-btn" id="gate_use_cloud">Entrar com uma conta na nuvem</button></div>`;
 }
 
-/* V6.46.18 — o seletor local só pode aparecer quando o modo escolhido realmente
+/* V6.46.19 — o seletor local só pode aparecer quando o modo escolhido realmente
    terminou de abrir. Se o Google/Supabase falhar ou perder a sessão, voltar para
    "Bem-vindo / Criar meu perfil" confundia o usuário e podia iniciar um perfil
    local por engano. Agora o Gate devolve para a tela correta de reconexão. */

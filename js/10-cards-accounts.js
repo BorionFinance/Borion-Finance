@@ -112,27 +112,30 @@ function renderCards(){
         `Cards.toggleParcelaPagamento('${c.id}','${p.id}','${fatura.competencia}')`,
         p.apareceDespesas?'esta despesa':'este item da fatura'
       );
-      return `<div class="installment-row">
-        <span>${esc(p.descricao)}${p.local?` <span style="color:var(--muted)">(${esc(p.local)})</span>`:''}${p.categoria?` <span class="cat-pill" style="margin-left:4px;"><span class="dot" style="background:${catColor(p.categoria)}"></span>${esc(p.categoria)}</span>`:''}${p.apareceDespesas?` <span class="cat-pill" style="opacity:.85;"><span class="dot" style="background:var(--gold-bright)"></span>Também em Despesas (${p.despesaTipo==='fixa'?'fixa':'variável'})</span>`:''}${paymentPill}</span>
-        <span>${brl(p.valorParcela)}/mês</span>
-        <span>${p.atual} de ${p.parcelaTotal}</span>
-        <span>Dia ${p.diaEntrada || '—'}</span>
-        <span style="display:flex;gap:5px;justify-content:flex-end;">${paymentButton}<button onclick="Cards.editParcela('${c.id}','${p.id}')" title="Editar compra">✎</button></span>
+      return `<div class="installment-row installment-purchase-row">
+        <span class="installment-main">
+          <span class="installment-title-line"><strong class="installment-description">${esc(p.descricao)}</strong>${p.local?` <span class="installment-local">(${esc(p.local)})</span>`:''}</span>
+          <span class="installment-tags">${p.categoria?`<span class="cat-pill installment-category-pill"><span class="dot" style="background:${catColor(p.categoria)}"></span>${esc(p.categoria)}</span>`:''}${p.apareceDespesas?`<span class="cat-pill installment-linked-pill"><span class="dot" style="background:var(--gold-bright)"></span>Também em Despesas (${p.despesaTipo==='fixa'?'fixa':'variável'})</span>`:''}${paymentPill}</span>
+        </span>
+        <span class="installment-value">${brl(p.valorParcela)}<span class="installment-monthly-suffix">/mês</span></span>
+        <span class="installment-count">${p.atual} de ${p.parcelaTotal}</span>
+        <span class="installment-day">Dia ${p.diaEntrada || '—'}</span>
+        <span class="installment-actions">${paymentButton}<button onclick="Cards.editParcela('${c.id}','${p.id}')" title="Editar compra">✎</button></span>
       </div>`;
     }).join('');
     const inactiveRows = inactive.map(p=>{
       const fim = shiftYM(p.dataCompra, p.parcelaTotal-1);
-      return `<div class="installment-row muted">
-        <span>${esc(p.descricao)}${p.local?` <span style="color:var(--muted)">(${esc(p.local)})</span>`:''}</span>
-        <span>${brl(p.valorParcela)}/mês</span>
-        <span>Compra ${shortMonthLabel(p.dataCompra)}</span>
-        <span>Fim ${shortMonthLabel(fim)}</span>
-        <button onclick="Cards.editParcela('${c.id}','${p.id}')">✎</button>
+      return `<div class="installment-row installment-purchase-row installment-inactive-row muted">
+        <span class="installment-main"><span class="installment-title-line"><strong class="installment-description">${esc(p.descricao)}</strong>${p.local?` <span class="installment-local">(${esc(p.local)})</span>`:''}</span></span>
+        <span class="installment-value">${brl(p.valorParcela)}<span class="installment-monthly-suffix">/mês</span></span>
+        <span class="installment-count">Compra ${shortMonthLabel(p.dataCompra)}</span>
+        <span class="installment-day">Fim ${shortMonthLabel(fim)}</span>
+        <span class="installment-actions"><button onclick="Cards.editParcela('${c.id}','${p.id}')">✎</button></span>
       </div>`;
     }).join('');
     const faturaHTML = fatura.paga
-      ? `<div class="installment-row" style="color:#22c55e;"><span>Fatura de ${monthLabel(S.month.y,S.month.m)} — <b>PAGA</b></span><span>${brl(fatura.pagamento.valor)}</span><span>via ${esc(fatura.pagamento.banco)}</span><span>${fatura.pagamento.data?fatura.pagamento.data.slice(8,10)+'/'+fatura.pagamento.data.slice(5,7):''}</span><button onclick="Cards.undoFaturaPagamento('${c.id}','${fatura.pagamento.id}')" title="Marcar fatura em aberto">↺</button></div>`
-      : (fatura.total>0 ? `<div class="installment-row"><span>Fatura de ${monthLabel(S.month.y,S.month.m)}: <b style="color:#ef4444">${brl(fatura.total)}</b></span><span></span><span></span><span></span><button onclick="Cards.payFatura('${c.id}')" title="Marcar fatura como paga">✔</button></div>` : '');
+      ? `<div class="installment-row installment-invoice-row is-paid" style="color:#22c55e;"><span>Fatura de ${monthLabel(S.month.y,S.month.m)} — <b>PAGA</b></span><span>${brl(fatura.pagamento.valor)}</span><span>via ${esc(fatura.pagamento.banco)}</span><span>${fatura.pagamento.data?fatura.pagamento.data.slice(8,10)+'/'+fatura.pagamento.data.slice(5,7):''}</span><button onclick="Cards.undoFaturaPagamento('${c.id}','${fatura.pagamento.id}')" title="Marcar fatura em aberto">↺</button></div>`
+      : (fatura.total>0 ? `<div class="installment-row installment-invoice-row"><span>Fatura de ${monthLabel(S.month.y,S.month.m)}: <b style="color:#ef4444">${brl(fatura.total)}</b></span><span></span><span></span><span></span><button onclick="Cards.payFatura('${c.id}')" title="Marcar fatura como paga">✔</button></div>` : '');
     return `
     <div class="card-entity" data-order-id="${esc(c.id)}">
       <div class="card-entity-head">

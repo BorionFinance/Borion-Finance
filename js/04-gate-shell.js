@@ -48,8 +48,27 @@ function gateCloudLinkHTML(){
   return `<div style="text-align:center;margin-top:6px;"><button class="link-btn" id="gate_use_cloud">Entrar com uma conta na nuvem</button></div>`;
 }
 
+/* V6.46.18 — o seletor local só pode aparecer quando o modo escolhido realmente
+   terminou de abrir. Se o Google/Supabase falhar ou perder a sessão, voltar para
+   "Bem-vindo / Criar meu perfil" confundia o usuário e podia iniciar um perfil
+   local por engano. Agora o Gate devolve para a tela correta de reconexão. */
+function redirectUnresolvedRemoteGate64618(){
+  const mode=typeof getStorageMode==='function'?getStorageMode():null;
+  if(mode==='google_drive'&&(!window.GoogleDriveProvider||!GoogleDriveProvider.isConnected())){
+    if(typeof renderGoogleDriveReconnect==='function')renderGoogleDriveReconnect('A conta Google ainda não concluiu a conexão com a pasta do Borion.');
+    else if(window.CloudAuth&&typeof CloudAuth.render==='function'){CloudAuth.mode='login';CloudAuth.error='Conecte novamente com sua conta Google para continuar.';CloudAuth.render();}
+    return true;
+  }
+  if((mode==='cloud'||mode==='supabase')&&(!window.CloudStorage||!CloudStorage.user)){
+    if(window.CloudAuth&&typeof CloudAuth.render==='function'){CloudAuth.mode='login';CloudAuth.error=CloudAuth.error||'Sua sessão não foi concluída. Entre novamente para continuar.';CloudAuth.render();}
+    return true;
+  }
+  return false;
+}
+
 /* ---------------- RENDER: GATE ---------------- */
 function renderGate(){
+  if(redirectUnresolvedRemoteGate64618())return;
   const root = $('#root');
   const profiles = S.profiles;
 

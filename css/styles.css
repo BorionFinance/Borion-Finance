@@ -3161,7 +3161,7 @@ html[data-theme="light"] .interop-source-value{background:rgba(122,85,29,.025)}
 .mit-expense-modal .quickcat-box{margin-top:8px;}
 html[data-theme="light"] .mit-expense-modal .field input[type="text"],html[data-theme="light"] .mit-expense-modal .field input[type="date"],html[data-theme="light"] .mit-expense-modal .field select{background:rgba(255,255,255,.92);border-color:rgba(122,85,29,.18);color:var(--text);}
 
-/* V6.46.17 — Dashboard estilo área de trabalho: posição e tamanho livres, sobreposição e camadas */
+/* V6.46.18 — Dashboard estilo área de trabalho: posição e tamanho livres, sobreposição e camadas */
 .overview-dashboard-grid{gap:12px;margin-bottom:18px;align-items:start;grid-auto-flow:dense;}
 .overview-dashboard-grid.module-free-placement{display:block;position:relative;min-height:180px;overflow:visible;}
 .overview-dashboard-grid.module-free-placement.module-free-bootstrap{display:grid;grid-auto-flow:row;height:auto!important;}
@@ -3231,7 +3231,7 @@ html[data-theme="light"] .module-widget-menu{background:rgba(252,249,242,.99);bo
 }
 
 
-/* ---------- V6.46.17 — acabamento solicitado: avatar, privacidade, lápis e reservas ---------- */
+/* ---------- V6.46.18 — acabamento solicitado: avatar, privacidade, lápis e reservas ---------- */
 .borion-money{display:inline;white-space:nowrap;}
 .value-mask{letter-spacing:0!important;color:var(--muted-2);font-weight:800;}
 .profile-avatar-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;}
@@ -3283,7 +3283,7 @@ html[data-interface-mode="smartphone"] #view-body .line-chart-svg polyline{
 ::view-transition-old(borion-content),
 ::view-transition-new(borion-content){animation:none!important;}
 
-/* ---------- V6.46.17 — cabeçalho mobile limpo e lançamentos compactos ---------- */
+/* ---------- V6.46.18 — cabeçalho mobile limpo e lançamentos compactos ---------- */
 html[data-interface-mode="smartphone"] .topbar{
   display:grid!important;
   grid-template-columns:minmax(0,1fr)!important;
@@ -3525,4 +3525,270 @@ html[data-interface-mode="smartphone"] #view-body>.dash-grid>.panel-box:first-ch
   html[data-interface-mode="smartphone"] .topbar-controls .reserve-last-movement-top strong{font-size:9px!important;}
   html[data-interface-mode="smartphone"] .budget-launch-table tbody tr{grid-template-columns:38px minmax(0,1fr) auto auto;column-gap:5px;}
   html[data-interface-mode="smartphone"] .budget-launch-table .launch-name-text{font-size:11px;}
+}
+
+
+/* ---------- V6.46.18 — mobile linear, compacto e cabeçalho realmente fechado ---------- */
+/* O scroller principal começa no topo real. O cabeçalho continua no fluxo (sticky),
+   porém agora é sólido: nenhum lançamento antigo aparece por trás dele durante o scroll. */
+html[data-interface-mode="smartphone"] #view-root.main{
+  padding-top:0!important;
+}
+html[data-interface-mode="smartphone"] .topbar{
+  top:0!important;
+  margin:0 -12px 12px!important;
+  padding:max(10px,env(safe-area-inset-top)) 12px 10px!important;
+  background:#070b11!important;
+  background-image:none!important;
+  border-bottom:1px solid rgba(217,180,107,.11);
+  box-shadow:0 8px 22px rgba(0,0,0,.26);
+  isolation:isolate;
+}
+html[data-interface-mode="smartphone"] .topbar::after{display:none!important;}
+html[data-theme="light"][data-interface-mode="smartphone"] .topbar{
+  background:#f8f3e9!important;
+  background-image:none!important;
+  border-bottom-color:rgba(122,85,29,.12);
+  box-shadow:0 8px 22px rgba(90,70,34,.10);
+}
+
+/* Cartões e Contas: cada compra ocupa apenas duas faixas horizontais. A descrição/local
+   ficam em uma linha com reticências; valor, parcela, dia e ações ficam lado a lado. */
+html[data-interface-mode="smartphone"] .card-entity{
+  padding:12px 13px!important;
+  margin-bottom:12px;
+  border-radius:18px;
+}
+html[data-interface-mode="smartphone"] .card-entity-head{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  gap:8px;
+  margin-bottom:8px;
+}
+html[data-interface-mode="smartphone"] .card-entity-head .cehl{
+  min-width:0;
+  gap:9px;
+  align-items:center;
+}
+html[data-interface-mode="smartphone"] .card-entity-head .bank-badge{
+  width:38px;
+  height:38px;
+  min-width:38px;
+  border-radius:12px;
+}
+html[data-interface-mode="smartphone"] .card-entity-head .info{min-width:0;}
+html[data-interface-mode="smartphone"] .card-entity-head .info>div:first-child{
+  font-size:13.5px;
+  line-height:1.15;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+html[data-interface-mode="smartphone"] .card-entity-head .info>div:last-child{
+  font-size:9.5px;
+  line-height:1.3;
+}
+html[data-interface-mode="smartphone"] .card-entity-head>div:last-child{
+  width:100%;
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:7px!important;
+}
+html[data-interface-mode="smartphone"] .card-entity-head>div:last-child .btn-outline{
+  min-height:36px!important;
+  padding:7px 8px!important;
+  font-size:10.5px;
+  white-space:nowrap;
+}
+html[data-interface-mode="smartphone"] .card-entity .installment-row.ih{display:none!important;}
+html[data-interface-mode="smartphone"] .card-entity .installment-purchase-row{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto auto auto;
+  grid-template-areas:
+    "main main main actions"
+    "value count day actions";
+  gap:4px 8px;
+  align-items:center;
+  padding:8px 0!important;
+  min-width:0;
+  font-size:10.5px;
+}
+html[data-interface-mode="smartphone"] .installment-purchase-row .installment-main{
+  grid-area:main;
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+html[data-interface-mode="smartphone"] .installment-purchase-row .installment-title-line{
+  min-width:0;
+  flex:1 1 auto;
+  display:flex;
+  align-items:center;
+  gap:4px;
+  white-space:nowrap;
+  overflow:hidden;
+}
+html[data-interface-mode="smartphone"] .installment-purchase-row .installment-description{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:11.5px;
+  line-height:1.15;
+}
+html[data-interface-mode="smartphone"] .installment-purchase-row .installment-local{
+  flex:0 1 auto;
+  min-width:0;
+  max-width:35%;
+  color:var(--muted);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:9.5px;
+}
+html[data-interface-mode="smartphone"] .installment-purchase-row .installment-tags{
+  flex:0 0 auto;
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  white-space:nowrap;
+}
+html[data-interface-mode="smartphone"] .installment-purchase-row .installment-tags .cat-pill,
+html[data-interface-mode="smartphone"] .installment-purchase-row .installment-tags .cheque-status{
+  margin:0!important;
+  padding:2px 6px;
+  font-size:8px;
+  line-height:1.15;
+}
+html[data-interface-mode="smartphone"] .installment-purchase-row .installment-linked-pill{display:none!important;}
+html[data-interface-mode="smartphone"] .installment-purchase-row .installment-value{
+  grid-area:value;
+  font-size:10.5px;
+  font-weight:800;
+  white-space:nowrap;
+}
+html[data-interface-mode="smartphone"] .installment-purchase-row .installment-monthly-suffix{font-size:8px;color:var(--muted);}
+html[data-interface-mode="smartphone"] .installment-purchase-row .installment-count{
+  grid-area:count;
+  white-space:nowrap;
+  color:var(--text);
+  font-size:9.5px;
+}
+html[data-interface-mode="smartphone"] .installment-purchase-row .installment-day{
+  grid-area:day;
+  white-space:nowrap;
+  color:var(--text);
+  font-size:9.5px;
+}
+html[data-interface-mode="smartphone"] .installment-purchase-row .installment-actions{
+  grid-area:actions;
+  align-self:stretch;
+  display:flex!important;
+  align-items:center;
+  justify-content:flex-end;
+  gap:0!important;
+  white-space:nowrap;
+}
+html[data-interface-mode="smartphone"] .installment-purchase-row .installment-actions button{
+  width:25px;
+  height:25px;
+  min-width:25px;
+  padding:0!important;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:11px;
+}
+html[data-interface-mode="smartphone"] .card-entity .installment-invoice-row{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto auto auto auto;
+  gap:5px;
+  align-items:center;
+  padding:7px 0!important;
+  font-size:10px;
+}
+html[data-interface-mode="smartphone"] .card-entity .installment-invoice-row>span:first-child{
+  min-width:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-size:11px;
+}
+html[data-interface-mode="smartphone"] .card-entity .installment-invoice-row>span:empty{display:none;}
+html[data-interface-mode="smartphone"] .card-entity .installment-invoice-row button{
+  width:27px;
+  height:27px;
+  padding:0;
+}
+
+/* Status em aberto: amarelo discreto somente na experiência mobile. */
+html[data-interface-mode="smartphone"] .cheque-status.neutral{
+  color:#d9b46b!important;
+  background:rgba(217,180,107,.10)!important;
+  border-color:rgba(217,180,107,.22)!important;
+}
+
+/* Reserva: resumo e os três controles principais sem linha vazia. O histórico continua
+   disponível no desktop, mas não ocupa altura no celular. */
+html[data-interface-mode="smartphone"] .reservas-panel{
+  padding:13px!important;
+}
+html[data-interface-mode="smartphone"] .reserve-main-toolbar{
+  gap:7px!important;
+  margin-bottom:9px!important;
+}
+html[data-interface-mode="smartphone"] .reserve-toolbar-summary{
+  width:100%;
+  gap:7px!important;
+  flex-wrap:nowrap!important;
+  min-width:0;
+}
+html[data-interface-mode="smartphone"] .reserve-toolbar-summary .lmeta{
+  min-width:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-size:11px;
+}
+html[data-interface-mode="smartphone"] .reserve-active-inline{
+  margin-left:auto;
+  padding:3px 6px;
+  font-size:8.5px;
+}
+html[data-interface-mode="smartphone"] .reserva-toolbar-actions{
+  width:100%!important;
+  display:grid!important;
+  grid-template-columns:minmax(0,1.05fr) minmax(0,1fr) minmax(0,1fr);
+  gap:6px!important;
+  align-items:stretch;
+}
+html[data-interface-mode="smartphone"] .reserva-toolbar-actions .reserve-history-compact{
+  display:none!important;
+}
+html[data-interface-mode="smartphone"] .reserva-toolbar-actions .order-sort-wrap{
+  display:block!important;
+  width:100%;
+  min-width:0;
+}
+html[data-interface-mode="smartphone"] .reserva-toolbar-actions .order-sort-select,
+html[data-interface-mode="smartphone"] .reserva-toolbar-actions>.btn-outline{
+  width:100%;
+  min-width:0;
+  min-height:35px!important;
+  height:35px;
+  padding:5px 6px!important;
+  border-radius:10px;
+  font-size:9.5px!important;
+  white-space:nowrap;
+}
+html[data-interface-mode="smartphone"] .reserva-toolbar-actions .order-organize-btn{display:none!important;}
+html[data-interface-mode="smartphone"] .reserva-grid{margin-top:8px!important;gap:10px!important;}
+html[data-interface-mode="smartphone"] .reserva-card{padding:13px!important;}
+
+@media(max-width:370px){
+  html[data-interface-mode="smartphone"] .installment-purchase-row .installment-category-pill{display:none!important;}
+  html[data-interface-mode="smartphone"] .card-entity .installment-purchase-row{gap:3px 5px;}
+  html[data-interface-mode="smartphone"] .reserva-toolbar-actions .order-sort-select,
+  html[data-interface-mode="smartphone"] .reserva-toolbar-actions>.btn-outline{font-size:8.6px!important;padding-inline:3px!important;}
 }

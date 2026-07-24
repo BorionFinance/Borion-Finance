@@ -183,7 +183,7 @@ function renderBudget(){
         const occurrence=fixaOcorrenciaFor(f.id,mesKeyAtual);
         const statusLabel=status==='Pago'?'Pago':(status==='Vencido'?'Em aberto · vencida':'Em aberto');
         const fixedValue=fixaValorNoMes(f,S.month.y,S.month.m);
-        const fixedMeta=f.compartilhamentoId?['Compra compartilhada','Fatura '+brl(f.valorFaturaParcela||0),'Minha parte '+brl(fixedValue)]:[];
+        const fixedMeta=f.compartilhamentoId?['Compra compartilhada','Fatura '+brlText(f.valorFaturaParcela||0),'Minha parte '+brlText(fixedValue)]:[];
         const nameHTML=budgetLaunchNameHTML(f.nome,{source:budgetExpenseSourceLabel(f,occurrence),recurrence:'Recorrente desde '+shortMonthLabel(f.startMonth),meta:fixedMeta});
         return `
         <tr>

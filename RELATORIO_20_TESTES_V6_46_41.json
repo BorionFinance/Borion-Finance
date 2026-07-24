@@ -1,0 +1,90 @@
+{
+  "passed": 20,
+  "total": 20,
+  "results": [
+    {
+      "name": "01. App abre sem erro de página",
+      "passed": true
+    },
+    {
+      "name": "02. App abre sem erro no console",
+      "passed": true
+    },
+    {
+      "name": "03. Versão visível é v6.46.41",
+      "passed": true
+    },
+    {
+      "name": "04. Parcela comum não vira compartilhamento",
+      "passed": true
+    },
+    {
+      "name": "05. isShared retorna falso para compra comum",
+      "passed": true
+    },
+    {
+      "name": "06. Compra comum não recebe selo compartilhado",
+      "passed": true
+    },
+    {
+      "name": "07. Transação comum não recebe metadados de divisão",
+      "passed": true
+    },
+    {
+      "name": "08. Nova compra inicia com compartilhamento desligado",
+      "passed": true
+    },
+    {
+      "name": "09. Detalhes ficam escondidos por padrão",
+      "passed": true
+    },
+    {
+      "name": "10. Ativar manualmente mostra os detalhes",
+      "passed": true
+    },
+    {
+      "name": "11. Ativar manualmente cria uma linha de pessoa",
+      "passed": true
+    },
+    {
+      "name": "12. Desligado salva como compra normal",
+      "passed": true
+    },
+    {
+      "name": "13. Editar compra antiga comum mantém botão desligado",
+      "passed": true
+    },
+    {
+      "name": "14. Modelo válido continua reconhecido",
+      "passed": true
+    },
+    {
+      "name": "15. Compra compartilhada válida continua ativa",
+      "passed": true
+    },
+    {
+      "name": "16. Editar compra realmente compartilhada mantém botão ligado",
+      "passed": true
+    },
+    {
+      "name": "17. Modelo malformado sem pessoas é rejeitado",
+      "passed": true
+    },
+    {
+      "name": "18. Metadados exibem valores normais em pt-BR",
+      "passed": true
+    },
+    {
+      "name": "19. Metadados não contêm HTML, códigos ou data attributes",
+      "passed": true
+    },
+    {
+      "name": "20. Despesas fixas também usam texto monetário limpo",
+      "passed": true
+    }
+  ],
+  "extra_sanity": {
+    "summary_has_one": true,
+    "summary_has_no_literal_html_code": true
+  }
+}

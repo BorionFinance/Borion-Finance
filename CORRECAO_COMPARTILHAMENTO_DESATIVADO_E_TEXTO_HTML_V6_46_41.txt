@@ -1,0 +1,15 @@
+BORION FINANCE — V6.46.41
+
+CORREÇÕES
+1. Compra compartilhada agora fica DESATIVADA por padrão em compras normais.
+2. Apenas compras que possuem uma divisão válida salva são reconhecidas como compartilhadas.
+3. Compras antigas sem compartilhamento deixam de aparecer como se estivessem divididas.
+4. Removido o HTML cru que aparecia nos detalhes, como:
+   Fatura <span class=...>R$ ...</span>
+   Minha parte <span class=...>R$ ...</span>
+5. Os detalhes agora aparecem apenas como texto normal em pt-BR, por exemplo:
+   Fatura R$ 313,35
+   Minha parte R$ 0,00
+6. A mesma correção foi aplicada aos lançamentos variáveis e às despesas fixas vinculadas ao cartão.
+
+Nenhuma regra de fatura, reembolso, sincronização ou compra compartilhada válida foi removida.

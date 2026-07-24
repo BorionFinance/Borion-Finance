@@ -1,4 +1,4 @@
-/* Borion Finance — V6.46.37 — Compras compartilhadas, valores a receber e reembolsos. */
+/* Borion Finance — V6.46.41 — Compras compartilhadas, valores a receber e reembolsos. */
 (function(){
   'use strict';
 
@@ -9,6 +9,7 @@
   const clone=value=>{try{return JSON.parse(JSON.stringify(value));}catch(e){return value;}};
   const safeId=()=>typeof uid==='function'?uid():('sp_'+Date.now().toString(36)+Math.random().toString(36).slice(2));
   const money=value=>typeof brl==='function'?brl(Number(value)||0):Number(value||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+  const moneyText=value=>typeof brlText==='function'?brlText(Number(value)||0):Number(value||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
   const setMaskedMoney=(input,value)=>{if(!input)return;const c=cents(value);input.dataset.cents=String(c);input.value=(c/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});input.dispatchEvent(new Event('input',{bubbles:true}));};
   const escape=value=>typeof esc==='function'?esc(value):String(value||'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 
@@ -48,9 +49,25 @@
   }
 
   function normalizeModel(parcelOrModel){
-    const raw=parcelOrModel&&parcelOrModel.compartilhamento?parcelOrModel.compartilhamento:parcelOrModel;
+    /* V6.46.41 — um lançamento/cartão comum não é um modelo de compartilhamento.
+       Antes, qualquer objeto de parcela era aceito como se fosse uma divisão, pois
+       `ativo` ausente não era igual a false. Isso fazia compras normais aparecerem
+       com o botão ligado e com "minha parte R$ 0,00". Agora só aceitamos um objeto
+       explicitamente salvo em `compartilhamento` ou um modelo direto com a estrutura
+       real da funcionalidade. */
+    let raw=null;
+    if(parcelOrModel&&parcelOrModel.compartilhamento&&typeof parcelOrModel.compartilhamento==='object'){
+      raw=parcelOrModel.compartilhamento;
+    }else if(parcelOrModel&&typeof parcelOrModel==='object'){
+      const hasModelShape=(parcelOrModel.ativo===true||Number(parcelOrModel.versao)>=1||Object.prototype.hasOwnProperty.call(parcelOrModel,'valorProprioTotal'))
+        && Array.isArray(parcelOrModel.pessoas)
+        && parcelOrModel.pessoas.length>0
+        && Number(parcelOrModel.valorTotalCompra)>0;
+      if(hasModelShape)raw=parcelOrModel;
+    }
     if(!raw||raw.ativo===false)return null;
     const pessoas=(Array.isArray(raw.pessoas)?raw.pessoas:[]).map(normalizePerson).filter(Boolean);
+    if(!pessoas.length||Number(raw.valorTotalCompra)<=0)return null;
     const model={
       id:raw.id||safeId(),
       versao:1,
@@ -291,7 +308,7 @@
 
   function transactionMeta(tx){
     if(!tx||!tx.compartilhamentoId)return null;
-    return ['Compra compartilhada','Fatura '+money(tx.valorFaturaParcela||0),'Minha parte '+money(tx.valor||0)];
+    return ['Compra compartilhada','Fatura '+moneyText(tx.valorFaturaParcela||0),'Minha parte '+moneyText(tx.valor||0)];
   }
 
   function summaryHTML(){

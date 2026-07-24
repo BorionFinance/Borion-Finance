@@ -1796,7 +1796,7 @@
   function confirmCutoffChange(message){
     return typeof confirm!=='function' || confirm(message);
   }
-  // V6.46.27 — saveProfileData() já inicia o commit no modo Drive estrito.
+  // V6.46.28 — saveProfileData() já inicia o commit no modo Drive estrito.
   // Não pode chamar queueSave()+forceSyncNow() de novo por cima: isso aumentava a
   // revisão enquanto o primeiro snapshot ainda estava consolidando e disparava o
   // bloqueio ao salvar a data de corte. No modo estrito, apenas entra na mesma

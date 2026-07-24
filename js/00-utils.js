@@ -17,13 +17,16 @@ function el(html){const t=document.createElement('template');t.innerHTML=html.tr
    que troque o conteúdo de #root por baixo dele. */
 function ensureBorionVersionBadge(){
   if(typeof document==='undefined')return;
-  if(document.getElementById('borion_version_badge'))return;
-  const badge=document.createElement('div');
-  badge.id='borion_version_badge';
-  const v=(typeof BORION_APP_VERSION!=='undefined'&&BORION_APP_VERSION)?BORION_APP_VERSION:'?';
+  const v=(typeof BORION_APP_VERSION!=='undefined'&&BORION_APP_VERSION)?BORION_APP_VERSION:'6.46.28';
+  let badge=document.getElementById('borion_version_badge');
+  if(!badge){
+    badge=document.createElement('div');
+    badge.id='borion_version_badge';
+    badge.setAttribute('aria-label','Versão do Borion');
+    (document.body||document.documentElement).appendChild(badge);
+  }
+  // Mantém o número correto mesmo quando a tela de login/perfis é renderizada novamente.
   badge.textContent='v'+v;
-  badge.style.cssText='position:fixed;right:10px;bottom:8px;font-size:11px;line-height:1;color:rgba(255,255,255,.32);font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.02em;z-index:99999;pointer-events:none;user-select:none;';
-  (document.body||document.documentElement).appendChild(badge);
 }
 /* V6.46.2 — clone rápido pra snapshots de "desfazer"/rollback (excluir lançamento,
    excluir categoria, excluir despesa fixa etc.). Antes cada um desses pontos fazia

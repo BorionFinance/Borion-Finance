@@ -1,0 +1,14 @@
+BORION FINANCE V6.46.28 — VERSÃO VISÍVEL NA TELA INICIAL DE LOGIN
+
+BASE PRESERVADA
+- Mantém integralmente as correções da v6.46.27 para salvar a data de corte da integração.
+
+ALTERAÇÃO
+- A versão v6.46.28 foi adicionada diretamente ao index.html.
+- Ela aparece no canto inferior direito desde o primeiro instante da abertura, inclusive na tela “Entrar com Google”.
+- O selo permanece visível nas telas de login, reconexão, perfis e bloqueio.
+- O JavaScript atualiza o mesmo selo sem criar duplicações.
+- Estilo adaptado para tema escuro, tema claro e áreas seguras de celular.
+
+OBJETIVO
+Permitir confirmar visualmente que o deploy mais recente chegou ao navegador antes de entrar no Borion.

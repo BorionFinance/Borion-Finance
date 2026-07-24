@@ -1,4 +1,4 @@
-BORION FINANCE V6.46.27 — CORREÇÃO AO SALVAR DATA DE CORTE DA INTEGRAÇÃO
+BORION FINANCE V6.46.28 — CORREÇÃO AO SALVAR DATA DE CORTE DA INTEGRAÇÃO
 
 PROBLEMA
 Ao confirmar a data de corte em Configurações > Integrações, o app abria imediatamente a tela "Falha ao confirmar no Google Drive". Em alguns testes aparecia "Alteração protegida no Drive; aguardando consolidação do snapshot".
@@ -17,7 +17,7 @@ CORREÇÃO
 ARQUIVOS ALTERADOS
 - js/01c-google-drive-provider.js
 - js/24-interconnections.js
-- index.html, sw.js, manifest.json, js/02-backup-local.js e js/13-settings.js (versão/cache 6.46.27)
+- index.html, sw.js, manifest.json, js/02-backup-local.js e js/13-settings.js (versão/cache 6.46.28)
 
 VALIDAÇÃO
 - Sintaxe JavaScript validada.

@@ -1,4 +1,4 @@
-/* Borion Finance — Google Drive Provider (V6.46.27 — Corrige corrida ao salvar data de corte da integração)
+/* Borion Finance — Google Drive Provider (V6.46.28 — Corrige corrida ao salvar data de corte da integração)
 
    Arquitetura 6.40.2: current.json é apenas o snapshot consolidado. Toda alteração
    é protegida primeiro como operação imutável, identificada por operationId, e só
@@ -1033,7 +1033,7 @@ const GoogleDriveProvider = {
           let ok=false;
           for(let attempt=0;;attempt++){
             ok=await this.forceSyncNow({payload,reason:'strict_'+source});
-            // V6.46.27 — syncNow() considera a alteração segura assim que a operação
+            // V6.46.28 — syncNow() considera a alteração segura assim que a operação
             // imutável existe no Drive, mesmo que o current.json ainda esteja aguardando
             // consolidação. Para o commit ESTRITO isso ainda não é confirmação final.
             // Conclui a consolidação pendente na mesma fila antes de liberar a tela.
@@ -1068,7 +1068,7 @@ const GoogleDriveProvider = {
     return this._strictCommitPromise;
   },
 
-  // V6.46.27 — configurações críticas da integração já passam primeiro por
+  // V6.46.28 — configurações críticas da integração já passam primeiro por
   // saveProfileData(), que chama queueSave() e inicia o commit estrito. O código
   // antigo chamava forceSyncNow() logo em seguida, criando uma segunda revisão no
   // meio da consolidação da primeira. Isso fazia um salvamento válido parecer uma

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Borion Finance</title>
+<meta name="description" content="Controle financeiro pessoal — receitas, despesas, cartões e patrimônio.">
+<link rel="manifest" href="manifest.json?v=borion-7.9.7-salvamento-drive-resiliente">
+<meta name="theme-color" content="#060a10">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Borion Finance">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="shortcut icon" href="borion.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<script>
+(function(){
+  try{
+    var raw=localStorage.getItem('mc_config');
+    var cfg=raw?JSON.parse(raw):{};
+    var choice=cfg.theme||'dark';
+    var resolved=choice==='system'&&window.matchMedia? (window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark') : choice;
+    resolved = resolved==='light'?'light':'dark';
+    document.documentElement.setAttribute('data-theme', resolved);
+    document.documentElement.setAttribute('data-theme-choice', choice);
+    var meta=document.querySelector('meta[name="theme-color"]');
+    if(meta) meta.setAttribute('content', resolved==='light'?'#f7f2e7':'#060a10');
+  }catch(e){ document.documentElement.setAttribute('data-theme','dark'); }
+})();
+</script>
+<link rel="preload" href="css/styles.css?v=borion-7.9.5-assinaturas-perfis-download" as="style">
+<link rel="preload" href="borion-emblem.png" as="image" type="image/png">
+<link rel="stylesheet" href="css/styles.css?v=borion-7.9.5-assinaturas-perfis-download">
+  <link rel="stylesheet" href="css/borion-hub.css?v=borion-7.9.5-assinaturas-perfis-download">
+  <link rel="stylesheet" href="css/charts-studio.css?v=borion-7.9.5-assinaturas-perfis-download">
+
+<style id="borion-version-badge-style">
+#borion_version_badge{
+  position:fixed;
+  right:max(12px,env(safe-area-inset-right));
+  bottom:max(10px,env(safe-area-inset-bottom));
+  z-index:2147483647;
+  padding:6px 9px;
+  border:1px solid rgba(214,174,91,.34);
+  border-radius:8px;
+  background:rgba(6,10,16,.82);
+  color:rgba(255,255,255,.82);
+  box-shadow:0 4px 18px rgba(0,0,0,.22);
+  font:700 12px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  letter-spacing:.03em;
+  pointer-events:none;
+  user-select:none;
+  -webkit-user-select:none;
+}
+html[data-theme="light"] #borion_version_badge{
+  background:rgba(255,255,255,.9);
+  color:rgba(17,24,39,.78);
+  border-color:rgba(145,105,27,.28);
+}
+</style>
+</head>
+<body class="borion-intro-active">
+
+<div id="borion-intro-splash" role="status" aria-live="polite" aria-label="Carregando Borion Finance">
+  <img src="borion-emblem.png" alt="Borion Finance">
+  <div class="splash-num">R$ 0,00</div>
+  <div class="splash-tag">Carregando</div>
+</div>
+<script>
+(function(){
+  var splash=document.getElementById('borion-intro-splash');
+  if(!splash)return;
+  var numEl=splash.querySelector('.splash-num');
+  var returning=false;
+  try{returning=Object.keys(localStorage).some(function(key){return key.indexOf('borion_gdrive_folder_')===0;});}catch(e){}
+  var duration=returning?520:820;
+  var start=performance.now();
+  function money(value){
+    try{return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:2}).format(value);}
+    catch(e){return 'R$ '+Number(value||0).toFixed(2).replace('.',',');}
+  }
+  function tick(now){
+    var t=Math.min(1,(now-start)/duration);
+    var eased=1-Math.pow(1-t,4);
+    if(numEl)numEl.textContent=money(eased*1000000);
+    if(t<1){requestAnimationFrame(tick);return;}
+    setTimeout(function(){
+      splash.classList.add('is-leaving');
+      setTimeout(function(){
+        if(splash.parentNode)splash.parentNode.removeChild(splash);
+        document.body.classList.remove('borion-intro-active');
+        window.dispatchEvent(new CustomEvent('borion:intro-complete'));
+      },returning?180:240);
+    },returning?30:90);
+  }
+  requestAnimationFrame(tick);
+})();
+</script>
+<div id="borion_version_badge" aria-label="Versão do Borion">7.9.7</div>
+<div id="root"><div id="borion-boot" class="borion-boot" role="status" aria-live="polite" aria-atomic="true"><div class="borion-boot-card"><div class="borion-boot-logo-wrap"><img class="borion-boot-logo" src="borion-watermark.png" alt="Borion Finance"></div><div class="borion-boot-brand">BORION FINANCE</div><div class="borion-boot-spinner" aria-hidden="true"><span></span></div><h1 id="borion-boot-title">Preparando o Borion</h1><p id="borion-boot-detail">Carregando os componentes essenciais</p><div class="borion-boot-progress" aria-label="Progresso da inicialização"><span id="borion-boot-progress-bar" style="width:4%"></span></div><div class="borion-boot-meta"><span id="borion-boot-connection">Verificando conexão</span><span id="borion-boot-elapsed" hidden></span></div><p class="borion-boot-safe">Seus dados continuam protegidos.</p><div id="borion-boot-slow" class="borion-boot-slow" hidden></div><div id="borion-boot-error" class="borion-boot-error" hidden></div></div></div></div>
+<div id="modal-root"></div>
+<div id="toast-root"></div>
+
+
+<script defer src="js/00-release.js?v=borion-7.9.7-salvamento-drive-resiliente"></script>
+<script defer src="js/00-utils.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/secure-json-vault.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/01i-boot-progress-v642.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/01j-remote-update-v642.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/01-storage-data-state.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/01b-storage-provider.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/01c-google-drive-provider.js?v=borion-7.9.7-salvamento-drive-resiliente"></script>
+<script defer src="js/01d-data-guard.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/01e-sync-core-v640.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/01k-account-integrity-v700.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/01l-diagnostics-v700.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/01f-sync-queue-v640.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/01g-drive-journal-v640.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/01h-multitab-v640.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/29-fast-wal-v700-64665.js?v=borion-7.9.7-salvamento-drive-resiliente"></script>
+<script defer src="js/29-security-isolated-v700-64665.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/18-order-preferences.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/25-module-layout.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/02-backup-local.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/17-borion-cloud.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/03-modals-shared.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/04-gate-shell.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/05-calculations-charts.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/06-overview.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/07-budget.js?v=borion-7.9.7-salvamento-drive-resiliente"></script>
+<script defer src="js/08-investments.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/09-patrimony-goals.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/32-foreign-currencies.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/10-cards-accounts.js?v=borion-7.9.7-salvamento-drive-resiliente"></script>
+<script defer src="js/27-shared-purchases.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/31-refunds-estornos.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/11-agenda-notifications.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/12-bank-filter-search.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/13-settings.js?v=borion-7.9.7-salvamento-drive-resiliente"></script>
+<script defer src="js/30-notes.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/33-charts-studio.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer data-borion-calculator-script="1" src="js/28-borion-calculator.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/19-subscriptions.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/20-smartphone-mode.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/21-smartphone-history.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/22-mobile-experience.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/15-cheques.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/16-import-statement.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/23-profile-import-review.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/24-interconnections.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script defer src="js/14-events-boot-pwa.js?v=borion-7.9.7-salvamento-drive-resiliente"></script>
+  <script defer src="js/borion-hub.js?v=borion-7.9.5-assinaturas-perfis-download"></script>
+<script>window.addEventListener('load',()=>window.BorionInterop?.start());</script>
+</body>
+</html>

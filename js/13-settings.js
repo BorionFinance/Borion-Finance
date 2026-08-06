@@ -1,0 +1,2045 @@
+/* Borion Finance — Configurações reorganizadas: módulos, perfis, categorias, personalização e backups. */
+
+/* ---------------- VIEW: SETTINGS ---------------- */
+function settingsTabButton(key,label){ return `<button class="settings-tab ${S.settingsTab===key?'active':''}" onclick="Settings.setTab('${key}')">${label}</button>`; }
+
+function settingsHelpButton(title,summary,query){
+  return `<button type="button" class="settings-context-help" onclick="Settings.openContextHelp(${jsArg(title)},${jsArg(summary)},${jsArg(query||title)})" title="Ajuda rápida sobre ${esc(title)}" aria-label="Ajuda rápida sobre ${esc(title)}">?</button>`;
+}
+function settingsTitleWithHelp(title,summary,query,tag='h3'){
+  return `<div class="settings-title-help"><${tag}>${esc(title)}</${tag}>${settingsHelpButton(title,summary,query)}</div>`;
+}
+
+/* V6.36.0 — a Central do Borion é carregada somente quando o usuário abre o botão ?.
+   O manual completo não participa do caminho crítico de inicialização do app. */
+const HelpCenterLoader = {
+  promise:null,
+  placeholder(){ return `<div class="help-loading-card"><span class="help-loading-spinner"></span><strong>Carregando a Central do Borion...</strong><span>Guias, checklist e história do sistema.</span></div>`; },
+  ensure(){
+    if(window.BorionHelp) return Promise.resolve(window.BorionHelp);
+    if(this.promise) return this.promise;
+    this.promise = new Promise((resolve,reject)=>{
+      if(!document.querySelector('link[data-borion-help-css]')){
+        const link=document.createElement('link');
+        link.rel='stylesheet'; link.href='css/help-center.css?v='+(window.BORION_RELEASE_ID||'borion-7.1.2')+'-notes-stable'; link.dataset.borionHelpCss='1';
+        document.head.appendChild(link);
+      }
+      const existing=document.querySelector('script[data-borion-help-script]');
+      if(existing){
+        existing.addEventListener('load',()=>resolve(window.BorionHelp),{once:true});
+        existing.addEventListener('error',()=>reject(new Error('Falha ao carregar a Central do Borion.')),{once:true});
+        return;
+      }
+      const script=document.createElement('script');
+      script.src='js/26-help-center.js?v='+(window.BORION_RELEASE_ID||'borion-7.1.2')+'-notes-stable'; script.async=true; script.dataset.borionHelpScript='1';
+      script.onload=()=>window.BorionHelp?resolve(window.BorionHelp):reject(new Error('A Central do Borion não iniciou.'));
+      script.onerror=()=>{ script.remove(); reject(new Error('Falha ao carregar a Central do Borion.')); };
+      document.head.appendChild(script);
+    }).catch(err=>{ this.promise=null; throw err; });
+    return this.promise;
+  },
+  open(){
+    S.settingsTab='help';
+    if(window.BorionHelp){ renderView(); return; }
+    renderView();
+    this.ensure().then(()=>{
+      if(S.view==='settings' && S.settingsTab==='help') renderView();
+    }).catch(err=>{
+      console.error('[BORION_HELP][LOAD]',err);
+      toast('Não foi possível abrir a Central do Borion. Recarregue o aplicativo.');
+    });
+  }
+};
+window.HelpCenterLoader=HelpCenterLoader;
+// V6.46.8 — a função renderSettings() completa (abas, conteúdo, versão e rodapé)
+// é definida logo abaixo, dentro da IIFE V6.33.1. A versão antiga que existia aqui
+// era descartada em tempo de execução (a IIFE sempre reatribuía renderSettings antes
+// de qualquer tela chamá-la) e ainda mostrava um número de versão desatualizado no
+// rodapé — por isso foi removida, evitando o risco de alguém editar a função errada.
+function renderSettingsModules(){
+  const navList=(typeof NAV!=='undefined')?NAV:[];
+  const ordered=window.OrderPreferences?OrderPreferences.applyOrder('modules',navList,{idKey:'key',labelKey:'label'}):navList;
+  const enabledKeys=new Set(typeof getNavItems==='function'?getNavItems().map(x=>x.key):navList.map(x=>x.key));
+  const startup=S.data&&S.data.uiPreferences&&S.data.uiPreferences.startupView||null;
+  const organizing=!!(window.OrderPreferences&&OrderPreferences.active&&OrderPreferences.activeType==='modules');
+  const ids=ordered.map(n=>n.key);
+  const toggleable=new Set(['investments','patrimony','reservas','agenda','cheques','imports','notes','charts']);
+  const descriptions={overview:'Resumo principal e saúde financeira',budget:'Receitas, despesas e movimentações',investments:'Ativos e valores investidos',patrimony:'Contas, bens, metas e dívidas',reservas:'Reservas e cofrinhos',cards:'Cartões, contas e boletos',agenda:'Compromissos e lembretes',cheques:'Controle de cheques',imports:'Importação de extratos',notes:'Editor de notas',charts:'Painel de gráficos montados por você',settings:'Preferências e manutenção'};
+  const rows=ordered.map(n=>{const enabled=enabledKeys.has(n.key),canToggle=toggleable.has(n.key),isStartup=startup===n.key;return `<div class="order-row module-order-row menu-organization-row ${enabled?'is-enabled':'is-disabled'}" data-order-id="${esc(n.key)}"><div class="order-row-main menu-organization-main"><span class="order-row-status ${enabled?'on':'off'}">${canToggle?(enabled?'Ativo':'Oculto'):'Essencial'}</span><span class="menu-organization-copy"><b>${esc(n.label)}</b><small>${esc(descriptions[n.key]||'Módulo do Borion')}</small></span></div><div class="menu-organization-actions">${canToggle?`<button class="toggle-switch ${enabled?'on':''}" onclick="Settings.toggleNavModule('${esc(n.key)}')" aria-label="${enabled?'Ocultar':'Mostrar'} ${esc(n.label)}"><span></span></button>`:'<span class="menu-essential-lock" title="Este item é essencial">fixo</span>'}<button type="button" class="order-favorite-star ${isStartup?'active':''}" ${enabled?'':'disabled'} onclick="Settings.setStartupView('${esc(n.key)}')" title="${isStartup?'Remover como tela inicial':'Abrir o Borion nesta tela'}" aria-label="${isStartup?'Remover':'Definir'} ${esc(n.label)} como tela inicial">★</button>${organizing&&window.OrderPreferences?OrderPreferences.reorderRowControlsHTML('modules',n.key,n.label,ids):''}</div></div>`;}).join('');
+  const orderAction=organizing?'OrderPreferences.saveAll()':"OrderPreferences.setActive(true,'modules')";
+  return `<div class="settings-section settings-hero-section settings-clean-hero"><div class="order-organize-head"><div>${settingsTitleWithHelp('Organização do menu','Ative, oculte, reordene e escolha a tela inicial em um único lugar. Nenhum dado é apagado.','organizar menu módulos tela inicial')}<p class="desc">Tudo que controla o menu agora fica aqui: visibilidade, ordem e tela inicial.</p></div><button class="btn ${organizing?'btn-primary':'btn-outline'} btn-sm" onclick="${orderAction}">${organizing?'Salvar ordem':'Editar ordem'}</button></div>${organizing?'<div class="order-active-hint">Segure a alça e arraste. Use a barra inferior para salvar, cancelar ou restaurar a ordem.</div>':''}<div class="order-list menu-organization-list" data-order-list="modules">${rows}</div><p class="desc menu-startup-help">A estrela define a tela que abre primeiro. Sem estrela, o Borion abre na Visão Geral.</p></div>`;
+}
+function renderSettingsCategories(){
+  ensureCategoryColors();
+  const catBlock=(typeKey,typeLabel)=>{
+    const orderType='cat_'+typeKey;
+    const raw=(S.data.categorias&&S.data.categorias[typeKey])?S.data.categorias[typeKey]:[];
+    const wrapped=raw.map((nome,createdIndex)=>({id:nome,nome,createdIndex}));
+    const ordered=window.OrderPreferences?OrderPreferences.applyOrder(orderType,wrapped):wrapped;
+    const naturalIds=ordered.map(x=>x.id);
+    const organizing=!!(window.OrderPreferences&&OrderPreferences.active&&OrderPreferences.activeType===orderType);
+    const tags=ordered.map(item=>{const c=item.nome;return `<span class="cat-tag cat-tag-manage ${organizing?'category-order-row':''}" data-order-id="${esc(c)}" style="--cat-color:${esc(categoryColor(typeKey,c))}">
+      <span class="cat-dot"></span><span class="cat-tag-name">${esc(c)}</span>
+      ${organizing?OrderPreferences.reorderRowControlsHTML(orderType,c,c,naturalIds):`<input type="color" class="cat-color-inline" value="${esc(categoryColor(typeKey,c))}" title="Cor da categoria" onchange="Settings.setCategoryColor(${jsArg(typeKey)},${jsArg(c)},this.value)"><button class="cat-mini-btn" onclick="Settings.renameCategory(${jsArg(typeKey)},${jsArg(c)})" title="Renomear">✎</button><button class="cat-mini-btn danger" onclick="Settings.deleteCategory(${jsArg(typeKey)},${jsArg(c)})" title="Excluir">&times;</button>`}
+    </span>`;}).join('');
+    return `<div class="cat-manage-group cat-panel"><div class="category-panel-head"><div><h4>${esc(typeLabel)}</h4><p class="desc">Escolha A–Z, Z–A, recentes, antigas ou uma ordem personalizada.</p></div>${window.OrderPreferences?OrderPreferences.sortSelectHTML(orderType):''}</div><div class="cat-tag-list" data-order-list="${orderType}">${tags||'<span class="desc">Nenhuma categoria ainda.</span>'}</div>${organizing?'':`<button class="btn-outline btn-sm" onclick="Settings.addCategory(${jsArg(typeKey)})">+ Nova categoria</button>`}</div>`;
+  };
+  return `<div class="settings-section settings-hero-section"><h3>Categorias</h3><p class="desc">As categorias mantêm suas cores e agora também podem ser ordenadas por perfil. A mesma ordem aparece nos seletores de lançamentos e assinaturas.</p></div><div class="settings-categories-grid">${catBlock('receita','Receitas')}${catBlock('fixa','Despesas fixas')}${catBlock('variavel','Despesas variáveis')}</div>`;
+}
+
+function renderBudgetSummaryPersonalization(){
+  if(typeof budgetSummaryPreferences!=='function') return '';
+  const pref=budgetSummaryPreferences();
+  const rows=pref.order.map(k=>{const d=BUDGET_SUMMARY_CARD_DEFS[k],checked=pref.visible.includes(k);return `<div class="order-row summary-order-row" data-order-id="${k}" data-summary-key="${k}"><div class="order-row-main"><span class="order-row-status ${checked?'on':'off'}">${checked?'Visível':'Oculto'}</span><span class="order-row-label">${esc(d.label)}</span><label class="summary-inline-check"><input type="checkbox" ${checked?'checked':''} onchange="Settings.toggleBudgetSummaryCard('${k}',this.checked)"> Exibir</label></div><div class="order-controls"><button type="button" class="order-handle" title="Segure e arraste ${esc(d.label)}" aria-label="Arrastar ${esc(d.label)} para reordenar">${window.OrderPreferences?OrderPreferences.handleSVG():'☰'}</button></div></div>`;}).join('');
+  return `<div class="settings-section"><h3>Resumo de Lançamentos</h3><p class="desc">Escolha quais indicadores aparecem e segure a alça para arrastar.</p><div class="order-list" data-order-list="budget_summary">${rows}</div><button class="btn-outline btn-sm" onclick="Settings.resetBudgetSummaryCards()">Restaurar padrão</button></div>`;
+}
+function renderSettingsPersonalization(){
+  const fontOptions=Object.keys(FONT_LABELS).map(k=>`<option value="${k}" ${S.config.font===k?'selected':''}>${esc(FONT_LABELS[k])}</option>`).join('');
+  const theme=S.config.theme||'dark',uiMode=S.config.uiMode||'auto';
+  return `${renderSettingsModules()}<div class="settings-section settings-hero-section"><h3>Aparência e comportamento</h3><p class="desc">Preferências visuais reunidas sem duplicar controles do menu.</p></div><div class="settings-preference-grid"><div class="settings-section interface-mode-card"><h3>Modo de interface</h3><p class="desc">Automático usa Smartphone no celular e Pro no computador.</p><div class="field"><select id="cfg_ui_mode"><option value="auto" ${uiMode==='auto'?'selected':''}>Automático</option><option value="smartphone" ${uiMode==='smartphone'?'selected':''}>Forçar Smartphone Mode</option><option value="pro" ${uiMode==='pro'?'selected':''}>Forçar Modo Pro</option></select></div><div class="interface-mode-preview"><span class="${resolvedInterfaceMode()==='smartphone'?'active':''}">Smartphone</span><span class="${resolvedInterfaceMode()==='pro'?'active':''}">Pro</span></div></div><div class="settings-section"><h3>Tema</h3><p class="desc">Escolha o tema do aplicativo.</p><div class="field"><select id="cfg_theme"><option value="dark" ${theme==='dark'?'selected':''}>Escuro / Private banking</option><option value="light" ${theme==='light'?'selected':''}>Claro / Branco</option><option value="system" ${theme==='system'?'selected':''}>Tema do sistema</option></select></div></div><div class="settings-section"><h3>Fonte do app</h3><p class="desc">A fonte é aplicada em todas as telas.</p><div class="field"><select id="cfg_font">${fontOptions}</select></div></div></div>${renderBudgetSummaryPersonalization()}<div class="info-box">As cores principais permanecem padronizadas para preservar a identidade premium do Borion.</div>`;
+}
+
+
+const Settings = {
+  toggleNavModule(key){ const actions={investments:'toggleInvestments',patrimony:'togglePatrimony',reservas:'toggleReservas',agenda:'toggleAgenda',cheques:'toggleCheques',imports:'toggleImports',notes:'toggleNotesModule',charts:'toggleChartsModule'}; const method=actions[key]; if(method&&typeof Settings[method]==='function')Settings[method](); },
+  toggleBudgetSummaryCard(key,checked){ const p=budgetSummaryPreferences(); p.visible=p.visible.filter(k=>k!==key); if(checked)p.visible.push(key); saveCurrentData(); renderView(); },
+  moveBudgetSummaryCard(key,dir){ const p=budgetSummaryPreferences(), i=p.order.indexOf(key), j=i+dir; if(i<0||j<0||j>=p.order.length)return; [p.order[i],p.order[j]]=[p.order[j],p.order[i]]; saveCurrentData(); renderView(); },
+  summaryDragStart(ev,key){ Settings._summaryDragKey=key; if(ev.dataTransfer){ev.dataTransfer.effectAllowed='move';ev.dataTransfer.setData('text/plain',key);} },
+  summaryDrop(ev,target){ ev.preventDefault(); const source=Settings._summaryDragKey||(ev.dataTransfer&&ev.dataTransfer.getData('text/plain')); if(!source||source===target)return; const p=budgetSummaryPreferences(), from=p.order.indexOf(source), to=p.order.indexOf(target); if(from<0||to<0)return; p.order.splice(from,1); p.order.splice(to,0,source); Settings._summaryDragKey=null; saveCurrentData(); renderView(); },
+  resetBudgetSummaryCards(){ const p=budgetSummaryPreferences(); p.order=Object.keys(BUDGET_SUMMARY_CARD_DEFS); p.visible=DEFAULT_BUDGET_SUMMARY_CARDS.slice(); saveCurrentData(); renderView(); toast('Resumo de Lançamentos restaurado.'); },
+  setTab(tab){ S.settingsTab=tab; renderView(); },
+  addCategory(typeKey){
+    openModal({title:'Nova categoria', fields:[{key:'nome',label:'Nome da categoria',type:'text'}], onSave(v){ if(v.nome && !S.data.categorias[typeKey].includes(v.nome)){ S.data.categorias[typeKey].push(v.nome); saveCurrentData(); } closeModal(); renderView(); }});
+  },
+  renameCategory(typeKey, oldName){
+    openModal({title:'Renomear categoria', fields:[{key:'nome',label:'Novo nome',type:'text',default:oldName}], onSave(v){ const list=S.data.categorias[typeKey]; const idx=list.indexOf(oldName); if(idx>-1 && v.nome){ list[idx]=v.nome; S.data.transacoes.forEach(t=>{ if(t.categoria===oldName) t.categoria=v.nome; }); S.data.fixas.forEach(f=>{ if(f.categoria===oldName) f.categoria=v.nome; }); saveCurrentData(); } closeModal(); renderView(); }});
+  },
+  deleteCategory(typeKey, name){
+    const snapshot=borionCloneForUndo(S.data); S.data.categorias[typeKey]=S.data.categorias[typeKey].filter(c=>c!==name); if(!S.data.categorias[typeKey].includes('Outro')) S.data.categorias[typeKey].push('Outro'); S.data.transacoes.forEach(t=>{ if(t.categoria===name) t.categoria='Outro'; }); S.data.fixas.forEach(f=>{ if(f.categoria===name) f.categoria='Outro'; }); if(typeKey==='variavel') (S.data.assinaturas||[]).forEach(a=>{ if(a.categoria===name) a.categoria='Outro'; }); saveCurrentData(); renderView(); showUndoToast('Categoria "'+name+'" excluída.', ()=>{ S.data=snapshot; saveCurrentData(); renderView(); });
+  },
+  savePersonal(){
+    const p=S.currentProfile; const name=$('#pf_name'); if(name)p.name=name.value.trim()||p.name; const email=$('#pf_email'); if(email)p.email=email.value.trim(); const color=$('#pf_avatar_color'); if(color) p.avatarColor=color.value; setProfiles(S.profiles); renderApp(); toast('Perfil atualizado.');
+  },
+  /* V7.0.1 SECURITY — readAvatarFile e removeAvatarImage antigos (900 KB, sem
+     recorte, sem marcação de campo) foram removidos daqui. Eram sobrescritos
+     mais abaixo por versões mais novas e nunca executavam de verdade — mas
+     ter três definições da mesma função no mesmo arquivo é, por si só, um
+     risco: foi exatamente por causa desse padrão que a versão realmente usada
+     (a última sobrescrita) ficou sem marcar a remoção de foto como intencional
+     perante o sistema de mesclagem/conflito. Ver applyAvatarImage64616. */
+  setPasswordFlow(){
+    openModal({title:'Definir senha', fields:[{key:'pw',label:'Nova senha',type:'password'},{key:'pw2',label:'Confirmar senha',type:'password'}], onSave: async (v)=>{ if(!v.pw || v.pw.length<4){ alert('A senha deve ter ao menos 4 caracteres.'); return; } if(v.pw!==v.pw2){ alert('As senhas não coincidem.'); return; } const p=S.currentProfile; p.salt=randomSalt(); p.passwordHash=await hashPassword(v.pw,p.salt); touchProfileMetadata700(p,['salt','passwordHash']); markProfileMetadataPending64611(p); setProfiles(S.profiles); closeModal(); renderView(); toast('Senha definida.'); }});
+  },
+  changePassword(){ Settings.setPasswordFlow(); },
+  removePassword(){ const p=S.currentProfile; p.passwordHash=null; p.salt=null; touchProfileMetadata700(p,['passwordHash','salt'],['passwordHash','salt']); markProfileMetadataPending64611(p); setProfiles(S.profiles); renderView(); toast('Senha removida.'); },
+  deleteProfile(id){
+    const pr=S.profiles.find(x=>x.id===id); if(!pr) return; const prSnapshot=JSON.parse(JSON.stringify(pr)); const dataSnapshot=getProfileData(id); const wasCurrent=id===S.currentProfile.id; if(window.BorionDataActions6401) BorionDataActions6401.deleteProfile(id,'settings_delete'); S.profiles=S.profiles.filter(x=>x.id!==id); setProfiles(S.profiles); localStorage.removeItem(LS_DATA_PREFIX+id); if(wasCurrent){ logout(); } else { renderView(); } showUndoToast('Perfil "'+pr.name+'" excluído.', ()=>{ if(typeof clearProfileDeletion6401==='function') clearProfileDeletion6401(id); S.profiles.push(prSnapshot); setProfiles(S.profiles); if(dataSnapshot!=null) setProfileData(id,dataSnapshot); if(S.currentProfile) renderView(); else renderGate(); });
+  },
+  exportProfile(){ return Settings.quickBackupDrive(); },
+  emailBackup(){ BackupFS.manualBackupNow(); const p=S.currentProfile; const subject=encodeURIComponent('Backup - '+APP_NAME); const body=encodeURIComponent('Olá,\n\nSegue em anexo o backup do '+APP_NAME+' (perfil atual: "'+p.name+'").\nO arquivo foi baixado/salvo agora — anexe-o a este e-mail antes de enviar.\n\n'); setTimeout(()=>{ window.location.href=`mailto:${p.email||''}?subject=${subject}&body=${body}`; },400); },
+  resetColors(){ S.config.iconColors=Object.assign({},DEFAULT_ICON_COLORS); setConfig(S.config); renderView(); toast('Cores restauradas.'); },
+  /* ---------------- V6.24.6 — force save manual unificado ----------------
+     Ctrl+S, os botões de Configurações e o atalho fixo do Modo Pro passam todos por
+     manualBackup(). O backup rápido não tem uma lógica própria: ele é somente um atalho
+     visual para o mesmo backup manual, usando um único snapshot nos destinos escolhidos. */
+  async _runQuickBackup(btnId, defaultLabel, busyLabel, task){
+    const btn = document.getElementById(btnId);
+    const originalHTML=btn?btn.innerHTML:'';
+    if(btn){ if(btn.disabled) return null; btn.disabled = true; const label=btn.querySelector('span:last-child'); if(label) label.textContent=busyLabel; else btn.textContent=busyLabel; }
+    try{ return await task(); }
+    finally{ if(btn && btn.isConnected){ btn.disabled = false; if(originalHTML) btn.innerHTML=originalHTML; else btn.textContent=defaultLabel; } }
+  },
+  async _prepareLocalFolderAccess(interactive=true){
+    if(!window.BackupFS) return false;
+    try{
+      await BackupFS.init();
+      let connected=await BackupFS.verifyFolderConnection(interactive);
+      if(!connected&&interactive&&!BackupFS.needsReconnect) connected=await BackupFS.choose();
+      return !!connected;
+    }catch(e){ console.warn('[BORION_BACKUP][VERIFY_FOLDER]',e); return false; }
+  },
+  async _saveSnapshotLocally(snapshot, reason='manual', options={}){
+    if(!window.BackupFS) throw new Error('Módulo de backup local não está disponível.');
+    const supported=BackupFS.isSupported&&BackupFS.isSupported();
+    if(!supported){
+      const filename=backupFilename('borion-backup-local');
+      downloadJSON(snapshot,filename);
+      return {entry:null,folderFile:null,downloaded:true,folderError:'A seleção de pasta não é suportada neste navegador.'};
+    }
+    const connected=await Settings._prepareLocalFolderAccess(options.interactive!==false);
+    if(!connected||!BackupFS.dirHandle) throw new Error('Nenhuma pasta local foi selecionada.');
+    const folderFile=await BackupFS.writeToFolder(snapshot,'borion-backup-local',{interactive:true});
+    if(!folderFile) throw new Error('A pasta foi conectada, mas a gravação do JSON falhou. Reconecte a pasta e tente novamente.');
+    BackupFS.lastAutoBackupAt=Date.now();
+    BackupFS.dirty=false;
+    return {entry:null,folderFile,downloaded:false,folderError:''};
+  },
+  async manualBackup(options={}){
+    if(!(S&&S.currentProfile&&S.data)) throw new Error('Abra um perfil financeiro antes de salvar.');
+    const targets=options.targets||'both';
+    const wantDrive=(targets==='both'||targets==='drive');
+    const wantLocal=(targets==='both'||targets==='local');
+    const reason=options.reason||'manual_drive_local';
+    saveCurrentData({finalConfirmation:true,deferGoogleCommit:true});
+    if(typeof clearExitSavePending==='function') clearExitSavePending(S.currentProfile.id);
+
+    const sharedSnapshot=await buildSharedBackupSnapshot(reason,'backup manual do usuário');
+    const result={driveOk:false,localOk:false,driveError:'',localError:'',folderFile:null,downloaded:false,snapshotId:sharedSnapshot.snapshotId};
+
+    const jobs=[];
+    if(wantDrive){
+      jobs.push((async()=>{
+        if(!(window.GoogleDriveProvider&&GoogleDriveProvider.isConnected())) throw new Error('nenhuma conta do Google Drive conectada');
+        /* Atualiza current.json, cria forcesave e também registra o backup manual.
+           Todos recebem exatamente o mesmo snapshot. */
+        const foregroundToken=typeof GoogleDriveProvider.beginForegroundSave==='function'
+          ?GoogleDriveProvider.beginForegroundSave('Salvando no Google Drive…','manual_drive_save'):null;
+        const criticalToken=typeof GoogleDriveProvider.beginCriticalSave==='function'
+          ?GoogleDriveProvider.beginCriticalSave('manual_drive_save'):null;
+        try{
+          const forced=await GoogleDriveProvider.forceSyncNow({payload:sharedSnapshot,reason:'manual_drive_save'});
+          if(!forced) throw new Error(GoogleDriveProvider.lastSyncError||'o Google Drive não confirmou o salvamento');
+          if(typeof GoogleDriveProvider.updateForegroundSave==='function')GoogleDriveProvider.updateForegroundSave('Salvo no Google Drive','Criando o backup manual…','busy');
+          await GoogleDriveProvider.createBackup(reason,{payload:sharedSnapshot});
+          result.driveOk=true;
+          if(typeof GoogleDriveProvider.updateForegroundSave==='function')GoogleDriveProvider.updateForegroundSave('Salvo no Google Drive','Confirmação concluída com sucesso.','success');
+        }finally{
+          if(typeof GoogleDriveProvider.endCriticalSave==='function')GoogleDriveProvider.endCriticalSave(criticalToken);
+          if(typeof GoogleDriveProvider.endForegroundSave==='function')GoogleDriveProvider.endForegroundSave(foregroundToken,{keepError:!result.driveOk});
+        }
+      })().catch(e=>{ result.driveError=(e&&e.message)||String(e); }));
+    }
+    if(wantLocal){
+      jobs.push((async()=>{
+        const local=await Settings._saveSnapshotLocally(sharedSnapshot,reason,{interactive:options.interactive!==false});
+        result.localOk=true;
+        result.folderFile=local.folderFile;
+        result.downloaded=local.downloaded;
+        if(local.folderError) result.localError=local.folderError;
+      })().catch(e=>{ result.localError=(e&&e.message)||String(e); }));
+    }
+    await Promise.all(jobs);
+
+    const parts=[];
+    if(wantDrive) parts.push(result.driveOk?'Drive salvo':'Drive falhou: '+result.driveError);
+    if(wantLocal){
+      if(result.folderFile) parts.push('JSON salvo em '+result.folderFile.filename);
+      else if(result.downloaded) parts.push('JSON baixado pelo navegador');
+      else parts.push('Local falhou: '+result.localError);
+    }
+    toast(parts.join(' · '));
+    return result;
+  },
+  quickBackupDrive(){
+    return Settings._runQuickBackup('qb_drive','Criar backup agora','Criando...',()=>Settings.manualBackup({targets:'drive',reason:'manual'}));
+  },
+  quickBackupLocal(){
+    return Settings._runQuickBackup('qb_local','Criar backup agora','Criando...',()=>Settings.manualBackup({targets:'local',reason:'manual_local_folder',interactive:true}));
+  },
+  quickBackupBoth(){
+    return Settings._runQuickBackup('qb_both','SALVAR NO DRIVE','Salvando...',()=>Settings.manualBackup({targets:'drive',reason:'manual_drive'}));
+  },
+  toggleCheques(){ if(!S.data.cheques) S.data.cheques={enabled:false,items:[]}; S.data.cheques.enabled=!S.data.cheques.enabled; if(!Array.isArray(S.data.cheques.items)) S.data.cheques.items=[]; saveCurrentData(); if(!S.data.cheques.enabled && S.view==='cheques') S.view='settings'; renderApp(); },
+  toggleReservas(){
+    if(!S.data.modules) S.data.modules=Object.assign({},DEFAULT_MODULES);
+    if(!S.data.reservas) S.data.reservas={enabled:true,boxes:[],moves:[],monthlyReports:[]};
+    const wasEnabled=(S.data.modules.reserves !== false && S.data.reservas.enabled !== false);
+    const next=!wasEnabled;
+    let converted=[];
+    if(next && typeof convertStandaloneMetasToReservas==='function') converted=convertStandaloneMetasToReservas();
+    S.data.modules.reserves=next;
+    S.data.reservas.enabled=next;
+    saveCurrentData();
+    if(!next && S.view==='reservas') S.view='settings';
+    renderApp();
+    void converted;
+  },
+  toggleImports(){ if(!S.data.modules) S.data.modules=Object.assign({},DEFAULT_MODULES); S.data.modules.imports = !(S.data.modules.imports !== false); saveCurrentData(); if(S.data.modules.imports===false && S.view==='imports') S.view='settings'; renderApp(); },
+  toggleInvestments(){ if(!S.data.modules) S.data.modules=Object.assign({},DEFAULT_MODULES); S.data.modules.investments = !(S.data.modules.investments !== false); saveCurrentData(); if(S.data.modules.investments===false && S.view==='investments') S.view='settings'; renderApp(); },
+  toggleAgenda(){ if(!S.data.modules) S.data.modules=Object.assign({},DEFAULT_MODULES); S.data.modules.agenda = !(S.data.modules.agenda !== false); saveCurrentData(); if(S.data.modules.agenda===false && S.view==='agenda') S.view='settings'; renderApp(); },
+  toggleNotesModule(){ if(!S.data.modules) S.data.modules=Object.assign({},DEFAULT_MODULES); S.data.modules.notes = !(S.data.modules.notes !== false); saveCurrentData(); if(S.data.modules.notes===false && S.view==='notes') S.view='settings'; renderApp(); },
+  toggleChartsModule(){ if(!S.data.modules) S.data.modules=Object.assign({},DEFAULT_MODULES); S.data.modules.charts = !(S.data.modules.charts !== false); saveCurrentData(); if(S.data.modules.charts===false && S.view==='charts') S.view='settings'; renderApp(); },
+  togglePatrimony(){ if(!S.data.modules) S.data.modules=Object.assign({},DEFAULT_MODULES); S.data.modules.patrimony = !(S.data.modules.patrimony !== false); saveCurrentData(); if(S.data.modules.patrimony===false && S.view==='patrimony') S.view='settings'; renderApp(); },
+  /* V7.1.4 — estrela em "Organizar módulos e itens": marca/desmarca a aba favorita, que passa
+     a abrir no lugar da Visão Geral ao entrar no perfil. Clicar na estrela já ativa desmarca
+     (volta ao padrão). Não navega — só atualiza o estado e re-renderiza a própria tela. */
+  setStartupView(key){
+    if(!S.data.uiPreferences) S.data.uiPreferences={};
+    const current = S.data.uiPreferences.startupView;
+    S.data.uiPreferences.startupView = (current===key) ? null : key;
+    saveCurrentData();
+    renderView();
+  },
+  /* V7.9.5 — a ordem dos perfis passou a usar exatamente a mesma maquina de arraste de
+     "Organizar modulos e itens" (alca .order-handle + pointer events em 18-order-preferences.js).
+     As setas para cima/baixo e o draggable do HTML5 foram removidos: um so gesto, igual em
+     todo o resto do Borion, e funcionando tambem no celular. */
+  profilesReorderFromDom(ids){
+    const list=Array.isArray(S.profiles)?S.profiles.slice():[];
+    if(!list.length)return;
+    const byId=new Map(list.map(p=>[String(p&&p.id),p]));
+    const seen=new Set();
+    const ordered=[];
+    (Array.isArray(ids)?ids:[]).forEach(id=>{
+      const key=String(id);
+      if(seen.has(key))return;
+      const item=byId.get(key);
+      if(!item)return;
+      seen.add(key);ordered.push(item);
+    });
+    list.forEach(p=>{ if(!seen.has(String(p&&p.id))) ordered.push(p); });
+    if(ordered.length!==list.length)return;
+    /* A lista persistida e a lista viva precisam mudar juntas. Antes somente
+       setProfiles(ordered) era chamado; renderView() lia S.profiles ainda na ordem
+       antiga e desfazia visualmente o arraste, além de o payload do Drive nascer
+       com a ordem antiga. */
+    S.profiles=ordered;
+    setProfiles(S.profiles);
+    saveCurrentData({source:'financial_profiles_reorder'});
+    renderView();
+    toast('Ordem dos perfis atualizada e salvando no Google Drive.');
+  },
+  togglePopupNotifs(){ if(!S.config.popupNotifs) S.config.popupNotifs={enabled:true,durationMs:40000}; S.config.popupNotifs.enabled = !(S.config.popupNotifs.enabled !== false); setConfig(S.config); renderView(); }
+};
+function slug(s){ return (s||'perfil').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,''); }
+function dateSlug(){ const d=new Date(); return d.toISOString().slice(0,10); }
+function downloadJSON(obj, filename){ const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); },200); }
+
+/* ---------- V5.34 Cloud Foundation overrides: conta separada de perfis financeiros ---------- */
+function renderSettingsProfiles(){
+  const p = S.currentProfile || {};
+  const isCloud = !!(window.CloudStorage && CloudStorage.user);
+  const profileHandleSVG = window.OrderPreferences&&typeof OrderPreferences.handleSVG==='function'?OrderPreferences.handleSVG():'☰';
+  const profilesRows = (S.profiles||[]).map(pr=>`
+    <div class="profile-row ${pr.id===p.id?'active':''}" data-order-id="${esc(pr.id)}" data-profile-id="${esc(pr.id)}">
+      <div class="order-controls profile-order-controls"><button type="button" class="order-handle" title="Segure e arraste ${esc(pr.name||'perfil')} para reordenar" aria-label="Arrastar ${esc(pr.name||'perfil')} para reordenar">${profileHandleSVG}</button></div>
+      ${profileAvatarHTML(pr)}
+      <div class="info"><div class="n">${esc(pr.name)} ${pr.id===p.id?'(ativo)':''}</div><div class="e">Perfil financeiro ${isCloud?'na nuvem':'local'} · ${pr.passwordHash?'com senha':'sem senha'}</div></div>
+      ${pr.id!==p.id?`<button class="btn-outline btn-sm" onclick="Settings.switchFinancialProfile('${pr.id}')">Abrir</button>`:''}
+      <button class="btn-outline btn-sm danger-text" onclick="Settings.deleteProfile('${pr.id}')">Excluir</button>
+    </div>`).join('');
+  return `
+    <div class="settings-section settings-hero-section settings-clean-hero">${settingsTitleWithHelp('Perfil financeiro atual','O perfil guarda nome, avatar, cor e senha. Importação, exportação e backups ficam centralizados em Backups / Dados.','perfil financeiro backup importar exportar')}</div>
+    <div class="profile-editor-card">
+      <div class="profile-editor-avatar">${profileAvatarHTML(p,'profile-avatar-xl')}<div class="profile-avatar-actions"><button class="btn-outline btn-sm" onclick="document.getElementById('pf_avatar_file').click()">Trocar foto ou GIF</button><button class="btn-outline btn-sm" onclick="Settings.openPresetAvatarPicker()">Escolher foto pronta</button><button class="btn-outline btn-sm" onclick="Settings.removeAvatarImage()">Remover foto</button></div><small class="profile-avatar-hint">GIF animado é reproduzido normalmente no avatar.</small></div>
+      <div class="profile-editor-fields">
+        <div class="field"><label>Nome do perfil financeiro</label><input type="text" id="pf_name" value="${esc(p.name||'Perfil')}"/></div>
+        <div class="field"><label>Cor do fundo do avatar</label><input type="color" id="pf_avatar_color" value="${esc(profileAvatarBg(p))}"/></div>
+        <div class="profile-editor-actions"><button class="profile-save-icon-btn" onclick="Settings.savePersonal()" title="Salvar perfil financeiro" aria-label="Salvar perfil financeiro"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h12l2 2v16H5z"/><path d="M8 3v6h8V3"/><path d="M8 21v-7h8v7"/></svg></button><button class="btn-outline btn-sm" onclick="Settings.createFinancialProfile()">+ Novo perfil</button>${p.passwordHash?`<button class="btn-outline btn-sm" onclick="Settings.changePassword()">Trocar senha</button><button class="btn-outline btn-sm" onclick="Settings.removePassword()">Remover senha</button>`:`<button class="btn-outline btn-sm" onclick="Settings.setPasswordFlow()">Colocar senha</button>`}${isCloud?`<button class="btn-outline btn-sm" onclick="cloudChangePasswordFromSettings()">Senha da conta</button>`:''}</div>
+        <input type="file" id="pf_avatar_file" accept="image/png,image/jpeg,image/webp,image/avif,image/gif" style="display:none" onchange="Settings.readAvatarFile(this)">
+      </div>
+    </div>
+    <div class="settings-section"><div class="settings-title-help"><h3>Perfis desta conta (${(S.profiles||[]).length})</h3>${settingsHelpButton('Perfis desta conta','Cada perfil mantém dados financeiros separados. Trocar de perfil não mistura contas, cartões ou lançamentos.','trocar perfil dados separados')}</div><div class="profiles-order-legend"><span class="profiles-order-legend-ic">${profileHandleSVG}</span><span>Segure a alça e arraste para reordenar os perfis</span></div><div class="profiles-order-list" data-order-list="financial_profiles">${profilesRows}</div><div class="settings-action-row"><button class="btn-outline btn-sm" onclick="Settings.createFinancialProfile()">+ Criar perfil</button></div></div>`;
+}
+
+/* V6.14.0 — "Nuvem" e "Backups" eram duas abas separadas, e a de Backups sempre
+   mostrava textos do Supabase (nomes de tabela, "Salvar snapshot no Supabase" etc.)
+   mesmo pra quem usa Google Drive ou modo local — informação irrelevante e confusa.
+   Unificado numa aba só, que mostra só o que é relevante pro modo atual. */
+function renderSettingsBackup(){
+  const cloud = window.CloudStorage;
+  const user = cloud && cloud.user;
+  const isDrive = !user && window.GoogleDriveProvider && GoogleDriveProvider.isConnected();
+  const isLocal = !user && !isDrive;
+
+  const localBackupsBlock = `
+    <div class="settings-section"><h3>Backups neste dispositivo</h3><p class="desc">Histórico guardado no navegador (IndexedDB). Quando uma pasta local está configurada, o mesmo clique também grava um arquivo JSON dentro de Backups_Borion.</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewLocalBackups()">Ver backups deste dispositivo</button><button id="qb_local" class="btn btn-primary btn-sm" onclick="Settings.quickBackupLocal()">Criar backup agora</button></div></div>`;
+
+  let backupFolderBlock;
+  if(!FS_ACCESS_SUPPORTED) backupFolderBlock = `<p class="desc">Este navegador não permite escolher uma pasta fixa pra backup automático.</p>`;
+  else if(BackupFS.needsReconnect) backupFolderBlock = `<div class="reconnect-banner"><span>A pasta de backups precisa ser reautorizada após reabrir o app.</span><button class="btn-outline btn-sm" onclick="BackupFS.reconnect()">Reconectar pasta</button></div>`;
+  else if(BackupFS.dirHandle) backupFolderBlock = `<div class="gold-box">Pasta local configurada. O Borion salva arquivos dentro da subpasta <b>Backups_Borion</b>.</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;"><button class="btn-outline btn-sm" onclick="BackupFS.choose()">Trocar pasta</button><button class="btn-outline btn-sm" onclick="BackupFS.disconnect()">Desconectar pasta</button></div>`;
+  else backupFolderBlock = `<p class="desc">Escolha uma pasta local (ex: uma pasta sincronizada com Google Drive/OneDrive) pra cópias automáticas extras neste dispositivo.</p><button class="btn btn-primary btn-sm" onclick="BackupFS.choose()">Escolher pasta de backups</button>`;
+  const folderSection = `
+    <div class="settings-section"><h3>Pasta local extra (opcional)</h3>
+      ${backupFolderBlock}
+      <div class="info-box">Por segurança do navegador, o Borion não pode criar uma pasta sozinho sem você autorizar.</div>
+    </div>`;
+
+  if(isDrive){
+    const gs = GoogleDriveProvider.getStatus();
+    const conflictBanner = gs.conflict ? `<div class="info-box danger-box"><b>Atenção:</b> existe uma versão mais recente desta conta salva no Google Drive (provavelmente de outro dispositivo). Escolha uma: <button class="btn-outline btn-sm" onclick="GoogleDriveProvider.reload()">Recarregar (usar a versão do Drive)</button> <button class="btn-outline btn-sm" onclick="forceManualSave()">Salvar minha versão agora (Ctrl+S)</button></div>` : '';
+    return `
+    <div class="settings-section settings-hero-section"><h3>Backups e Google Drive</h3><p class="desc">Seus dados sincronizam automaticamente com a pasta compartilhada do Google Drive.</p></div>
+    ${conflictBanner}
+    <div class="settings-section"><h3>Status</h3><p class="desc"><strong>Conta:</strong> ${esc(gs.email||'')}<br><strong>Pasta conectada:</strong> ${esc(gs.folderName||'(não identificada)')} ${gs.folderLink?`<a href="${esc(gs.folderLink)}" target="_blank" rel="noopener">Abrir no Google Drive ↗</a>`:''}<br><strong>Status:</strong> ${gs.conflict?'Conflito — veja acima':gs.lastSyncError?(gs.authRequired?'Reconexão necessária':'Falha de sincronização'):gs.pending?'Salvando alterações...':'Tudo sincronizado'}${gs.lastSyncError?`<br><strong>Erro:</strong> ${esc(gs.lastSyncError)}`:''}${gs.lastSyncAt?`<br><strong>Última confirmação:</strong> ${esc(new Date(gs.lastSyncAt).toLocaleString('pt-BR'))}`:''}<br><strong>Perfil ativo:</strong> ${esc(S.currentProfile?S.currentProfile.name:'Nenhum')}</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="GoogleDriveProvider.handleStatusClick()">Sincronizar agora</button><button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button><button class="btn-outline btn-sm" onclick="GoogleDriveProvider.disconnect();S.currentProfile=null;S.data=null;CloudAuth.mode='login';CloudAuth.error='';CloudAuth.info='';CloudAuth.emailExpanded=false;CloudAuth.render();">Sair da conta Google</button></div>
+    </div>
+    <div class="settings-section"><h3>Backups no Google Drive</h3><p class="desc">Histórico guardado na pasta <b>backups</b>, dentro da pasta acima. Limpeza automática mantém no máximo ~10GB (mais antigos são apagados — o histórico completo continua no disco local).</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.viewDriveBackups()">Ver backups no Drive</button><button id="qb_drive" class="btn btn-primary btn-sm" onclick="Settings.quickBackupDrive()">Criar backup agora</button></div></div>
+    ${localBackupsBlock}
+    ${folderSection}
+    <div class="info-box">Neste modo, o Borion depende 100% do Google Drive. Sem internet ou sem login confirmado, o aplicativo é bloqueado e não aceita lançamentos.</div>`;
+  }
+
+  if(isLocal){
+    const st = (window.storageProvider ? storageProvider.getStorageStatus() : {profileCount:(S.profiles||[]).length, online:navigator.onLine});
+    return `
+    <div class="settings-section settings-hero-section"><h3>Backups</h3><p class="desc">Você está usando o Borion sem conta — os dados ficam só neste dispositivo.</p></div>
+    <div class="settings-section"><h3>Status</h3><p class="desc"><strong>Modo:</strong> Local (sem conta)<br><strong>Perfis neste dispositivo:</strong> ${st.profileCount||0}<br><strong>Perfil ativo:</strong> ${esc(S.currentProfile?S.currentProfile.name:'Nenhum')}<br><strong>Conexão:</strong> ${st.online?'Online':'Offline'}</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button><button class="btn-outline btn-sm" onclick="document.getElementById('import_file_cloud').click()">Importar JSON</button><button class="btn-outline btn-sm" onclick="Settings.switchToCloudFromSettings()">Entrar com uma conta na nuvem</button></div>
+      <input type="file" id="import_file_cloud" accept="application/json" style="display:none;">
+    </div>
+    ${localBackupsBlock}
+    ${folderSection}
+    <div class="info-box">Entrar com uma conta permite sincronizar entre celular e computador — seus perfis locais continuam aqui e voltam a aparecer se você sair da conta depois.</div>
+    ${renderInstallAppCard()}`;
+  }
+
+  // ---- Só chega aqui se realmente estiver logado no Supabase (legado) ----
+  const pending = cloud && cloud.pendingInfo ? cloud.pendingInfo() : null;
+  const last = cloud && cloud.lastSyncAt ? new Date(cloud.lastSyncAt).toLocaleString('pt-BR') : 'Ainda não sincronizou nesta sessão';
+  const status = cloud ? (cloud.statusLabel ? cloud.statusLabel() : (cloud.statusText || cloud.status || 'Indisponível')) : 'Módulo de nuvem não carregado';
+  const pendingTxt = pending ? `Existe sincronização pendente desde ${new Date(pending.savedAt).toLocaleString('pt-BR')}. Motivo: ${esc(pending.reason||'pendente')}` : 'Nenhum dado pendente no cache local.';
+  const profileName = S.currentProfile ? S.currentProfile.name : 'Nenhum perfil ativo';
+  const schema = cloud && cloud.schemaError ? `<div class="info-box danger-box"><b>Atenção:</b> ${esc(cloud.schemaError)}<br>Verifique a configuração das tabelas do Supabase antes de usar o login antigo por e-mail.</div>` : '';
+  const consent = window.BackupFS ? BackupFS.hasConsent() : null;
+  const consentText = consent ? `Aceito em ${new Date(consent.acceptedAt).toLocaleString('pt-BR')} · modo: ${esc(consent.mode||'backup')}` : 'Ainda não configurado neste dispositivo.';
+  return `
+    <div class="settings-section settings-hero-section"><h3>Borion Cloud Foundation</h3><p class="desc">Conta, perfis financeiros, sincronização real, cache local e proteção contra perda de dados.</p></div>
+    ${schema}
+    <div class="settings-section"><h3>Status da nuvem</h3><p class="desc"><strong>Usuário logado:</strong> ${user?esc(user.email||'logado'):'não logado'}<br><strong>Perfil financeiro ativo:</strong> ${esc(profileName)}<br><strong>Status:</strong> ${esc(status)}<br><strong>Última sincronização:</strong> ${esc(last)}<br><strong>Dados pendentes:</strong> ${pendingTxt}</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="cloudForceSync()">Sincronizar agora</button><button class="btn-outline btn-sm" onclick="cloudRunSupabaseDiagnostic()">Diagnóstico Supabase</button><button class="btn-outline btn-sm" onclick="Settings.exportProfile()">Exportar conta completa</button><button class="btn-outline btn-sm" onclick="document.getElementById('import_file_cloud').click()">Importar JSON</button><button class="btn-outline btn-sm" onclick="cloudChangePasswordFromSettings()">Trocar senha da conta/login</button>${user?`<button class="btn-danger btn-sm" onclick="Settings.deleteCloudAccountFlow()">Excluir conta</button>`:''}<button class="btn-outline btn-sm" onclick="cloudLogout()">Sair da conta</button></div><input type="file" id="import_file_cloud" accept="application/json" style="display:none;"></div>
+    <div class="settings-section"><h3>Aceite de proteção de dados</h3><p class="desc"><strong>Status:</strong> ${consentText}</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.showBackupConsent()">Ver termo/configurar proteção</button><button class="btn-outline btn-sm" onclick="Settings.createCloudBackupNow('first_setup','backup criado manualmente pela tela de segurança')">Criar backup inicial agora</button></div></div>
+    <div class="settings-section"><h3>Backups no Supabase</h3><p class="desc">Gera um JSON completo com todos os perfis da conta.</p><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn-outline btn-sm" onclick="Settings.createCloudBackupNow('manual','backup manual completo')">Salvar snapshot no Supabase</button><button class="btn-outline btn-sm" onclick="Settings.viewCloudBackups()">Ver backups do Supabase</button></div></div>
+    ${localBackupsBlock}
+    ${folderSection}
+    <div class="info-box">Fluxo: alteração → salva local/offline → marca pendente → envia ao Supabase → limpa pendência.</div>
+    ${user?`<div class="settings-section danger-box"><h3>Excluir conta Borion Cloud</h3><p class="desc">Apaga a conta de login, e-mail, todos os perfis financeiros e todos os dados monetários salvos no Supabase.</p><button class="btn btn-danger btn-sm" onclick="Settings.deleteCloudAccountFlow()">Excluir conta</button></div>`:''}
+    ${renderInstallAppCard()}`;
+}
+function renderInstallAppCard(){
+  if(typeof isStandalonePWA==='function' && isStandalonePWA()){
+    return `<div class="settings-section"><h3>Instalar o app</h3><div class="gold-box">Você já está usando o Borion Finance instalado como app (tela cheia, fora do navegador).</div></div>`;
+  }
+  const ios = typeof isIOSDevice==='function' && isIOSDevice();
+  const canPromptNow = !ios && typeof deferredInstallPrompt!=='undefined' && deferredInstallPrompt;
+  const instructions = ios
+    ? `<div class="info-box"><b>iPhone/iPad (Safari):</b> toque no ícone de compartilhar (retângulo com seta para cima) na barra do Safari e depois em <b>“Adicionar à Tela de Início”</b>.</div>`
+    : `<div class="info-box"><b>Android/Chrome ou computador:</b> toque no menu (⋮) do navegador e escolha <b>“Instalar app”</b> ou <b>“Adicionar à tela inicial”</b>. Se aparecer o botão abaixo, você pode instalar direto por ele.</div>`;
+  return `<div class="settings-section"><h3>Instalar o app</h3><p class="desc">Instalar o Borion na tela inicial abre em tela cheia, mais rápido, como um app de verdade.</p>${instructions}${canPromptNow?`<button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="Settings.promptInstall()">Instalar agora</button>`:''}</div>`;
+}
+Settings.promptInstall = async function(){
+  if(!deferredInstallPrompt){ toast('A instalação automática não está disponível agora. Use o menu do navegador.'); return; }
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  renderView();
+};
+
+
+Settings.createFinancialProfile = async function(){
+  openModal({title:'Novo perfil financeiro', sub:'Crie um perfil separado dentro da sua conta.', fields:[{key:'nome',label:'Nome do perfil',type:'text',placeholder:'Ex: Pedro Pessoal'}], saveLabel:'Criar perfil', onSave: async (v)=>{
+    try{ if(!v.nome || !v.nome.trim()) throw new Error('Digite um nome.'); if(window.CloudStorage&&CloudStorage.user){ await CloudStorage.createProfile(v.nome.trim(), true); closeModal(); renderApp(); toast('Perfil criado e confirmado no Supabase.'); } else { const p={id:uid(),name:v.nome.trim(),email:'',avatarColor:avatarColor(v.nome.trim()),createdAt:Date.now()}; S.profiles.push(p); setProfiles(S.profiles); enterProfile(p,true); closeModal(); toast('Perfil criado.'); } }
+    catch(e){ alert(e.message||String(e)); }
+  }});
+};
+Settings.switchFinancialProfile = async function(id){
+  const doSwitch = async ()=>{
+    try{ if(window.CloudStorage&&CloudStorage.user) await CloudStorage.switchProfile(id); else { const p=S.profiles.find(x=>x.id===id); if(p) await enterProfile(p,true); } toast('Perfil alterado.'); }
+    catch(e){ alert(e.message||String(e)); }
+  };
+  if(window.CloudStorage && CloudStorage.user) await CloudStorage.guardExit(doSwitch);
+  else await doSwitch();
+};
+/* V6.46.22 — recorte de foto de perfil. Sem dependências externas, só canvas puro.
+   Usa Pointer Events (unifica mouse no computador e toque no celular no mesmo
+   código): arrastar para posicionar, controle deslizante (ou roda do mouse) para
+   zoom. O quadro de recorte é sempre um círculo, igual ao avatar exibido no app. */
+function openAvatarCropper(srcDataUrl, onConfirm){
+  const img = new Image();
+  img.onload = ()=>{
+    const frameSize = Math.min(300, (window.innerWidth||360) - 80);
+    const minScale = frameSize / Math.min(img.naturalWidth, img.naturalHeight);
+    let zoom = 1, tx = 0, ty = 0, dragging = false, startX = 0, startY = 0, startTx = 0, startTy = 0;
+
+    const box = el(`
+    <div class="modal-overlay">
+      <div class="modal-box" style="max-width:360px;text-align:center;">
+        <div class="modal-head"><h2>Ajustar foto</h2><button id="crop_close">&times;</button></div>
+        <p class="modal-sub">Arraste para posicionar e use o controle abaixo para o zoom.</p>
+        <div id="crop_frame" style="width:${frameSize}px;height:${frameSize}px;margin:12px auto;border-radius:50%;overflow:hidden;position:relative;background:#111;touch-action:none;cursor:grab;">
+          <img id="crop_img" src="${srcDataUrl}" draggable="false" style="position:absolute;left:0;top:0;transform-origin:0 0;user-select:none;-webkit-user-drag:none;pointer-events:none;"/>
+        </div>
+        <input id="crop_zoom" type="range" min="1" max="3" step="0.01" value="1" style="width:100%;margin:8px 0 14px;"/>
+        <div class="row-btns">
+          <button class="btn btn-secondary btn-block" id="crop_cancel">Cancelar</button>
+          <button class="btn btn-primary btn-block" id="crop_confirm">Usar foto</button>
+        </div>
+      </div>
+    </div>`);
+    $('#modal-root').innerHTML=''; $('#modal-root').appendChild(box); attachModalGuard(box);
+
+    const frameEl = box.querySelector('#crop_frame'), imgEl = box.querySelector('#crop_img'), zoomEl = box.querySelector('#crop_zoom');
+    const clamp=(v,mn,mx)=>Math.max(mn,Math.min(mx,v));
+    function layout(){
+      const scale = minScale*zoom, dw = img.naturalWidth*scale, dh = img.naturalHeight*scale;
+      const maxTx = Math.max(0,(dw-frameSize)/2), maxTy = Math.max(0,(dh-frameSize)/2);
+      tx = clamp(tx,-maxTx,maxTx); ty = clamp(ty,-maxTy,maxTy);
+      imgEl.style.width = dw+'px'; imgEl.style.height = dh+'px';
+      imgEl.style.transform = `translate(${(frameSize-dw)/2+tx}px, ${(frameSize-dh)/2+ty}px)`;
+    }
+    layout();
+    zoomEl.oninput = ()=>{ zoom = parseFloat(zoomEl.value)||1; layout(); };
+    frameEl.addEventListener('pointerdown',e=>{ dragging=true; startX=e.clientX; startY=e.clientY; startTx=tx; startTy=ty; frameEl.style.cursor='grabbing'; try{frameEl.setPointerCapture(e.pointerId);}catch(_e){} });
+    frameEl.addEventListener('pointermove',e=>{ if(!dragging) return; tx=startTx+(e.clientX-startX); ty=startTy+(e.clientY-startY); layout(); });
+    const endDrag=e=>{ dragging=false; frameEl.style.cursor='grab'; try{frameEl.releasePointerCapture(e.pointerId);}catch(_e){} };
+    frameEl.addEventListener('pointerup',endDrag); frameEl.addEventListener('pointercancel',endDrag);
+    frameEl.addEventListener('wheel',e=>{ e.preventDefault(); zoom=clamp(zoom+(e.deltaY<0?0.08:-0.08),1,3); zoomEl.value=zoom; layout(); },{passive:false});
+
+    const finish=dataUrl=>{ closeModal(); if(dataUrl) onConfirm(dataUrl); };
+    box.querySelector('#crop_close').onclick = ()=>finish(null);
+    box.querySelector('#crop_cancel').onclick = ()=>finish(null);
+    box.querySelector('#crop_confirm').onclick = ()=>{
+      const scale = minScale*zoom, dw = img.naturalWidth*scale, dh = img.naturalHeight*scale;
+      const left = (frameSize-dw)/2+tx, top = (frameSize-dh)/2+ty;
+      const srcX = -left/scale, srcY = -top/scale, srcSize = frameSize/scale, OUT=512;
+      const canvas = document.createElement('canvas'); canvas.width=OUT; canvas.height=OUT;
+      canvas.getContext('2d').drawImage(img, srcX, srcY, srcSize, srcSize, 0, 0, OUT, OUT);
+      finish(canvas.toDataURL('image/jpeg',0.88));
+    };
+  };
+  img.onerror = ()=>alert('Não foi possível abrir essa imagem para recorte.');
+  img.src = srcDataUrl;
+}
+Settings.exportSecurityDiagnostics = async function(){
+  try{
+    if(!window.BorionDiagnostics700||typeof BorionDiagnostics700.download!=='function') throw new Error('O módulo de diagnóstico não está disponível nesta sessão.');
+    await BorionDiagnostics700.download();
+    toast('Diagnóstico técnico sanitizado exportado.');
+  }catch(e){alert(e.message||String(e));}
+};
+
+/* V6.46.22 — nome, foto, cor e senha pertencem ao metadado do perfil, não aos
+   lançamentos. Durante uma gravação no Drive, um snapshot confirmado mais antigo
+   podia voltar para a tela e apagar uma segunda alteração feita enquanto a primeira
+   ainda estava em trânsito. Este marcador mantém a identidade mais nova do perfil
+   sobreposta em memória até o próprio Drive devolver exatamente essa versão. */
+function profileMutationContext700(){
+  const provider=window.GoogleDriveProvider||null;
+  let operationId=provider&&provider._queueOperationId||'';
+  if(!operationId&&window.BorionSyncCore&&BorionSyncCore.uuid640){
+    operationId=BorionSyncCore.uuid640();
+    if(provider) provider._queueOperationId=operationId;
+  }
+  let deviceId='';
+  try{deviceId=String(provider&&provider._deviceId||'');}catch(_){ }
+  return {operationId:String(operationId||''),deviceId:String(deviceId||'')};
+}
+function touchProfileMetadata700(profile,fields,explicitClears=[]){
+  if(!profile||!window.BorionAccountIntegrity700||typeof BorionAccountIntegrity700.touchProfileField!=='function') return;
+  const context=profileMutationContext700(),clearSet=new Set(explicitClears||[]);
+  for(const field of (fields||[])) BorionAccountIntegrity700.touchProfileField(profile,field,Object.assign({},context,{explicitClear:clearSet.has(field)}));
+}
+function markProfileMetadataPending64611(profile){
+  if(!profile) return;
+  profile.updatedAt = new Date().toISOString();
+  if(window.GoogleDriveProvider && typeof GoogleDriveProvider.markProfileMetadataChanged==='function')
+    GoogleDriveProvider.markProfileMetadataChanged(profile);
+}
+
+async function confirmProfileMetadataSave64611(){
+  if(!(window.GoogleDriveProvider&&GoogleDriveProvider.isConnected())) return true;
+  const result=GoogleDriveProvider.queueSave({source:'profile_change'});
+  if(result&&typeof result.then==='function'){
+    const confirmed=await result;
+    if(confirmed!==true) throw new Error('O Google Drive não confirmou a alteração do perfil.');
+  }
+  return true;
+}
+
+function currentProfileFormIdentity64611(profile){
+  const p=profile||{};
+  const nameEl=$('#pf_name'),colorEl=$('#pf_avatar_color');
+  return {
+    name:(nameEl&&nameEl.value.trim())||p.name||'Perfil',
+    avatarColor:(colorEl&&colorEl.value)||profileAvatarBg(p)
+  };
+}
+
+Settings.savePersonal = async function(){
+  const p=S.currentProfile; if(!p) return;
+  const name=$('#pf_name').value.trim()||p.name; const color=$('#pf_avatar_color'); const c=color?color.value:profileAvatarBg(p);
+  try{
+    if(window.CloudStorage&&CloudStorage.user){
+      await CloudStorage.renameProfile(p.id,name,c,p.avatarImage||'');
+      const fresh = S.profiles.find(x=>x.id===p.id);
+      if(fresh) S.currentProfile = fresh;
+      renderApp();
+      toast('Perfil financeiro atualizado e confirmado no Supabase.');
+    } else {
+      const changed=[];
+      if(String(p.name||'')!==String(name||'')) changed.push('name');
+      if(String(p.avatarColor||'')!==String(c||'')) changed.push('avatarColor');
+      p.name=name; p.avatarColor=c;
+      touchProfileMetadata700(p,changed);
+      markProfileMetadataPending64611(p);
+      setProfiles(S.profiles);
+      await confirmProfileMetadataSave64611();
+      renderApp(); toast('Nome e foto do perfil confirmados no Google Drive.');
+    }
+  }
+  catch(e){ alert(e.message||String(e)); }
+};
+/* V7.0.1 SECURITY — readAvatarFile (3 MB, com recorte) e removeAvatarImage
+   intermediários removidos daqui. Eram a segunda camada de sobrescrita nesta
+   mesma tela e nunca chegavam a rodar — a versão que realmente executa é
+   applyAvatarImage64616 + o readAvatarFile mais abaixo (com suporte a GIF
+   animado e limite de 5 MB), agora corrigidos para marcar corretamente toda
+   remoção de foto como intencional (explicitClear) perante o Data Guard. */
+Settings.setPasswordFlow = function(){
+  const p=S.currentProfile; if(!p) return;
+  openModal({title:'Colocar senha no perfil', sub:'Essa senha protege somente este perfil financeiro dentro da conta. A senha da conta continua sendo a do login.', fields:[{key:'pw',label:'Senha do perfil',type:'password',placeholder:'Mínimo 4 caracteres'},{key:'pw2',label:'Confirmar senha do perfil',type:'password'}], saveLabel:'Salvar senha do perfil', onSave: async (v)=>{
+    try{
+      if(!v.pw || v.pw.length<4) throw new Error('A senha do perfil precisa ter pelo menos 4 caracteres.');
+      if(v.pw!==v.pw2) throw new Error('As senhas não coincidem.');
+      if(window.CloudStorage&&CloudStorage.user){
+        await CloudStorage.updateProfilePassword(p.id,'',v.pw,'set');
+      } else {
+        p.salt=randomSalt(); p.passwordHash=await hashPassword(v.pw,p.salt); touchProfileMetadata700(p,['salt','passwordHash']); markProfileMetadataPending64611(p); setProfiles(S.profiles);
+        await confirmProfileMetadataSave64611();
+      }
+      closeModal(); renderApp(); toast('Senha do perfil definida.');
+    }catch(e){ alert(e.message||String(e)); }
+  }});
+};
+Settings.changePassword = function(){
+  const p=S.currentProfile; if(!p) return;
+  const hasCurrent=!!p.passwordHash;
+  openModal({title:'Trocar senha do perfil', sub:'Essa senha é separada da senha da conta/login.', fields:[...(hasCurrent?[{key:'atual',label:'Senha atual do perfil',type:'password'}]:[]),{key:'pw',label:'Nova senha do perfil',type:'password',placeholder:'Mínimo 4 caracteres'},{key:'pw2',label:'Confirmar nova senha',type:'password'}], saveLabel:'Trocar senha', onSave: async (v)=>{
+    try{
+      if(!v.pw || v.pw.length<4) throw new Error('A nova senha do perfil precisa ter pelo menos 4 caracteres.');
+      if(v.pw!==v.pw2) throw new Error('As senhas não coincidem.');
+      if(window.CloudStorage&&CloudStorage.user){
+        await CloudStorage.updateProfilePassword(p.id,v.atual||'',v.pw,'change');
+      } else {
+        if(hasCurrent){ const oldHash=await hashPassword(v.atual||'',p.salt||''); if(oldHash!==p.passwordHash) throw new Error('Senha atual do perfil incorreta.'); }
+        p.salt=randomSalt(); p.passwordHash=await hashPassword(v.pw,p.salt); touchProfileMetadata700(p,['salt','passwordHash']); markProfileMetadataPending64611(p); setProfiles(S.profiles);
+        await confirmProfileMetadataSave64611();
+      }
+      closeModal(); renderApp(); toast('Senha do perfil alterada.');
+    }catch(e){ alert(e.message||String(e)); }
+  }});
+};
+Settings.removePassword = function(){
+  const p=S.currentProfile; if(!p) return;
+  openModal({title:'Remover senha do perfil', sub:'Para remover a senha, confirme a senha atual do perfil.', fields:[{key:'atual',label:'Senha atual do perfil',type:'password'}], saveLabel:'Remover senha', onSave: async (v)=>{
+    try{
+      if(window.CloudStorage&&CloudStorage.user){
+        await CloudStorage.updateProfilePassword(p.id,v.atual||'',null,'remove');
+      } else {
+        if(p.passwordHash){ const oldHash=await hashPassword(v.atual||'',p.salt||''); if(oldHash!==p.passwordHash) throw new Error('Senha atual do perfil incorreta.'); }
+        p.passwordHash=null; p.salt=null; touchProfileMetadata700(p,['passwordHash','salt'],['passwordHash','salt']); markProfileMetadataPending64611(p); setProfiles(S.profiles);
+        await confirmProfileMetadataSave64611();
+      }
+      closeModal(); renderApp(); toast('Senha do perfil removida.');
+    }catch(e){ alert(e.message||String(e)); }
+  }});
+};
+
+
+function categoryUsageDetails(typeKey, name){
+  const parts=[];
+  let total=0;
+  const add=(label,n)=>{ n=Number(n)||0; if(n>0){ total+=n; parts.push(`${n} em ${label}`); } };
+  if(typeKey==='receita'){
+    add('receitas', (S.data.transacoes||[]).filter(t=>t.tipo==='receita' && t.categoria===name).length);
+    add('cheques recebidos', (S.data.cheques&&S.data.cheques.items||[]).filter(c=>c.tipo==='recebido' && c.categoria===name).length);
+    const mitRules=S.data.interconnections?.sources?.['marco-iris']?.mitRevenueRules||{};
+    add('regras da integração Marco Iris', Object.values(mitRules).filter(rule=>rule&&rule.category===name).length);
+  } else if(typeKey==='fixa'){
+    add('despesas fixas', (S.data.fixas||[]).filter(f=>f.categoria===name).length);
+  } else if(typeKey==='variavel'){
+    add('despesas variáveis', (S.data.transacoes||[]).filter(t=>t.tipo==='variavel' && t.categoria===name).length);
+    add('parcelas de cartão', (S.data.cartoes||[]).reduce((n,card)=>n+((card.parcelas||[]).filter(p=>p.categoria===name).length),0));
+    add('boletos', (S.data.boletos||[]).filter(b=>b.categoria===name).length);
+    add('assinaturas', (S.data.assinaturas||[]).filter(a=>a.categoria===name).length);
+    add('cheques emitidos', (S.data.cheques&&S.data.cheques.items||[]).filter(c=>c.tipo==='emitido' && c.categoria===name).length);
+  }
+  return {total, parts};
+}
+function updateCategoryReferences(typeKey, oldName, newName){
+  if(typeKey==='receita'){
+    (S.data.transacoes||[]).forEach(t=>{ if(t.tipo==='receita' && t.categoria===oldName) t.categoria=newName; });
+    if(S.data.cheques&&Array.isArray(S.data.cheques.items)) S.data.cheques.items.forEach(c=>{ if(c.tipo==='recebido' && c.categoria===oldName) c.categoria=newName; });
+    const mitRules=S.data.interconnections?.sources?.['marco-iris']?.mitRevenueRules||{};
+    Object.values(mitRules).forEach(rule=>{ if(rule&&rule.category===oldName) rule.category=newName; });
+  } else if(typeKey==='fixa'){
+    (S.data.fixas||[]).forEach(f=>{ if(f.categoria===oldName) f.categoria=newName; });
+  } else if(typeKey==='variavel'){
+    (S.data.transacoes||[]).forEach(t=>{ if(t.tipo==='variavel' && t.categoria===oldName) t.categoria=newName; });
+    (S.data.cartoes||[]).forEach(card=>(card.parcelas||[]).forEach(p=>{ if(p.categoria===oldName) p.categoria=newName; }));
+    (S.data.boletos||[]).forEach(b=>{ if(b.categoria===oldName) b.categoria=newName; });
+    (S.data.assinaturas||[]).forEach(a=>{ if(a.categoria===oldName) a.categoria=newName; });
+    if(S.data.cheques&&Array.isArray(S.data.cheques.items)) S.data.cheques.items.forEach(c=>{ if(c.tipo==='emitido' && c.categoria===oldName) c.categoria=newName; });
+  }
+}
+Settings.setCategoryColor = function(typeKey, name, color){
+  setCategoryColor(typeKey, name, color);
+  saveCurrentData();
+  renderView();
+};
+Settings.addCategory = function(typeKey){
+  openModal({
+    title:'Nova categoria',
+    sub:'Você pode usar a mesma categoria em vários lançamentos, despesas ou recebimentos.',
+    fields:[{key:'nome',label:'Nome da categoria',type:'text'},{key:'cor',label:'Cor da categoria',type:'color',default:baseCatColor('Nova categoria')}],
+    saveLabel:'Criar categoria',
+    onSave(v){
+      const name=(v.nome||'').trim();
+      if(!name){ alert('Digite o nome da categoria.'); return; }
+      if(!S.data.categorias[typeKey]) S.data.categorias[typeKey]=[];
+      if(S.data.categorias[typeKey].some(c=>c.toLowerCase()===name.toLowerCase())){ alert('Essa categoria já existe.'); return; }
+      S.data.categorias[typeKey].push(name);
+      setCategoryColor(typeKey, name, v.cor||baseCatColor(name));
+      saveCurrentData(); closeModal(); renderView(); toast('Categoria criada.');
+    }
+  });
+};
+Settings.renameCategory = function(typeKey, oldName){
+  openModal({
+    title:'Editar categoria',
+    sub:'Renomear mantém o vínculo com os lançamentos já existentes.',
+    fields:[{key:'nome',label:'Nome da categoria',type:'text',default:oldName},{key:'cor',label:'Cor da categoria',type:'color',default:categoryColor(typeKey,oldName)}],
+    saveLabel:'Salvar categoria',
+    onSave(v){
+      const name=(v.nome||'').trim();
+      if(!name){ alert('Digite o nome da categoria.'); return; }
+      const list=S.data.categorias[typeKey]||[];
+      const idx=list.indexOf(oldName);
+      if(idx<0){ closeModal(); return; }
+      if(name!==oldName && list.some(c=>c.toLowerCase()===name.toLowerCase())){ alert('Já existe uma categoria com esse nome.'); return; }
+      list[idx]=name;
+      updateCategoryReferences(typeKey, oldName, name);
+      moveCategoryColor(typeKey, oldName, name, v.cor||categoryColor(typeKey,oldName));
+      saveCurrentData(); closeModal(); renderView(); toast('Categoria atualizada.');
+    }
+  });
+};
+function deleteCategoryAndMoveReferences(typeKey,name,usage){
+  if(!S.data.categorias[typeKey]) S.data.categorias[typeKey]=[];
+  if(!S.data.categorias[typeKey].includes('Outro')) S.data.categorias[typeKey].push('Outro');
+  updateCategoryReferences(typeKey,name,'Outro');
+  S.data.categorias[typeKey]=S.data.categorias[typeKey].filter(category=>category!==name);
+  if(S.data.categoryColors&&S.data.categoryColors[typeKey]) delete S.data.categoryColors[typeKey][name];
+  const mitCount=typeKey==='receita'?Object.values(S.data.interconnections?.sources?.['marco-iris']?.mitRevenueRules||{}).filter(rule=>rule&&rule.category==='Outro').length:0;
+  saveCurrentData();renderView();
+  const linkedRules=(usage?.parts||[]).find(part=>part.includes('regras da integração Marco Iris'));
+  toast(linkedRules?`Categoria excluída. ${linkedRules.split(' ')[0]} regra(s) da integração Marco Iris foram alteradas para “Outro”.`:'Categoria excluída. Referências vinculadas foram alteradas para “Outro”.');
+}
+Settings.showCategoryLinkedWarning = function(typeKey, name, usage){
+  const detail=usage&&usage.parts&&usage.parts.length?usage.parts.join(', '):'referências vinculadas';
+  openConfirmModal({
+    title:'Excluir categoria vinculada',
+    text:`A categoria "${name}" está em uso (${detail}). Ao excluir, todos esses vínculos serão movidos para “Outro”, inclusive regras da integração Marco Iris.`,
+    confirmLabel:'Excluir e mover para Outro',cancelLabel:'Cancelar',variant:'danger',
+    onConfirm(){ deleteCategoryAndMoveReferences(typeKey,name,usage); }
+  });
+};
+Settings.deleteCategory = function(typeKey, name){
+  if(name==='Outro'){ alert('A categoria “Outro” é necessária como destino seguro e não pode ser excluída.'); return; }
+  const usage=categoryUsageDetails(typeKey,name);
+  if(usage.total>0){ Settings.showCategoryLinkedWarning(typeKey,name,usage); return; }
+  openConfirmModal({
+    title:'Excluir categoria',text:`Excluir a categoria "${name}"?`,confirmLabel:'Excluir categoria',cancelLabel:'Cancelar',variant:'danger',
+    onConfirm(){ deleteCategoryAndMoveReferences(typeKey,name,usage); }
+  });
+};
+Settings.deleteCloudAccountFlow = function(){
+  const cloud = window.CloudStorage;
+  if(!cloud || !cloud.user){ alert('Entre na conta Borion Cloud antes de excluir.'); return; }
+  Settings._deleteAccountState = {
+    email: String(cloud.user.email||'').trim(),
+    step: 'warning',
+    busy: false,
+    message: '',
+    error: ''
+  };
+  Settings.renderDeleteAccountModal();
+};
+
+Settings.renderDeleteAccountModal = function(){
+  const st = Settings._deleteAccountState || {};
+  const cloud = window.CloudStorage;
+  if(!cloud || !cloud.user){ alert('Entre na conta Borion Cloud antes de excluir.'); return; }
+  const email = st.email || String(cloud.user.email||'').trim();
+  const step = st.step || 'warning';
+  const steps = [
+    {key:'warning', label:'Aviso'},
+    {key:'password1', label:'Senha'},
+    {key:'emailLink', label:'E-mail'},
+    {key:'password2', label:'Final'}
+  ];
+  const currentIndex = Math.max(0, steps.findIndex(x=>x.key===step));
+  const stepHTML = steps.map((x,i)=>`<span class="delete-step ${i<currentIndex?'done':i===currentIndex?'active':''}">${i+1}. ${esc(x.label)}</span>`).join('');
+  const msgHTML = st.error ? `<div class="delete-account-msg error">${esc(st.error)}</div>` : (st.message ? `<div class="delete-account-msg ok">${esc(st.message)}</div>` : '');
+  let body='';
+
+  if(step==='warning'){
+    body = `
+      <div class="delete-account-hero">
+        <div class="delete-danger-mark">!</div>
+        <div>
+          <h3>Excluir conta Borion Cloud</h3>
+          <p>Esta ação cancela a conta ligada ao e-mail <b>${esc(email)}</b>.</p>
+        </div>
+      </div>
+      <div class="delete-warning-list">
+        <p><b>Ao prosseguir, serão apagados:</b></p>
+        <ul>
+          <li>a conta de login e o e-mail cadastrado;</li>
+          <li>todos os perfis financeiros dentro dessa conta;</li>
+          <li>despesas, receitas, cartões, bancos, investimentos, patrimônio, agenda, cheques e reservas;</li>
+          <li>dados salvos no Supabase vinculados a esta conta.</li>
+        </ul>
+        <p><b>Depois de excluir, esses dados não poderão ser recuperados pelo app.</b></p>
+      </div>
+      <div class="field"><label>Para continuar, digite EXCLUIR</label><input type="text" id="del_confirm_word" autocomplete="off" placeholder="EXCLUIR"></div>
+      <div class="confirm-actions">
+        <button class="btn btn-secondary btn-block" id="del_cancel">Cancelar</button>
+        <button class="btn btn-danger-solid btn-block" id="del_next">Desejo prosseguir</button>
+      </div>`;
+  } else if(step==='password1'){
+    body = `
+      <p class="modal-sub">Primeira trava de segurança: confirme a senha atual da conta. Depois disso, o Borion enviará um e-mail padrão do Supabase para confirmar sua identidade.</p>
+      ${passwordInputWrapHTML({id:'del_password1',label:'Senha da conta',autocomplete:'current-password',placeholder:'Digite sua senha'})}
+      <div class="confirm-actions">
+        <button class="btn btn-secondary btn-block" id="del_back">Voltar</button>
+        <button class="btn btn-danger-solid btn-block" id="del_next">Confirmar senha e enviar e-mail</button>
+      </div>`;
+  } else if(step==='emailLink'){
+    body = `
+      <div class="delete-email-instructions">
+        <h3>Confirme pelo e-mail</h3>
+        <p>Enviamos um e-mail para <b>${esc(email)}</b>.</p>
+        <ol>
+          <li>Abra a caixa de entrada desse e-mail.</li>
+          <li>Procure o e-mail enviado por <b>Supabase Auth</b>.</li>
+          <li>O assunto pode aparecer como <b>Your sign-in link</b>.</li>
+          <li>Clique no botão/link <b>Sign in</b>.</li>
+          <li>Você será redirecionado de volta para o Borion e a última confirmação será aberta automaticamente.</li>
+        </ol>
+        <p class="delete-email-note">Esse texto aparece em inglês porque o e-mail padrão é do Supabase. O Borion está usando esse link apenas como confirmação de identidade antes da exclusão da conta.</p>
+      </div>
+      <div class="confirm-actions">
+        <button class="btn btn-secondary btn-block" id="del_back">Voltar</button>
+        <button class="btn-outline btn-block" id="del_check_email">Já cliquei em Sign in</button>
+        <button class="btn btn-danger-solid btn-block" id="del_next">Reenviar e-mail</button>
+      </div>`;
+  } else if(step==='password2'){
+    body = `
+      <p class="modal-sub">E-mail confirmado pelo link mágico. Última confirmação: digite o e-mail da conta e a senha novamente. Ao clicar no botão vermelho, a conta será apagada.</p>
+      <div class="field"><label>E-mail da conta</label><input type="email" id="del_email_final" autocomplete="email" placeholder="${esc(email)}"></div>
+      ${passwordInputWrapHTML({id:'del_password2',label:'Senha novamente',autocomplete:'current-password',placeholder:'Digite sua senha novamente'})}
+      <div class="delete-final-warning">Esta é a última etapa. Não existe “desfazer” depois da exclusão.</div>
+      <div class="confirm-actions">
+        <button class="btn btn-secondary btn-block" id="del_back">Voltar</button>
+        <button class="btn btn-danger-solid btn-block" id="del_next">Excluir definitivamente</button>
+      </div>`;
+  } else if(step==='done'){
+    body = `
+      <div class="delete-account-success">
+        <div class="success-mark">✓</div>
+        <h3>Sua conta foi cancelada</h3>
+        <p>Todos os dados foram apagados.</p>
+        <p>Esperamos vê-lo em breve novamente.</p>
+      </div>
+      <button class="btn btn-primary btn-block" id="del_finish">Voltar para o login</button>`;
+  }
+
+  const box = el(`
+    <div class="modal-overlay">
+      <div class="modal-box delete-account-modal confirm-box confirm-danger">
+        <div class="modal-head"><h2>Excluir conta</h2><button id="del_close">&times;</button></div>
+        ${step!=='done'?`<div class="delete-steps">${stepHTML}</div>`:''}
+        ${msgHTML}
+        <div class="delete-account-body">${body}</div>
+      </div>
+    </div>`);
+  $('#modal-root').innerHTML='';
+  $('#modal-root').appendChild(box);
+  attachModalGuard(box);
+  const closeBtn = $('#del_close'); if(closeBtn) closeBtn.onclick = closeModal;
+  const cancelBtn = $('#del_cancel'); if(cancelBtn) cancelBtn.onclick = closeModal;
+  const finishBtn = $('#del_finish'); if(finishBtn) finishBtn.onclick = ()=>{ closeModal(); CloudAuth.mode='login'; CloudAuth.info='Sua conta foi cancelada. Todos os dados foram apagados. Esperamos vê-lo em breve novamente.'; CloudAuth.error=''; CloudAuth.emailExpanded=false; CloudAuth.render(); };
+  const backBtn = $('#del_back');
+  if(backBtn) backBtn.onclick = ()=>{
+    st.error=''; st.message='';
+    if(step==='password1') st.step='warning';
+    else if(step==='emailLink') st.step='password1';
+    else if(step==='password2') st.step='emailLink';
+    Settings.renderDeleteAccountModal();
+  };
+  const nextBtn = $('#del_next');
+  if(nextBtn) nextBtn.onclick = async ()=>{
+    try{
+      st.error=''; st.message='';
+      if(step==='warning'){
+        const word = ($('#del_confirm_word')||{}).value || '';
+        if(word.trim().toUpperCase()!=='EXCLUIR') throw new Error('Digite EXCLUIR para liberar a próxima etapa.');
+        st.step='password1'; Settings.renderDeleteAccountModal(); return;
+      }
+      if(step==='password1'){
+        const pw = ($('#del_password1')||{}).value || '';
+        nextBtn.disabled=true; nextBtn.textContent='Validando...';
+        await CloudStorage.verifyAccountPasswordForDeletion(pw);
+        if(CloudStorage.isDeleteEmailVerified && CloudStorage.isDeleteEmailVerified()){
+          st.step='password2'; st.message='Senha e e-mail confirmados. Faça a última confirmação para excluir a conta.'; Settings.renderDeleteAccountModal(); return;
+        }
+        await CloudStorage.sendDeleteAccountMagicLink();
+        st.step='emailLink'; st.message='Senha confirmada. Enviamos o e-mail de confirmação para '+email+'. Clique em Sign in no e-mail para continuar.'; Settings.renderDeleteAccountModal(); return;
+      }
+      if(step==='emailLink'){
+        nextBtn.disabled=true; nextBtn.textContent='Reenviando...';
+        await CloudStorage.sendDeleteAccountMagicLink();
+        st.message='E-mail reenviado para '+email+'. Abra o e-mail do Supabase Auth e clique em Sign in.';
+        Settings.renderDeleteAccountModal(); return;
+      }
+      if(step==='password2'){
+        const typedEmail = (($('#del_email_final')||{}).value || '').trim();
+        const pw2 = ($('#del_password2')||{}).value || '';
+        if(!typedEmail) throw new Error('Digite o e-mail da conta.');
+        if(!pw2) throw new Error('Digite a senha novamente.');
+        nextBtn.disabled=true; nextBtn.textContent='Excluindo...';
+        await CloudStorage.deleteAccountWithCredentials(typedEmail, pw2);
+        st.step='done'; st.error=''; st.message='';
+        Settings.renderDeleteAccountModal();
+        return;
+      }
+    }catch(e){ st.error=translateSupabaseError(e&&e.message?e.message:String(e)); st.message=''; Settings.renderDeleteAccountModal(); }
+  };
+  const checkEmailBtn = $('#del_check_email');
+  if(checkEmailBtn) checkEmailBtn.onclick = ()=>{
+    try{
+      if(CloudStorage.isDeleteEmailVerified()){
+        st.step='password2'; st.error=''; st.message='E-mail confirmado. Faça a última confirmação para excluir a conta.';
+      } else {
+        throw new Error('Ainda não detectei a confirmação por e-mail. Abra o e-mail do Supabase Auth, clique em Sign in e aguarde voltar para o Borion.');
+      }
+    }catch(e){ st.error=e&&e.message?e.message:String(e); st.message=''; }
+    Settings.renderDeleteAccountModal();
+  };
+  ['del_confirm_word','del_password1','del_email_final','del_password2'].forEach(id=>{
+    const input=document.getElementById(id);
+    if(input) input.addEventListener('keydown', e=>{ if(e.key==='Enter'){ const btn=document.getElementById('del_next'); if(btn) btn.click(); } });
+  });
+};
+
+Settings.resumeDeleteAccountFromMagicLink = function(){
+  const cloud = window.CloudStorage;
+  if(!cloud || !cloud.user || !cloud.isDeleteEmailVerified || !cloud.isDeleteEmailVerified()) return false;
+  const firstPasswordOk = !!(cloud.deleteFirstPasswordVerifiedAt && (Date.now()-cloud.deleteFirstPasswordVerifiedAt) < 30*60*1000);
+  Settings._deleteAccountState = {
+    email: String(cloud.user.email||'').trim(),
+    step: firstPasswordOk ? 'password2' : 'password1',
+    busy: false,
+    message: firstPasswordOk ? 'E-mail confirmado pelo link mágico. Faça a última confirmação para excluir a conta.' : 'E-mail confirmado pelo link mágico. Por segurança, confirme a senha da conta para continuar.',
+    error: ''
+  };
+  Settings.renderDeleteAccountModal();
+  return true;
+};
+
+Settings.deleteProfile = function(id){
+  const pr=(S.profiles||[]).find(x=>String(x.id)===String(id)); if(!pr) return;
+  openConfirmModal({title:'Excluir perfil financeiro', text:`Para excluir "${pr.name}", confirme. Esta ação apaga este perfil e seus dados financeiros na nuvem. Mantenha um backup se precisar.`, confirmLabel:'Excluir perfil', cancelLabel:'Cancelar', variant:'danger', onConfirm: async ()=>{
+    try{
+      if(window.CloudStorage&&CloudStorage.user){
+        await CloudStorage.deleteProfile(id);
+        toast('Perfil excluído e confirmado na nuvem.');
+        return;
+      }
+      if(!window.BorionDataActions6401||typeof BorionDataActions6401.deleteProfileAndSync!=='function') throw new Error('O módulo seguro de exclusão de perfil não está disponível.');
+      const result=await BorionDataActions6401.deleteProfileAndSync(id,'settings_delete');
+      if(!result.deleted) throw new Error('O perfil não foi encontrado para exclusão.');
+      if(result.syncResult===true){
+        toast('Perfil excluído e sincronizado no Google Drive.');
+      }else if(result.syncResult&&result.syncResult.delegated){
+        toast('Perfil excluído. A aba principal está enviando a exclusão ao Drive.');
+      }else if(window.GoogleDriveProvider&&GoogleDriveProvider.isConnected()){
+        toast(navigator.onLine===false?'Perfil excluído neste dispositivo. A exclusão será enviada quando a internet voltar.':'Perfil excluído. A exclusão está pendente de confirmação no Drive.');
+      }else{
+        toast('Perfil excluído deste dispositivo.');
+      }
+    }catch(e){ alert(e.message||String(e)); }
+  }});
+};
+Settings.exportProfile = async function(){
+  if(!S.currentProfile && !(S.profiles||[]).length){ alert('Entre em um perfil antes de exportar.'); return; }
+  try{
+    const payload = (typeof buildSharedBackupSnapshot==='function')
+      ? await buildSharedBackupSnapshot('manual','exportação manual JSON completa')
+      : await buildLocalAccountBackupPayload('manual','exportação manual JSON completa');
+    downloadJSON(payload, `borion-conta-completa-${dateSlug()}.json`);
+    toast('Backup completo exportado com todos os perfis da conta.');
+  }catch(e){ alert(e.message||String(e)); }
+};
+/* V6.3.0 — mesmo caminho do botão "Entrar com uma conta na nuvem" do Gate, só que
+   acessível de dentro do app (tela Configurações), pra quem está no modo local e
+   decide, depois de já estar usando o Borion, que quer conta na nuvem. */
+Settings.switchToCloudFromSettings = function(){
+  setStorageMode('cloud');
+  if(window.CloudAuth){ CloudAuth.mode='login'; CloudAuth.error=''; CloudAuth.info=''; CloudAuth.emailExpanded=false; CloudAuth.render(); }
+};
+Settings.emailBackup = function(){
+  Settings.exportProfile();
+  const p=S.currentProfile||{};
+  const subject=encodeURIComponent('Backup completo - '+APP_NAME);
+  const body=encodeURIComponent('Olá,\n\nSegue em anexo o backup completo do '+APP_NAME+'.\nO arquivo JSON foi baixado/salvo agora e contém todos os perfis da conta; anexe-o a este e-mail antes de enviar.\n\n');
+  setTimeout(()=>{ window.location.href=`mailto:${p.email||''}?subject=${subject}&body=${body}`; },500);
+};
+
+/* ---------- V5.35.1: ações da tela Backups/Supabase ---------- */
+Settings.showBackupConsent = function(){
+  if(!window.BackupFS){ alert('Módulo de backup não carregou.'); return; }
+  BackupFS.showConsentModal();
+};
+Settings.createCloudBackupNow = async function(type='manual', reason='backup manual'){
+  try{
+    if(!window.BackupFS) throw new Error('Módulo de backup não carregou.');
+    const row = await BackupFS.createCloudBackup(type, reason);
+    toast('Backup salvo no Supabase: borion_backups.');
+    console.log('[BORION_BACKUP][MANUAL_UI][SUCCESS]', row);
+  }catch(e){
+    alert((e&&e.message?e.message:String(e))+'\n\nSe aparecer erro de tabela ou coluna, revise a configuração do Supabase usada pelo login antigo por e-mail.');
+  }
+};
+/* V6.3.0 — mesma ideia do viewCloudBackups logo abaixo, só que lendo do histórico
+   100% local (storageProvider/IndexedDB) — funciona sem Supabase e sem internet. */
+Settings.viewLocalBackups = async function(){
+  try{
+    if(!window.storageProvider) throw new Error('Módulo de armazenamento não carregou.');
+    const rows = await storageProvider.listBackups();
+    const reasonLabels = {manual:'Manual', before_import:'Antes de importar', before_restore:'Antes de restaurar', before_schema_migration:'Antes de atualização', auto:'Automático'};
+    const html = rows.length ? rows.map(r=>{
+      const when = r.createdAt ? new Date(r.createdAt).toLocaleString('pt-BR') : '-';
+      const reason = esc(reasonLabels[r.reasonType] || r.reasonType || 'backup');
+      return `<div class="backup-vault-row">
+        <div class="backup-vault-main"><b>${reason}</b><span>${esc(when)} · ${Number(r.profileCount||0)} perfil(is) · ${esc(r.appVersion||'')}</span></div>
+        <div class="backup-vault-actions"><button class="btn-outline btn-sm" onclick="Settings.downloadLocalBackup('${r.id}')">Baixar</button><button class="btn-outline btn-sm" onclick="Settings.restoreLocalBackup('${r.id}')">Restaurar</button></div>
+      </div>`;
+    }).join('') : `<div class="info-box">Nenhum backup local ainda. Clique em "Criar backup agora".</div>`;
+    const box = el(`
+      <div class="modal-overlay">
+        <div class="modal-box backup-vault-modal">
+          <div class="modal-head"><h2>Backups neste dispositivo</h2><button id="lbv_close">&times;</button></div>
+          <p class="modal-sub">Guardados só no navegador (IndexedDB), sem depender do Supabase. Backups manuais e "antes de importar/restaurar" nunca são apagados sozinhos; automáticos ficam limitados aos últimos 50.</p>
+          <div class="backup-vault-list">${html}</div>
+          <div class="row-btns" style="margin-top:12px;"><button class="btn btn-primary btn-block" id="lbv_new">Criar backup agora</button></div>
+        </div>
+      </div>`);
+    $('#modal-root').innerHTML=''; $('#modal-root').appendChild(box); attachModalGuard(box);
+    $('#lbv_close').onclick=closeModal;
+    $('#lbv_new').onclick=async()=>{ try{ await storageProvider.createBackup('manual'); closeModal(); Settings.viewLocalBackups(); }catch(e){ alert(e.message||String(e)); } };
+  }catch(e){ alert(e.message||String(e)); }
+};
+Settings.downloadLocalBackup = async function(id){
+  try{
+    const entry = await localBackupsGet(id);
+    if(!entry) throw new Error('Backup não encontrado.');
+    downloadJSON(entry.payload, `borion-backup-local-${dateSlug()}.json`);
+  }catch(e){ alert(e.message||String(e)); }
+};
+Settings.restoreLocalBackup = function(id){
+  openConfirmModal({
+    title:'Restaurar backup local',
+    text:'Você vai substituir os dados atuais pelo backup selecionado. O Borion cria um backup de segurança do estado atual antes de restaurar.',
+    confirmLabel:'Restaurar',
+    cancelLabel:'Cancelar',
+    variant:'danger',
+    onConfirm: async ()=>{
+      try{ await storageProvider.restoreBackup(id); closeModal(); toast('Backup local restaurado.'); }
+      catch(e){ alert(e.message||String(e)); }
+    }
+  });
+};
+
+Settings.viewFolderBackups = async function(){
+  try{
+    if(!window.BackupFS||!(BackupFS.isSupported&&BackupFS.isSupported())) throw new Error('A leitura de pasta local exige Chrome ou Edge atual, em HTTPS ou no PWA instalado.');
+    const connected=await Settings._prepareLocalFolderAccess(true);
+    if(!connected||!BackupFS.dirHandle) return;
+    const rows=await BackupFS.listFolderBackups();
+    const html=rows.length?rows.map(r=>{
+      const when=r.lastModified?new Date(r.lastModified).toLocaleString('pt-BR'):'data indisponível';
+      const size=r.size>=1024*1024?(r.size/1024/1024).toFixed(2)+' MB':Math.max(1,Math.round(r.size/1024))+' KB';
+      const encoded=encodeURIComponent(r.name);
+      return `<div class="backup-vault-row"><div class="backup-vault-main"><b>${esc(r.name)}</b><span>${esc(when)} · ${esc(size)}</span></div><div class="backup-vault-actions"><button class="btn-outline btn-sm" onclick="Settings.importFolderBackup('${encoded}')">Importar / restaurar</button></div></div>`;
+    }).join(''):`<div class="info-box">Nenhum backup JSON do Borion foi encontrado nesta pasta.</div>`;
+    const box=el(`<div class="modal-overlay"><div class="modal-box backup-vault-modal"><div class="modal-head"><h2>Backups locais · ${esc(BackupFS.startupFolderName||BackupFS.dirHandle.name||'Pasta selecionada')}</h2><button id="fbv_close">&times;</button></div><p class="modal-sub">Arquivos JSON salvos diretamente na pasta que você escolheu. O Google Drive continua sendo a fonte oficial dos dados.</p><div class="backup-vault-list">${html}</div><div class="row-btns" style="margin-top:12px;"><button class="btn btn-primary btn-block" id="fbv_new">Criar backup agora</button></div></div></div>`);
+    $('#modal-root').innerHTML='';$('#modal-root').appendChild(box);attachModalGuard(box);
+    $('#fbv_close').onclick=closeModal;
+    $('#fbv_new').onclick=async()=>{try{await Settings.quickBackupLocal();closeModal();Settings.viewFolderBackups();}catch(e){alert(e.message||String(e));}};
+  }catch(e){alert(e.message||String(e));}
+};
+Settings.importFolderBackup = function(encodedName){
+  const name=decodeURIComponent(encodedName||'');
+  openConfirmModal({title:'Importar backup local',text:`O arquivo "${name}" será validado e enviado ao fluxo seguro de importação. Antes da substituição, o Borion cria uma cópia de segurança no Google Drive.`,confirmLabel:'Continuar',cancelLabel:'Cancelar',onConfirm:async()=>{try{closeModal();await BackupFS.importFolderBackup(name);}catch(e){alert(e.message||String(e));}}});
+};
+
+/* V6.5.0 — mesma ideia do viewLocalBackups, lendo da pasta "backups" dentro da pasta
+   do Google Drive em vez do IndexedDB local. */
+Settings.viewDriveBackups = async function(){
+  try{
+    if(!window.GoogleDriveProvider || !GoogleDriveProvider.isConnected()) throw new Error('Google Drive não está conectado.');
+    const rows = await GoogleDriveProvider.listBackups();
+    const html = rows.length ? rows.map(r=>{
+      const when = r.modifiedTime ? new Date(r.modifiedTime).toLocaleString('pt-BR') : '-';
+      return `<div class="backup-vault-row">
+        <div class="backup-vault-main"><b>${esc(r.name)}</b><span>${esc(when)}</span></div>
+        <div class="backup-vault-actions"><button class="btn-outline btn-sm" onclick="Settings.restoreDriveBackup('${r.id}')">Restaurar</button></div>
+      </div>`;
+    }).join('') : `<div class="info-box">Nenhum backup no Drive ainda. Clique em "Criar backup agora".</div>`;
+    const box = el(`
+      <div class="modal-overlay">
+        <div class="modal-box backup-vault-modal">
+          <div class="modal-head"><h2>Backups no Google Drive</h2><button id="dbv_close">&times;</button></div>
+          <p class="modal-sub">Guardados na pasta "backups", dentro da sua pasta do Drive.</p>
+          <div class="backup-vault-list">${html}</div>
+          <div class="row-btns" style="margin-top:12px;"><button class="btn btn-primary btn-block" id="dbv_new">Criar backup agora</button></div>
+        </div>
+      </div>`);
+    $('#modal-root').innerHTML=''; $('#modal-root').appendChild(box); attachModalGuard(box);
+    $('#dbv_close').onclick=closeModal;
+    $('#dbv_new').onclick=async()=>{ try{ await GoogleDriveProvider.createBackup('manual'); closeModal(); toast('Backup criado no Drive.'); Settings.viewDriveBackups(); }catch(e){ alert(e.message||String(e)); } };
+  }catch(e){ alert(e.message||String(e)); }
+};
+Settings.restoreDriveBackup = function(fileId){
+  openConfirmModal({
+    title:'Restaurar backup do Google Drive',
+    text:'Você vai substituir os dados atuais pelo backup selecionado. O Borion cria um backup de segurança do estado atual antes de restaurar.',
+    confirmLabel:'Restaurar',
+    cancelLabel:'Cancelar',
+    variant:'danger',
+    onConfirm: async ()=>{
+      try{ await GoogleDriveProvider.restoreBackup(fileId); closeModal(); toast('Backup restaurado.'); renderGate(); }
+      catch(e){ alert(e.message||String(e)); }
+    }
+  });
+};
+
+Settings.backupSingleProfile = async function(profileId){
+  const pr = (S.profiles||[]).find(x=>x.id===profileId);
+  if(!pr){ alert('Perfil não encontrado.'); return; }
+  try{
+    if(window.GoogleDriveProvider && GoogleDriveProvider.isConnected()){
+      const r = await GoogleDriveProvider.exportSingleProfileToDrive(profileId);
+      toast('Backup de "'+pr.name+'" salvo no Drive ('+r.name+').');
+    } else {
+      let data = (S.currentProfile && S.currentProfile.id===profileId && S.data) ? S.data : getProfileData(profileId);
+      data = migrateData(data || emptyData(), {profileId});
+      const payload = {type:'multicap-profile-backup', version:2, exportedAt:new Date().toISOString(), profile:{id:pr.id,name:pr.name,email:pr.email,passwordHash:pr.passwordHash,salt:pr.salt,avatarColor:pr.avatarColor,avatarImage:pr.avatarImage}, data};
+      downloadJSON(payload, `perfil-${slug(pr.name)}-${dateSlug()}.json`);
+      toast('Backup de "'+pr.name+'" baixado.');
+    }
+  }catch(e){ alert(e.message||String(e)); }
+};
+
+Settings.viewCloudBackups = async function(){
+  try{
+    if(!window.BackupFS) throw new Error('Módulo de backup não carregou.');
+    const rows = await BackupFS.listCloudBackups();
+    const html = rows.length ? rows.map(r=>{
+      const when = r.created_at ? new Date(r.created_at).toLocaleString('pt-BR') : '-';
+      const reason = r.reason ? esc(r.reason) : 'sem observação';
+      return `<div class="backup-vault-row">
+        <div class="backup-vault-main"><b>${esc(r.backup_type||'backup')}</b><span>${esc(when)} · ${Number(r.profile_count||0)} perfil(is) · ${esc(r.app_version||'')}</span><em>${reason}</em></div>
+        <div class="backup-vault-actions"><button class="btn-outline btn-sm" onclick="BackupFS.downloadCloudBackup('${r.id}')">Baixar</button><button class="btn-outline btn-sm" onclick="BackupFS.restoreCloudBackup('${r.id}')">Restaurar</button></div>
+      </div>`;
+    }).join('') : `<div class="info-box">Nenhum backup salvo ainda. Clique em “Salvar snapshot no Supabase”.</div>`;
+    const box = el(`
+      <div class="modal-overlay">
+        <div class="modal-box backup-vault-modal">
+          <div class="modal-head"><h2>Backups salvos no Supabase</h2><button id="bv_close">&times;</button></div>
+          <p class="modal-sub">Local técnico: Supabase → Table Editor → <b>borion_backups</b>. São exibidos os últimos 30 snapshots desta conta.</p>
+          <div class="backup-vault-list">${html}</div>
+          <div class="row-btns" style="margin-top:12px;"><button class="btn btn-primary btn-block" id="bv_new">Criar backup agora</button></div>
+        </div>
+      </div>`);
+    $('#modal-root').innerHTML=''; $('#modal-root').appendChild(box); attachModalGuard(box);
+    $('#bv_close').onclick=closeModal;
+    $('#bv_new').onclick=async()=>{ try{ await BackupFS.createCloudBackup('manual','backup criado pela lista de backups'); closeModal(); Settings.viewCloudBackups(); }catch(e){ alert(e.message||String(e)); } };
+  }catch(e){ alert(e.message||String(e)); }
+};
+
+
+/* V6.24.6 — expõe a rotina central de backup para Ctrl+S e o atalho fixo do Modo Pro.
+   O objeto era declarado com const e, por isso, não existia em window.Settings. */
+window.Settings = Settings;
+
+Settings.openContextHelp = function(title,summary,query){
+  const old=document.getElementById('settings_context_help_overlay'); if(old) old.remove();
+  const overlay=document.createElement('div');
+  overlay.id='settings_context_help_overlay';
+  overlay.className='settings-context-help-overlay';
+  overlay.innerHTML=`<div class="settings-context-help-card" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="settings-context-help-head"><span>?</span><h3>${esc(title)}</h3><button type="button" aria-label="Fechar">×</button></div><p>${esc(summary)}</p><div class="settings-context-help-actions"><button type="button" class="btn-outline btn-sm" data-close>Fechar</button><button type="button" class="btn btn-primary btn-sm" data-more>Ver mais</button></div></div>`;
+  const close=()=>overlay.remove();
+  overlay.querySelector('.settings-context-help-head button').onclick=close;
+  overlay.querySelector('[data-close]').onclick=close;
+  overlay.onclick=e=>{if(e.target===overlay)close();};
+  overlay.querySelector('[data-more]').onclick=()=>{
+    close();
+    S.settingsTab='help';
+    if(!S.helpCenter)S.helpCenter={tab:'guides',query:'',category:'all'};
+    S.helpCenter.tab='guides';S.helpCenter.query=String(query||title||'');S.helpCenter.category='all';
+    renderView();
+    HelpCenterLoader.ensure().then(()=>{if(S.settingsTab==='help')renderView();}).catch(()=>toast('Não foi possível abrir a Central do Borion.'));
+  };
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-more]').focus();
+};
+
+
+/* ================= V6.33.1 — refinamento extra de Configurações, padronização de ordenação
+   e bloco flutuante de Anotações persistente entre abas ================= */
+(function(){
+  const SETTINGS_VERSION = (window.BORION_RELEASE&&BORION_RELEASE.label)||'7.0';
+
+  function floatingNotesPrefs(create=false){
+    const fallback={enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};
+    if(typeof S==='undefined' || !S.data) return fallback;
+    if(create){
+      if(!S.data.uiPreferences) S.data.uiPreferences = {};
+      if(!S.data.uiPreferences.floatingNotes || typeof S.data.uiPreferences.floatingNotes!=='object'){
+        S.data.uiPreferences.floatingNotes = {enabled:false,text:'',minimized:true,side:'right',y:null,panelW:360,panelH:380};
+      }
+      const p=S.data.uiPreferences.floatingNotes;
+      if(typeof p.enabled!=='boolean') p.enabled=false;
+      if(typeof p.text!=='string') p.text='';
+      if(typeof p.minimized!=='boolean') p.minimized=true;
+      /* V6.33.3 — migra a antiga posição livre (x/y solto na tela) para o novo modelo
+         "encostado na borda esquerda ou direita", igual ao botão de atalho flutuante do
+         iPhone: a bolinha nunca fica solta no meio da tela, só sobe/desce colada na lateral. */
+      if(p.side!=='left' && p.side!=='right'){
+        p.side = (typeof p.x==='number' && typeof window!=='undefined' && (p.x + 30) < (window.innerWidth/2)) ? 'left' : 'right';
+      }
+      if(typeof p.y!=='number') p.y=null;
+      if(typeof p.panelW!=='number' || p.panelW<200) p.panelW=360;
+      if(typeof p.panelH!=='number' || p.panelH<180) p.panelH=380;
+      delete p.x; // não é mais usado — a posição horizontal agora é sempre "encostada" em um dos lados
+    }
+    return (S.data.uiPreferences && S.data.uiPreferences.floatingNotes) || fallback;
+  }
+
+  function syncIconSVG(){
+    return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 0-15.5-6.36"/><path d="M3 4v5h5"/><path d="M3 12a9 9 0 0 0 15.5 6.36"/><path d="M21 20v-5h-5"/></svg>`;
+  }
+  function folderIconSVG(){return `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5h7l2 2h9v10.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 9h18"/></svg>`;}
+  function eyeIconSVG(){return `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="2.5"/></svg>`;}
+  function starIconSVG(filled){return `<svg viewBox="0 0 24 24" width="16" height="16" fill="${filled?'currentColor':'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2l2.7 5.6 6.1.6-4.6 4.1 1.3 6-5.5-3.1-5.5 3.1 1.3-6-4.6-4.1 6.1-.6z"/></svg>`;}
+  function plusBackupIconSVG(){return `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v8"/><path d="M8 7h8"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>`;}
+  function exportIconSVG(){return `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M5 13v7h14v-7"/></svg>`;}
+  function importIconSVG(){return `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M5 13v7h14v-7"/></svg>`;}
+  function notesIconSVG(){
+    return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14l4-3h8a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 10h6"/><path d="M9 13h6"/></svg>`;
+  }
+  function resizeGripIconSVG(){
+    return `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><circle cx="18" cy="6" r="1.6"/><circle cx="18" cy="12" r="1.6"/><circle cx="18" cy="18" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="18" r="1.6"/><circle cx="6" cy="18" r="1.6"/></svg>`;
+  }
+  function phoneIconSVG(){
+    return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.3"/><path d="M11 18.5h2"/></svg>`;
+  }
+  function sparklesIconSVG(){
+    return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.2L18 9l-4.2 1.8L12 15l-1.8-4.2L6 9l4.2-1.8z"/><path d="M19 14l.9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9z"/><path d="M5 14l.7 1.6L7.3 16l-1.6.7L5 18.3l-.7-1.6L2.7 16l1.6-.7z"/></svg>`;
+  }
+  function monitorIconSVG(){
+    return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8"/><path d="M12 16v4"/></svg>`;
+  }
+
+  const originalSettingsTabButton = settingsTabButton;
+  renderSettings = function(){
+    if(!S.settingsTab||S.settingsTab==='modules') S.settingsTab='organization';
+    if(S.settingsTab==='cloud') S.settingsTab='backup';
+    if(S.settingsTab==='dashboard') S.settingsTab='organization';
+    const tabs = `
+      <div class="settings-tabs">
+        ${originalSettingsTabButton('organization','Organização')}
+        ${originalSettingsTabButton('personalization','Personalização')}
+        ${originalSettingsTabButton('profiles','Perfis')}
+        ${originalSettingsTabButton('categories','Categorias')}
+        ${originalSettingsTabButton('backup','Backups / Dados')}
+        ${originalSettingsTabButton('integrations','Integrações')}
+        <button class="settings-tab settings-help-tab ${S.settingsTab==='help'?'active':''}" onclick="HelpCenterLoader.open()" title="Abrir a Central do Borion"><span class="settings-help-icon">?</span><span>Central do Borion</span></button>
+        <button id="qb_both" class="btn btn-primary btn-sm settings-quick-backup-btn" onclick="Settings.quickBackupBoth()" title="Confirma o salvamento diretamente no Google Drive">SALVAR NO DRIVE</button>
+      </div>`;
+    let content='';
+    if(S.settingsTab==='organization') content = renderSettingsOrganization();
+    else if(S.settingsTab==='personalization') content = renderSettingsPersonalization();
+    else if(S.settingsTab==='profiles') content = renderSettingsProfiles();
+    else if(S.settingsTab==='categories') content = renderSettingsCategories();
+    else if(S.settingsTab==='backup') content = renderSettingsBackup();
+    else if(S.settingsTab==='integrations') content = window.BorionInterop ? BorionInterop.renderSettings() : '<div class="settings-section">Integração indisponível.</div>';
+    else if(S.settingsTab==='help') content = window.BorionHelp ? BorionHelp.render() : HelpCenterLoader.placeholder();
+    return `<div class="settings-layout">${tabs}<div class="settings-content">${content}</div><div class="version-tag">V. ${SETTINGS_VERSION}</div><footer class="app-release-footer" aria-label="Informações do Borion">
+<div><strong>Versão:</strong> ${SETTINGS_VERSION}</div>
+<div><strong>Lançamento:</strong> 06/08/2026</div>
+<div>Desenvolvido por <strong>Pedro Bardella</strong></div>
+<div>© 2026 Pedro Bardella. Todos os direitos reservados.</div>
+</footer></div>`;
+  };
+
+  Settings.setInterfaceMode = function(mode){
+    const next=['auto','smartphone','pro'].includes(mode)?mode:'auto';
+    S.config.uiMode = next;
+    setConfig(S.config);
+    applyInterfaceMode();
+    renderApp();
+  };
+  Settings.toggleFloatingNotes = function(){
+    const p=floatingNotesPrefs(true);
+    p.enabled = !(p.enabled===true);
+    if(p.enabled) p.minimized=true;
+    saveCurrentData();
+    renderView();
+    setTimeout(()=>window.FloatingNotes&&FloatingNotes.render(),10);
+    setTimeout(()=>window.BorionQuickTools&&BorionQuickTools.sync&&BorionQuickTools.sync(),12);
+  };
+  Settings.ensureBorionCalculator = function(){
+    if(window.BorionCalculator) return Promise.resolve(window.BorionCalculator);
+    if(Settings._borionCalculatorPromise) return Settings._borionCalculatorPromise;
+    Settings._borionCalculatorPromise = new Promise((resolve,reject)=>{
+      const existing=document.querySelector('script[data-borion-calculator-script]');
+      if(existing){
+        if(window.BorionCalculator){resolve(window.BorionCalculator);return;}
+        existing.remove();
+      }
+      const script=document.createElement('script');
+      script.src='js/28-borion-calculator.js?v='+(window.BORION_RELEASE_ID||'borion-7.1.2');
+      script.async=true;
+      script.dataset.borionCalculatorScript='1';
+      script.onload=()=>window.BorionCalculator?resolve(window.BorionCalculator):reject(new Error('A Calculadora Borion não iniciou.'));
+      script.onerror=()=>{script.remove();reject(new Error('Falha ao carregar a Calculadora Borion.'));};
+      document.head.appendChild(script);
+    }).catch(err=>{Settings._borionCalculatorPromise=null;throw err;});
+    return Settings._borionCalculatorPromise;
+  };
+  Settings.toggleBorionCalculator = function(){
+    const apply=calc=>{
+      const enabled=typeof calc.toggleEnabled==='function'
+        ? calc.toggleEnabled()
+        : (()=>{
+            if(!S.data.uiPreferences)S.data.uiPreferences={};
+            const p=S.data.uiPreferences.borionCalculator||(S.data.uiPreferences.borionCalculator={enabled:false,minimized:true});
+            p.enabled=!(p.enabled===true);if(p.enabled)p.minimized=true;
+            saveCurrentData();if(typeof calc.render==='function')calc.render();return p.enabled;
+          })();
+      return enabled;
+    };
+    if(window.BorionCalculator)return apply(window.BorionCalculator);
+    Settings.ensureBorionCalculator().then(apply).catch(err=>{
+      console.error('[BORION_CALCULATOR][LOAD]',err);
+      toast('Não foi possível carregar a Calculadora Borion. Recarregue o aplicativo.');
+    });
+  };
+  Settings.toggleSummaryOrganize = function(){ Settings._summaryOrganizeActive = !Settings._summaryOrganizeActive; renderView(); };
+  Settings.moveBudgetSummaryCardAction = function(key, action){
+    const p = budgetSummaryPreferences();
+    const idx = p.order.indexOf(key);
+    if(idx<0) return;
+    let to = idx;
+    if(action==='top') to = 0;
+    else if(action==='up') to = Math.max(0, idx-1);
+    else if(action==='down') to = Math.min(p.order.length-1, idx+1);
+    else if(action==='bottom') to = p.order.length-1;
+    if(to===idx) return;
+    p.order.splice(idx,1);
+    p.order.splice(to,0,key);
+    saveCurrentData();
+    renderView();
+  };
+  Settings.toggleBudgetSummaryCard = function(key,checked){
+    const p=budgetSummaryPreferences();
+    p.visible=p.visible.filter(k=>k!==key);
+    if(checked) p.visible.push(key);
+    saveCurrentData();
+    renderView();
+  };
+  Settings.summaryDrop = function(ev,target){
+    ev.preventDefault();
+    const source=Settings._summaryDragKey||(ev.dataTransfer&&ev.dataTransfer.getData('text/plain'));
+    if(!source||source===target) return;
+    const p=budgetSummaryPreferences(), from=p.order.indexOf(source), to=p.order.indexOf(target);
+    if(from<0||to<0) return;
+    p.order.splice(from,1); p.order.splice(to,0,source); Settings._summaryDragKey=null; saveCurrentData(); renderView();
+  };
+  Settings.summaryReorderFromDom = function(ids){
+    const p=budgetSummaryPreferences();
+    const valid=new Set(p.order);
+    const clean=(Array.isArray(ids)?ids:[]).filter(id=>valid.has(id));
+    p.order=clean.concat(p.order.filter(id=>!clean.includes(id)));
+    saveCurrentData();renderView();
+  };
+
+  function summaryOrderControlsHTML(key,label){
+    return `<div class="order-controls summary-order-controls">
+      <button type="button" class="order-handle" title="Arrastar ${esc(label)} para reordenar" aria-label="Arrastar ${esc(label)} para reordenar">${window.OrderPreferences?OrderPreferences.handleSVG():`☰`}</button>
+    </div>`;
+  }
+  function summaryOrderLegend(){
+    return `<div class="order-option-legend"><div class="order-option-chip"><span class="order-option-ic">${window.OrderPreferences?OrderPreferences.handleSVG():'☰'}</span><span>Segure e arraste para reordenar</span></div></div>`;
+  }
+  renderBudgetSummaryPersonalization = function(){
+    if(typeof budgetSummaryPreferences!=='function') return '';
+    const pref=budgetSummaryPreferences();
+    const active=!!Settings._summaryOrganizeActive;
+    const rows=pref.order.map((k)=>{
+      const d=BUDGET_SUMMARY_CARD_DEFS[k];
+      if(!d) return '';
+      const checked=pref.visible.includes(k);
+      return `<div class="order-row summary-order-row" data-order-id="${k}" data-summary-key="${k}">
+        <div class="order-row-main">
+          <span class="order-row-status ${checked?'on':'off'}">${checked?'Visível':'Oculto'}</span>
+          <span class="order-row-label">${esc(d.label)}</span>
+          <label class="summary-inline-check"><input type="checkbox" ${checked?'checked':''} onchange="Settings.toggleBudgetSummaryCard('${k}',this.checked)"> Exibir</label>
+        </div>
+        ${active ? summaryOrderControlsHTML(k,d.label) : ''}
+      </div>`;
+    }).join('');
+    return `<div class="settings-section settings-hero-section order-organize-section">
+      <div class="order-organize-head">
+        <div>
+          <div class="settings-title-help"><h3>Resumo de Lançamentos</h3>${settingsHelpButton('Resumo de Lançamentos','Escolha quais indicadores aparecem no topo de Lançamentos e altere a ordem quando necessário.','resumo de lançamentos indicadores')}</div>
+        </div>
+        <button class="toggle-switch ${active?'on':''}" onclick="Settings.toggleSummaryOrganize()" aria-label="${active?'Desativar':'Ativar'} organização do Resumo de Lançamentos"><span></span></button>
+      </div>
+      
+      <div class="order-list" data-order-list="budget_summary" style="margin-top:12px;">${rows}</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;"><button class="btn-outline btn-sm" onclick="Settings.resetBudgetSummaryCards()">Restaurar padrão</button></div>
+    </div>`;
+  };
+
+  const originalRenderModulesOrganizePanel = window.OrderPreferences && OrderPreferences.renderModulesOrganizePanel ? OrderPreferences.renderModulesOrganizePanel.bind(OrderPreferences) : null;
+  if(window.OrderPreferences){
+    OrderPreferences.reorderRowControlsHTML = function(type,id,label,naturalIds){
+      const safeLabel=esc(label||'item');
+      return `<div class="order-controls" data-order-type="${esc(type)}"><button type="button" class="order-handle" title="Segure e arraste ${safeLabel}" aria-label="Arrastar ${safeLabel} para reordenar">${this.handleSVG()}</button></div>`;
+    };
+    OrderPreferences.renderModulesOrganizePanel = function(){ return renderSettingsModules(); };
+  }
+
+  function renderSettingsOrganization(){
+    return `${renderSettingsModules()}${renderBudgetSummaryPersonalization()}`;
+  }
+
+  renderSettingsPersonalization = function(){
+    const fontOptions=Object.keys(FONT_LABELS).map(k=>`<option value="${k}" ${S.config.font===k?'selected':''}>${esc(FONT_LABELS[k])}</option>`).join('');
+    const theme=S.config.theme||'dark',uiMode=S.config.uiMode||'auto';
+    const notes=floatingNotesPrefs(true);
+    const calculator=window.BorionCalculator?BorionCalculator.prefs(true):((S.data&&S.data.uiPreferences&&S.data.uiPreferences.borionCalculator)||{enabled:false});
+    return `
+      <div class="settings-personalization-page">
+        <header class="settings-personalization-header">
+          ${settingsTitleWithHelp('Personalização','Centraliza apenas aparência, modo de interface e ferramentas pessoais. A organização do menu continua na aba Organização.','tema fonte modo de interface anotações calculadora')}
+          <p>Deixe o Borion com a aparência e o comportamento que combinam com o seu uso, sem misturar essas escolhas com a organização do menu.</p>
+        </header>
+
+        <section class="settings-personalization-block settings-tools-block">
+          <div class="settings-personalization-block-head">
+            <div><span>Ferramentas rápidas</span><h3>Recursos flutuantes</h3><p>Ative apenas o que você realmente usa durante a rotina financeira.</p></div>
+          </div>
+          <div class="settings-tools-grid">
+            <article class="settings-tool-card">
+              <div class="settings-tool-copy">
+                <div class="settings-title-help"><h4>Anotações</h4>${settingsHelpButton('Anotações','Ativa um bloco de notas flutuante disponível nas principais telas do Borion.','anotações bloco flutuante')}</div>
+                <p>Bloco de notas rápido, acessível sem sair da tela atual.</p>
+              </div>
+              <div class="settings-tool-control">
+                <button class="toggle-switch ${notes.enabled?'on':''}" onclick="Settings.toggleFloatingNotes()" aria-label="${notes.enabled?'Desativar':'Ativar'} anotações"><span></span></button>
+                <div class="settings-mini-status ${notes.enabled?'on':'off'}">${notes.enabled?'Ativado':'Desativado'}</div>
+              </div>
+            </article>
+
+            <article class="settings-tool-card">
+              <div class="settings-tool-copy">
+                <div class="settings-title-help"><h4>Calculadora Borion</h4>${settingsHelpButton('Calculadora Borion','Ativa uma calculadora flutuante com histórico e conversor.','calculadora histórico conversor moedas')}</div>
+                <p>Calculadora com histórico e conversor disponível sobre o aplicativo.</p>
+              </div>
+              <div class="settings-tool-control">
+                <button type="button" data-borion-calculator-toggle class="toggle-switch ${calculator.enabled?'on':''}" onclick="Settings.toggleBorionCalculator()" aria-pressed="${calculator.enabled?'true':'false'}" aria-label="${calculator.enabled?'Desativar':'Ativar'} Calculadora Borion"><span></span></button>
+                <div class="settings-mini-status ${calculator.enabled?'on':'off'}">${calculator.enabled?'Ativado':'Desativado'}</div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="settings-personalization-block settings-appearance-block">
+          <div class="settings-personalization-block-head">
+            <div><span>Aparência do aplicativo</span><h3>Visual e adaptação da interface</h3><p>Essas escolhas são aplicadas em todo o Borion.</p></div>
+          </div>
+          <div class="settings-appearance-grid">
+            <article class="settings-option-card settings-interface-option">
+              <div class="settings-option-copy">
+                <div class="settings-title-help"><h4>Modo de interface</h4>${settingsHelpButton('Modo de interface','Automático adapta o Borion ao aparelho. Smartphone e Pro permitem forçar um modo específico.','smartphone pro automático interface')}</div>
+                <p>Use Automático para o Borion escolher o melhor formato em cada aparelho.</p>
+              </div>
+              <div class="interface-mode-row">
+                <div class="interface-segmented" role="group" aria-label="Modo de interface">
+                  <button class="interface-segment ${uiMode==='smartphone'?'active':''}" onclick="Settings.setInterfaceMode('smartphone')">${phoneIconSVG()}<span>Smartphone</span></button>
+                  <button class="interface-segment ${uiMode==='pro'?'active':''}" onclick="Settings.setInterfaceMode('pro')"><span class="pro-pill">Pro</span><span>Pro</span></button>
+                </div>
+                <button class="interface-auto-button ${uiMode==='auto'?'active':''}" onclick="Settings.setInterfaceMode('auto')">${sparklesIconSVG()}<span>Automático</span></button>
+              </div>
+            </article>
+
+            <article class="settings-option-card">
+              <div class="settings-option-copy">
+                <div class="settings-title-help"><h4>Tema</h4>${settingsHelpButton('Tema','Escolha o visual escuro, claro ou acompanhe o tema do sistema.','tema claro escuro sistema')}</div>
+                <p>Define as cores e o contraste de todas as telas.</p>
+              </div>
+              <div class="field"><select id="cfg_theme"><option value="dark" ${theme==='dark'?'selected':''}>Escuro / Private banking</option><option value="light" ${theme==='light'?'selected':''}>Claro / Branco</option><option value="system" ${theme==='system'?'selected':''}>Tema do sistema</option></select></div>
+            </article>
+
+            <article class="settings-option-card">
+              <div class="settings-option-copy">
+                <div class="settings-title-help"><h4>Fonte do aplicativo</h4>${settingsHelpButton('Fonte do app','Aplica a fonte escolhida em todas as áreas do Borion.','fonte do aplicativo')}</div>
+                <p>Escolha a tipografia usada em menus, tabelas e formulários.</p>
+              </div>
+              <div class="field"><select id="cfg_font">${fontOptions}</select></div>
+            </article>
+          </div>
+        </section>
+      </div>`;
+  };
+
+  renderSettingsBackup = function(){
+    const cloud = window.CloudStorage;
+    const user = cloud && cloud.user;
+    const isDrive = !user && window.GoogleDriveProvider && GoogleDriveProvider.isConnected();
+    const isLocal = !user && !isDrive;
+    if(!isDrive){
+      return `<div class="settings-section settings-hero-section settings-clean-hero">${settingsTitleWithHelp('Backups / Dados','O Borion usa somente o Google Drive e precisa de uma conexao autenticada.','google drive cloud only')}</div><div class="info-box">Reconecte sua conta Google para acessar ou salvar dados. Nenhuma base financeira e mantida neste navegador.</div>`;
+    }
+
+    function actionButton(cls,label,icon,onclick,id=''){return `<button ${id?`id="${id}"`:''} class="btn-sm backup-action-btn ${cls}" onclick="${onclick}">${icon}<span>${label}</span></button>`;}
+    function importBtn(){return `${actionButton('backup-action-import','Importar JSON',importIconSVG(),"document.getElementById('import_file_cloud').click()")}<input type="file" id="import_file_cloud" accept="application/json" style="display:none;">`;}
+    function exportAccountBtn(){return actionButton('backup-action-export','Exportar conta completa',exportIconSVG(),'Settings.exportProfile()');}
+    function exportProfileBtn(){const id=S.currentProfile&&S.currentProfile.id;return id?actionButton('backup-action-neutral','Exportar perfil atual',exportIconSVG(),`Settings.backupSingleProfile('${id}')`):'';}
+    function syncActionButton(label, onclick, id=''){return `<button ${id?`id="${id}"`:''} class="btn btn-primary btn-sm sync-action-btn" onclick="${onclick}">${syncIconSVG()}<span>${label}</span></button>`;}
+    function localFolderActions(){
+      if(!FS_ACCESS_SUPPORTED) return `<span class="settings-inline-note">Pasta fixa indisponível neste navegador.</span>`;
+      if(BackupFS.needsReconnect) return actionButton('backup-action-folder','Reconectar pasta',folderIconSVG(),'BackupFS.reconnect()');
+      if(BackupFS.dirHandle) return `${actionButton('backup-action-folder','Trocar pasta',folderIconSVG(),'BackupFS.choose()')}${actionButton('backup-action-neutral','Desconectar pasta',folderIconSVG(),'BackupFS.disconnect()')}<span class="settings-inline-note success">Pasta conectada</span>`;
+      return actionButton('backup-action-folder','Escolher pasta de backups',folderIconSVG(),'BackupFS.choose()');
+    }
+    function localBackupsBlock(includeTransferActions=false){return `
+      <div class="settings-section backup-card-compact">
+        <div class="settings-title-help"><h3>Backup local</h3>${settingsHelpButton('Backup local','Salva uma cópia JSON na pasta do computador escolhida por você. Essa cópia é independente do histórico do Google Drive.','backup local pasta computador importar exportar')}</div>
+        <p class="desc">Escolha a pasta uma vez e use os botões abaixo para criar ou consultar os backups locais. O Google Drive continua sendo a fonte oficial dos dados.</p>
+        <div class="backup-action-row">${localFolderActions()}${actionButton('backup-action-neutral','Ver backups locais',eyeIconSVG(),'Settings.viewFolderBackups()')}${actionButton('backup-action-create','Criar backup agora',plusBackupIconSVG(),'Settings.quickBackupLocal()','qb_local')}${includeTransferActions?exportAccountBtn()+importBtn():''}</div>
+      </div>`;}
+
+    if(isDrive){
+      const gs = GoogleDriveProvider.getStatus();
+      const conflictBanner = gs.conflict ? `<div class="info-box danger-box compact-note"><b>Atenção:</b> existe uma versão mais recente no Google Drive. Recarregue a versão do Drive ou mantenha esta versão com salvamento manual.</div>` : '';
+      return `
+      <div class="settings-section settings-hero-section settings-clean-hero">${settingsTitleWithHelp('Backups / Dados','Sincronização, importação, exportação e cópias de segurança ficam reunidas nesta área.','backup importar exportar sincronizar')}</div>
+      ${conflictBanner}
+      <div class="settings-section backup-highlight-card">
+        <div class="settings-card-head"><div><div class="settings-title-help"><h3>Sincronização com Google Drive</h3>${settingsHelpButton('Sincronização com Google Drive','Mantém o arquivo current.json confirmado no Drive e permite consultar o histórico de backups.','sincronização google drive current json')}</div><div class="backup-status-grid"><span><b>Conta</b>${esc(gs.email||'')}</span><span><b>Pasta</b>${esc(gs.folderName||'(não identificada)')}</span><span><b>Status</b>${gs.conflict?'Conflito':gs.lastSyncError?(gs.authRequired?'Reconexão necessária':'Falha'):gs.pending?'Salvando...':'Sincronizado'}</span><span><b>Perfil</b>${esc(S.currentProfile?S.currentProfile.name:'Nenhum')}</span></div>${gs.folderLink?`<a class="backup-drive-link" href="${esc(gs.folderLink)}" target="_blank" rel="noopener">Abrir no Drive ↗</a>`:''}</div></div>
+        <div class="backup-action-row">${syncActionButton('Sincronizar agora','GoogleDriveProvider.handleStatusClick()')}${actionButton('backup-action-neutral','Ver backups no Drive',eyeIconSVG(),'Settings.viewDriveBackups()')}${actionButton('backup-action-create','Criar backup agora',plusBackupIconSVG(),'Settings.quickBackupDrive()','qb_drive')}${actionButton('backup-action-neutral','Trocar pasta','<span aria-hidden="true">↺</span>','GoogleDriveProvider.relinkFolder()')}${actionButton('backup-action-logout','Sair da conta Google','<span aria-hidden="true">↪</span>',"GoogleDriveProvider.disconnect();S.currentProfile=null;S.data=null;CloudAuth.mode='login';CloudAuth.error='';CloudAuth.info='';CloudAuth.emailExpanded=false;CloudAuth.render();")}</div>
+      </div>
+      ${localBackupsBlock(true)}
+      <div class="info-box">O Google Drive continua sendo a fonte oficial e sincronizada. O backup local é uma cópia manual extra, criada apenas na pasta que você autorizar.</div>`;
+    }
+
+    if(isLocal){
+      const st = (window.storageProvider ? storageProvider.getStorageStatus() : {profileCount:(S.profiles||[]).length, online:navigator.onLine});
+      return `
+      <div class="settings-section settings-hero-section settings-clean-hero">${settingsTitleWithHelp('Backups / Dados','Importe, exporte e proteja os dados salvos neste dispositivo.','backup local importar exportar')}</div>
+      <div class="settings-section backup-highlight-card">
+        <div class="settings-card-head"><div><div class="settings-title-help"><h3>Status local</h3>${settingsHelpButton('Status local','No modo local, os dados ficam neste dispositivo até serem exportados ou conectados a uma conta.','modo local sem conta')}</div><div class="backup-status-grid"><span><b>Modo</b>Local</span><span><b>Perfis</b>${st.profileCount||0}</span><span><b>Perfil</b>${esc(S.currentProfile?S.currentProfile.name:'Nenhum')}</span><span><b>Conexão</b>${st.online?'Online':'Offline'}</span></div></div></div>
+        <div class="backup-action-row">${exportAccountBtn()}${exportProfileBtn()}${importBtn()}${actionButton('backup-action-neutral','Entrar com uma conta',syncIconSVG(),'Settings.switchToCloudFromSettings()')}</div>
+      </div>
+      ${localBackupsBlock(false)}
+      ${renderInstallAppCard()}`;
+    }
+
+    const pending = cloud && cloud.pendingInfo ? cloud.pendingInfo() : null;
+    const last = cloud && cloud.lastSyncAt ? new Date(cloud.lastSyncAt).toLocaleString('pt-BR') : 'Ainda não sincronizou nesta sessão';
+    const status = cloud ? (cloud.statusLabel ? cloud.statusLabel() : (cloud.statusText || cloud.status || 'Indisponível')) : 'Módulo de nuvem não carregado';
+    const pendingTxt = pending ? `Pendente desde ${new Date(pending.savedAt).toLocaleString('pt-BR')}` : 'Nenhuma pendência';
+    const profileName = S.currentProfile ? S.currentProfile.name : 'Nenhum perfil ativo';
+    return `
+      <div class="settings-section settings-hero-section settings-clean-hero">${settingsTitleWithHelp('Backups / Dados','Sincronização, importação, exportação e proteção dos dados ficam centralizadas aqui.','backup nuvem importar exportar')}</div>
+      <div class="settings-section backup-highlight-card"><div class="settings-card-head"><div><div class="settings-title-help"><h3>Status da nuvem</h3>${settingsHelpButton('Status da nuvem','Mostra a situação da conta conectada e se existem alterações pendentes.','status da nuvem sincronização')}</div><div class="backup-status-grid"><span><b>Usuário</b>${user?esc(user.email||'logado'):'não logado'}</span><span><b>Perfil</b>${esc(profileName)}</span><span><b>Status</b>${esc(status)}</span><span><b>Pendência</b>${esc(pendingTxt)}</span></div><span class="settings-inline-note">Última sincronização: ${esc(last)}</span></div></div><div class="backup-action-row">${syncActionButton('Sincronizar agora','cloudForceSync()')}${exportAccountBtn()}${exportProfileBtn()}${importBtn()}${user?actionButton('backup-action-logout','Sair da conta','<span aria-hidden="true">↪</span>','cloudLogout()'):''}</div></div>
+      <details class="settings-section settings-advanced-actions"><summary>Mais ações da nuvem</summary><div class="backup-action-row"><button class="btn-outline btn-sm" onclick="cloudRunSupabaseDiagnostic()">Diagnóstico</button><button class="btn-outline btn-sm" onclick="cloudChangePasswordFromSettings()">Trocar senha da conta</button><button class="btn-outline btn-sm" onclick="Settings.showBackupConsent()">Proteção de dados</button>${actionButton('backup-action-create','Criar backup da nuvem',plusBackupIconSVG(),"Settings.createCloudBackupNow('manual','backup manual completo')")}${actionButton('backup-action-neutral','Ver backups da nuvem',eyeIconSVG(),'Settings.viewCloudBackups()')}${user?`<button class="btn-danger btn-sm" onclick="Settings.deleteCloudAccountFlow()">Excluir conta</button>`:''}</div></details>
+      ${localBackupsBlock(false)}
+      ${renderInstallAppCard()}`;
+  };
+
+  window.BorionQuickTools = {
+    notesSVG(){ return notesIconSVG(); },
+    calculatorSVG(){ return `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2.8" width="16" height="18.4" rx="2.5"/><rect x="7" y="5.8" width="10" height="3.4" rx="1"/><path d="M8 13h2M14 13h2M8 17h2M14 17h2"/></svg>`; },
+    state(){
+      const notes=floatingNotesPrefs(false);
+      const calc=(typeof S!=='undefined'&&S.data&&S.data.uiPreferences&&S.data.uiPreferences.borionCalculator)||{};
+      return {notes:notes&&notes.enabled===true,calculator:calc&&calc.enabled===true};
+    },
+    renderSidebarShortcuts(){
+      const state=this.state();
+      const notesAction=state.notes?'Desativar Anotações':'Ativar e abrir Anotações';
+      const calcAction=state.calculator?'Desativar Calculadora Borion':'Ativar e abrir Calculadora Borion';
+      return `<div class="sidebar-quick-tools" aria-label="Acessos rápidos"><button type="button" data-sidebar-quick-tool="notes" class="sidebar-quick-tool ${state.notes?'is-active':''}" onclick="BorionQuickTools.toggleNotes(event)" title="${notesAction}" aria-label="${notesAction}" aria-pressed="${state.notes?'true':'false'}">${this.notesSVG()}</button><button type="button" data-sidebar-quick-tool="calculator" class="sidebar-quick-tool ${state.calculator?'is-active':''}" onclick="BorionQuickTools.toggleCalculator(event)" title="${calcAction}" aria-label="${calcAction}" aria-pressed="${state.calculator?'true':'false'}">${this.calculatorSVG()}</button></div>`;
+    },
+    sync(){
+      const state=this.state();
+      document.querySelectorAll('[data-sidebar-quick-tool="notes"]').forEach(el=>{
+        const label=state.notes?'Desativar Anotações':'Ativar e abrir Anotações';
+        el.classList.toggle('is-active',state.notes);el.setAttribute('aria-pressed',state.notes?'true':'false');el.setAttribute('aria-label',label);el.title=label;
+      });
+      document.querySelectorAll('[data-sidebar-quick-tool="calculator"]').forEach(el=>{
+        const label=state.calculator?'Desativar Calculadora Borion':'Ativar e abrir Calculadora Borion';
+        el.classList.toggle('is-active',state.calculator);el.setAttribute('aria-pressed',state.calculator?'true':'false');el.setAttribute('aria-label',label);el.title=label;
+      });
+      document.querySelectorAll('.settings-notes-toggle-row').forEach(row=>{
+        const button=row.querySelector('.toggle-switch'),status=row.querySelector('.settings-mini-status');
+        if(button){button.classList.toggle('on',state.notes);button.setAttribute('aria-label',(state.notes?'Desativar':'Ativar')+' anotações');}
+        if(status){status.classList.toggle('on',state.notes);status.classList.toggle('off',!state.notes);status.textContent=state.notes?'Ativado':'Desativado';}
+      });
+    },
+    toggleNotes(event){
+      if(event){event.preventDefault();event.stopPropagation();}
+      if(typeof S==='undefined'||!S.currentProfile||!S.data||!window.FloatingNotes)return false;
+      const p=floatingNotesPrefs(true);
+      const next=!(p.enabled===true);
+      p.enabled=next;
+      p.minimized=next?false:true;
+      if(next&&typeof FloatingNotes.ensurePrefs==='function')FloatingNotes.ensurePrefs();
+      saveCurrentData();
+      FloatingNotes.render();
+      this.sync();
+      if(next)setTimeout(()=>document.querySelector('#'+FloatingNotes.hostId+' .floating-note-textarea')?.focus(),0);
+      return next;
+    },
+    toggleCalculator(event){
+      if(event){event.preventDefault();event.stopPropagation();}
+      const apply=calc=>{
+        if(!calc||typeof S==='undefined'||!S.currentProfile||!S.data)return false;
+        if(!S.data.uiPreferences)S.data.uiPreferences={};
+        const p=S.data.uiPreferences.borionCalculator||(S.data.uiPreferences.borionCalculator={enabled:false,minimized:true});
+        const next=!(p.enabled===true);
+        if(typeof calc.setEnabled==='function')calc.setEnabled(next);
+        else{
+          p.enabled=next;
+          p.minimized=next?false:true;
+          saveCurrentData();
+          if(typeof calc.render==='function')calc.render();
+        }
+        if(next){
+          const live=S.data.uiPreferences.borionCalculator;
+          live.minimized=false;
+          saveCurrentData();
+          if(typeof calc.render==='function')calc.render();
+        }
+        this.sync();
+        return next;
+      };
+      if(window.BorionCalculator)return apply(window.BorionCalculator);
+      if(window.Settings&&typeof Settings.ensureBorionCalculator==='function'){
+        Settings.ensureBorionCalculator().then(apply).catch(err=>console.error('[BORION_QUICK_TOOLS][CALCULATOR]',err));
+      }
+      return false;
+    },
+    openNotes(event){return this.toggleNotes(event);},
+    openCalculator(event){return this.toggleCalculator(event);}
+  };
+
+  window.FloatingNotes = {
+    hostId:'borion_floating_notes_host',
+    bubbleSize:60,
+    edgeGap:14,
+    gap:12,
+    saveTimer:null,
+    suppressBubbleClickUntil:0,
+    prefs(create=false){ return floatingNotesPrefs(create); },
+    /* Reserva espaço para não ficar atrás da barra de abas inferior do Smartphone Mode
+       (nem "pra dentro" dela) e respeita a área segura do aparelho. */
+    bottomSafeMargin(){
+      try{
+        const nav=document.querySelector('.smart-bottom-nav');
+        if(nav && getComputedStyle(nav).display!=='none') return nav.getBoundingClientRect().height + 18;
+      }catch(e){}
+      return 18;
+    },
+    topSafeMargin(){ return 16; },
+    clampY(y){
+      const vh=window.innerHeight;
+      const top=this.topSafeMargin(), bottom=this.bottomSafeMargin();
+      const max=Math.max(top, vh - bottom - this.bubbleSize);
+      return Math.min(Math.max(Number(y)||0, top), max);
+    },
+    avoidCalculatorCollision(p){
+      try{
+        const calc=S&&S.data&&S.data.uiPreferences&&S.data.uiPreferences.borionCalculator;
+        if(!calc||calc.enabled!==true||calc.side!==p.side)return p;
+        const calcY=this.clampY(typeof calc.y==='number'?calc.y:120);
+        const minDistance=this.bubbleSize+10;
+        if(Math.abs(Number(p.y)-calcY)>=minDistance)return p;
+        const maxY=this.clampY(Number.MAX_SAFE_INTEGER);
+        const below=calcY+minDistance;
+        const above=calcY-minDistance;
+        p.y=below<=maxY?this.clampY(below):this.clampY(above);
+      }catch(_e){}
+      return p;
+    },
+    ensurePrefs(){
+      const p=this.prefs(true);
+      if(p.side!=='left' && p.side!=='right') p.side='right';
+      p.y = (typeof p.y==='number') ? this.clampY(p.y) : this.clampY(window.innerHeight - this.bottomSafeMargin() - this.bubbleSize - 70);
+      return this.avoidCalculatorCollision(p);
+    },
+    scheduleSave(silent=true){
+      clearTimeout(this.saveTimer);
+      this.saveTimer = setTimeout(()=>{
+        try{ saveCurrentData(); }catch(e){}
+        if(!silent && typeof toast==='function') toast('Anotações salvas.');
+      }, 260);
+    },
+    onInput(value){ const p=this.prefs(true); p.text=value||''; this.scheduleSave(true); },
+    save(){ this.scheduleSave(false); },
+    toggleMinimize(){ const p=this.prefs(true); p.minimized=!p.minimized; saveCurrentData(); this.render(); },
+    openFromBubble(){ if(Date.now()<Number(this.suppressBubbleClickUntil||0))return; const p=this.prefs(true); p.minimized=!p.minimized; saveCurrentData(); this.render(); },
+    openQuick(){ const p=this.prefs(true); p.enabled=true; p.minimized=false; this.ensurePrefs(); saveCurrentData(); this.render(); try{window.BorionQuickTools&&BorionQuickTools.sync&&BorionQuickTools.sync();}catch(_e){} setTimeout(()=>document.querySelector('#'+this.hostId+' .floating-note-textarea')?.focus(),0); return true; },
+    close(){ const p=this.prefs(true); p.enabled=false; saveCurrentData(); this.render(); },
+    /* Decide se o painel abre para cima ou para baixo da bolinha, e qual o tamanho
+       possível, sempre respeitando a viewport — nunca "atravessa" a tela nem invade a
+       barra de abas. */
+    computeLayout(p){
+      const vw=window.innerWidth, vh=window.innerHeight;
+      const topSafe=this.topSafeMargin(), bottomSafe=this.bottomSafeMargin();
+      const maxW=Math.max(300, Math.min(vw - (this.edgeGap*2) - 4, 720));
+      const maxH=Math.max(220, Math.min(vh - topSafe - bottomSafe - this.gap - this.bubbleSize, 800));
+      let panelW=Math.min(Math.max(p.panelW||360, 300), maxW);
+      let panelH=Math.min(Math.max(p.panelH||380, 220), maxH);
+      const spaceBelow = vh - bottomSafe - (p.y + this.bubbleSize) - this.gap;
+      const spaceAbove = p.y - topSafe - this.gap;
+      let openDown;
+      if(panelH <= spaceBelow) openDown=true;
+      else if(panelH <= spaceAbove) openDown=false;
+      else { openDown = spaceBelow >= spaceAbove; panelH = Math.max(200, openDown ? spaceBelow : spaceAbove); }
+      return {panelW, panelH, openDown};
+    },
+    render(){
+      let host=document.getElementById(this.hostId);
+      if(typeof S==='undefined' || !S.currentProfile || !S.data) { if(host) host.remove(); return; }
+      const p=this.ensurePrefs();
+      if(!p.enabled){ if(host) host.remove(); return; }
+      if(!host){ host=document.createElement('div'); host.id=this.hostId; host.className='floating-notes-host'; document.body.appendChild(host); }
+      host.className='floating-notes-host side-'+p.side+(p.minimized?' is-minimized':' is-open');
+
+      const vh=window.innerHeight;
+      const bubbleStyle=(p.side==='left'?`left:${this.edgeGap}px;right:auto;`:`right:${this.edgeGap}px;left:auto;`)+`top:${p.y}px;`;
+
+      let panelHTML='';
+      if(!p.minimized){
+        const L=this.computeLayout(p);
+        const anchorX = p.side==='left' ? 'left' : 'right';
+        const anchorY = L.openDown ? 'top' : 'bottom';
+        const horiz = anchorX==='left' ? `left:${this.edgeGap}px;right:auto;` : `right:${this.edgeGap}px;left:auto;`;
+        const vert = anchorY==='top' ? `top:${p.y + this.bubbleSize + this.gap}px;bottom:auto;` : `bottom:${vh - p.y + this.gap}px;top:auto;`;
+        const gripCorner={x:anchorX==='left'?'right':'left', y:anchorY==='top'?'bottom':'top'};
+        const gripCursor=(gripCorner.x==='left')===(gripCorner.y==='top') ? 'nwse-resize' : 'nesw-resize';
+        const gripStyle=`${gripCorner.y}:6px;${gripCorner.x}:6px;cursor:${gripCursor};`;
+        panelHTML = `
+          <div class="floating-note-panel" data-anchor-x="${anchorX}" data-anchor-y="${anchorY}" style="${horiz}${vert}width:${L.panelW}px;height:${L.panelH}px;">
+            <div class="floating-note-header floating-notes-drag-handle">
+              <div class="floating-note-title">${notesIconSVG()}<span>Anotações</span></div>
+              <div class="floating-note-header-actions">
+                <button class="floating-note-icon-btn" onclick="FloatingNotes.save()" title="Salvar anotações">Salvar</button>
+                <button class="floating-note-icon-btn" onclick="FloatingNotes.toggleMinimize()" title="Minimizar">—</button>
+              </div>
+            </div>
+            <textarea class="floating-note-textarea" placeholder="Anote recados rápidos, pendências, ideias ou observações deste perfil..." oninput="FloatingNotes.onInput(this.value)">${esc(p.text||'')}</textarea>
+            <div class="floating-note-footer"><span>Permanece entre abas e perfis do app enquanto estiver ativado neste perfil.</span><span class="floating-note-drag-tip">Arraste para mover</span></div>
+            <div class="floating-note-resize-grip" style="${gripStyle}" title="Arraste para redimensionar">${resizeGripIconSVG()}</div>
+          </div>`;
+      }
+      host.innerHTML = panelHTML + `<button class="floating-note-bubble floating-notes-drag-handle" style="${bubbleStyle}" onclick="FloatingNotes.openFromBubble()" title="${p.minimized?'Abrir':'Minimizar'} anotações" aria-label="${p.minimized?'Abrir':'Minimizar'} anotações">${notesIconSVG()}</button>`;
+      this.bindDrag(host);
+      this.bindResize(host);
+    },
+    /* Arrasta apenas na vertical durante o gesto (feedback fluido); ao soltar, a bolinha
+       sempre "gruda" no lado esquerdo ou direito mais próximo — igual ao botão de atalho
+       flutuante do iPhone — nunca fica solta no meio da tela. */
+    bindDrag(host){
+      if(!host || host.dataset.dragBound==='1') return;
+      host.dataset.dragBound='1';
+      let active=null;
+      host.addEventListener('pointerdown',(ev)=>{
+        const handle=ev.target.closest('.floating-notes-drag-handle');
+        if(!handle) return;
+        if(ev.target.closest('.floating-note-resize-grip')) return;
+        if(ev.target.closest('button') && !ev.target.closest('.floating-note-bubble')) return;
+        const p=this.prefs(true);
+        active={id:ev.pointerId, startY:ev.clientY, baseY:Number(p.y)||0, lastY:Number(p.y)||0, lastX:ev.clientX, moved:false};
+        host.classList.add('dragging');
+        try{ handle.setPointerCapture && handle.setPointerCapture(ev.pointerId); }catch(e){}
+      });
+      window.addEventListener('pointermove',(ev)=>{
+        if(!active || ev.pointerId!==active.id) return;
+        const dy=ev.clientY-active.startY;
+        if(Math.abs(dy)>4 || Math.abs(ev.clientX-active.lastX)>4) active.moved=true;
+        const nextY=this.clampY(active.baseY + dy);
+        active.lastY=nextY; active.lastX=ev.clientX;
+        const bubbleEl=host.querySelector('.floating-note-bubble');
+        if(bubbleEl) bubbleEl.style.top=nextY+'px';
+      });
+      const endDrag=(ev)=>{
+        if(!active || (ev && ev.pointerId!=null && ev.pointerId!==active.id)) return;
+        const p=this.prefs(true);
+        const wasMoved=active.moved;
+        if(wasMoved){
+          p.y=active.lastY;
+          p.side = active.lastX < (window.innerWidth/2) ? 'left' : 'right';
+          this.avoidCalculatorCollision(p);
+          this.suppressBubbleClickUntil=Date.now()+320;
+          try{ saveCurrentData(); }catch(e){}
+        }
+        active=null; host.classList.remove('dragging');
+        if(wasMoved){
+          this.render();
+          try{window.BorionCalculator&&BorionCalculator.render&&BorionCalculator.render();}catch(_e){}
+        }
+      };
+      window.addEventListener('pointerup',endDrag);
+      window.addEventListener('pointercancel',endDrag);
+    },
+    /* Redimensiona o painel a partir do canto livre (o oposto de onde ele está ancorado
+       na bolinha), mantendo sempre dentro da tela — permite deixar mais largo/alto. */
+    bindResize(host){
+      if(!host || host.dataset.resizeBound==='1') return;
+      host.dataset.resizeBound='1';
+      let active=null;
+      host.addEventListener('pointerdown',(ev)=>{
+        const grip=ev.target.closest('.floating-note-resize-grip');
+        if(!grip) return;
+        ev.stopPropagation();
+        const panel=host.querySelector('.floating-note-panel');
+        if(!panel) return;
+        active={id:ev.pointerId, startX:ev.clientX, startY:ev.clientY, startW:panel.offsetWidth, startH:panel.offsetHeight, anchorX:panel.dataset.anchorX, anchorY:panel.dataset.anchorY, lastW:panel.offsetWidth, lastH:panel.offsetHeight};
+        panel.classList.add('resizing');
+        try{ grip.setPointerCapture && grip.setPointerCapture(ev.pointerId); }catch(e){}
+      });
+      window.addEventListener('pointermove',(ev)=>{
+        if(!active || ev.pointerId!==active.id) return;
+        const panel=host.querySelector('.floating-note-panel');
+        if(!panel) return;
+        const dx=ev.clientX-active.startX, dy=ev.clientY-active.startY;
+        const maxW=Math.max(300, Math.min(window.innerWidth - (this.edgeGap*2) - 4, 720));
+        const maxH=Math.max(220, Math.min(window.innerHeight - this.topSafeMargin() - this.bottomSafeMargin() - this.gap - this.bubbleSize, 800));
+        let w = active.anchorX==='right' ? active.startW - dx : active.startW + dx;
+        let h = active.anchorY==='top' ? active.startH + dy : active.startH - dy;
+        w=Math.min(Math.max(w, 300), maxW);
+        h=Math.min(Math.max(h, 220), maxH);
+        panel.style.width=w+'px'; panel.style.height=h+'px';
+        active.lastW=w; active.lastH=h;
+      });
+      const endResize=(ev)=>{
+        if(!active || (ev && ev.pointerId!=null && ev.pointerId!==active.id)) return;
+        const p=this.prefs(true);
+        p.panelW=active.lastW; p.panelH=active.lastH;
+        const panel=host.querySelector('.floating-note-panel');
+        if(panel) panel.classList.remove('resizing');
+        active=null;
+        try{ saveCurrentData(); }catch(e){}
+        this.render();
+      };
+      window.addEventListener('pointerup',endResize);
+      window.addEventListener('pointercancel',endResize);
+    }
+  };
+
+  // Update notes position after view redraws and on resize.
+  if(typeof renderView==='function' && !window.__borionNotesRenderWrapped){
+    window.__borionNotesRenderWrapped=true;
+    const _renderView = renderView;
+    renderView = function(){ const r=_renderView.apply(this, arguments); setTimeout(()=>window.FloatingNotes&&FloatingNotes.render(),0); return r; };
+  }
+  if(typeof renderApp==='function' && !window.__borionNotesAppWrapped){
+    window.__borionNotesAppWrapped=true;
+    const _renderApp = renderApp;
+    renderApp = function(){ const r=_renderApp.apply(this, arguments); setTimeout(()=>window.FloatingNotes&&FloatingNotes.render(),0); return r; };
+  }
+  window.addEventListener('resize', ()=>{ try{ window.FloatingNotes&&FloatingNotes.render(); }catch(e){} });
+})();
+
+
+/* ================= V6.46.22 — Avatares animados, galeria pronta e proteção das integrações ================= */
+(function(){
+  const BORION_PRESET_AVATARS_64616 = [
+    'assets/profile-avatars/perfil-padrao-01.webp',
+    'assets/profile-avatars/perfil-padrao-02.webp',
+    'assets/profile-avatars/perfil-padrao-03.webp',
+    'assets/profile-avatars/perfil-padrao-04.webp',
+    'assets/profile-avatars/perfil-padrao-05.webp',
+    'assets/profile-avatars/perfil-padrao-06.webp'
+  ];
+  const BORION_AVATAR_UPLOAD_MAX_BYTES_64616 = 5*1024*1024;
+
+  Settings.applyAvatarImage64616 = async function(imageSource, options={}){
+    const profileAtSelection=S.currentProfile;
+    if(!profileAtSelection) return false;
+    const profileId=String(profileAtSelection.id);
+    const typedIdentity=currentProfileFormIdentity64611(profileAtSelection);
+    const usingCloud=!!(window.CloudStorage&&CloudStorage.user);
+    let target=null, previousIdentity=null;
+    try{
+      target=(S.profiles||[]).find(x=>String(x.id)===profileId);
+      if(!target) throw new Error('O perfil aberto mudou antes da foto ser confirmada.');
+      previousIdentity={name:target.name,avatarColor:target.avatarColor,avatarImage:target.avatarImage};
+      // V7.0.1 SECURITY — antes desta correção, esta função trocava/apagava a foto
+      // sem chamar touchProfileMetadata700: o campo avatarImage nunca ganhava uma
+      // revisão própria, então o Data Guard não tinha como distinguir "usuário
+      // removeu a foto de propósito" de "essa cópia está desatualizada". Numa
+      // mesclagem de conflito (ex.: outro dispositivo com sessão atrasada), a
+      // foto antiga podia voltar por engano. Agora toda mudança de nome/cor/foto
+      // passa por touchProfileMetadata700, e uma remoção explícita de foto marca
+      // avatarImage como explicitClear — o mesmo tratamento que name/passwordHash
+      // já recebiam.
+      const changed=[];
+      if(String(target.name||'')!==String(typedIdentity.name||'')) changed.push('name');
+      if(String(target.avatarColor||'')!==String(typedIdentity.avatarColor||'')) changed.push('avatarColor');
+      if(String(target.avatarImage||'')!==String(imageSource||'')) changed.push('avatarImage');
+      target.name=typedIdentity.name;
+      target.avatarColor=typedIdentity.avatarColor;
+      if(imageSource) target.avatarImage=String(imageSource);
+      else delete target.avatarImage;
+      S.currentProfile=target;
+
+      if(!usingCloud){
+        touchProfileMetadata700(target,changed,options.removed?['avatarImage']:[]);
+        markProfileMetadataPending64611(target);
+        setProfiles(S.profiles);
+      }
+      renderApp();
+
+      if(usingCloud){
+        await CloudStorage.renameProfile(target.id,typedIdentity.name,typedIdentity.avatarColor,imageSource?String(imageSource):'');
+        const fresh=(S.profiles||[]).find(x=>String(x.id)===profileId);
+        if(fresh) S.currentProfile=fresh;
+      }else{
+        await confirmProfileMetadataSave64611();
+      }
+      renderApp();
+      toast(options.removed?'Foto removida e confirmada.':'Nome e foto do perfil confirmados.');
+      return true;
+    }catch(e){
+      if(usingCloud&&target&&previousIdentity){
+        target.name=previousIdentity.name;
+        target.avatarColor=previousIdentity.avatarColor;
+        if(previousIdentity.avatarImage) target.avatarImage=previousIdentity.avatarImage;
+        else delete target.avatarImage;
+        S.currentProfile=target;
+        renderApp();
+      }
+      alert(e.message||String(e));
+      return false;
+    }
+  };
+
+  Settings.readAvatarFile = function(input){
+    const file=input.files&&input.files[0];
+    if(!file) return;
+    if(file.size>BORION_AVATAR_UPLOAD_MAX_BYTES_64616){
+      alert('Escolha uma foto ou GIF menor que 5 MB para não pesar a sincronização.');
+      input.value='';
+      return;
+    }
+    const isGif=(file.type||'').toLowerCase()==='image/gif'||/\.gif$/i.test(file.name||'');
+    const reader=new FileReader();
+    reader.onload=()=>{
+      if(isGif){
+        Settings.applyAvatarImage64616(reader.result,{animated:true});
+        return;
+      }
+      openAvatarCropper(reader.result, croppedDataUrl=>Settings.applyAvatarImage64616(croppedDataUrl));
+    };
+    reader.onerror=()=>alert('Não foi possível abrir esta imagem.');
+    reader.readAsDataURL(file);
+    input.value='';
+  };
+
+  Settings.openPresetAvatarPicker = function(){
+    const cards=BORION_PRESET_AVATARS_64616.map((src,index)=>`
+      <button type="button" class="preset-avatar-card" data-avatar-src="${esc(src)}" title="Usar foto pronta ${index+1}">
+        <img src="${esc(src)}" alt="Foto de perfil pronta ${index+1}">
+        <span>Opção ${index+1}</span>
+      </button>`).join('');
+    const box=el(`<div class="modal-overlay"><div class="modal-box preset-avatar-modal">
+      <div class="modal-head"><div><h2>Escolher foto pronta</h2><p class="modal-sub">Escolha uma das imagens incluídas no próprio Borion.</p></div><button type="button" id="preset_avatar_close">&times;</button></div>
+      <div class="preset-avatar-grid">${cards}</div>
+      <button type="button" class="btn-outline btn-block" id="preset_avatar_cancel">Cancelar</button>
+    </div></div>`);
+    $('#modal-root').replaceChildren(box);
+    attachModalGuard(box);
+    const close=()=>closeModal();
+    box.querySelector('#preset_avatar_close').onclick=close;
+    box.querySelector('#preset_avatar_cancel').onclick=close;
+    box.querySelectorAll('[data-avatar-src]').forEach(btn=>{
+      btn.onclick=()=>{
+        const src=btn.dataset.avatarSrc;
+        closeModal();
+        Settings.applyAvatarImage64616(src,{preset:true});
+      };
+    });
+  };
+
+  Settings.removeAvatarImage = function(){
+    return Settings.applyAvatarImage64616('',{removed:true});
+  };
+
+  const IntegrationsAccess64616 = {
+    password:'38554273',
+    temporaryProfileId:'',
+    profileId(){ return String(S&&S.currentProfile&&S.currentProfile.id||'sem_perfil'); },
+    rememberKey(){ return 'borion_integrations_remember_64616_'+this.profileId(); },
+    remembered(){ try{return localStorage.getItem(this.rememberKey())==='1';}catch(e){return false;} },
+    hasAccess(){ return this.remembered()||this.temporaryProfileId===this.profileId(); },
+    clearTemporary(){ this.temporaryProfileId=''; },
+    open(){
+      const box=el(`<div class="modal-overlay"><div class="modal-box integrations-password-modal">
+        <div class="modal-head"><div><h2>Proteger Integrações</h2><p class="modal-sub">Digite a senha para abrir as configurações de integração.</p></div><button type="button" id="integrations_password_close">&times;</button></div>
+        <div class="field"><label>Senha</label><div class="password-input-wrap"><input type="password" id="integrations_password_input" inputmode="numeric" autocomplete="current-password" placeholder="Digite a senha"><button type="button" class="password-eye-btn" id="integrations_password_eye" aria-label="Mostrar senha">${eyeIconSVG(true)}</button></div></div>
+        <label class="field-check integrations-remember"><input type="checkbox" id="integrations_password_remember"><span>Sempre lembrar senha neste dispositivo</span></label>
+        <div class="row-btns"><button type="button" class="btn btn-secondary" id="integrations_password_cancel">Cancelar</button><button type="button" class="btn btn-primary" id="integrations_password_enter">Entrar</button></div>
+      </div></div>`);
+      $('#modal-root').replaceChildren(box);
+      attachModalGuard(box);
+      const input=box.querySelector('#integrations_password_input');
+      const close=()=>closeModal();
+      box.querySelector('#integrations_password_close').onclick=close;
+      box.querySelector('#integrations_password_cancel').onclick=close;
+      box.querySelector('#integrations_password_eye').onclick=()=>{
+        input.type=input.type==='password'?'text':'password';
+        box.querySelector('#integrations_password_eye').innerHTML=eyeIconSVG(input.type==='password');
+      };
+      const enter=()=>{
+        if(input.value!==this.password){
+          input.value='';
+          input.focus();
+          toast('Senha incorreta.');
+          return;
+        }
+        this.temporaryProfileId=this.profileId();
+        if(box.querySelector('#integrations_password_remember').checked){
+          try{localStorage.setItem(this.rememberKey(),'1');}catch(e){}
+        }
+        closeModal();
+        S.settingsTab='integrations';
+        renderView();
+      };
+      box.querySelector('#integrations_password_enter').onclick=enter;
+      input.addEventListener('keydown',e=>{if(e.key==='Enter')enter();});
+      setTimeout(()=>input.focus(),20);
+    }
+  };
+  window.BorionIntegrationsAccess=IntegrationsAccess64616;
+
+  const baseSetTab64616=Settings.setTab.bind(Settings);
+  Settings.setTab=function(tab){
+    if(tab==='integrations'&&!IntegrationsAccess64616.hasAccess()){
+      IntegrationsAccess64616.open();
+      return;
+    }
+    if(tab!=='integrations') IntegrationsAccess64616.clearTemporary();
+    baseSetTab64616(tab);
+  };
+})();

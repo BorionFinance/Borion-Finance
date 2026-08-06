@@ -1,0 +1,208 @@
+/* Borion Finance — Estúdio de Gráficos (V7.9.1)
+   Estética idêntica ao restante do app: vidro escuro, borda discreta e dourado
+   como cor de destaque. Todas as cores saem das variáveis de :root, então o
+   tema claro funciona sem nenhuma regra duplicada. */
+
+.cs-topbar{
+  display:flex;align-items:flex-end;justify-content:space-between;gap:16px;
+  flex-wrap:wrap;margin-bottom:14px;
+}
+.cs-topbar-copy h3{margin:0 0 4px;font-size:17px;letter-spacing:.01em;}
+.cs-topbar-copy .desc{margin:0;max-width:70ch;}
+.cs-topbar-actions{display:flex;gap:8px;flex-wrap:wrap;}
+
+.cs-grid{margin-top:12px;}
+.cs-slot{min-width:0;}
+.cs-card{
+  display:flex;flex-direction:column;gap:10px;height:100%;padding:16px 16px 12px;
+  min-width:0;overflow:hidden;
+}
+.cs-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+.cs-card-title{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.cs-card-title b{font-size:14.5px;font-weight:700;letter-spacing:.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cs-card-title small{font-size:11.5px;color:var(--muted-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cs-card-title.preview{margin-bottom:8px;}
+.cs-card-actions{display:flex;gap:4px;flex:0 0 auto;opacity:0;transition:opacity .18s ease;}
+.cs-card:hover .cs-card-actions,.cs-card:focus-within .cs-card-actions{opacity:1;}
+@media (hover:none){.cs-card-actions{opacity:1;}}
+.cs-icon-btn{
+  width:26px;height:26px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;
+  background:rgba(12,19,26,.7);border:1px solid rgba(255,255,255,.07);color:var(--muted);
+  font-size:13px;line-height:1;cursor:pointer;transition:color .18s ease,border-color .18s ease,background-color .18s ease;
+}
+.cs-icon-btn:hover{color:var(--gold-bright);border-color:rgba(201,164,92,.42);background:rgba(201,164,92,.08);}
+.cs-icon-btn.danger:hover{color:var(--red);border-color:rgba(255,90,95,.42);background:rgba(255,90,95,.08);}
+.cs-card-body{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;}
+
+.cs-svg{width:100%;height:auto;display:block;overflow:visible;}
+.cs-svg .cs-axis-text{fill:var(--muted-2);font-size:11px;}
+.cs-svg .cs-value-text{fill:var(--muted);font-size:11px;font-weight:650;}
+.cs-svg .cs-center-top{fill:var(--text);font-size:19px;font-weight:750;}
+.cs-svg .cs-center-big{fill:var(--text);font-size:34px;font-weight:760;letter-spacing:-.01em;}
+.cs-svg .cs-kpi-delta{font-size:12.5px;font-weight:700;}
+.cs-svg .cs-tile-label{fill:rgba(6,10,16,.86);font-size:12px;font-weight:700;}
+.cs-svg .cs-tile-value{fill:rgba(6,10,16,.78);font-size:12px;font-weight:650;}
+html[data-theme="light"] .cs-svg .cs-tile-label,
+html[data-theme="light"] .cs-svg .cs-tile-value{fill:rgba(255,255,255,.94);}
+.cs-svg .cs-hit{cursor:pointer;}
+.cs-svg .cs-hit:hover{filter:brightness(1.14);}
+
+.cs-legend{
+  display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;padding-top:9px;
+  border-top:1px solid rgba(255,255,255,.05);
+}
+.cs-legend-item{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);cursor:pointer;}
+.cs-legend-item i{width:9px;height:9px;border-radius:3px;flex:0 0 auto;}
+.cs-legend-item:hover{color:var(--text);}
+
+.cs-empty-chart{
+  padding:26px 16px;text-align:center;color:var(--muted-2);font-size:12.5px;
+  border:1px dashed rgba(255,255,255,.08);border-radius:12px;
+}
+
+/* ---------- tabelas comparativas ---------- */
+.cs-table-wrap{overflow:auto;max-height:520px;}
+.cs-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+.cs-table th{
+  position:sticky;top:0;z-index:1;text-align:left;padding:8px 10px;font-size:11px;
+  letter-spacing:.05em;text-transform:uppercase;color:var(--muted-2);font-weight:700;
+  background:linear-gradient(180deg,rgba(18,28,38,.99),rgba(14,22,31,.99));
+  border-bottom:1px solid rgba(255,255,255,.07);
+}
+.cs-table td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle;}
+.cs-table tbody tr{cursor:pointer;transition:background-color .16s ease;}
+.cs-table tbody tr:hover{background:rgba(201,164,92,.07);}
+.cs-cell-label{font-weight:650;}
+.cs-cell-value{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;}
+.cs-cell-pct{position:relative;min-width:110px;}
+.cs-cell-bar{
+  position:absolute;left:10px;top:50%;transform:translateY(-50%);height:7px;border-radius:99px;
+  background:linear-gradient(90deg,rgba(201,164,92,.75),rgba(201,164,92,.32));max-width:calc(100% - 60px);
+}
+.cs-cell-pct em{position:relative;float:right;font-style:normal;color:var(--muted);font-variant-numeric:tabular-nums;}
+.cs-cell-delta{text-align:right;white-space:nowrap;font-weight:700;}
+.cs-cell-delta.up{color:var(--green);}
+.cs-cell-delta.down{color:var(--red);}
+.cs-total-row td{font-weight:750;border-top:1px solid rgba(255,255,255,.09);border-bottom:none;cursor:default;}
+.cs-total-row:hover{background:transparent !important;}
+
+/* ---------- estado vazio ---------- */
+.cs-onboarding{text-align:center;padding:34px 22px;display:flex;flex-direction:column;align-items:center;gap:8px;}
+.cs-onboarding-art{opacity:.9;margin-bottom:4px;}
+.cs-onboarding h4{margin:0;font-size:16px;}
+.cs-onboarding .desc{max-width:56ch;margin:0;}
+.cs-onboarding-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:12px;}
+
+/* ---------- montador ---------- */
+.cs-builder-box{max-width:1080px;width:min(1080px,96vw);}
+.cs-builder-grid{display:grid;grid-template-columns:minmax(280px,340px) 1fr;gap:18px;align-items:start;}
+.cs-builder-form{display:flex;flex-direction:column;gap:10px;min-width:0;}
+.cs-builder-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.cs-builder-checks{display:flex;flex-direction:column;gap:7px;margin-top:2px;}
+.cs-check{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);cursor:pointer;}
+.cs-check input{accent-color:var(--gold);}
+.cs-builder-preview{min-width:0;display:flex;flex-direction:column;gap:6px;}
+.cs-preview-label{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted-2);font-weight:700;}
+.cs-preview-card{min-height:320px;display:flex;flex-direction:column;justify-content:center;}
+.cs-builder-footer{margin-top:14px;}
+@media (max-width:900px){
+  .cs-builder-grid{grid-template-columns:1fr;}
+  .cs-preview-card{min-height:230px;}
+}
+
+/* ---------- modelos prontos ---------- */
+.cs-presets-box{max-width:760px;width:min(760px,96vw);}
+.cs-preset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:12px;}
+.cs-preset-card{
+  text-align:left;padding:13px 14px;border-radius:14px;cursor:pointer;
+  background:rgba(12,19,26,.72);border:1px solid rgba(255,255,255,.07);color:var(--text);
+  display:flex;flex-direction:column;gap:3px;transition:border-color .18s ease,transform .16s ease,background-color .18s ease;
+}
+.cs-preset-card:hover{border-color:rgba(201,164,92,.44);background:rgba(201,164,92,.07);transform:translateY(-1px);}
+.cs-preset-card b{font-size:13px;}
+.cs-preset-card small{font-size:11px;color:var(--muted-2);}
+
+/* ---------- detalhamento ---------- */
+.cs-drill-box{max-width:640px;width:min(640px,96vw);}
+.cs-drill-summary{
+  display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 12px;
+}
+.cs-drill-summary>div{
+  flex:1 1 120px;background:rgba(12,19,26,.66);border:1px solid rgba(255,255,255,.06);
+  border-radius:12px;padding:9px 12px;display:flex;flex-direction:column;gap:2px;
+}
+.cs-drill-summary span{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-2);font-weight:700;}
+.cs-drill-summary b{font-size:15px;font-variant-numeric:tabular-nums;}
+.cs-drill-list{max-height:52vh;overflow:auto;display:flex;flex-direction:column;gap:2px;}
+.cs-drill-row{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:9px 10px;border-radius:10px;border:1px solid transparent;
+}
+.cs-drill-row:hover{background:rgba(255,255,255,.03);border-color:rgba(255,255,255,.05);}
+.cs-drill-main{display:flex;flex-direction:column;gap:1px;min-width:0;}
+.cs-drill-main b{font-size:13px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cs-drill-main small{font-size:11px;color:var(--muted-2);}
+.cs-drill-value{font-size:13.5px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;}
+
+/* ---------- tooltip ---------- */
+.cs-tooltip{
+  position:fixed;z-index:2147483000;pointer-events:none;
+  padding:8px 11px;border-radius:11px;min-width:120px;
+  background:rgba(8,13,20,.96);border:1px solid rgba(201,164,92,.28);
+  box-shadow:0 14px 34px rgba(0,0,0,.42);
+  display:flex;flex-direction:column;gap:1px;
+}
+.cs-tooltip b{font-size:12px;color:var(--text);font-weight:700;}
+.cs-tooltip span{font-size:10.5px;color:var(--muted-2);}
+.cs-tooltip em{font-size:14px;font-style:normal;font-weight:750;color:var(--gold-bright);font-variant-numeric:tabular-nums;}
+html[data-theme="light"] .cs-tooltip{background:rgba(255,255,255,.97);border-color:rgba(145,105,27,.3);}
+html[data-theme="light"] .cs-tooltip em{color:#8a6420;}
+
+/* ---------- celular: painel em coluna única, com rolagem ---------- */
+@media (max-width:760px){
+  .cs-topbar{flex-direction:column;align-items:stretch;}
+  .cs-topbar-actions{justify-content:stretch;}
+  .cs-topbar-actions .btn,.cs-topbar-actions .btn-outline{flex:1;justify-content:center;}
+  .cs-card{padding:14px 13px 10px;}
+  .cs-card-title b{white-space:normal;}
+  .cs-table-wrap{max-height:none;}
+  .cs-drill-list{max-height:60vh;}
+  .cs-legend{gap:5px 10px;}
+  .cs-svg .cs-center-big{font-size:28px;}
+}
+html[data-interface-mode="smartphone"] .cs-grid{display:flex;flex-direction:column;gap:12px;height:auto !important;}
+html[data-interface-mode="smartphone"] .cs-slot{position:static !important;width:100% !important;height:auto !important;left:auto !important;top:auto !important;}
+
+/* ---------- V7.9.1 — contenção real do painel livre ----------
+   O editor grava left/top em pixels. Sem um contexto posicionado próprio, esses
+   valores eram calculados contra a página e o gráfico podia cobrir menu, topo e
+   outras telas. O painel agora é a única área de posicionamento e recorta qualquer
+   sobra horizontal enquanto mantém a altura atualizada pelo ModuleLayout. */
+.cs-grid.module-free-placement{
+  display:block;
+  position:relative;
+  width:100%;
+  max-width:100%;
+  min-height:180px;
+  overflow:hidden;
+  isolation:isolate;
+  z-index:1;
+  box-sizing:border-box;
+}
+.cs-grid.module-free-placement.module-free-bootstrap{
+  display:grid;
+  position:relative;
+  height:auto!important;
+  overflow:visible;
+}
+.cs-grid.module-free-placement:not(.module-free-bootstrap)>.cs-slot{
+  position:absolute;
+  max-width:100%;
+  margin:0;
+  box-sizing:border-box;
+}
+.cs-grid.module-free-placement .module-layout-content,
+.cs-grid.module-free-placement .cs-card{
+  max-width:100%;
+  box-sizing:border-box;
+}

@@ -1,0 +1,22 @@
+{
+  "version": "7.9.7",
+  "tag": "BORION FINANCE 7.9.7 — SALVAMENTO RESILIENTE NO DRIVE",
+  "channel": "stable",
+  "notes": [
+    "Desmarcar “Aparecer também em Despesas” em uma compra de assinatura deixou de ser desfeito ao trocar de aba: a escolha é gravada na ocorrência e na assinatura e passa a ser respeitada em toda reconciliação.",
+    "A caixa vale nos dois sentidos — alterada em Cartões e Contas ou em Lançamentos, o efeito é imediato na tela e o salvamento no Google Drive continua em segundo plano.",
+    "A ordem dos perfis passou a ser definida por arraste, com a mesma alça de “Organizar módulos e itens”; as setas para cima e para baixo foram removidas.",
+    "O download da base do Google Drive passou a ser feito em partes, com tempo limite proporcional ao tamanho do arquivo — bases grandes deixam de falhar em conexões móveis instáveis.",
+    "A tela de abertura mostra o progresso real do download da base em vez de uma mensagem parada.",
+    "“Tentar novamente” após falha de leitura do Drive agora recarrega a página inteira.",
+    "A troca de visibilidade entre Cartões e Despesas agora entra no estado local no próprio clique, sem aguardar o Drive ou o botão Salvar.",
+    "A ordem arrastada dos perfis agora atualiza a memória e o payload persistido antes de redesenhar a tela.",
+    "O timeout do download móvel permanece ativo até o corpo de cada parte terminar de chegar e cada parte pode ser repetida isoladamente.",
+    "A última alteração ainda não confirmada pelo Drive passa a ter uma recuperação temporária criptografada no próprio dispositivo.",
+    "Ao reabrir o Borion no mesmo dispositivo, uma gravação interrompida pelo fechamento da página é recuperada e reenviada ao Drive antes de ser descartada.",
+    "A recuperação local contém somente a pendência mais recente, usa AES-GCM com chave não exportável e é apagada somente após confirmação remota real.",
+    "Rajadas de alterações substituem a pendência local anterior pela versão mais nova, evitando uma fila crescente de cópias de 3 MB.",
+    "O aviso nativo de fechamento e as tentativas em visibilitychange/pagehide continuam ativos enquanto o Drive ainda está salvando.",
+    "Versão da tela inicial, rodapé, manifest, service worker e cache atualizada para 7.9.7."
+  ]
+}

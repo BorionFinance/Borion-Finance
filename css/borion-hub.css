@@ -1,0 +1,20 @@
+/* Hub Borion — acesso discreto e consistente em login e menu lateral. */
+.borion-hub-entry{box-sizing:border-box;text-decoration:none!important;-webkit-tap-highlight-color:transparent}
+.borion-hub-entry--login{position:fixed;top:max(16px,env(safe-area-inset-top));right:max(16px,env(safe-area-inset-right));z-index:120;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:38px;padding:8px 13px;border:1px solid rgba(255,255,255,.16);border-radius:999px;background:rgba(8,12,22,.40);color:rgba(255,255,255,.78);font:600 12px/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.01em;box-shadow:0 10px 28px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.10);backdrop-filter:blur(16px) saturate(135%);-webkit-backdrop-filter:blur(16px) saturate(135%);transition:transform .18s ease,background-color .18s ease,border-color .18s ease,color .18s ease}
+.borion-hub-entry--login svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:0 0 16px}
+.borion-hub-entry--login:hover,.borion-hub-entry--login:focus-visible{transform:translateY(-1px);color:#fff;background:rgba(12,18,32,.68);border-color:rgba(255,255,255,.30);outline:none}
+.borion-hub-entry--login:active{transform:scale(.97)}
+html[data-borion-app="marco"] .borion-hub-entry--login{border-color:rgba(95,166,255,.28);background:rgba(3,30,58,.48);color:#b9d9ff}
+html[data-borion-app="amanda"] .borion-hub-entry--login{border-color:rgba(212,95,146,.24);background:rgba(255,250,252,.72);color:#9f3f68;box-shadow:0 10px 28px rgba(109,71,88,.12),inset 0 1px 0 rgba(255,255,255,.80)}
+html[data-borion-app="amanda"] .borion-hub-entry--login:hover,html[data-borion-app="amanda"] .borion-hub-entry--login:focus-visible{color:#7f2e52;background:rgba(255,255,255,.92);border-color:rgba(212,95,146,.38)}
+html[data-borion-app="borion"] .borion-hub-entry--login{border-color:rgba(201,164,92,.30);background:rgba(8,10,16,.50);color:#e8c98a}
+
+/* v7.7.11 — Hub Borion: só o ícone da casinha, junto do logo no topo da barra lateral. */
+.borion-hub-logo-link{margin-left:auto;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;flex:0 0 34px;border-radius:11px;border:1px solid rgba(217,180,107,.28);background:linear-gradient(180deg,rgba(217,180,107,.18),rgba(217,180,107,.08));color:var(--gold-bright);box-shadow:0 8px 18px rgba(0,0,0,.16),inset 0 1px 0 rgba(255,255,255,.08);transition:transform .16s ease,border-color .18s ease,background .18s ease;}
+.borion-hub-logo-link svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+.borion-hub-logo-link:hover,.borion-hub-logo-link:focus-visible{transform:translateY(-1px);border-color:rgba(217,180,107,.52);outline:none;}
+.borion-hub-logo-link:active{transform:scale(.96);}
+html[data-theme="light"] .borion-hub-logo-link{color:#875a1a;background:rgba(184,137,55,.08);border-color:rgba(122,85,29,.18);}
+
+@media(max-width:420px){.borion-hub-entry--login{top:max(11px,env(safe-area-inset-top));right:max(11px,env(safe-area-inset-right));min-height:35px;padding:7px 10px;font-size:11px}.borion-hub-entry--login svg{width:15px;height:15px}}
+@media(prefers-reduced-motion:reduce){.borion-hub-entry--login{transition:none}}

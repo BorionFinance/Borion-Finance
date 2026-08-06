@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<title>Teste WAL Borion 7.9.7</title>
+<body><pre id="result">RUNNING</pre>
+<script>
+window.S={
+  profiles:[{id:'teste-797',name:'Perfil teste'}],
+  currentProfile:{id:'teste-797',name:'Perfil teste'},
+  data:{transacoes:[],fixas:[],contas:[],cartoes:[],testeMarker:'WAL-797-'+Date.now()},
+  config:{theme:'dark'}
+};
+window.GoogleDriveProvider={folderId:'pasta-teste-797'};
+window.getProfileTombstones=()=>({});
+</script>
+<script src="../js/00-release.js"></script>
+<script src="../js/29-fast-wal-v700-64665.js"></script>
+<script>
+(async()=>{
+  const marker=S.data.testeMarker,folder=GoogleDriveProvider.folderId;
+  try{
+    const saved=await BorionFastWal700.persistCurrent({reason:'browser_test',operationId:'op-teste-797'});
+    const pending=await BorionFastWal700.status(folder);
+    const remote={profiles:[{id:'teste-797',name:'Perfil remoto'}],dataByProfile:{'teste-797':{testeMarker:'REMOTO'}},config:{},__syncMeta640:{}};
+    const recovered=await BorionFastWal700.recover(folder,remote);
+    const db=await new Promise((resolve,reject)=>{const q=indexedDB.open('borion_fast_wal_v797');q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});
+    const stored=await new Promise((resolve,reject)=>{const tx=db.transaction('pending','readonly'),q=tx.objectStore('pending').get('folder:'+folder);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);tx.oncomplete=()=>db.close();});
+    const result={
+      saved:!!saved.saved,
+      pending:pending.pending,
+      encrypted:pending.encrypted,
+      recoveredMarkerMatches:recovered.payload.dataByProfile['teste-797'].testeMarker===marker,
+      containsPlaintext:JSON.stringify(stored).includes(marker)
+    };
+    result.confirmed=await BorionFastWal700.confirm(folder,'op-teste-797',recovered.record.sequence);
+    result.pendingAfter=(await BorionFastWal700.status(folder)).pending;
+    result.ok=result.saved&&result.pending&&result.encrypted&&result.recoveredMarkerMatches&&!result.containsPlaintext&&result.confirmed&&!result.pendingAfter;
+    document.getElementById('result').textContent=JSON.stringify(result);
+  }catch(error){document.getElementById('result').textContent=JSON.stringify({ok:false,error:String(error&&error.stack||error)});}
+})();
+</script>
+</body>
+</html>
